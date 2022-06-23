@@ -6,3 +6,18 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+hexyl = "0.10.0"
+parking_lot = "0.12.1"
+pretty-hex = "0.3.0"
+rend = "0.3.6"
+rkyv = "0.7.38"
+wasmer = "2.3.0"
+wasmer-vm = "2.3.0"
+
+[workspace]
+members = [
+    "dallo",
+    "modules/counter",
+    "modules/vector",
+    "modules/box",  
+]

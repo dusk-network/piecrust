@@ -1,0 +1,21 @@
+[package]
+name = "vector"
+version = "0.1.0"
+authors = [
+    "Kristoffer Ström <kristoffer@dusk.network>",
+]
+edition = "2021"
+
+[dependencies]
+dallo = { path = "../../dallo", default-features = false  }
+
+[profile.dev]
+panic = "abort"
+
+[profile.release]
+strip = true
+opt-level = "z"
+panic = "abort"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
