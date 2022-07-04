@@ -1,18 +1,26 @@
 #![feature(alloc_error_handler, lang_items, const_mut_refs)]
-#![cfg_attr(not(feature = "host"), no_std)]
+#![no_std]
 
-#[cfg(not(feature = "host"))]
-mod guest_mem;
+extern crate alloc;
 
-#[cfg(feature = "host")]
-mod host_mem;
-mod memory;
+use alloc::vec::Vec;
 
-mod boxed;
-mod vec;
+mod snap;
 
-pub use boxed::Box;
-pub use vec::Vec;
+pub use snap::snap;
 
-#[cfg(not(feature = "host"))]
 mod handlers;
+
+mod helpers;
+pub use helpers::*;
+
+mod host_allocator;
+pub use host_allocator::HostAlloc;
+
+pub type ModuleId = [u8; 32];
+
+pub type RawQuery = Vec<u8>;
+
+pub type RawTransaction = Vec<u8>;
+
+pub type ReturnBuf = Vec<u8>;

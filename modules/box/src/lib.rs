@@ -6,15 +6,19 @@
 #![no_std]
 #![no_main]
 
-use rkyv::ser::serializers::BufferSerializer;
-use rkyv::ser::Serializer;
-use rkyv::{archived_value, Deserialize, Infallible};
+extern crate alloc;
 
-use dallo::Box;
+use alloc::boxed::Box;
+
+use dallo::HostAlloc;
+#[global_allocator]
+static ALLOCATOR: HostAlloc = HostAlloc;
 
 // One Box, many `Boxen`
 pub struct Boxen {
     a: Option<Box<i16>>,
+    #[allow(unused)]
+    b: i16,
 }
 
 const ARGBUF_LEN: usize = 6;
@@ -24,32 +28,29 @@ static mut A: [u8; ARGBUF_LEN] = [0u8; ARGBUF_LEN];
 #[no_mangle]
 static AL: i32 = ARGBUF_LEN as i32;
 
-static mut SELF: Boxen = Boxen { a: None };
+static mut SELF: Boxen = Boxen { a: None, b: 0xbb };
 
 impl Boxen {
     pub fn set(&mut self, x: i16) {
+        dallo::snap();
         match self.a.as_mut() {
             Some(o) => **o = x,
             None => self.a = Some(Box::new(x)),
         }
+        dallo::snap();
     }
 
-    pub fn get(&mut self) -> Option<i16> {
+    pub fn get(&self) -> Option<i16> {
         self.a.as_ref().map(|i| **i)
     }
 }
 
 #[no_mangle]
-fn set(a: i32) -> i32 {
-    let i = unsafe { archived_value::<i16>(&A, a as usize) };
-    let i = i.deserialize(&mut Infallible).unwrap();
-    unsafe { SELF.set(i) };
-    0
+unsafe fn set(a: i32) -> i32 {
+    dallo::transact_helper(&mut SELF, &mut A, a, |slf, to| slf.set(to))
 }
 
 #[no_mangle]
-fn get(_: i32) -> i32 {
-    let ret = unsafe { SELF.get() };
-    let mut ser = unsafe { BufferSerializer::new(&mut A) };
-    ser.serialize_value(&ret).unwrap() as i32
+unsafe fn get(a: i32) -> i32 {
+    dallo::query_helper(&SELF, &mut A, a, |slf, _: ()| slf.get())
 }

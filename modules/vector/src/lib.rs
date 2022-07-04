@@ -5,18 +5,31 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 #![no_std]
 #![no_main]
+extern crate alloc;
 
-use dallo::Vec;
+use dallo::HostAlloc;
+#[global_allocator]
+static ALLOCATOR: HostAlloc = HostAlloc;
+
+use alloc::vec::Vec;
 
 pub struct Vector {
     a: Vec<i16>,
 }
 
+const ARGBUF_LEN: usize = 6;
+
+#[no_mangle]
+static mut A: [u8; ARGBUF_LEN] = [0u8; ARGBUF_LEN];
+#[no_mangle]
+static AL: i32 = ARGBUF_LEN as i32;
+
 static mut SELF: Vector = Vector { a: Vec::new() };
 
 impl Vector {
     pub fn push(&mut self, x: i16) {
-        self.a.push(x)
+        self.a.push(x);
+        dallo::snap()
     }
 
     pub fn pop(&mut self) -> Option<i16> {
@@ -25,11 +38,11 @@ impl Vector {
 }
 
 #[no_mangle]
-fn push(x: i16) {
-    unsafe { SELF.push(x) }
+unsafe fn push(a: i32) -> i32 {
+    dallo::transact_helper(&mut SELF, &mut A, a, |slf, arg| slf.push(arg))
 }
 
 #[no_mangle]
-fn pop() -> Option<i16> {
-    unsafe { SELF.pop() }
+unsafe fn pop(a: i32) -> i32 {
+    dallo::transact_helper(&mut SELF, &mut A, a, |slf, _arg: ()| slf.pop())
 }

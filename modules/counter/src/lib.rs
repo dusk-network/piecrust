@@ -6,9 +6,8 @@
 #![no_std]
 #![no_main]
 
-use rkyv::ser::serializers::BufferSerializer;
-use rkyv::ser::Serializer;
-use rkyv::{archived_value, Deserialize};
+#[global_allocator]
+static ALLOCATOR: dallo::HostAlloc = dallo::HostAlloc;
 
 #[derive(Default)]
 pub struct Counter {
@@ -36,33 +35,25 @@ impl Counter {
         self.value += 1;
     }
 
-    pub fn mogrify(&mut self, x: i32) {
+    pub fn mogrify(&mut self, x: i32) -> i32 {
         let x: i32 = x.into();
+        let old = self.read_value();
         self.value -= x;
+        old
     }
 }
 
 #[no_mangle]
-fn read_value(_: i32) -> i32 {
-    let ret = unsafe { SELF.read_value() };
-    let mut ser = unsafe { BufferSerializer::new(&mut A) };
-    ser.serialize_value(&ret).unwrap() as i32
+unsafe fn read_value(a: i32) -> i32 {
+    dallo::query_helper(&SELF, &mut A, a, |slf, _: ()| slf.read_value())
 }
 
 #[no_mangle]
-fn increment(_: i32) -> i32 {
-    unsafe { SELF.increment() }
-    0
+unsafe fn increment(a: i32) -> i32 {
+    dallo::transact_helper(&mut SELF, &mut A, a, |slf, _: ()| slf.increment())
 }
 
 #[no_mangle]
-fn mogrify(arg: i32) -> i32 {
-    let ret = {
-        let i = unsafe { archived_value::<i32>(&A, arg as usize) };
-        let i: i32 = i.deserialize(&mut rkyv::Infallible).unwrap();
-        unsafe { SELF.mogrify(i) }
-    };
-
-    let mut ser = unsafe { BufferSerializer::new(&mut A) };
-    ser.serialize_value(&ret).unwrap() as i32
+unsafe fn mogrify(a: i32) -> i32 {
+    dallo::transact_helper(&mut SELF, &mut A, a, |slf, by: i32| slf.mogrify(by))
 }

@@ -1,5 +1,5 @@
 all: ## Generate the optimized WASM for the contract given
-	@cargo +nightly build \
+	@cargo build \
           --release \
           --manifest-path=./Cargo.toml \
           -Z build-std=std,panic_abort \

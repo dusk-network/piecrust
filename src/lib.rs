@@ -1,10 +1,10 @@
-use std::{cell::UnsafeCell, sync::Arc};
-
+use colored::*;
 use rkyv::{
     archived_value,
     ser::{serializers::BufferSerializer, Serializer},
     Archive, Deserialize, Infallible, Serialize,
 };
+use std::{cell::UnsafeCell, sync::Arc};
 use wasmer::{imports, Exports, Function, NativeFunc, Val, WasmerEnv};
 
 mod error;
@@ -22,6 +22,7 @@ enum EnvInner {
         mem_handler: MemHandler,
         arg_buf_ofs: i32,
         arg_buf_len: i32,
+        heap_base: i32,
     },
 }
 
@@ -45,6 +46,7 @@ impl Env {
                 mem_handler: MemHandler::new(heap_base as usize),
                 arg_buf_ofs,
                 arg_buf_len,
+                heap_base,
             };
         }
     }
@@ -59,14 +61,15 @@ impl Env {
 
         let mut env = Env::uninitialized();
 
-        let real_imports = imports! {
+        let imports = imports! {
             "env" => {
                 "alloc" => Function::new_native_with_env(&store, env.clone(), host_alloc),
+        "dealloc" => Function::new_native_with_env(&store, env.clone(), host_dealloc),
                 "snap" => Function::new_native_with_env(&store, env.clone(), host_snapshot),
             }
         };
 
-        let instance = wasmer::Instance::new(&module, &real_imports)?;
+        let instance = wasmer::Instance::new(&module, &imports)?;
 
         let arg_buf_ofs = global_i32(&instance.exports, "A")?;
         let arg_buf_len_pos = global_i32(&instance.exports, "AL")?;
@@ -106,12 +109,20 @@ impl Env {
                 fun.call(entry)?
             };
 
-            println!("mid query snap!");
-            self.snap();
+            println!("ret pos {}", ret_pos);
 
             Ok(self.with_arg_buffer(|buf| {
+                println!("arg buffer {:?}", buf);
+
                 let val = unsafe { archived_value::<Ret>(buf, ret_pos as usize) };
-                val.deserialize(&mut Infallible).unwrap()
+
+                println!("omg we have the return {:?}", val);
+
+                let deserialized = val.deserialize(&mut Infallible).unwrap();
+
+                println!("omg we have the de {:?}", deserialized);
+
+                deserialized
             }))
         } else {
             unreachable!("Call on uninitialized environment")
@@ -182,29 +193,59 @@ impl Env {
         }
     }
 
+    pub fn dealloc(&self, _addr: usize) {
+        ()
+    }
+
     pub fn snap(&self) {
-        if let EnvInner::Initialized { instance, .. } = unsafe { &*self.0.get() } {
+        if let EnvInner::Initialized {
+            instance,
+            arg_buf_ofs,
+            arg_buf_len,
+            heap_base,
+            ..
+        } = unsafe { &*self.0.get() }
+        {
             let mem = instance
                 .exports
                 .get_memory("memory")
                 .expect("memory export is checked at module creation time");
 
+            println!("memory snapshot");
+
             let maybe_interesting = unsafe { mem.data_unchecked_mut() };
 
             const CSZ: usize = 128;
+            const RSZ: usize = 16;
 
-            let mut zeroes = 0;
-            for chunk in maybe_interesting.chunks(CSZ) {
+            for (chunk_nr, chunk) in maybe_interesting.chunks(CSZ).enumerate() {
                 if chunk[..] != [0; CSZ][..] {
-                    if zeroes > 1024 {
-                        println!("- {} zeroes ({:?} kibi) -", zeroes, zeroes as f64 / 1024.0);
-                    } else if zeroes > 0 {
-                        println!("- {} zeroes -", zeroes);
+                    for (row_nr, row) in chunk.chunks(16).enumerate() {
+                        let ofs = chunk_nr * CSZ + row_nr * RSZ;
+
+                        print!("{:08x}:", ofs);
+
+                        for (i, byte) in row.iter().enumerate() {
+                            if i % 4 == 0 {
+                                print!(" ");
+                            }
+
+                            let buf_start = *arg_buf_ofs as usize;
+                            let buf_end = buf_start + *arg_buf_len as usize;
+                            let heap_base = *heap_base as usize;
+
+                            if ofs + i >= buf_start && ofs + i < buf_end {
+                                print!("{}", format!("{:02x}", byte).red());
+                                print!(" ");
+                            } else if ofs + i >= heap_base {
+                                print!("{}", format!("{:02x} ", byte).green());
+                            } else {
+                                print!("{:02x} ", byte)
+                            }
+                        }
+
+                        println!();
                     }
-                    zeroes = 0;
-                    println!("{}", pretty_hex::pretty_hex(&chunk));
-                } else {
-                    zeroes += CSZ
                 }
             }
         } else {
@@ -227,11 +268,13 @@ fn host_alloc(env: &Env, amount: i32, align: i32) -> i32 {
         .expect("i32 overflow")
 }
 
+fn host_dealloc(env: &Env, addr: i32) {
+    env.dealloc(addr as usize)
+}
+
 // Debug helper to take a snapshot of the memory of the running process.
-fn host_snapshot(env: &Env, amount: i32, align: i32) -> i32 {
-    env.alloc(amount as usize, align as usize)
-        .try_into()
-        .expect("i32 overflow")
+fn host_snapshot(env: &Env) {
+    env.snap()
 }
 
 #[macro_export]

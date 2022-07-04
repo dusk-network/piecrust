@@ -10,15 +10,13 @@ pub fn box_set_get() -> Result<(), Error> {
 
     println!("setting");
 
-    module.transact("set", 0x37)?;
+    module.transact("set", 0x11)?;
 
-    println!("snap after set");
+    let value: Option<i16> = module.query("get", ())?;
 
-    module.snap();
+    println!("fin");
 
-    let value: Option<i32> = module.query("get", ())?;
-
-    assert_eq!(value, Some(0x37));
+    assert_eq!(value, Some(0x11));
 
     Ok(())
 }

@@ -1,5 +1,5 @@
 [package]
-name = "vector"
+name = "callcenter"
 version = "0.1.0"
 authors = [
     "Kristoffer Ström <kristoffer@dusk.network>",
@@ -7,7 +7,7 @@ authors = [
 edition = "2021"
 
 [dependencies]
-dallo = { path = "../../dallo" }
+dallo = { path = "../../dallo", default-features = false }
 
 [lib]
 crate-type = ["cdylib", "rlib"]

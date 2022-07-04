@@ -8,15 +8,6 @@ edition = "2021"
 
 [dependencies]
 dallo = { path = "../../dallo", default-features = false }
-rkyv = { version = "0.7.38", default-features = false, features = ["size_32", "rend"] }
-
-[profile.dev]
-panic = "abort"
-
-[profile.release]
-strip = true
-opt-level = "z"
-panic = "abort"
 
 [lib]
 crate-type = ["cdylib", "rlib"]
