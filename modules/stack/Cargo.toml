@@ -1,0 +1,14 @@
+[package]
+name = "stack"
+version = "0.1.0"
+authors = [
+    "Eduardo Leegwater Simões <eduardo@dusk.network>",
+]
+edition = "2021"
+
+[dependencies]
+dallo = { path = "../../dallo" }
+nstack = { git = "https://github.com/dusk-network/nstack", branch = "uitkleden" }
+
+[lib]
+crate-type = ["cdylib", "rlib"]
