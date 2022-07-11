@@ -9,6 +9,9 @@ use wasmer::{imports, Exports, Function, NativeFunc, Val, WasmerEnv};
 
 mod error;
 mod memory;
+mod world;
+
+pub use world::World;
 
 pub use error::Error;
 

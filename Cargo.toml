@@ -10,6 +10,7 @@ colored = "2.0.0"
 rkyv = "0.7.38"
 wasmer = "2.3.0"
 wasmer-vm = "2.3.0"
+dallo = { path = "dallo" , default_features = false }
 
 [workspace]
 members = [

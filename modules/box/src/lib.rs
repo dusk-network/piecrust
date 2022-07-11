@@ -47,10 +47,10 @@ impl Boxen {
 
 #[no_mangle]
 unsafe fn set(a: i32) -> i32 {
-    dallo::transact_helper(&mut SELF, &mut A, a, |slf, to| slf.set(to))
+    dallo::wrap_transaction(&mut A, a, |to| SELF.set(to))
 }
 
 #[no_mangle]
 unsafe fn get(a: i32) -> i32 {
-    dallo::query_helper(&SELF, &mut A, a, |slf, _: ()| slf.get())
+    dallo::wrap_transaction(&mut A, a, |_: ()| SELF.get())
 }

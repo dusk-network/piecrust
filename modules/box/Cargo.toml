@@ -7,7 +7,7 @@ authors = [
 edition = "2021"
 
 [dependencies]
-dallo = { path = "../../dallo", default-features = false }
+dallo = { path = "../../dallo" }
 
 [lib]
 crate-type = ["cdylib", "rlib"]

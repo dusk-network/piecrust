@@ -417,6 +417,7 @@ name = "hatchery"
 version = "0.1.0"
 dependencies = [
  "colored",
+ "dallo",
  "rkyv",
  "wasmer",
  "wasmer-vm",

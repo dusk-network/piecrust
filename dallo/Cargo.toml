@@ -7,3 +7,5 @@ edition = "2021"
 rkyv = { version = "0.7.38", default-features = false, features = ["size_32", "alloc"] }
 
 [features]
+default = ["wasm"]
+wasm = []

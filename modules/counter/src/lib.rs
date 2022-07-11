@@ -45,15 +45,15 @@ impl Counter {
 
 #[no_mangle]
 unsafe fn read_value(a: i32) -> i32 {
-    dallo::query_helper(&SELF, &mut A, a, |slf, _: ()| slf.read_value())
+    dallo::wrap_query(&mut A, a, |_: ()| SELF.read_value())
 }
 
 #[no_mangle]
 unsafe fn increment(a: i32) -> i32 {
-    dallo::transact_helper(&mut SELF, &mut A, a, |slf, _: ()| slf.increment())
+    dallo::wrap_transaction(&mut A, a, |_: ()| SELF.increment())
 }
 
 #[no_mangle]
 unsafe fn mogrify(a: i32) -> i32 {
-    dallo::transact_helper(&mut SELF, &mut A, a, |slf, by: i32| slf.mogrify(by))
+    dallo::wrap_transaction(&mut A, a, |by: i32| SELF.mogrify(by))
 }

@@ -39,10 +39,10 @@ impl Vector {
 
 #[no_mangle]
 unsafe fn push(a: i32) -> i32 {
-    dallo::transact_helper(&mut SELF, &mut A, a, |slf, arg| slf.push(arg))
+    dallo::wrap_transaction(&mut A, a, |arg| SELF.push(arg))
 }
 
 #[no_mangle]
 unsafe fn pop(a: i32) -> i32 {
-    dallo::transact_helper(&mut SELF, &mut A, a, |slf, _arg: ()| slf.pop())
+    dallo::wrap_transaction(&mut A, a, |_arg: ()| SELF.pop())
 }
