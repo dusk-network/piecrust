@@ -32,12 +32,10 @@ static mut SELF: Boxen = Boxen { a: None, b: 0xbb };
 
 impl Boxen {
     pub fn set(&mut self, x: i16) {
-        dallo::snap();
         match self.a.as_mut() {
             Some(o) => **o = x,
             None => self.a = Some(Box::new(x)),
         }
-        dallo::snap();
     }
 
     pub fn get(&self) -> Option<i16> {

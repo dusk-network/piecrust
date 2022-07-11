@@ -3,6 +3,7 @@
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
+#![feature(arbitrary_self_types)]
 #![no_std]
 #![no_main]
 
@@ -11,32 +12,30 @@ static ALLOCATOR: dallo::HostAlloc = dallo::HostAlloc;
 
 #[derive(Default)]
 pub struct Counter {
-    value: i32,
+    value: i64,
 }
 
-#[allow(unused)]
-use dallo;
+use dallo::State;
 
-const ARGBUF_LEN: usize = 4;
+const ARGBUF_LEN: usize = 64;
 
 #[no_mangle]
 static mut A: [u8; ARGBUF_LEN] = [0u8; ARGBUF_LEN];
 #[no_mangle]
 static AL: i32 = ARGBUF_LEN as i32;
 
-static mut SELF: Counter = Counter { value: 0xfc };
+static mut SELF: State<Counter> = State::new(Counter { value: 0xfc });
 
 impl Counter {
-    pub fn read_value(&self) -> i32 {
-        self.value.into()
+    pub fn read_value(self: &State<Counter>) -> i64 {
+        self.value
     }
 
-    pub fn increment(&mut self) {
+    pub fn increment(self: &mut State<Counter>) {
         self.value += 1;
     }
 
-    pub fn mogrify(&mut self, x: i32) -> i32 {
-        let x: i32 = x.into();
+    pub fn mogrify(self: &mut State<Counter>, x: i64) -> i64 {
         let old = self.read_value();
         self.value -= x;
         old
@@ -55,5 +54,5 @@ unsafe fn increment(a: i32) -> i32 {
 
 #[no_mangle]
 unsafe fn mogrify(a: i32) -> i32 {
-    dallo::wrap_transaction(&mut A, a, |by: i32| SELF.mogrify(by))
+    dallo::wrap_transaction(&mut A, a, |by| SELF.mogrify(by))
 }

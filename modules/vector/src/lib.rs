@@ -7,7 +7,8 @@
 #![no_main]
 extern crate alloc;
 
-use dallo::HostAlloc;
+use dallo::{HostAlloc, State};
+
 #[global_allocator]
 static ALLOCATOR: HostAlloc = HostAlloc;
 
@@ -24,12 +25,11 @@ static mut A: [u8; ARGBUF_LEN] = [0u8; ARGBUF_LEN];
 #[no_mangle]
 static AL: i32 = ARGBUF_LEN as i32;
 
-static mut SELF: Vector = Vector { a: Vec::new() };
+static mut SELF: State<Vector> = State::new(Vector { a: Vec::new() });
 
 impl Vector {
     pub fn push(&mut self, x: i16) {
         self.a.push(x);
-        dallo::snap()
     }
 
     pub fn pop(&mut self) -> Option<i16> {
