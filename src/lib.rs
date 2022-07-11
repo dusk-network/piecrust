@@ -1,7 +1,9 @@
 use colored::*;
+use dallo::{ModuleId, Ser};
 use rkyv::{
     archived_value,
-    ser::{serializers::BufferSerializer, Serializer},
+    ser::serializers::{BufferScratch, BufferSerializer, CompositeSerializer},
+    ser::Serializer,
     Archive, Deserialize, Infallible, Serialize,
 };
 use std::{cell::UnsafeCell, sync::Arc};
@@ -21,6 +23,7 @@ use crate::memory::MemHandler;
 enum EnvInner {
     Uninitialized,
     Initialized {
+        id: ModuleId,
         instance: wasmer::Instance,
         mem_handler: MemHandler,
         arg_buf_ofs: i32,
@@ -38,6 +41,7 @@ unsafe impl Send for Env {}
 impl Env {
     fn initialize(
         &mut self,
+        id: ModuleId,
         instance: wasmer::Instance,
         arg_buf_ofs: i32,
         arg_buf_len: i32,
@@ -45,6 +49,7 @@ impl Env {
     ) {
         unsafe {
             *self.0.get() = EnvInner::Initialized {
+                id,
                 instance,
                 mem_handler: MemHandler::new(heap_base as usize),
                 arg_buf_ofs,
@@ -89,14 +94,16 @@ impl Env {
 
         println!("arg_buf_len {:?}", arg_buf_len);
 
-        env.initialize(instance, arg_buf_ofs, arg_buf_len, heap_base);
+        let id = blake3::hash(bytecode).into();
+
+        env.initialize(id, instance, arg_buf_ofs, arg_buf_len, heap_base);
 
         Ok(env)
     }
 
-    pub fn query<Arg, Ret>(&self, name: &str, arg: Arg) -> Result<Ret, Error>
+    pub(crate) fn query<Arg, Ret>(&self, name: &str, arg: Arg) -> Result<Ret, Error>
     where
-        Arg: for<'a> Serialize<BufferSerializer<&'a mut [u8]>>,
+        Arg: for<'a> Serialize<Ser<'a>>,
         Ret: Archive + core::fmt::Debug,
         Ret::Archived: Deserialize<Ret, Infallible> + core::fmt::Debug,
     {
@@ -105,8 +112,12 @@ impl Env {
 
             let ret_pos = {
                 let entry = self.with_arg_buffer(|buf| {
-                    let mut serializer = BufferSerializer::new(buf);
-                    serializer.serialize_value(&arg)
+                    let mut sbuf = [0u8; 16];
+                    let scratch = BufferScratch::new(&mut sbuf);
+                    let ser = BufferSerializer::new(buf);
+                    let mut composite = CompositeSerializer::new(ser, scratch, rkyv::Infallible);
+
+                    composite.serialize_value(&arg)
                 })? as i32;
 
                 fun.call(entry)?
@@ -132,9 +143,9 @@ impl Env {
         }
     }
 
-    pub fn transact<Arg, Ret>(&mut self, name: &str, arg: Arg) -> Result<Ret, Error>
+    pub(crate) fn transact<Arg, Ret>(&mut self, name: &str, arg: Arg) -> Result<Ret, Error>
     where
-        Arg: for<'a> Serialize<BufferSerializer<&'a mut [u8]>>,
+        Arg: for<'a> Serialize<Ser<'a>>,
         Ret: Archive + core::fmt::Debug,
         Ret::Archived: Deserialize<Ret, Infallible> + core::fmt::Debug,
     {
@@ -143,8 +154,12 @@ impl Env {
 
             let ret_pos = {
                 let entry = self.with_arg_buffer(|buf| {
-                    let mut serializer = BufferSerializer::new(buf);
-                    serializer.serialize_value(&arg)
+                    let mut sbuf = [0u8; 16];
+                    let scratch = BufferScratch::new(&mut sbuf);
+                    let ser = BufferSerializer::new(buf);
+                    let mut composite = CompositeSerializer::new(ser, scratch, rkyv::Infallible);
+
+                    composite.serialize_value(&arg)
                 })? as i32;
 
                 fun.call(entry)?
@@ -188,7 +203,7 @@ impl Env {
         }
     }
 
-    pub fn alloc(&self, amount: usize, align: usize) -> usize {
+    pub(crate) fn alloc(&self, amount: usize, align: usize) -> usize {
         if let EnvInner::Initialized { mem_handler, .. } = unsafe { &mut *self.0.get() } {
             mem_handler.alloc(amount, align)
         } else {
@@ -196,8 +211,16 @@ impl Env {
         }
     }
 
-    pub fn dealloc(&self, _addr: usize) {
+    pub(crate) fn dealloc(&self, _addr: usize) {
         ()
+    }
+
+    pub fn id(&self) -> ModuleId {
+        if let EnvInner::Initialized { id, .. } = unsafe { &*self.0.get() } {
+            *id
+        } else {
+            unreachable!("Call on uninitialized environment")
+        }
     }
 
     pub fn snap(&self) {

@@ -24,14 +24,14 @@ static AL: i32 = ARGBUF_LEN as i32;
 static mut SELF: Callcenter = Callcenter;
 
 impl Callcenter {
-    pub fn delegate_query(&self, id: ModuleId, raw: RawQuery) -> ReturnBuf {
+    pub fn delegate_query(&self, _id: ModuleId, _raw: RawQuery) -> ReturnBuf {
         todo!()
     }
 
     pub fn delegate_transaction(
         &self,
-        id: ModuleId,
-        raw: RawTransaction,
+        _id: ModuleId,
+        _raw: RawTransaction,
     ) -> ReturnBuf {
         todo!()
     }

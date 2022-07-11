@@ -1,14 +1,12 @@
-use hatchery::{module, Error};
+use hatchery::{module, Error, World};
 
 #[test]
 pub fn counter_trivial() -> Result<(), Error> {
-    println!("runt trivial counter test yo");
+    let mut world = World::new();
 
-    let module = module!("counter")?;
+    let id = world.deploy(module!("counter")?);
 
-    println!("env created!");
-
-    let value: i32 = module.query("read_value", ())?;
+    let value: i32 = world.query(id, "read_value", ())?;
 
     assert_eq!(value, 0xfc);
 
@@ -17,16 +15,18 @@ pub fn counter_trivial() -> Result<(), Error> {
 
 #[test]
 pub fn counter_increment() -> Result<(), Error> {
-    let mut module = module!("counter")?;
+    let mut world = World::new();
 
-    module.transact("increment", ())?;
+    let id = world.deploy(module!("counter")?);
 
-    let value: i32 = module.query("read_value", ())?;
+    world.transact(id, "increment", ())?;
+
+    let value: i32 = world.query(id, "read_value", ())?;
     assert_eq!(value, 0xfd);
 
-    module.transact("increment", ())?;
+    world.transact(id, "increment", ())?;
 
-    let value: i32 = module.query("read_value", ())?;
+    let value: i32 = world.query(id, "read_value", ())?;
     assert_eq!(value, 0xfe);
 
     Ok(())
@@ -34,17 +34,15 @@ pub fn counter_increment() -> Result<(), Error> {
 
 #[test]
 pub fn counter_mogrify() -> Result<(), Error> {
-    println!("runt trivial counter test yo");
+    let mut world = World::new();
 
-    let mut module = module!("counter")?;
+    let id = world.deploy(module!("counter")?);
 
-    println!("env created!");
-
-    let value: i32 = module.transact("mogrify", 32)?;
+    let value: i32 = world.transact(id, "mogrify", 32)?;
 
     assert_eq!(value, 0xfc);
 
-    let value: i32 = module.query("read_value", ())?;
+    let value: i32 = world.query(id, "read_value", ())?;
     assert_eq!(value, 0xfc - 32);
 
     Ok(())

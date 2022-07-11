@@ -1,4 +1,4 @@
-use rkyv::ser::serializers::BufferSerializerError;
+use rkyv::ser::serializers::{BufferSerializerError, CompositeSerializerError};
 
 #[derive(Debug)]
 pub enum Error {
@@ -37,5 +37,11 @@ impl From<wasmer::RuntimeError> for Error {
 impl From<BufferSerializerError> for Error {
     fn from(e: BufferSerializerError) -> Self {
         Error::BufferSerializerError(e)
+    }
+}
+
+impl<A, B, C> From<CompositeSerializerError<A, B, C>> for Error {
+    fn from(_e: CompositeSerializerError<A, B, C>) -> Self {
+        todo!()
     }
 }
