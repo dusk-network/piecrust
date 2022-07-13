@@ -1,16 +1,16 @@
-use hatchery::{module, Error, World};
+use hatchery::{module_bytecode, Error, World};
 
 #[test]
 pub fn world_center_counter() -> Result<(), Error> {
-    let mut world = World::default();
+    let mut world = World::new();
 
-    let counter_id = world.deploy(module!("counter")?);
+    let counter_id = world.deploy(module_bytecode!("counter"))?;
     assert_eq!(&counter_id, include_bytes!("../modules/counter/id"));
 
     let value: i64 = world.query(counter_id, "read_value", ())?;
     assert_eq!(value, 0xfc);
 
-    let center_id = world.deploy(module!("callcenter")?);
+    let center_id = world.deploy(module_bytecode!("callcenter"))?;
     assert_eq!(&center_id, include_bytes!("../modules/callcenter/id"));
 
     // read value through callcenter

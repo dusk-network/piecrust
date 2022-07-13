@@ -25,7 +25,8 @@ static mut A: [u8; ARGBUF_LEN] = [0u8; ARGBUF_LEN];
 #[no_mangle]
 static AL: i32 = ARGBUF_LEN as i32;
 
-static mut SELF: State<Vector> = State::new(Vector { a: Vec::new() });
+static mut SELF: State<Vector> =
+    unsafe { State::new(Vector { a: Vec::new() }, &mut A) };
 
 impl Vector {
     pub fn push(&mut self, x: i16) {

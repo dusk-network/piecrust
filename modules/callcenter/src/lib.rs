@@ -22,7 +22,7 @@ static mut A: [u8; ARGBUF_LEN] = [0u8; ARGBUF_LEN];
 #[no_mangle]
 static AL: i32 = ARGBUF_LEN as i32;
 
-static mut SELF: State<Callcenter> = State::new(Callcenter);
+static mut SELF: State<Callcenter> = unsafe { State::new(Callcenter, &mut A) };
 
 const COUNTER_ID: &[u8; 32] = include_bytes!("../../counter/id");
 
