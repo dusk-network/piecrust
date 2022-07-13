@@ -92,8 +92,6 @@ impl Env {
             .deserialize(&mut Infallible)
             .expect("infallible");
 
-        println!("arg_buf_len {:?}", arg_buf_len);
-
         let id = blake3::hash(bytecode).into();
 
         env.initialize(id, instance, arg_buf_ofs, arg_buf_len, heap_base);
@@ -123,19 +121,9 @@ impl Env {
                 fun.call(entry)?
             };
 
-            println!("ret pos {}", ret_pos);
-
             Ok(self.with_arg_buffer(|buf| {
-                println!("arg buffer {:?}", buf);
-
                 let val = unsafe { archived_value::<Ret>(buf, ret_pos as usize) };
-
-                println!("omg we have the return {:?}", val);
-
                 let deserialized = val.deserialize(&mut Infallible).unwrap();
-
-                println!("omg we have the de {:?}", deserialized);
-
                 deserialized
             }))
         } else {

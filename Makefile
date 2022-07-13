@@ -4,6 +4,7 @@ help: ## Display this help screen
 all: test-contracts
 
 test: test-contracts ## Run the contracts' tests
+	sh gen_ids.sh
 	cargo test --all-features
 
 test-contracts: ## Build the test contracts

@@ -14,6 +14,9 @@ impl World {
     pub fn deploy(&mut self, env: Env) -> ModuleId {
         let id = env.id();
         self.0.insert(id, env);
+
+        println!("deployed id {:?}", id);
+
         id
     }
 

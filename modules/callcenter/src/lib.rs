@@ -3,6 +3,7 @@
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
+#![feature(arbitrary_self_types)]
 #![no_std]
 #![no_main]
 
@@ -21,32 +22,26 @@ static mut A: [u8; ARGBUF_LEN] = [0u8; ARGBUF_LEN];
 #[no_mangle]
 static AL: i32 = ARGBUF_LEN as i32;
 
-static mut SELF: Callcenter = Callcenter;
+static mut SELF: State<Callcenter> = State::new(Callcenter);
+
+const COUNTER_ID: &[u8; 32] = include_bytes!("../../counter/id");
 
 impl Callcenter {
-    pub fn delegate_query(&self, _id: ModuleId, _raw: RawQuery) -> ReturnBuf {
-        todo!()
+    pub fn query_counter(self: &State<Self>) -> i64 {
+        self.query(*COUNTER_ID, "read_value", ())
     }
 
-    pub fn delegate_transaction(
-        &self,
-        _id: ModuleId,
-        _raw: RawTransaction,
-    ) -> ReturnBuf {
-        todo!()
+    pub fn increment_counter(self: &mut State<Self>) {
+        self.transact(*COUNTER_ID, "increment", ())
     }
 }
 
 #[no_mangle]
-unsafe fn delegate_query(a: i32) -> i32 {
-    dallo::wrap_query(&mut A, a, |(mod_id, raw)| {
-        SELF.delegate_query(mod_id, raw)
-    })
+unsafe fn query_counter(a: i32) -> i32 {
+    dallo::wrap_query(&mut A, a, |_: ()| SELF.query_counter())
 }
 
 #[no_mangle]
-unsafe fn delegate_transaction(a: i32) -> i32 {
-    dallo::wrap_transaction(&mut A, a, |(mod_id, raw)| {
-        SELF.delegate_transaction(mod_id, raw)
-    })
+unsafe fn increment_counter(a: i32) -> i32 {
+    dallo::wrap_transaction(&mut A, a, |_: ()| SELF.increment_counter())
 }
