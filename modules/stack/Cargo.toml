@@ -1,0 +1,15 @@
+[package]
+name = "stack"
+version = "0.1.0"
+authors = [
+    "Eduardo Leegwater Simões <eduardo@dusk.network>",
+]
+edition = "2021"
+
+[dependencies]
+dallo = { path = "../../dallo" }
+nstack = { path = "../../../nstack" }
+ranno = { path = "../../../ranno", default-features = false, features = ["alloc"]}
+
+[lib]
+crate-type = ["cdylib", "rlib"]
