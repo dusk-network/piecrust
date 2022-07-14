@@ -15,17 +15,20 @@ pub fn world_center_counter() -> Result<(), Error> {
 
     // read value through callcenter
 
-    // let value: i64 = world.query(center_id, "query_counter", ())?;
-    // assert_eq!(value, 0xfc);
+    let value: i64 = world.query(center_id, "query_counter", ())?;
+    assert_eq!(value, 0xfc);
 
-    // world.transact(center_id, "increment_counter", ())?;
+    world.transact(center_id, "increment_counter", ())?;
 
-    // // read back without proxy.
+    // read back without proxy.
 
-    // // read back with proxy.
+    let value: i64 = world.query(counter_id, "read_value", ())?;
+    assert_eq!(value, 0xfc);
 
-    // let value: i64 = world.query(center_id, "query_counter", ())?;
-    // assert_eq!(value, 0xfc);
+    // read back with proxy.
+
+    let value: i64 = world.query(center_id, "query_counter", ())?;
+    assert_eq!(value, 0xfc);
 
     Ok(())
 }

@@ -7,7 +7,10 @@ use parking_lot::RwLock;
 use rkyv::{archived_value, Archive, Deserialize, Infallible, Serialize};
 use wasmer::{imports, Exports, Function, Val};
 
-use crate::{Env, Error, Instance, MemHandler};
+use crate::env::Env;
+use crate::error::Error;
+use crate::instance::Instance;
+use crate::memory::MemHandler;
 
 #[derive(Debug)]
 pub struct WorldInner(BTreeMap<ModuleId, Env>);
@@ -70,17 +73,17 @@ impl World {
 
         let id = blake3::hash(bytecode).into();
 
-        let instance = Instance {
+        let instance = Instance::new(
             id,
             instance,
-            world: self.clone(),
-            mem_handler: MemHandler::new(heap_base as usize),
+            self.clone(),
+            MemHandler::new(heap_base as usize),
             arg_buf_ofs,
             arg_buf_len,
             heap_base,
-        };
+        );
 
-	env.initialize(instance);
+        env.initialize(instance);
 
         self.0.write().insert(id, env);
 
@@ -113,6 +116,64 @@ impl World {
             .expect("invalid module id")
             .inner_mut()
             .transact(name, arg)
+    }
+
+    fn perform_query(&self, name: &str, caller: ModuleId, callee: ModuleId, arg_ofs: i32) -> Result<i32, Error> {
+        let a = self.0.read();
+
+        let caller = a.get(&caller).expect("oh no").inner();
+        let callee = a.get(&callee).expect("no oh").inner();
+
+        let mut min_len = 0;
+
+        caller.with_arg_buffer(|buf_caller| {
+            callee.with_arg_buffer(|buf_callee| {
+                min_len = std::cmp::min(buf_caller.len(), buf_callee.len());
+                buf_callee[..min_len].copy_from_slice(&buf_caller[..min_len]);
+            })
+        });
+
+        let ret_ofs = callee.perform_query(name, arg_ofs)?;
+
+        callee.with_arg_buffer(|buf_callee| {
+            caller.with_arg_buffer(|buf_caller| {
+                buf_caller[..min_len].copy_from_slice(&buf_callee[..min_len]);
+            })
+        });
+
+	Ok(ret_ofs)
+    }
+
+    fn perform_transaction(
+        &self,
+        name: &str,
+        caller: ModuleId,
+        callee: ModuleId,
+        arg_ofs: i32,
+    ) -> Result<i32, Error> {
+        let a = self.0.write();
+
+        let caller = a.get(&caller).expect("oh no").inner();
+        let callee = a.get(&callee).expect("no oh").inner();
+
+        let mut min_len = 0;
+
+        caller.with_arg_buffer(|buf_caller| {
+            callee.with_arg_buffer(|buf_callee| {
+                min_len = std::cmp::min(buf_caller.len(), buf_callee.len());
+                buf_callee[..min_len].copy_from_slice(&buf_caller[..min_len]);
+            })
+        });
+
+        let ret_ofs = callee.perform_transaction(name, arg_ofs)?;
+
+        callee.with_arg_buffer(|buf_callee| {
+            caller.with_arg_buffer(|buf_caller| {
+                buf_caller[..min_len].copy_from_slice(&buf_callee[..min_len]);
+            })
+        });
+
+	Ok(ret_ofs)
     }
 }
 
@@ -150,34 +211,48 @@ fn host_query(
     let module_id_adr = module_id_adr as usize;
     let method_name_adr = method_name_adr as usize;
     let method_name_len = method_name_len as usize;
-    let _arg_ofs = arg_ofs as usize;
 
-    let i = env.inner();
+    let instance = env.inner();
     let mut mod_id = ModuleId::default();
     // performance: use a dedicated buffer here?
     let mut name = String::new();
 
-    i.with_memory(|buf| {
+    instance.with_memory(|buf| {
         mod_id[..].copy_from_slice(&buf[module_id_adr..][..core::mem::size_of::<ModuleId>()]);
         let utf = core::str::from_utf8(&buf[method_name_adr..][..method_name_len])
             .expect("TODO, error out cleaner");
         name.push_str(utf)
     });
 
-    let _ = env.inner().world;
-    
-    // At this point we have the mod_id, and the name of the method.
-    // The caller has written the arguments to its own arg buffer.
-
-    todo!()
+    instance
+        .world()
+        .perform_query(&name, instance.id(), mod_id, arg_ofs).expect("TODO: error handling")
 }
 
 fn host_transact(
-    _env: &Env,
-    _module_id_adr: i32,
-    _method_name_adr: i32,
-    _method_name_len: i32,
-    _buffer_arg_ofs: i32,
+    env: &Env,
+    module_id_adr: i32,
+    method_name_adr: i32,
+    method_name_len: i32,
+    arg_ofs: i32,
 ) -> i32 {
-    todo!()
+    let module_id_adr = module_id_adr as usize;
+    let method_name_adr = method_name_adr as usize;
+    let method_name_len = method_name_len as usize;
+
+    let instance = env.inner();
+    let mut mod_id = ModuleId::default();
+    // performance: use a dedicated buffer here?
+    let mut name = String::new();
+
+    instance.with_memory(|buf| {
+        mod_id[..].copy_from_slice(&buf[module_id_adr..][..core::mem::size_of::<ModuleId>()]);
+        let utf = core::str::from_utf8(&buf[method_name_adr..][..method_name_len])
+            .expect("TODO, error out cleaner");
+        name.push_str(utf)
+    });
+
+    instance
+        .world()
+        .perform_transaction(&name, instance.id(), mod_id, arg_ofs).expect("TODO: error handling")
 }

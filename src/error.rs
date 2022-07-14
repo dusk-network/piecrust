@@ -14,6 +14,7 @@ pub enum Error {
     CompileError(wasmer::CompileError),
     ExportError(wasmer::ExportError),
     RuntimeError(wasmer::RuntimeError),
+    Trap(wasmer_vm::Trap),
     MissingModuleExport,
     CompositeSerializerError(Compo),
 }
@@ -45,5 +46,11 @@ impl From<wasmer::RuntimeError> for Error {
 impl From<Compo> for Error {
     fn from(e: Compo) -> Self {
         Error::CompositeSerializerError(e)
+    }
+}
+
+impl From<wasmer_vm::Trap> for Error {
+    fn from(e: wasmer_vm::Trap) -> Self {
+        Error::Trap(e)
     }
 }
