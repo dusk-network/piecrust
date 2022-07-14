@@ -7,14 +7,16 @@
 #![no_std]
 #![no_main]
 
+use nstack::annotation::Cardinality;
 use nstack::NStack;
+use ranno::Annotation;
 
 #[global_allocator]
 static ALLOCATOR: dallo::HostAlloc = dallo::HostAlloc;
 
 #[derive(Default)]
 pub struct Stack {
-    inner: NStack<i32>,
+    inner: NStack<i32, Cardinality>,
 }
 
 const ARGBUF_LEN: usize = 8;
@@ -36,6 +38,10 @@ impl Stack {
     pub fn pop(&mut self) -> Option<i32> {
         self.inner.pop()
     }
+
+    pub fn len(&self) -> i32 {
+        *Cardinality::from_child(&self.inner) as i32
+    }
 }
 
 #[no_mangle]
@@ -46,4 +52,9 @@ unsafe fn push(a: i32) -> i32 {
 #[no_mangle]
 unsafe fn pop(a: i32) -> i32 {
     dallo::wrap_transaction(&mut A, a, |_arg: ()| SELF.pop())
+}
+
+#[no_mangle]
+unsafe fn len(a: i32) -> i32 {
+    dallo::wrap_query(&mut A, a, |_arg: ()| SELF.len())
 }

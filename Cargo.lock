@@ -649,7 +649,9 @@ checksum = "7843ec2de400bcbc6a6328c958dc38e5359da6e93e72e37bc5246bf1ae776389"
 [[package]]
 name = "nstack"
 version = "0.15.0-rkyv.0"
-source = "git+https://github.com/dusk-network/nstack?branch=uitkleden#6b783f2bc924bd57bd41518f64aa5e6e1394eafc"
+dependencies = [
+ "ranno",
+]
 
 [[package]]
 name = "num_cpus"
@@ -755,6 +757,10 @@ checksum = "3bcdf212e9776fbcb2d23ab029360416bb1706b1aea2d1a5ba002727cbcab804"
 dependencies = [
  "proc-macro2",
 ]
+
+[[package]]
+name = "ranno"
+version = "0.1.0"
 
 [[package]]
 name = "rayon"
@@ -932,6 +938,7 @@ version = "0.1.0"
 dependencies = [
  "dallo",
  "nstack",
+ "ranno",
 ]
 
 [[package]]

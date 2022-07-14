@@ -8,7 +8,8 @@ edition = "2021"
 
 [dependencies]
 dallo = { path = "../../dallo" }
-nstack = { git = "https://github.com/dusk-network/nstack", branch = "uitkleden" }
+nstack = { path = "../../../nstack" }
+ranno = { path = "../../../ranno", default-features = false, features = ["alloc"]}
 
 [lib]
 crate-type = ["cdylib", "rlib"]

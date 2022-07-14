@@ -15,26 +15,39 @@ pub fn push_pop() -> Result<(), Error> {
     let val = 42;
 
     world.transact(id, "push", val)?;
-    let popped: Option<i32> = world.transact(id, "pop", ())?;
 
+    let len: i32 = world.query(id, "len", ())?;
+    assert_eq!(len, 1);
+
+    let popped: Option<i32> = world.transact(id, "pop", ())?;
+    let len: i32 = world.query(id, "len", ())?;
+
+    assert_eq!(len, 0);
     assert_eq!(popped, Some(val));
 
     Ok(())
 }
 
+#[test]
 pub fn multi_push_pop() -> Result<(), Error> {
     let mut world = World::new();
 
     let id = world.deploy(module!("stack")?);
 
-    const N: i32 = 1_000_000;
+    const N: i32 = 1_000;
 
     for i in 0..N {
         world.transact(id, "push", i)?;
+        let len: i32 = world.query(id, "len", ())?;
+
+        assert_eq!(len, i + 1);
     }
 
     for i in (0..N).rev() {
         let popped: Option<i32> = world.transact(id, "pop", ())?;
+        let len: i32 = world.query(id, "len", ())?;
+
+        assert_eq!(len, i);
         assert_eq!(popped, Some(i));
     }
 
