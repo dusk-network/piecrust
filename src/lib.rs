@@ -80,23 +80,11 @@ impl Instance {
         let fun: NativeFunc<i32, i32> = self.instance.exports.get_native_function(name)?;
 
         let ret_pos = {
-            let entry = self.with_arg_buffer(|buf| {
-                let mut sbuf = [0u8; SCRATCH_BUF_BYTES];
-                let scratch = BufferScratch::new(&mut sbuf);
-                let ser = BufferSerializer::new(buf);
-                let mut composite = CompositeSerializer::new(ser, scratch, rkyv::Infallible);
-
-                composite.serialize_value(&arg)
-            })? as i32;
-
-            fun.call(entry)?
+	    let arg_ofs = self.write_to_arg_buffer(arg)?;
+            fun.call(arg_ofs as i32)?
         };
 
-        Ok(self.with_arg_buffer(|buf| {
-            let val = unsafe { archived_value::<Ret>(buf, ret_pos as usize) };
-            let deserialized = val.deserialize(&mut Infallible).unwrap();
-            deserialized
-        }))
+	self.read_from_arg_buffer(ret_pos as usize)
     }
 
     pub(crate) fn transact<Arg, Ret>(&mut self, name: &str, arg: Arg) -> Result<Ret, Error>
@@ -153,7 +141,7 @@ impl Instance {
         f(memory_bytes)
     }
 
-    fn write_to_arg_buffer<T>(&self, value: T) -> usize
+    fn write_to_arg_buffer<T>(&self, value: T) -> Result<usize, error::Compo>
     where
         T: for<'a> Serialize<Ser<'a>>,
     {
@@ -163,19 +151,20 @@ impl Instance {
             let ser = BufferSerializer::new(abuf);
             let mut composite = CompositeSerializer::new(ser, scratch, rkyv::Infallible);
 
-            composite.serialize_value(&value).expect("Infallible")
+            composite.serialize_value(&value)
         })
     }
 
-    fn read_from_arg_buffer<T>(&self, arg_ofs: usize) -> T
+    fn read_from_arg_buffer<T>(&self, arg_ofs: usize) -> Result<T, Error>
     where
         T: Archive,
         T::Archived: Deserialize<T, Infallible>,
     {
-        self.with_arg_buffer(|abuf| {
+	// TODO use bytecheck here
+        Ok(self.with_arg_buffer(|abuf| {
             let ta: &T::Archived = unsafe { archived_value::<T>(abuf, arg_ofs as usize) };
             ta.deserialize(&mut rkyv::Infallible).unwrap()
-        })
+        }))
     }
 
     fn with_arg_buffer<F, R>(&self, f: F) -> R

@@ -5,7 +5,7 @@ use std::sync::Arc;
 use dallo::{ModuleId, Ser};
 use parking_lot::RwLock;
 use rkyv::{archived_value, Archive, Deserialize, Infallible, Serialize};
-use wasmer::{imports, Exports, Function, NativeFunc, Val, WasmerEnv};
+use wasmer::{imports, Exports, Function, Val};
 
 use crate::{Env, Error, Instance, MemHandler};
 
@@ -80,7 +80,7 @@ impl World {
             heap_base,
         };
 
-        env.initialize(instance);
+	env.initialize(instance);
 
         self.0.write().insert(id, env);
 
@@ -150,7 +150,7 @@ fn host_query(
     let module_id_adr = module_id_adr as usize;
     let method_name_adr = method_name_adr as usize;
     let method_name_len = method_name_len as usize;
-    let arg_ofs = arg_ofs as usize;
+    let _arg_ofs = arg_ofs as usize;
 
     let i = env.inner();
     let mut mod_id = ModuleId::default();
@@ -164,6 +164,8 @@ fn host_query(
         name.push_str(utf)
     });
 
+    let _ = env.inner().world;
+    
     // At this point we have the mod_id, and the name of the method.
     // The caller has written the arguments to its own arg buffer.
 
