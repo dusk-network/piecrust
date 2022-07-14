@@ -44,12 +44,12 @@ pub fn world_center_counter() -> Result<(), Error> {
     // read back without proxy.
 
     let value: i64 = world.query(counter_id, "read_value", ())?;
-    assert_eq!(value, 0xfc);
+    assert_eq!(value, 0xfd);
 
     // read back with proxy.
 
     let value: i64 = world.query(center_id, "query_counter", ())?;
-    assert_eq!(value, 0xfc);
+    assert_eq!(value, 0xfd);
 
     Ok(())
 }

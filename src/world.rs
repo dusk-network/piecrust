@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
-use std::cell::RefCell;
+use std::cell::UnsafeCell;
 
 use dallo::{ModuleId, Ser};
 use parking_lot::ReentrantMutex;
@@ -31,11 +31,11 @@ impl DerefMut for WorldInner {
 }
 
 #[derive(Debug, Clone)]
-pub struct World(Arc<ReentrantMutex<RefCell<WorldInner>>>);
+pub struct World(Arc<ReentrantMutex<UnsafeCell<WorldInner>>>);
 
 impl World {
     pub fn new() -> Self {
-        World(Arc::new(ReentrantMutex::new(RefCell::new(WorldInner(BTreeMap::new())))))
+        World(Arc::new(ReentrantMutex::new(UnsafeCell::new(WorldInner(BTreeMap::new())))))
     }
 
     pub fn deploy(&mut self, bytecode: &[u8]) -> Result<ModuleId, Error> {
@@ -86,7 +86,9 @@ impl World {
 
         env.initialize(instance);
 
-        self.0.lock().borrow_mut().insert(id, env);
+	let guard = self.0.lock();
+	let w = unsafe { &mut *guard.get() };
+	w.insert(id, env);
 
         Ok(id)
     }
@@ -97,9 +99,11 @@ impl World {
         Ret: Archive,
         Ret::Archived: Deserialize<Ret, Infallible>,
     {
-        self.0
-            .lock()
-            .borrow()
+	let guard =         self.0
+            .lock();
+	let w = unsafe { &* guard.get() };
+
+	w
             .get(&m_id)
             .expect("invalid module id")
             .inner()
@@ -112,21 +116,21 @@ impl World {
         Ret: Archive,
         Ret::Archived: Deserialize<Ret, Infallible>,
     {
-        self.0
-            .lock()
-            .borrow_mut()
-            .get_mut(&m_id)
+	let w = self.0.lock();
+	let w = unsafe { &mut *w.get() };
+	
+	w.get_mut(&m_id)
             .expect("invalid module id")
             .inner_mut()
             .transact(name, arg)
     }
 
     fn perform_query(&self, name: &str, caller: ModuleId, callee: ModuleId, arg_ofs: i32) -> Result<i32, Error> {
-        let a = self.0.lock();
-	let a = a.borrow();
+        let guard = self.0.lock();
+	let w = unsafe { & *guard.get() };
 
-        let caller = a.get(&caller).expect("oh no").inner();
-        let callee = a.get(&callee).expect("no oh").inner();
+        let caller = w.get(&caller).expect("oh no").inner();
+        let callee = w.get(&callee).expect("no oh").inner();
 
         let mut min_len = 0;
 
@@ -155,27 +159,20 @@ impl World {
         callee: ModuleId,
         arg_ofs: i32,
     ) -> Result<i32, Error> {
-        let a = self.0.lock();
+        let guard = self.0.lock();
+	let w = unsafe { &mut *guard.get() };
 
-	let ret_ofs = {	    
-	    let a = a.borrow_mut();
+        let caller = w.get(&caller).expect("oh no").inner();
+        let callee = w.get(&callee).expect("no oh").inner();
 
-            let caller = a.get(&caller).expect("oh no").inner();
-            let callee = a.get(&callee).expect("no oh").inner();
+        caller.with_arg_buffer(|buf_caller| {
+	    callee.with_arg_buffer(|buf_callee| {
+                let min_len = std::cmp::min(buf_caller.len(), buf_callee.len());
+                buf_callee[..min_len].copy_from_slice(&buf_caller[..min_len]);
+	    })
+        });
 
-            caller.with_arg_buffer(|buf_caller| {
-		callee.with_arg_buffer(|buf_callee| {
-                    let min_len = std::cmp::min(buf_caller.len(), buf_callee.len());
-                    buf_callee[..min_len].copy_from_slice(&buf_caller[..min_len]);
-		})
-            });
-            callee.perform_transaction(name, arg_ofs)?
-	};
-
-	let a = a.borrow_mut();
-
-        let caller = a.get(&caller).expect("oh no").inner();
-        let callee = a.get(&callee).expect("no oh").inner();
+        let ret_ofs = callee.perform_transaction(name, arg_ofs)?;
 	
         callee.with_arg_buffer(|buf_callee| {
             caller.with_arg_buffer(|buf_caller| {
