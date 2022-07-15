@@ -1,4 +1,12 @@
-use rkyv::ser::serializers::{BufferSerializerError, CompositeSerializerError};
+use rkyv::ser::serializers::{
+    BufferSerializerError, CompositeSerializerError, FixedSizeScratchError,
+};
+
+pub type Compo = CompositeSerializerError<
+    BufferSerializerError,
+    FixedSizeScratchError,
+    std::convert::Infallible,
+>;
 
 #[derive(Debug)]
 pub enum Error {
@@ -6,8 +14,9 @@ pub enum Error {
     CompileError(wasmer::CompileError),
     ExportError(wasmer::ExportError),
     RuntimeError(wasmer::RuntimeError),
+    Trap(wasmer_vm::Trap),
     MissingModuleExport,
-    BufferSerializerError(BufferSerializerError),
+    CompositeSerializerError(Compo),
 }
 
 impl From<wasmer::InstantiationError> for Error {
@@ -34,14 +43,14 @@ impl From<wasmer::RuntimeError> for Error {
     }
 }
 
-impl From<BufferSerializerError> for Error {
-    fn from(e: BufferSerializerError) -> Self {
-        Error::BufferSerializerError(e)
+impl From<Compo> for Error {
+    fn from(e: Compo) -> Self {
+        Error::CompositeSerializerError(e)
     }
 }
 
-impl<A, B, C> From<CompositeSerializerError<A, B, C>> for Error {
-    fn from(_e: CompositeSerializerError<A, B, C>) -> Self {
-        todo!()
+impl From<wasmer_vm::Trap> for Error {
+    fn from(e: wasmer_vm::Trap) -> Self {
+        Error::Trap(e)
     }
 }

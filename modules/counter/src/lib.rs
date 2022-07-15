@@ -24,7 +24,8 @@ static mut A: [u8; ARGBUF_LEN] = [0u8; ARGBUF_LEN];
 #[no_mangle]
 static AL: i32 = ARGBUF_LEN as i32;
 
-static mut SELF: State<Counter> = State::new(Counter { value: 0xfc });
+static mut SELF: State<Counter> =
+    unsafe { State::new(Counter { value: 0xfc }, &mut A) };
 
 impl Counter {
     pub fn read_value(self: &State<Counter>) -> i64 {

@@ -1,10 +1,10 @@
-use hatchery::{module, Error, World};
+use hatchery::{module_bytecode, Error, World};
 
 #[test]
 pub fn box_set_get() -> Result<(), Error> {
     let mut world = World::new();
 
-    let id = world.deploy(module!("box")?);
+    let id = world.deploy(module_bytecode!("box"))?;
 
     let value: Option<i32> = world.query(id, "get", ())?;
 

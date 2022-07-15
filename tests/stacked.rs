@@ -4,13 +4,13 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use hatchery::{module, Error, World};
+use hatchery::{module_bytecode, Error, World};
 
 #[test]
 pub fn push_pop() -> Result<(), Error> {
     let mut world = World::new();
 
-    let id = world.deploy(module!("stack")?);
+    let id = world.deploy(module_bytecode!("stack"))?;
 
     let val = 42;
 
@@ -32,7 +32,7 @@ pub fn push_pop() -> Result<(), Error> {
 pub fn multi_push_pop() -> Result<(), Error> {
     let mut world = World::new();
 
-    let id = world.deploy(module!("stack")?);
+    let id = world.deploy(module_bytecode!("stack"))?;
 
     const N: i32 = 1_000;
 

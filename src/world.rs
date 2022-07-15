@@ -1,46 +1,266 @@
-use crate::{Env, Error};
-use dallo::{ModuleId, Ser};
-use rkyv::{Archive, Deserialize, Infallible, Serialize};
 use std::collections::BTreeMap;
+use std::ops::{Deref, DerefMut};
+use std::sync::Arc;
+use std::cell::UnsafeCell;
 
-#[derive(Default)]
-pub struct World(BTreeMap<ModuleId, Env>);
+use dallo::{ModuleId, Ser};
+use parking_lot::ReentrantMutex;
+use rkyv::{archived_value, Archive, Deserialize, Infallible, Serialize};
+use wasmer::{imports, Exports, Function, Val};
+
+use crate::env::Env;
+use crate::error::Error;
+use crate::instance::Instance;
+use crate::memory::MemHandler;
+
+#[derive(Debug)]
+pub struct WorldInner(BTreeMap<ModuleId, Env>);
+
+impl Deref for WorldInner {
+    type Target = BTreeMap<ModuleId, Env>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl DerefMut for WorldInner {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct World(Arc<ReentrantMutex<UnsafeCell<WorldInner>>>);
 
 impl World {
     pub fn new() -> Self {
-        Default::default()
+        World(Arc::new(ReentrantMutex::new(UnsafeCell::new(WorldInner(BTreeMap::new())))))
     }
 
-    pub fn deploy(&mut self, env: Env) -> ModuleId {
-        let id = env.id();
-        self.0.insert(id, env);
+    pub fn deploy(&mut self, bytecode: &[u8]) -> Result<ModuleId, Error> {
+        let store = wasmer::Store::default();
+        let module = wasmer::Module::new(&store, bytecode)?;
 
-        println!("deployed id {:?}", id);
+        let mut env = Env::uninitialized();
 
-        id
+        #[rustfmt::skip]
+        let imports = imports! {
+            "env" => {
+                "alloc" => Function::new_native_with_env(&store, env.clone(), host_alloc),
+		"dealloc" => Function::new_native_with_env(&store, env.clone(), host_dealloc),
+
+                "snap" => Function::new_native_with_env(&store, env.clone(), host_snapshot),
+		
+                "q" => Function::new_native_with_env(&store, env.clone(), host_query),
+		"t" => Function::new_native_with_env(&store, env.clone(), host_transact),
+            }
+        };
+
+        let instance = wasmer::Instance::new(&module, &imports)?;
+
+        let arg_buf_ofs = global_i32(&instance.exports, "A")?;
+        let arg_buf_len_pos = global_i32(&instance.exports, "AL")?;
+        let heap_base = global_i32(&instance.exports, "__heap_base")?;
+
+        // We need to read the actual value of AL from the offset into memory
+
+        let mem = instance.exports.get_memory("memory")?;
+        let data = &unsafe { mem.data_unchecked() }[arg_buf_len_pos as usize..][..4];
+
+        let arg_buf_len: i32 = unsafe { archived_value::<i32>(data, 0) }
+            .deserialize(&mut Infallible)
+            .expect("infallible");
+
+        let id = blake3::hash(bytecode).into();
+
+        let instance = Instance::new(
+            id,
+            instance,
+            self.clone(),
+            MemHandler::new(heap_base as usize),
+            arg_buf_ofs,
+            arg_buf_len,
+            heap_base,
+        );
+
+        env.initialize(instance);
+
+	let guard = self.0.lock();
+	let w = unsafe { &mut *guard.get() };
+	w.insert(id, env);
+
+        Ok(id)
     }
 
     pub fn query<Arg, Ret>(&self, m_id: ModuleId, name: &str, arg: Arg) -> Result<Ret, Error>
     where
         Arg: for<'a> Serialize<Ser<'a>>,
-        Ret: Archive + core::fmt::Debug,
-        Ret::Archived: Deserialize<Ret, Infallible> + core::fmt::Debug,
+        Ret: Archive,
+        Ret::Archived: Deserialize<Ret, Infallible>,
     {
-        self.0
+	let guard =         self.0
+            .lock();
+	let w = unsafe { &* guard.get() };
+
+	w
             .get(&m_id)
             .expect("invalid module id")
+            .inner()
             .query(name, arg)
     }
 
     pub fn transact<Arg, Ret>(&mut self, m_id: ModuleId, name: &str, arg: Arg) -> Result<Ret, Error>
     where
         Arg: for<'a> Serialize<Ser<'a>>,
-        Ret: Archive + core::fmt::Debug,
-        Ret::Archived: Deserialize<Ret, Infallible> + core::fmt::Debug,
+        Ret: Archive,
+        Ret::Archived: Deserialize<Ret, Infallible>,
     {
-        self.0
-            .get_mut(&m_id)
+	let w = self.0.lock();
+	let w = unsafe { &mut *w.get() };
+	
+	w.get_mut(&m_id)
             .expect("invalid module id")
+            .inner_mut()
             .transact(name, arg)
     }
+
+    fn perform_query(&self, name: &str, caller: ModuleId, callee: ModuleId, arg_ofs: i32) -> Result<i32, Error> {
+        let guard = self.0.lock();
+	let w = unsafe { & *guard.get() };
+
+        let caller = w.get(&caller).expect("oh no").inner();
+        let callee = w.get(&callee).expect("no oh").inner();
+
+        let mut min_len = 0;
+
+        caller.with_arg_buffer(|buf_caller| {
+            callee.with_arg_buffer(|buf_callee| {
+                min_len = std::cmp::min(buf_caller.len(), buf_callee.len());
+                buf_callee[..min_len].copy_from_slice(&buf_caller[..min_len]);
+            })
+        });
+
+        let ret_ofs = callee.perform_query(name, arg_ofs)?;
+
+        callee.with_arg_buffer(|buf_callee| {
+            caller.with_arg_buffer(|buf_caller| {
+                buf_caller[..min_len].copy_from_slice(&buf_callee[..min_len]);
+            })
+        });
+
+	Ok(ret_ofs)
+    }
+
+    fn perform_transaction(
+        &self,
+        name: &str,
+        caller: ModuleId,
+        callee: ModuleId,
+        arg_ofs: i32,
+    ) -> Result<i32, Error> {
+        let guard = self.0.lock();
+	let w = unsafe { &mut *guard.get() };
+
+        let caller = w.get(&caller).expect("oh no").inner();
+        let callee = w.get(&callee).expect("no oh").inner();
+
+        caller.with_arg_buffer(|buf_caller| {
+	    callee.with_arg_buffer(|buf_callee| {
+                let min_len = std::cmp::min(buf_caller.len(), buf_callee.len());
+                buf_callee[..min_len].copy_from_slice(&buf_caller[..min_len]);
+	    })
+        });
+
+        let ret_ofs = callee.perform_transaction(name, arg_ofs)?;
+	
+        callee.with_arg_buffer(|buf_callee| {
+            caller.with_arg_buffer(|buf_caller| {
+                let min_len = std::cmp::min(buf_caller.len(), buf_callee.len());		
+                buf_caller[..min_len].copy_from_slice(&buf_callee[..min_len]);
+            })
+        });
+
+	Ok(ret_ofs)
+    }
+}
+
+fn global_i32(exports: &Exports, name: &str) -> Result<i32, Error> {
+    if let Val::I32(i) = exports.get_global(name)?.get() {
+        Ok(i)
+    } else {
+        Err(Error::MissingModuleExport)
+    }
+}
+
+fn host_alloc(env: &Env, amount: i32, align: i32) -> i32 {
+    env.inner_mut()
+        .alloc(amount as usize, align as usize)
+        .try_into()
+        .expect("i32 overflow")
+}
+
+fn host_dealloc(env: &Env, addr: i32) {
+    env.inner_mut().dealloc(addr as usize)
+}
+
+// Debug helper to take a snapshot of the memory of the running process.
+fn host_snapshot(env: &Env) {
+    env.inner().snap()
+}
+
+fn host_query(
+    env: &Env,
+    module_id_adr: i32,
+    method_name_adr: i32,
+    method_name_len: i32,
+    arg_ofs: i32,
+) -> i32 {
+    let module_id_adr = module_id_adr as usize;
+    let method_name_adr = method_name_adr as usize;
+    let method_name_len = method_name_len as usize;
+
+    let instance = env.inner();
+    let mut mod_id = ModuleId::default();
+    // performance: use a dedicated buffer here?
+    let mut name = String::new();
+
+    instance.with_memory(|buf| {
+        mod_id[..].copy_from_slice(&buf[module_id_adr..][..core::mem::size_of::<ModuleId>()]);
+        let utf = core::str::from_utf8(&buf[method_name_adr..][..method_name_len])
+            .expect("TODO, error out cleaner");
+        name.push_str(utf)
+    });
+
+    instance
+        .world()
+        .perform_query(&name, instance.id(), mod_id, arg_ofs).expect("TODO: error handling")
+}
+
+fn host_transact(
+    env: &Env,
+    module_id_adr: i32,
+    method_name_adr: i32,
+    method_name_len: i32,
+    arg_ofs: i32,
+) -> i32 {
+    let module_id_adr = module_id_adr as usize;
+    let method_name_adr = method_name_adr as usize;
+    let method_name_len = method_name_len as usize;
+
+    let instance = env.inner();
+    let mut mod_id = ModuleId::default();
+    // performance: use a dedicated buffer here?
+    let mut name = String::new();
+
+    instance.with_memory(|buf| {
+        mod_id[..].copy_from_slice(&buf[module_id_adr..][..core::mem::size_of::<ModuleId>()]);
+        let utf = core::str::from_utf8(&buf[method_name_adr..][..method_name_len])
+            .expect("TODO, error out cleaner");
+        name.push_str(utf)
+    });
+
+    instance
+        .world()
+        .perform_transaction(&name, instance.id(), mod_id, arg_ofs).expect("TODO: error handling")
 }
