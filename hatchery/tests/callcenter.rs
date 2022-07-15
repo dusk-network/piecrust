@@ -38,7 +38,7 @@ pub fn world_center_counter() -> Result<(), Error> {
     assert_eq!(value, 0xfc);
 
     // increment through call center
-    world.transact(center_id, "increment_counter", ())?;
+    world.transact(center_id, "increment_counter", counter_id)?;
 
     // read value directly
     let value: i64 = world.query(counter_id, "read_value", ())?;

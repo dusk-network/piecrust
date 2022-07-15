@@ -93,7 +93,12 @@ impl World {
         Ok(id)
     }
 
-    pub fn query<Arg, Ret>(&self, m_id: ModuleId, name: &str, arg: Arg) -> Result<Ret, Error>
+    pub fn query<Arg, Ret>(
+        &self,
+        m_id: ModuleId,
+        name: &str,
+        arg: Arg,
+    ) -> Result<Ret, Error>
     where
         Arg: for<'a> Serialize<Ser<'a>>,
         Ret: Archive,
@@ -110,7 +115,12 @@ impl World {
             .query(name, arg)
     }
 
-    pub fn transact<Arg, Ret>(&mut self, m_id: ModuleId, name: &str, arg: Arg) -> Result<Ret, Error>
+    pub fn transact<Arg, Ret>(
+        &mut self,
+        m_id: ModuleId,
+        name: &str,
+        arg: Arg,
+    ) -> Result<Ret, Error>
     where
         Arg: for<'a> Serialize<Ser<'a>>,
         Ret: Archive,

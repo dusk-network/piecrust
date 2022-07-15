@@ -11,7 +11,7 @@ pub use error::Error;
 macro_rules! module_bytecode {
     ($name:literal) => {
         include_bytes!(concat!(
-            "../target/wasm32-unknown-unknown/release/",
+            "../../target/wasm32-unknown-unknown/release/",
             $name,
             ".wasm"
         ))
