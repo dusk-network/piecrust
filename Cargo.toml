@@ -1,21 +1,6 @@
-[package]
-name = "hatchery"
-version = "0.1.0"
-edition = "2021"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
-[dependencies]
-colored = "2.0.0"
-rkyv = "0.7.38"
-wasmer = "2.3.0"
-wasmer-vm = "2.3.0"
-dallo = { path = "dallo" , default_features = false }
-blake3 = "1.3.1"
-parking_lot = "0.12.1"
-
 [workspace]
 members = [
     "dallo",
+    "hatchery",
     "modules/*",
 ]
