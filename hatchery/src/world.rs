@@ -1,3 +1,9 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+//
+// Copyright (c) DUSK NETWORK. All rights reserved.
+
 use std::collections::BTreeMap;
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
@@ -51,7 +57,7 @@ impl World {
 		"dealloc" => Function::new_native_with_env(&store, env.clone(), host_dealloc),
 
                 "snap" => Function::new_native_with_env(&store, env.clone(), host_snapshot),
-		
+
                 "q" => Function::new_native_with_env(&store, env.clone(), host_query),
 		"t" => Function::new_native_with_env(&store, env.clone(), host_transact),
             }
@@ -128,7 +134,7 @@ impl World {
     {
 	let w = self.0.lock();
 	let w = unsafe { &mut *w.get() };
-	
+
 	w.get_mut(&m_id)
             .expect("invalid module id")
             .inner_mut()
@@ -183,10 +189,10 @@ impl World {
         });
 
         let ret_ofs = callee.perform_transaction(name, arg_ofs)?;
-	
+
         callee.with_arg_buffer(|buf_callee| {
             caller.with_arg_buffer(|buf_caller| {
-                let min_len = std::cmp::min(buf_caller.len(), buf_callee.len());		
+                let min_len = std::cmp::min(buf_caller.len(), buf_callee.len());
                 buf_caller[..min_len].copy_from_slice(&buf_callee[..min_len]);
             })
         });
