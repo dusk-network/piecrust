@@ -660,6 +660,7 @@ checksum = "7843ec2de400bcbc6a6328c958dc38e5359da6e93e72e37bc5246bf1ae776389"
 [[package]]
 name = "nstack"
 version = "0.15.0-rkyv.0"
+source = "git+ssh://git@github.com/dusk-network/nstack?branch=ad-hoc-annotations#758c2a50f6b346e60ae349937edfa9ad1b21b474"
 dependencies = [
  "ranno",
 ]
@@ -795,6 +796,7 @@ dependencies = [
 [[package]]
 name = "ranno"
 version = "0.1.0"
+source = "git+ssh://git@github.com/dusk-network/ranno?branch=main#2b822a5e15b2f7cef97c813c48b342b8fd546be5"
 
 [[package]]
 name = "rayon"
