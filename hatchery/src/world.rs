@@ -10,7 +10,7 @@ use std::ops::{Deref, DerefMut};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use dallo::{ModuleId, Ser};
+use dallo::{ModuleId, Ser, SnapshotId};
 use parking_lot::ReentrantMutex;
 use rkyv::{archived_value, Archive, Deserialize, Infallible, Serialize};
 use tempfile::tempdir;
@@ -20,8 +20,10 @@ use crate::env::Env;
 use crate::error::Error;
 use crate::instance::Instance;
 use crate::memory::MemHandler;
-use crate::storage_helpers::module_id_to_filename;
-use crate::Error::PersistenceError;
+use crate::storage_helpers::{
+    combine_module_snapshot_names, module_id_to_name, snapshot_id_to_name,
+};
+use crate::Error::{MemoryError, PersistenceError};
 
 #[derive(Debug)]
 pub struct WorldInner {
@@ -69,11 +71,82 @@ impl World {
         )))))
     }
 
-    pub fn deploy(&mut self, bytecode: &[u8]) -> Result<ModuleId, Error> {
-        let id = blake3::hash(bytecode).into();
+    pub fn snapshot(
+        &self,
+        module_id: ModuleId,
+        snapshot_id: SnapshotId,
+    ) -> Result<(), Error> {
+        let src_path =
+            self.storage_path().join(module_id_to_name(module_id));
+        fn append_file_name(
+            path: impl AsRef<Path>,
+            snapshot_id: SnapshotId,
+        ) -> PathBuf {
+            let mut result = path.as_ref().to_owned();
+            result.set_file_name(combine_module_snapshot_names(
+                path.as_ref()
+                    .file_name()
+                    .expect("filename exists")
+                    .to_str()
+                    .expect("filename is UTF8"),
+                snapshot_id_to_name(snapshot_id),
+            ));
+            result
+        }
+        let trg_path = append_file_name(src_path.clone(), snapshot_id);
+        std::fs::copy(src_path, trg_path).map_err(PersistenceError)?;
+        Ok(())
+    }
+
+    pub fn restore_from_snapshot(
+        &mut self,
+        bytecode: &[u8],
+        mem_grow_by: u32,
+        snapshot_id: SnapshotId,
+    ) -> Result<ModuleId, Error> {
+        fn build_filename(
+            module_id: ModuleId,
+            snapshot_id: SnapshotId,
+        ) -> String {
+            combine_module_snapshot_names(
+                module_id_to_name(module_id),
+                snapshot_id_to_name(snapshot_id),
+            )
+        }
+        self.deploy_snapshot(bytecode, mem_grow_by, snapshot_id, build_filename)
+    }
+
+    pub fn deploy(
+        &mut self,
+        bytecode: &[u8],
+        mem_grow_by: u32,
+    ) -> Result<ModuleId, Error> {
+        fn build_filename(
+            module_id: ModuleId,
+            _snapshot_id: SnapshotId,
+        ) -> String {
+            module_id_to_name(module_id)
+        }
+        const EMPTY_SNAPSHOT_ID: SnapshotId = [0u8; 32];
+        self.deploy_snapshot(
+            bytecode,
+            mem_grow_by,
+            EMPTY_SNAPSHOT_ID,
+            build_filename,
+        )
+    }
+
+    fn deploy_snapshot(
+        &mut self,
+        bytecode: &[u8],
+        mem_grow_by: u32,
+        snapshot_id: SnapshotId,
+        build_filename: fn(ModuleId, SnapshotId) -> String,
+    ) -> Result<ModuleId, Error> {
+        let id: ModuleId = blake3::hash(bytecode).into();
         let store = wasmer::Store::new_with_path(
             self.storage_path()
-                .join(module_id_to_filename(id))
+                .join(build_filename(id, snapshot_id))
                 .as_path(),
         );
         let module = wasmer::Module::new(&store, bytecode)?;
@@ -95,13 +168,17 @@ impl World {
 
         let instance = wasmer::Instance::new(&module, &imports)?;
 
+        let mem = instance.exports.get_memory("memory")?;
+        if mem_grow_by != 0 {
+            let _ = mem.grow(mem_grow_by).map_err(MemoryError)?;
+        }
+
         let arg_buf_ofs = global_i32(&instance.exports, "A")?;
         let arg_buf_len_pos = global_i32(&instance.exports, "AL")?;
         let heap_base = global_i32(&instance.exports, "__heap_base")?;
 
         // We need to read the actual value of AL from the offset into memory
 
-        let mem = instance.exports.get_memory("memory")?;
         let data =
             &unsafe { mem.data_unchecked() }[arg_buf_len_pos as usize..][..4];
 
@@ -198,7 +275,7 @@ impl World {
             })
         });
 
-        Ok(ret_ofs)
+	Ok(ret_ofs)
     }
 
     fn perform_transaction(
@@ -209,7 +286,7 @@ impl World {
         arg_ofs: i32,
     ) -> Result<i32, Error> {
         let guard = self.0.lock();
-        let w = unsafe { &mut *guard.get() };
+	let w = unsafe { &mut *guard.get() };
 
         let caller = w.get(&caller).expect("oh no").inner();
         let callee = w.get(&callee).expect("no oh").inner();
