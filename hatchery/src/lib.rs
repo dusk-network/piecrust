@@ -4,14 +4,15 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-mod error;
-mod memory;
-mod world;
 mod env;
+mod error;
 mod instance;
+mod memory;
+mod storage_helpers;
+mod world;
 
-pub use world::World;
 pub use error::Error;
+pub use world::World;
 
 #[macro_export]
 macro_rules! module_bytecode {

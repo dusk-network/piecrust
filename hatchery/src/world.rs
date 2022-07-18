@@ -4,35 +4,42 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
+use std::cell::UnsafeCell;
 use std::collections::BTreeMap;
 use std::ops::{Deref, DerefMut};
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::cell::UnsafeCell;
 
 use dallo::{ModuleId, Ser};
 use parking_lot::ReentrantMutex;
 use rkyv::{archived_value, Archive, Deserialize, Infallible, Serialize};
+use tempfile::tempdir;
 use wasmer::{imports, Exports, Function, Val};
 
 use crate::env::Env;
 use crate::error::Error;
 use crate::instance::Instance;
 use crate::memory::MemHandler;
+use crate::storage_helpers::module_id_to_filename;
+use crate::Error::PersistenceError;
 
 #[derive(Debug)]
-pub struct WorldInner(BTreeMap<ModuleId, Env>);
+pub struct WorldInner {
+    environments: BTreeMap<ModuleId, Env>,
+    storage_path: PathBuf,
+}
 
 impl Deref for WorldInner {
     type Target = BTreeMap<ModuleId, Env>;
 
     fn deref(&self) -> &Self::Target {
-        &self.0
+        &self.environments
     }
 }
 
 impl DerefMut for WorldInner {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
+        &mut self.environments
     }
 }
 
@@ -40,12 +47,35 @@ impl DerefMut for WorldInner {
 pub struct World(Arc<ReentrantMutex<UnsafeCell<WorldInner>>>);
 
 impl World {
-    pub fn new() -> Self {
-        World(Arc::new(ReentrantMutex::new(UnsafeCell::new(WorldInner(BTreeMap::new())))))
+    pub fn new<P>(path: P) -> Self
+    where
+        P: Into<PathBuf>,
+    {
+        World(Arc::new(ReentrantMutex::new(UnsafeCell::new(WorldInner {
+            environments: BTreeMap::new(),
+            storage_path: path.into(),
+        }))))
+    }
+
+    pub fn ephemeral() -> Result<Self, Error> {
+        Ok(World(Arc::new(ReentrantMutex::new(UnsafeCell::new(
+            WorldInner {
+                environments: BTreeMap::new(),
+                storage_path: tempdir()
+                    .map_err(PersistenceError)?
+                    .path()
+                    .into(),
+            },
+        )))))
     }
 
     pub fn deploy(&mut self, bytecode: &[u8]) -> Result<ModuleId, Error> {
-        let store = wasmer::Store::default();
+        let id = blake3::hash(bytecode).into();
+        let store = wasmer::Store::new_with_path(
+            self.storage_path()
+                .join(module_id_to_filename(id))
+                .as_path(),
+        );
         let module = wasmer::Module::new(&store, bytecode)?;
 
         let mut env = Env::uninitialized();
@@ -54,12 +84,12 @@ impl World {
         let imports = imports! {
             "env" => {
                 "alloc" => Function::new_native_with_env(&store, env.clone(), host_alloc),
-		"dealloc" => Function::new_native_with_env(&store, env.clone(), host_dealloc),
+		        "dealloc" => Function::new_native_with_env(&store, env.clone(), host_dealloc),
 
                 "snap" => Function::new_native_with_env(&store, env.clone(), host_snapshot),
 
                 "q" => Function::new_native_with_env(&store, env.clone(), host_query),
-		"t" => Function::new_native_with_env(&store, env.clone(), host_transact),
+		        "t" => Function::new_native_with_env(&store, env.clone(), host_transact),
             }
         };
 
@@ -72,13 +102,12 @@ impl World {
         // We need to read the actual value of AL from the offset into memory
 
         let mem = instance.exports.get_memory("memory")?;
-        let data = &unsafe { mem.data_unchecked() }[arg_buf_len_pos as usize..][..4];
+        let data =
+            &unsafe { mem.data_unchecked() }[arg_buf_len_pos as usize..][..4];
 
         let arg_buf_len: i32 = unsafe { archived_value::<i32>(data, 0) }
             .deserialize(&mut Infallible)
             .expect("infallible");
-
-        let id = blake3::hash(bytecode).into();
 
         let instance = Instance::new(
             id,
@@ -92,9 +121,9 @@ impl World {
 
         env.initialize(instance);
 
-	let guard = self.0.lock();
-	let w = unsafe { &mut *guard.get() };
-	w.insert(id, env);
+        let guard = self.0.lock();
+        let w = unsafe { &mut *guard.get() };
+        w.insert(id, env);
 
         Ok(id)
     }
@@ -110,12 +139,10 @@ impl World {
         Ret: Archive,
         Ret::Archived: Deserialize<Ret, Infallible>,
     {
-	let guard =         self.0
-            .lock();
-	let w = unsafe { &* guard.get() };
+        let guard = self.0.lock();
+        let w = unsafe { &*guard.get() };
 
-	w
-            .get(&m_id)
+        w.get(&m_id)
             .expect("invalid module id")
             .inner()
             .query(name, arg)
@@ -132,18 +159,24 @@ impl World {
         Ret: Archive,
         Ret::Archived: Deserialize<Ret, Infallible>,
     {
-	let w = self.0.lock();
-	let w = unsafe { &mut *w.get() };
+        let w = self.0.lock();
+        let w = unsafe { &mut *w.get() };
 
-	w.get_mut(&m_id)
+        w.get_mut(&m_id)
             .expect("invalid module id")
             .inner_mut()
             .transact(name, arg)
     }
 
-    fn perform_query(&self, name: &str, caller: ModuleId, callee: ModuleId, arg_ofs: i32) -> Result<i32, Error> {
+    fn perform_query(
+        &self,
+        name: &str,
+        caller: ModuleId,
+        callee: ModuleId,
+        arg_ofs: i32,
+    ) -> Result<i32, Error> {
         let guard = self.0.lock();
-	let w = unsafe { & *guard.get() };
+        let w = unsafe { &*guard.get() };
 
         let caller = w.get(&caller).expect("oh no").inner();
         let callee = w.get(&callee).expect("no oh").inner();
@@ -165,7 +198,7 @@ impl World {
             })
         });
 
-	Ok(ret_ofs)
+        Ok(ret_ofs)
     }
 
     fn perform_transaction(
@@ -176,16 +209,16 @@ impl World {
         arg_ofs: i32,
     ) -> Result<i32, Error> {
         let guard = self.0.lock();
-	let w = unsafe { &mut *guard.get() };
+        let w = unsafe { &mut *guard.get() };
 
         let caller = w.get(&caller).expect("oh no").inner();
         let callee = w.get(&callee).expect("no oh").inner();
 
         caller.with_arg_buffer(|buf_caller| {
-	    callee.with_arg_buffer(|buf_callee| {
+            callee.with_arg_buffer(|buf_callee| {
                 let min_len = std::cmp::min(buf_caller.len(), buf_callee.len());
                 buf_callee[..min_len].copy_from_slice(&buf_caller[..min_len]);
-	    })
+            })
         });
 
         let ret_ofs = callee.perform_transaction(name, arg_ofs)?;
@@ -197,7 +230,13 @@ impl World {
             })
         });
 
-	Ok(ret_ofs)
+        Ok(ret_ofs)
+    }
+
+    pub fn storage_path(&self) -> &Path {
+        let guard = self.0.lock();
+        let world_inner = unsafe { &*guard.get() };
+        world_inner.storage_path.as_path()
     }
 }
 
@@ -242,15 +281,19 @@ fn host_query(
     let mut name = String::new();
 
     instance.with_memory(|buf| {
-        mod_id[..].copy_from_slice(&buf[module_id_adr..][..core::mem::size_of::<ModuleId>()]);
-        let utf = core::str::from_utf8(&buf[method_name_adr..][..method_name_len])
-            .expect("TODO, error out cleaner");
+        mod_id[..].copy_from_slice(
+            &buf[module_id_adr..][..core::mem::size_of::<ModuleId>()],
+        );
+        let utf =
+            core::str::from_utf8(&buf[method_name_adr..][..method_name_len])
+                .expect("TODO, error out cleaner");
         name.push_str(utf)
     });
 
     instance
         .world()
-        .perform_query(&name, instance.id(), mod_id, arg_ofs).expect("TODO: error handling")
+        .perform_query(&name, instance.id(), mod_id, arg_ofs)
+        .expect("TODO: error handling")
 }
 
 fn host_transact(
@@ -270,13 +313,17 @@ fn host_transact(
     let mut name = String::new();
 
     instance.with_memory(|buf| {
-        mod_id[..].copy_from_slice(&buf[module_id_adr..][..core::mem::size_of::<ModuleId>()]);
-        let utf = core::str::from_utf8(&buf[method_name_adr..][..method_name_len])
-            .expect("TODO, error out cleaner");
+        mod_id[..].copy_from_slice(
+            &buf[module_id_adr..][..core::mem::size_of::<ModuleId>()],
+        );
+        let utf =
+            core::str::from_utf8(&buf[method_name_adr..][..method_name_len])
+                .expect("TODO, error out cleaner");
         name.push_str(utf)
     });
 
     instance
         .world()
-        .perform_transaction(&name, instance.id(), mod_id, arg_ofs).expect("TODO: error handling")
+        .perform_transaction(&name, instance.id(), mod_id, arg_ofs)
+        .expect("TODO: error handling")
 }

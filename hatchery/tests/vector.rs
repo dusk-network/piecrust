@@ -8,7 +8,7 @@ use hatchery::{module_bytecode, Error, World};
 
 #[test]
 pub fn vector_push_pop() -> Result<(), Error> {
-    let mut world = World::new();
+    let mut world = World::ephemeral()?;
 
     let id = world.deploy(module_bytecode!("vector"))?;
 

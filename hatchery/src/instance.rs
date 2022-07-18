@@ -45,7 +45,11 @@ impl Instance {
         }
     }
 
-    pub(crate) fn query<Arg, Ret>(&self, name: &str, arg: Arg) -> Result<Ret, Error>
+    pub(crate) fn query<Arg, Ret>(
+        &self,
+        name: &str,
+        arg: Arg,
+    ) -> Result<Ret, Error>
     where
         Arg: for<'a> Serialize<Ser<'a>>,
         Ret: Archive,
@@ -60,12 +64,21 @@ impl Instance {
         self.read_from_arg_buffer(ret_pos)
     }
 
-    pub(crate) fn perform_query(&self, name: &str, arg_ofs: i32) -> Result<i32, Error> {
-        let fun: NativeFunc<i32, i32> = self.instance.exports.get_native_function(name)?;
+    pub(crate) fn perform_query(
+        &self,
+        name: &str,
+        arg_ofs: i32,
+    ) -> Result<i32, Error> {
+        let fun: NativeFunc<i32, i32> =
+            self.instance.exports.get_native_function(name)?;
         Ok(fun.call(arg_ofs as i32)?)
     }
 
-    pub(crate) fn transact<Arg, Ret>(&mut self, name: &str, arg: Arg) -> Result<Ret, Error>
+    pub(crate) fn transact<Arg, Ret>(
+        &mut self,
+        name: &str,
+        arg: Arg,
+    ) -> Result<Ret, Error>
     where
         Arg: for<'a> Serialize<Ser<'a>>,
         Ret: Archive,
@@ -80,8 +93,13 @@ impl Instance {
         self.read_from_arg_buffer(ret_pos)
     }
 
-    pub(crate) fn perform_transaction(&self, name: &str, arg_ofs: i32) -> Result<i32, Error> {
-        let fun: NativeFunc<i32, i32> = self.instance.exports.get_native_function(name)?;
+    pub(crate) fn perform_transaction(
+        &self,
+        name: &str,
+        arg_ofs: i32,
+    ) -> Result<i32, Error> {
+        let fun: NativeFunc<i32, i32> =
+            self.instance.exports.get_native_function(name)?;
         Ok(fun.call(arg_ofs as i32)?)
     }
 
@@ -120,7 +138,8 @@ impl Instance {
             let mut sbuf = [0u8; SCRATCH_BUF_BYTES];
             let scratch = BufferScratch::new(&mut sbuf);
             let ser = BufferSerializer::new(abuf);
-            let mut composite = CompositeSerializer::new(ser, scratch, rkyv::Infallible);
+            let mut composite =
+                CompositeSerializer::new(ser, scratch, rkyv::Infallible);
 
             Ok(composite.serialize_value(&value)? as i32)
         })
@@ -133,7 +152,8 @@ impl Instance {
     {
         // TODO use bytecheck here
         Ok(self.with_arg_buffer(|abuf| {
-            let ta: &T::Archived = unsafe { archived_value::<T>(abuf, arg_ofs as usize) };
+            let ta: &T::Archived =
+                unsafe { archived_value::<T>(abuf, arg_ofs as usize) };
             ta.deserialize(&mut rkyv::Infallible).unwrap()
         }))
     }

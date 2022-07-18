@@ -7,6 +7,7 @@
 use rkyv::ser::serializers::{
     BufferSerializerError, CompositeSerializerError, FixedSizeScratchError,
 };
+use std::io;
 
 pub type Compo = CompositeSerializerError<
     BufferSerializerError,
@@ -23,6 +24,7 @@ pub enum Error {
     Trap(wasmer_vm::Trap),
     MissingModuleExport,
     CompositeSerializerError(Compo),
+    PersistenceError(io::Error),
 }
 
 impl From<wasmer::InstantiationError> for Error {

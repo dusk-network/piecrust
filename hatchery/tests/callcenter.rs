@@ -8,7 +8,7 @@ use hatchery::{module_bytecode, Error, World};
 
 #[test]
 pub fn world_center_counter_read() -> Result<(), Error> {
-    let mut world = World::new();
+    let mut world = World::ephemeral()?;
 
     let counter_id = world.deploy(module_bytecode!("counter"))?;
 
@@ -26,7 +26,7 @@ pub fn world_center_counter_read() -> Result<(), Error> {
 
 #[test]
 pub fn world_center_counter() -> Result<(), Error> {
-    let mut world = World::new();
+    let mut world = World::ephemeral()?;
 
     let counter_id = world.deploy(module_bytecode!("counter"))?;
 

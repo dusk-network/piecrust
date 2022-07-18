@@ -8,7 +8,7 @@ use hatchery::{module_bytecode, Error, World};
 
 #[test]
 pub fn counter_trivial() -> Result<(), Error> {
-    let mut world = World::new();
+    let mut world = World::ephemeral()?;
 
     let id = world.deploy(module_bytecode!("counter"))?;
 
@@ -21,7 +21,7 @@ pub fn counter_trivial() -> Result<(), Error> {
 
 #[test]
 pub fn counter_increment() -> Result<(), Error> {
-    let mut world = World::new();
+    let mut world = World::ephemeral()?;
 
     let id = world.deploy(module_bytecode!("counter"))?;
 
@@ -40,7 +40,7 @@ pub fn counter_increment() -> Result<(), Error> {
 
 #[test]
 pub fn counter_mogrify() -> Result<(), Error> {
-    let mut world = World::new();
+    let mut world = World::ephemeral()?;
 
     let id = world.deploy(module_bytecode!("counter"))?;
 
