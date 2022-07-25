@@ -4,11 +4,13 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
+use dallo::ModuleId;
 use hatchery::{module_bytecode, Error, World};
+use std::path::PathBuf;
 
 #[test]
 pub fn box_set_get() -> Result<(), Error> {
-    let mut world = World::new();
+    let mut world = World::ephemeral()?;
 
     let id = world.deploy(module_bytecode!("box"))?;
 
@@ -21,6 +23,34 @@ pub fn box_set_get() -> Result<(), Error> {
     let value: Option<i16> = world.query(id, "get", ())?;
 
     assert_eq!(value, Some(0x11));
+
+    Ok(())
+}
+
+#[test]
+pub fn box_set_store_restore_get() -> Result<(), Error> {
+    let mut storage_path = PathBuf::new();
+    let first_id: ModuleId;
+
+    {
+        let mut first_world = World::ephemeral()?;
+
+        first_id = first_world.deploy(module_bytecode!("box"))?;
+
+        first_world.transact(first_id, "set", 0x23)?;
+
+        first_world.storage_path().clone_into(&mut storage_path);
+    }
+
+    let mut second_world = World::new(storage_path);
+
+    let second_id = second_world.deploy(module_bytecode!("box"))?;
+
+    assert_eq!(first_id, second_id);
+
+    let value: Option<i16> = second_world.query(second_id, "get", ())?;
+
+    assert_eq!(value, Some(0x23));
 
     Ok(())
 }

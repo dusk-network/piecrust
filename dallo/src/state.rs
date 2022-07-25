@@ -65,7 +65,8 @@ impl<S> State<S> {
             let mut sbuf = [0u8; 16];
             let scratch = BufferScratch::new(&mut sbuf);
             let ser = BufferSerializer::new(buf);
-            let mut composite = CompositeSerializer::new(ser, scratch, rkyv::Infallible);
+            let mut composite =
+                CompositeSerializer::new(ser, scratch, rkyv::Infallible);
 
             composite.serialize_value(&arg).unwrap() as i32
         });
@@ -81,7 +82,12 @@ impl<S> State<S> {
         })
     }
 
-    pub fn transact<Arg, Ret>(&mut self, mod_id: ModuleId, name: &str, arg: Arg) -> Ret
+    pub fn transact<Arg, Ret>(
+        &mut self,
+        mod_id: ModuleId,
+        name: &str,
+        arg: Arg,
+    ) -> Ret
     where
         Arg: for<'a> Serialize<Ser<'a>>,
         Ret: Archive,
@@ -91,7 +97,8 @@ impl<S> State<S> {
             let mut sbuf = [0u8; 16];
             let scratch = BufferScratch::new(&mut sbuf);
             let ser = BufferSerializer::new(buf);
-            let mut composite = CompositeSerializer::new(ser, scratch, rkyv::Infallible);
+            let mut composite =
+                CompositeSerializer::new(ser, scratch, rkyv::Infallible);
 
             composite.serialize_value(&arg).unwrap() as i32
         });

@@ -37,7 +37,8 @@ impl Env {
     }
 
     pub(crate) fn inner_mut(&self) -> &mut Instance {
-        if let EnvInner::Initialized(ref mut ei) = unsafe { &mut *self.0.get() } {
+        if let EnvInner::Initialized(ref mut ei) = unsafe { &mut *self.0.get() }
+        {
             ei
         } else {
             unreachable!("uninitialized env")
