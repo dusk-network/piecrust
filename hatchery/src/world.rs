@@ -76,8 +76,7 @@ impl World {
         module_id: ModuleId,
         snapshot_id: SnapshotId,
     ) -> Result<(), Error> {
-        let src_path =
-            self.storage_path().join(module_id_to_name(module_id));
+        let src_path = self.storage_path().join(module_id_to_name(module_id));
         fn append_file_name(
             path: impl AsRef<Path>,
             snapshot_id: SnapshotId,
@@ -275,7 +274,7 @@ impl World {
             })
         });
 
-	Ok(ret_ofs)
+        Ok(ret_ofs)
     }
 
     fn perform_transaction(
@@ -286,7 +285,7 @@ impl World {
         arg_ofs: i32,
     ) -> Result<i32, Error> {
         let guard = self.0.lock();
-	let w = unsafe { &mut *guard.get() };
+        let w = unsafe { &mut *guard.get() };
 
         let caller = w.get(&caller).expect("oh no").inner();
         let callee = w.get(&callee).expect("no oh").inner();
