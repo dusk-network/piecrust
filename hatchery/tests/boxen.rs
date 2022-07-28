@@ -74,7 +74,7 @@ pub fn box_create_and_restore_snapshots() -> Result<(), Error> {
 
     world.transact(id, "set", 0x12)?;
     world.create_snapshot(id, create_snapshot_id("snapshot2"))?;
-    world.diff_snapshot(id, create_snapshot_id("snapshot1"), create_snapshot_id("snapshot3"));
+    world.diff_snapshot(id, create_snapshot_id("snapshot1"), create_snapshot_id("snapshot3"))?;
 
     let value: Option<i16> = world.query(id, "get", ())?;
 

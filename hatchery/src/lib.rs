@@ -10,6 +10,7 @@ mod instance;
 mod memory;
 mod storage_helpers;
 mod world;
+mod snapshot;
 
 pub use error::Error;
 pub use storage_helpers::create_snapshot_id;
