@@ -9,6 +9,8 @@ use std::collections::BTreeMap;
 use std::ops::{Deref, DerefMut};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::io::Read;
+use bsdiff::diff;
 
 use dallo::{ModuleId, Ser, SnapshotId};
 use parking_lot::ReentrantMutex;
@@ -71,7 +73,7 @@ impl World {
         )))))
     }
 
-    pub fn snapshot(
+    pub fn create_snapshot(
         &self,
         module_id: ModuleId,
         snapshot_id: SnapshotId,
@@ -94,6 +96,56 @@ impl World {
         }
         let trg_path = append_file_name(src_path.clone(), snapshot_id);
         std::fs::copy(src_path, trg_path).map_err(PersistenceError)?;
+        Ok(())
+    }
+
+    pub fn diff_snapshot(
+        &self,
+        module_id: ModuleId,
+        base_snapshot_id: SnapshotId,
+        diff_snapshot_id: SnapshotId,
+    ) -> Result<(), Error> {
+        let src_path = self.storage_path().join(module_id_to_name(module_id));
+        fn append_file_name(
+            path: impl AsRef<Path>,
+            snapshot_id: SnapshotId,
+        ) -> PathBuf {
+            let mut result = path.as_ref().to_owned();
+            result.set_file_name(combine_module_snapshot_names(
+                path.as_ref()
+                    .file_name()
+                    .expect("filename exists")
+                    .to_str()
+                    .expect("filename is UTF8"),
+                snapshot_id_to_name(snapshot_id),
+            ));
+            result
+        }
+        let base_path = append_file_name(src_path.clone(), base_snapshot_id);
+        let diff_path = append_file_name(src_path.clone(), diff_snapshot_id);
+        // current state is in src_path
+        // base state to compare the current state to is in base_path
+        // diff_path should contain the patch - to be applied to base state to obtain current state
+        let mut base_f = std::fs::File::open(base_path.as_path()).expect("no file found");
+        let base_metadata = std::fs::metadata(base_path.as_path()).expect("unable to read metadata");
+        let mut base_buffer = vec![0; base_metadata.len() as usize];
+        base_f.read(base_buffer.as_mut_slice()).expect("buffer overflow");
+
+        let mut curr_f = std::fs::File::open(src_path.as_path()).expect("no file found");
+        let curr_metadata = std::fs::metadata(src_path.as_path()).expect("unable to read metadata");
+        let mut curr_buffer = vec![0; curr_metadata.len() as usize];
+        curr_f.read(curr_buffer.as_mut_slice()).expect("buffer overflow");
+
+        let mut compressor = zstd::block::Compressor::new();
+        use diff::diff;
+        let mut delta: Vec<u8> = Vec::new();
+        diff::diff(base_buffer.as_slice(), curr_buffer.as_slice(), &mut delta).unwrap();
+        println!("base path={:?}", base_path.as_path());
+        println!("curr path={:?}", src_path.as_path());
+        println!("uncompressed patch len={:?}", delta.len());
+        delta = compressor.compress(&delta, 11).unwrap();
+        println!("compressed patch len={:?}", delta.len());
+
         Ok(())
     }
 

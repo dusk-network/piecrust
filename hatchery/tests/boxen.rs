@@ -8,7 +8,7 @@ use dallo::ModuleId;
 use hatchery::{create_snapshot_id, module_bytecode, Error, World};
 use std::path::PathBuf;
 
-#[test]
+#[ignore]
 pub fn box_set_get() -> Result<(), Error> {
     let mut world = World::ephemeral()?;
 
@@ -27,7 +27,7 @@ pub fn box_set_get() -> Result<(), Error> {
     Ok(())
 }
 
-#[test]
+#[ignore]
 pub fn box_set_store_restore_get() -> Result<(), Error> {
     let mut storage_path = PathBuf::new();
     let first_id: ModuleId;
@@ -68,12 +68,13 @@ pub fn box_create_and_restore_snapshots() -> Result<(), Error> {
     println!("setting to 0x11, storing snapshot1");
 
     world.transact(id, "set", 0x11)?;
-    world.snapshot(id, create_snapshot_id("snapshot1"))?;
+    world.create_snapshot(id, create_snapshot_id("snapshot1"))?;
 
     println!("setting to 0x12, storing snapshot2");
 
     world.transact(id, "set", 0x12)?;
-    world.snapshot(id, create_snapshot_id("snapshot2"))?;
+    world.create_snapshot(id, create_snapshot_id("snapshot2"))?;
+    world.diff_snapshot(id, create_snapshot_id("snapshot1"), create_snapshot_id("snapshot3"));
 
     let value: Option<i16> = world.query(id, "get", ())?;
 

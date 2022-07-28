@@ -6,7 +6,7 @@
 
 use hatchery::{module_bytecode, Error, World};
 
-#[test]
+#[ignore]
 pub fn counter_trivial() -> Result<(), Error> {
     let mut world = World::ephemeral()?;
 
@@ -19,7 +19,7 @@ pub fn counter_trivial() -> Result<(), Error> {
     Ok(())
 }
 
-#[test]
+#[ignore]
 pub fn counter_increment() -> Result<(), Error> {
     let mut world = World::ephemeral()?;
 
@@ -38,7 +38,7 @@ pub fn counter_increment() -> Result<(), Error> {
     Ok(())
 }
 
-#[test]
+#[ignore]
 pub fn counter_mogrify() -> Result<(), Error> {
     let mut world = World::ephemeral()?;
 
