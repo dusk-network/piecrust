@@ -1,8 +1,10 @@
 
 use dallo::SnapshotId;
 use std::path::{Path, PathBuf};
-use std::io::Read;
+use std::io::{Read, Write};
+use std::fs::{File, OpenOptions};
 use bsdiff::diff::diff;
+use bsdiff::patch::patch;
 
 use crate::error::Error;
 use crate::Error::PersistenceError;
@@ -88,7 +90,32 @@ impl Snapshot {
         println!("uncompressed patch len={:?}", delta.len());
         delta = compressor.compress(&delta, 11).unwrap();
         println!("compressed patch len={:?}", delta.len());
-        // write delta to path
+        self.save(delta)?;
+
+        Ok(())
+    }
+
+    /// Save buffer into current snapshot
+    pub fn save(&self, buf: Vec<u8>) -> Result<(), Error> {
+        let file_path_exists = self.path().exists();
+        let mut file = OpenOptions::new()
+            .write(true)
+            .create(!file_path_exists)
+            .open(self.path()).map_err(PersistenceError)?;
+        file.write_all(buf.as_slice()).map_err(PersistenceError)?;
+        Ok(())
+    }
+
+    /// Decompress current snapshot into the given snapshot
+    pub fn decompress(&self, old_snapshot: &Snapshot, to_snapshot: &Snapshot) -> Result<(), Error> {
+        const MAX_DATA_LEN: usize = 4096*1024; // todo! we need to store this in a file, should not be hardcoded
+        let compressed = self.load()?;
+        let old = old_snapshot.load()?;
+        let mut decompressor = zstd::block::Decompressor::new();
+        let mut patch_data = std::io::Cursor::new(decompressor.decompress(compressed.as_slice(), MAX_DATA_LEN).map_err(PersistenceError)?);
+        let mut patched = vec![0; MAX_DATA_LEN];
+        patch(old.as_slice(), &mut patch_data, patched.as_mut_slice()).map_err(PersistenceError)?;
+        to_snapshot.save(patched)?;
         Ok(())
     }
 }
