@@ -11,7 +11,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use dallo::{ModuleId, Ser, SnapshotId};
-use snapshot::Snapshot;
+use snapshot::{MemoryEdge, Snapshot};
 use parking_lot::ReentrantMutex;
 use rkyv::{archived_value, Archive, Deserialize, Infallible, Serialize};
 use tempfile::tempdir;
@@ -22,7 +22,7 @@ use crate::error::Error;
 use crate::instance::Instance;
 use crate::memory::MemHandler;
 use crate::storage_helpers::{
-    combine_module_snapshot_names, module_id_to_name, snapshot_id_to_name, create_snapshot_id
+    combine_module_snapshot_names, module_id_to_name, snapshot_id_to_name
 };
 use crate::Error::{MemoryError, PersistenceError};
 use crate::snapshot;
@@ -78,22 +78,22 @@ impl World {
         module_id: ModuleId,
         snapshot_id: SnapshotId,
     ) -> Result<(), Error> {
-        let current_snapshot = Snapshot::current(create_snapshot_id("current"), self.storage_path().join(module_id_to_name(module_id)).as_path());
-        let snapshot = Snapshot::new(snapshot_id, &current_snapshot);
-        snapshot.write(&current_snapshot)?;
+        let memory_edge = MemoryEdge::new(self.storage_path().join(module_id_to_name(module_id)).as_path());
+        let snapshot = Snapshot::new(snapshot_id, &memory_edge);
+        snapshot.write(&memory_edge)?;
         Ok(())
     }
 
     pub fn diff_snapshot(
         &self,
         module_id: ModuleId,
-        base_snapshot_id: SnapshotId,
-        diff_snapshot_id: SnapshotId,
+        in2_snapshot_id: SnapshotId,
+        out_snapshot_id: SnapshotId,
     ) -> Result<(), Error> {
-        let src_path = self.storage_path().join(module_id_to_name(module_id));
-        let current_snapshot = Snapshot::current(base_snapshot_id, src_path.as_path());
-        let diff_snapshot = Snapshot::new(diff_snapshot_id, &current_snapshot);
-        diff_snapshot.write_compressed(&current_snapshot)?;
+        let in1_memory_edge = MemoryEdge::new(self.storage_path().join(module_id_to_name(module_id)).as_path());
+        let in2_snapshot = Snapshot::new(in2_snapshot_id, &in1_memory_edge);
+        let diff_snapshot = Snapshot::new(out_snapshot_id, &in1_memory_edge);
+        diff_snapshot.write_compressed(&in1_memory_edge, &in2_snapshot)?;
 
         Ok(())
     }
