@@ -74,7 +74,11 @@ pub fn box_create_and_restore_snapshots() -> Result<(), Error> {
 
     world.transact(id, "set", 0x13)?;
     world.create_snapshot(id, create_snapshot_id("snapshot2"))?;
-    world.create_compressed_snapshot(id, create_snapshot_id("snapshot1"), create_snapshot_id("snapshot3_compressed"))?;
+    world.create_compressed_snapshot(
+        id,
+        create_snapshot_id("snapshot1"),
+        create_snapshot_id("snapshot3_compressed"),
+    )?;
 
     let value: Option<i16> = world.query(id, "get", ())?;
 
@@ -120,7 +124,8 @@ pub fn box_create_and_restore_snapshots() -> Result<(), Error> {
     )?;
 
     let value: Option<i16> = world.query(id, "get", ())?;
-    assert_eq!(value, Some(0x13)); // this was recreated from a compressed snapshot taking just 75 bytes, diff'ed against `snapshot1`
+    assert_eq!(value, Some(0x13)); // this was recreated from a compressed snapshot taking just 75 bytes,
+                                   // diff'ed against `snapshot1`
 
     Ok(())
 }

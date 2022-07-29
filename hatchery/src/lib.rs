@@ -8,9 +8,9 @@ mod env;
 mod error;
 mod instance;
 mod memory;
+mod snapshot;
 mod storage_helpers;
 mod world;
-mod snapshot;
 
 pub use error::Error;
 pub use storage_helpers::create_snapshot_id;

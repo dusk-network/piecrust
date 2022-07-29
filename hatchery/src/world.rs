@@ -11,9 +11,9 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use dallo::{ModuleId, Ser, SnapshotId};
-use snapshot::{MemoryEdge, Snapshot};
 use parking_lot::ReentrantMutex;
 use rkyv::{archived_value, Archive, Deserialize, Infallible, Serialize};
+use snapshot::{MemoryEdge, Snapshot};
 use tempfile::tempdir;
 use wasmer::{imports, Exports, Function, Val};
 
@@ -21,11 +21,11 @@ use crate::env::Env;
 use crate::error::Error;
 use crate::instance::Instance;
 use crate::memory::MemHandler;
+use crate::snapshot;
 use crate::storage_helpers::{
-    combine_module_snapshot_names, module_id_to_name, snapshot_id_to_name
+    combine_module_snapshot_names, module_id_to_name, snapshot_id_to_name,
 };
 use crate::Error::{MemoryError, PersistenceError};
-use crate::snapshot;
 
 #[derive(Debug)]
 pub struct WorldInner {
@@ -79,20 +79,29 @@ impl World {
         module_id: ModuleId,
         out_snapshot_id: SnapshotId,
     ) -> Result<(), Error> {
-        let memory_edge = MemoryEdge::new(self.storage_path().join(module_id_to_name(module_id)).as_path());
+        let memory_edge = MemoryEdge::new(
+            self.storage_path()
+                .join(module_id_to_name(module_id))
+                .as_path(),
+        );
         let out_snapshot = Snapshot::new(out_snapshot_id, &memory_edge);
         out_snapshot.write(&memory_edge)?;
         Ok(())
     }
 
-    /// Writes compressed snapshot of a diff between memory edge and a given base (non-compressed) snapshot
+    /// Writes compressed snapshot of a diff between memory edge and a given
+    /// base (non-compressed) snapshot
     pub fn create_compressed_snapshot(
         &self,
         module_id: ModuleId,
         base_snapshot_id: SnapshotId,
         out_snapshot_id: SnapshotId,
     ) -> Result<(), Error> {
-        let memory_edge = MemoryEdge::new(self.storage_path().join(module_id_to_name(module_id)).as_path());
+        let memory_edge = MemoryEdge::new(
+            self.storage_path()
+                .join(module_id_to_name(module_id))
+                .as_path(),
+        );
         let base_snapshot = Snapshot::new(base_snapshot_id, &memory_edge);
         let out_snapshot = Snapshot::new(out_snapshot_id, &memory_edge);
         out_snapshot.write_compressed(&memory_edge, &base_snapshot)?;
@@ -118,7 +127,8 @@ impl World {
         self.deploy_snapshot(bytecode, mem_grow_by, snapshot_id, build_filename)
     }
 
-    /// Deploys module with a given base (non-compressed) snapshot and a compressed snapshot
+    /// Deploys module with a given base (non-compressed) snapshot and a
+    /// compressed snapshot
     pub fn restore_from_compressed_snapshot(
         &mut self,
         bytecode: &[u8],
@@ -126,7 +136,12 @@ impl World {
         base_snapshot_id: SnapshotId,
         compressed_snapshot_id: SnapshotId,
     ) -> Result<ModuleId, Error> {
-        self.deploy_compressed_snapshot(bytecode, mem_grow_by, base_snapshot_id, compressed_snapshot_id)
+        self.deploy_compressed_snapshot(
+            bytecode,
+            mem_grow_by,
+            base_snapshot_id,
+            compressed_snapshot_id,
+        )
     }
 
     /// Deploys module without a snapshot
@@ -158,20 +173,20 @@ impl World {
         compressed_snapshot_id: SnapshotId,
     ) -> Result<ModuleId, Error> {
         let module_id: ModuleId = blake3::hash(bytecode).into(); // todo - suboptimal that this has to be done here as well
-        let full_path = self.storage_path().to_path_buf().join(module_id_to_name(module_id));
+        let full_path = self
+            .storage_path()
+            .to_path_buf()
+            .join(module_id_to_name(module_id));
         let memory_edge_path = full_path.as_path();
-        let compressed_snapshot = Snapshot::new(compressed_snapshot_id, &MemoryEdge::new(memory_edge_path));
-        let base_snapshot = Snapshot::new(base_snapshot_id, &MemoryEdge::new(memory_edge_path));
+        let compressed_snapshot = Snapshot::new(
+            compressed_snapshot_id,
+            &MemoryEdge::new(memory_edge_path),
+        );
+        let base_snapshot =
+            Snapshot::new(base_snapshot_id, &MemoryEdge::new(memory_edge_path));
         let edge = Snapshot::from_edge(&MemoryEdge::new(memory_edge_path));
         compressed_snapshot.decompress(&base_snapshot, &edge)?;
-        fn build_filename(
-            module_id: ModuleId,
-            _snapshot_id: SnapshotId,
-        ) -> String {
-            module_id_to_name(module_id)
-        }
-        const EMPTY_SNAPSHOT_ID: SnapshotId = [0u8; 32];
-        self.deploy_snapshot(bytecode, mem_grow_by, EMPTY_SNAPSHOT_ID, build_filename)
+        self.deploy(bytecode, mem_grow_by)
     }
 
     fn deploy_snapshot(
@@ -182,8 +197,10 @@ impl World {
         build_filename: fn(ModuleId, SnapshotId) -> String,
     ) -> Result<ModuleId, Error> {
         let id: ModuleId = blake3::hash(bytecode).into();
-        println!("deploy this path={:?}", self.storage_path()
-            .join(build_filename(id, snapshot_id)));
+        println!(
+            "deploy this path={:?}",
+            self.storage_path().join(build_filename(id, snapshot_id))
+        );
         let store = wasmer::Store::new_with_path(
             self.storage_path()
                 .join(build_filename(id, snapshot_id))
