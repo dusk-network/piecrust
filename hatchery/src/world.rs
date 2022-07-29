@@ -73,31 +73,33 @@ impl World {
         )))))
     }
 
+    /// Writes memory edge as a non-compressed snapshot
     pub fn create_snapshot(
         &self,
         module_id: ModuleId,
-        snapshot_id: SnapshotId,
+        out_snapshot_id: SnapshotId,
     ) -> Result<(), Error> {
         let memory_edge = MemoryEdge::new(self.storage_path().join(module_id_to_name(module_id)).as_path());
-        let snapshot = Snapshot::new(snapshot_id, &memory_edge);
-        snapshot.write(&memory_edge)?;
+        let out_snapshot = Snapshot::new(out_snapshot_id, &memory_edge);
+        out_snapshot.write(&memory_edge)?;
         Ok(())
     }
 
+    /// Writes compressed snapshot of a diff between memory edge and a given non-compressed snapshot
     pub fn diff_snapshot(
         &self,
         module_id: ModuleId,
-        in2_snapshot_id: SnapshotId,
+        in_snapshot_id: SnapshotId,
         out_snapshot_id: SnapshotId,
     ) -> Result<(), Error> {
-        let in1_memory_edge = MemoryEdge::new(self.storage_path().join(module_id_to_name(module_id)).as_path());
-        let in2_snapshot = Snapshot::new(in2_snapshot_id, &in1_memory_edge);
-        let diff_snapshot = Snapshot::new(out_snapshot_id, &in1_memory_edge);
-        diff_snapshot.write_compressed(&in1_memory_edge, &in2_snapshot)?;
-
+        let memory_edge = MemoryEdge::new(self.storage_path().join(module_id_to_name(module_id)).as_path());
+        let in_snapshot = Snapshot::new(in_snapshot_id, &memory_edge);
+        let out_snapshot = Snapshot::new(out_snapshot_id, &memory_edge);
+        out_snapshot.write_compressed(&memory_edge, &in_snapshot)?;
         Ok(())
     }
 
+    /// Deploys module with a given non-compressed snapshot
     pub fn restore_from_snapshot(
         &mut self,
         bytecode: &[u8],
@@ -116,6 +118,7 @@ impl World {
         self.deploy_snapshot(bytecode, mem_grow_by, snapshot_id, build_filename)
     }
 
+    /// Deploys module without a snapshot
     pub fn deploy(
         &mut self,
         bytecode: &[u8],
