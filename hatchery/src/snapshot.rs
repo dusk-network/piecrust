@@ -37,7 +37,6 @@ impl MemoryEdge {
 }
 
 pub struct Snapshot {
-    snapshot_id: SnapshotId,
     path: PathBuf,
 }
 
@@ -53,15 +52,12 @@ impl Snapshot {
             snapshot_id_to_name(snapshot_id),
         ));
         Snapshot {
-            snapshot_id,
             path
         }
     }
 
     pub fn from_edge(memory_edge: &MemoryEdge) -> Self {
-        const EMPTY_SNAPSHOT_ID: SnapshotId = [0u8; 32];
         Snapshot {
-            snapshot_id: EMPTY_SNAPSHOT_ID,
             path: memory_edge.path().to_path_buf(),
         }
     }
