@@ -117,7 +117,6 @@ pub fn box_create_and_restore_snapshots() -> Result<(), Error> {
         0,
         create_snapshot_id("snapshot1"), // base 0x11
         create_snapshot_id("snapshot3_compressed"), // compressed 0x13
-        create_snapshot_id("snapshot4_uncompressed") // target uncompressed (todo - eliminate the need for it as we could simply convert compressed to `this`)
     )?;
 
     let value: Option<i16> = world.query(id, "get", ())?;

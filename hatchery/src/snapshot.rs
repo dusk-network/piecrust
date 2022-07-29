@@ -58,6 +58,14 @@ impl Snapshot {
         }
     }
 
+    pub fn from_edge(memory_edge: &MemoryEdge) -> Self {
+        const EMPTY_SNAPSHOT_ID: SnapshotId = [0u8; 32];
+        Snapshot {
+            snapshot_id: EMPTY_SNAPSHOT_ID,
+            path: memory_edge.path().to_path_buf(),
+        }
+    }
+
     pub fn path(&self) -> &PathBuf {
         &self.path
     }
