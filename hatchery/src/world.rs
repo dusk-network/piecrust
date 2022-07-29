@@ -124,7 +124,7 @@ impl World {
                 snapshot_id_to_name(snapshot_id),
             )
         }
-        self.deploy_snapshot(bytecode, mem_grow_by, snapshot_id, build_filename)
+        self.deploy_with_snapshot(bytecode, mem_grow_by, snapshot_id, build_filename)
     }
 
     /// Deploys module with a given base (non-compressed) snapshot and a
@@ -136,7 +136,7 @@ impl World {
         base_snapshot_id: SnapshotId,
         compressed_snapshot_id: SnapshotId,
     ) -> Result<ModuleId, Error> {
-        self.deploy_compressed_snapshot(
+        self.deploy_with_compressed_snapshot(
             bytecode,
             mem_grow_by,
             base_snapshot_id,
@@ -144,7 +144,7 @@ impl World {
         )
     }
 
-    /// Deploys module without a snapshot
+    /// Deploys module off the edge
     pub fn deploy(
         &mut self,
         bytecode: &[u8],
@@ -157,7 +157,7 @@ impl World {
             module_id_to_name(module_id)
         }
         const EMPTY_SNAPSHOT_ID: SnapshotId = [0u8; 32];
-        self.deploy_snapshot(
+        self.deploy_with_snapshot(
             bytecode,
             mem_grow_by,
             EMPTY_SNAPSHOT_ID,
@@ -165,7 +165,8 @@ impl World {
         )
     }
 
-    fn deploy_compressed_snapshot(
+    /// Deploys module but first it decompresses snapshot into edge
+    fn deploy_with_compressed_snapshot(
         &mut self,
         bytecode: &[u8],
         mem_grow_by: u32,
@@ -175,7 +176,6 @@ impl World {
         let module_id: ModuleId = blake3::hash(bytecode).into(); // todo - suboptimal that this has to be done here as well
         let full_path = self
             .storage_path()
-            .to_path_buf()
             .join(module_id_to_name(module_id));
         let memory_edge_path = full_path.as_path();
         let compressed_snapshot = Snapshot::new(
@@ -189,7 +189,8 @@ impl World {
         self.deploy(bytecode, mem_grow_by)
     }
 
-    fn deploy_snapshot(
+    /// Deploys module with or without snapshot depending on the build_filename function
+    fn deploy_with_snapshot(
         &mut self,
         bytecode: &[u8],
         mem_grow_by: u32,
