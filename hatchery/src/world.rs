@@ -85,17 +85,17 @@ impl World {
         Ok(())
     }
 
-    /// Writes compressed snapshot of a diff between memory edge and a given non-compressed snapshot
-    pub fn diff_snapshot(
+    /// Writes compressed snapshot of a diff between memory edge and a given base (non-compressed) snapshot
+    pub fn create_compressed_snapshot(
         &self,
         module_id: ModuleId,
-        in_snapshot_id: SnapshotId,
+        base_snapshot_id: SnapshotId,
         out_snapshot_id: SnapshotId,
     ) -> Result<(), Error> {
         let memory_edge = MemoryEdge::new(self.storage_path().join(module_id_to_name(module_id)).as_path());
-        let in_snapshot = Snapshot::new(in_snapshot_id, &memory_edge);
+        let base_snapshot = Snapshot::new(base_snapshot_id, &memory_edge);
         let out_snapshot = Snapshot::new(out_snapshot_id, &memory_edge);
-        out_snapshot.write_compressed(&memory_edge, &in_snapshot)?;
+        out_snapshot.write_compressed(&memory_edge, &base_snapshot)?;
         Ok(())
     }
 
@@ -118,6 +118,18 @@ impl World {
         self.deploy_snapshot(bytecode, mem_grow_by, snapshot_id, build_filename)
     }
 
+    /// Deploys module with a given base (non-compressed) snapshot and a compressed snapshot
+    pub fn restore_from_compressed_snapshot(
+        &mut self,
+        bytecode: &[u8],
+        mem_grow_by: u32,
+        base_snapshot_id: SnapshotId,
+        compressed_snapshot_id: SnapshotId,
+        decompressed_snapshot_id: SnapshotId,
+    ) -> Result<ModuleId, Error> {
+        self.deploy_compressed_snapshot(bytecode, mem_grow_by, base_snapshot_id, compressed_snapshot_id, decompressed_snapshot_id)
+    }
+
     /// Deploys module without a snapshot
     pub fn deploy(
         &mut self,
@@ -137,6 +149,33 @@ impl World {
             EMPTY_SNAPSHOT_ID,
             build_filename,
         )
+    }
+
+    fn deploy_compressed_snapshot(
+        &mut self,
+        bytecode: &[u8],
+        mem_grow_by: u32,
+        base_snapshot_id: SnapshotId,
+        compressed_snapshot_id: SnapshotId,
+        decompressed_snapshot_id: SnapshotId,
+    ) -> Result<ModuleId, Error> {
+        let module_id: ModuleId = blake3::hash(bytecode).into(); // todo - suboptimal that this has to be done here as well
+        let full_path = self.storage_path().to_path_buf().join(module_id_to_name(module_id));
+        let memory_edge_path = full_path.as_path();
+        let compressed_snapshot = Snapshot::new(compressed_snapshot_id, &MemoryEdge::new(memory_edge_path));
+        let base_snapshot = Snapshot::new(base_snapshot_id, &MemoryEdge::new(memory_edge_path));
+        let decompressed_snapshot = Snapshot::new(decompressed_snapshot_id, &MemoryEdge::new(memory_edge_path));
+        compressed_snapshot.decompress(&base_snapshot, &decompressed_snapshot)?;
+        fn build_filename(
+            module_id: ModuleId,
+            snapshot_id: SnapshotId,
+        ) -> String {
+            combine_module_snapshot_names(
+                module_id_to_name(module_id),
+                snapshot_id_to_name(snapshot_id),
+            )
+        }
+        self.deploy_snapshot(bytecode, mem_grow_by, decompressed_snapshot_id, build_filename)
     }
 
     fn deploy_snapshot(

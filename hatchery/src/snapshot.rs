@@ -109,12 +109,18 @@ impl Snapshot {
     /// Decompress current snapshot into the given snapshot
     pub fn decompress(&self, old_snapshot: &Snapshot, to_snapshot: &Snapshot) -> Result<(), Error> {
         const MAX_DATA_LEN: usize = 4096*1024; // todo! we need to store this in a file, should not be hardcoded
+        println!("decompress 1, this path={:?}", self.path);
         let compressed = self.load()?;
+        println!("decompress 2 - compressed size={}", compressed.len());
         let old = old_snapshot.load()?;
+        println!("decompress 3 - old size={}", old.len());
         let mut decompressor = zstd::block::Decompressor::new();
         let mut patch_data = std::io::Cursor::new(decompressor.decompress(compressed.as_slice(), MAX_DATA_LEN).map_err(PersistenceError)?);
         let mut patched = vec![0; MAX_DATA_LEN];
+        patched.resize(old.len(), 0u8);
+        println!("decompress 4");
         patch(old.as_slice(), &mut patch_data, patched.as_mut_slice()).map_err(PersistenceError)?;
+        println!("decompress 5 - patch size={}", patched.len());
         to_snapshot.save(patched)?;
         Ok(())
     }
