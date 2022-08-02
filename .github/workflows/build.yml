@@ -39,6 +39,7 @@ jobs:
           profile: minimal
           toolchain: nightly
           override: true
+      - run: rustup component add rust-src
       - name: Run `make test`
         run: make test
 
