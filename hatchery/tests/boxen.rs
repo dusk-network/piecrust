@@ -8,7 +8,7 @@ use dallo::ModuleId;
 use hatchery::{create_snapshot_id, module_bytecode, Error, World};
 use std::path::PathBuf;
 
-#[ignore]
+#[test]
 pub fn box_set_get() -> Result<(), Error> {
     let mut world = World::ephemeral()?;
 
@@ -27,7 +27,7 @@ pub fn box_set_get() -> Result<(), Error> {
     Ok(())
 }
 
-#[ignore]
+#[test]
 pub fn box_set_store_restore_get() -> Result<(), Error> {
     let mut storage_path = PathBuf::new();
     let first_id: ModuleId;

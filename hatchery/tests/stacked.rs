@@ -8,7 +8,7 @@ use dallo::ModuleId;
 use hatchery::{module_bytecode, Error, World};
 use std::path::PathBuf;
 
-#[ignore]
+#[test]
 pub fn push_pop() -> Result<(), Error> {
     let mut world = World::ephemeral()?;
 
@@ -30,7 +30,7 @@ pub fn push_pop() -> Result<(), Error> {
     Ok(())
 }
 
-#[ignore]
+#[test]
 pub fn multi_push_pop() -> Result<(), Error> {
     const MEM_GROW_BY: u32 = 5;
     let mut world = World::ephemeral()?;
@@ -60,7 +60,7 @@ pub fn multi_push_pop() -> Result<(), Error> {
     Ok(())
 }
 
-#[ignore]
+#[test]
 pub fn multi_push_store_restore_pop() -> Result<(), Error> {
     const MEM_GROW_BY: u32 = 5;
     let mut storage_path = PathBuf::new();

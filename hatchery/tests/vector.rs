@@ -6,7 +6,7 @@
 
 use hatchery::{module_bytecode, Error, World};
 
-#[ignore]
+#[test]
 pub fn vector_push_pop() -> Result<(), Error> {
     let mut world = World::ephemeral()?;
 

@@ -1,7 +1,7 @@
 use bsdiff::diff::diff;
 use bsdiff::patch::patch;
 use dallo::SnapshotId;
-use std::fs::{File, OpenOptions};
+use std::fs::OpenOptions;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
@@ -10,6 +10,8 @@ use crate::storage_helpers::{
     combine_module_snapshot_names, snapshot_id_to_name,
 };
 use crate::Error::PersistenceError;
+
+const COMPRESSION_LEVEL: i32 = 11;
 
 pub trait SnapshotLike {
     fn path(&self) -> &PathBuf;
@@ -85,8 +87,8 @@ impl Snapshot {
         let diff2_buffer = diff2.load()?;
         diff(diff2_buffer.as_slice(), diff1_buffer.as_slice(), &mut delta)
             .unwrap();
-        delta = compressor.compress(&delta, 11).unwrap();
-        self.save(delta)?;
+        let compressed_delta = compressor.compress(&delta, COMPRESSION_LEVEL).unwrap();
+        self.save(compressed_delta)?;
         Ok(())
     }
 
@@ -118,7 +120,7 @@ impl Snapshot {
                 .map_err(PersistenceError)?,
         );
         let mut patched = vec![0; MAX_DATA_LEN];
-        patched.resize(old.len(), 0u8);
+        patched.resize(old.len(), 0u8); // todo! old.len cannot be used here, as it might be wrong, size needs to be read from a file
         patch(old.as_slice(), &mut patch_data, patched.as_mut_slice())
             .map_err(PersistenceError)?;
         to_snapshot.save(patched)?;
