@@ -4,7 +4,12 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-#![feature(alloc_error_handler, lang_items, const_mut_refs)]
+#![feature(
+    alloc_error_handler,
+    lang_items,
+    const_mut_refs,
+    const_slice_from_raw_parts
+)]
 #![no_std]
 
 extern crate alloc;

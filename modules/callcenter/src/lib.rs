@@ -19,11 +19,11 @@ pub struct Callcenter;
 const ARGBUF_LEN: usize = 2048;
 
 #[no_mangle]
-static mut A: [u8; ARGBUF_LEN] = [0u8; ARGBUF_LEN];
+static mut A: [u64; ARGBUF_LEN / 8] = [0; ARGBUF_LEN / 8];
 #[no_mangle]
 static AL: i32 = ARGBUF_LEN as i32;
 
-static mut SELF: State<Callcenter> = unsafe { State::new(Callcenter, &mut A) };
+static mut STATE: State<Callcenter> = unsafe { State::new(Callcenter, &mut A) };
 
 impl Callcenter {
     pub fn query_counter(self: &State<Self>, counter_id: ModuleId) -> i64 {
@@ -37,10 +37,14 @@ impl Callcenter {
 
 #[no_mangle]
 unsafe fn query_counter(a: i32) -> i32 {
-    wrap_query(&mut A, a, |counter_id| SELF.query_counter(counter_id))
+    wrap_query(STATE.buffer(), a, |counter_id| {
+        STATE.query_counter(counter_id)
+    })
 }
 
 #[no_mangle]
 unsafe fn increment_counter(a: i32) -> i32 {
-    wrap_transaction(&mut A, a, |counter_id| SELF.increment_counter(counter_id))
+    wrap_transaction(STATE.buffer(), a, |counter_id| {
+        STATE.increment_counter(counter_id)
+    })
 }

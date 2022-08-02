@@ -1,3 +1,4 @@
+use core::cell::UnsafeCell;
 use rkyv::{
     archived_value,
     ser::serializers::{BufferScratch, BufferSerializer, CompositeSerializer},
@@ -31,12 +32,24 @@ use core::ops::{Deref, DerefMut};
 
 pub struct State<S> {
     inner: S,
-    buffer: *mut [u8],
+    buffer: UnsafeCell<&'static mut [u64]>,
 }
 
 impl<S> State<S> {
-    pub const fn new(inner: S, buffer: &'static mut [u8]) -> Self {
-        State { inner, buffer }
+    pub const fn new(inner: S, buffer: &'static mut [u64]) -> Self {
+        State {
+            inner,
+            buffer: UnsafeCell::new(buffer),
+        }
+    }
+
+    pub unsafe fn buffer(&self) -> &mut [u8] {
+        let buf = &mut **self.buffer.get();
+        let len_in_bytes = buf.len() * 8;
+        let first = &mut buf[0];
+        let first_byte: &mut u8 = core::mem::transmute(first);
+
+        core::slice::from_raw_parts_mut(first_byte, len_in_bytes)
     }
 }
 
@@ -116,6 +129,6 @@ impl<S> State<S> {
     where
         F: Fn(&mut [u8]) -> R,
     {
-        f(unsafe { &mut *self.buffer })
+        f(unsafe { self.buffer() })
     }
 }

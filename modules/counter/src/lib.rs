@@ -21,11 +21,11 @@ use dallo::State;
 const ARGBUF_LEN: usize = 64;
 
 #[no_mangle]
-static mut A: [u8; ARGBUF_LEN] = [0u8; ARGBUF_LEN];
+static mut A: [u64; ARGBUF_LEN / 8] = [0; ARGBUF_LEN / 8];
 #[no_mangle]
 static AL: i32 = ARGBUF_LEN as i32;
 
-static mut SELF: State<Counter> =
+static mut STATE: State<Counter> =
     unsafe { State::new(Counter { value: 0xfc }, &mut A) };
 
 impl Counter {
@@ -46,15 +46,15 @@ impl Counter {
 
 #[no_mangle]
 unsafe fn read_value(a: i32) -> i32 {
-    dallo::wrap_query(&mut A, a, |_: ()| SELF.read_value())
+    dallo::wrap_query(STATE.buffer(), a, |_: ()| STATE.read_value())
 }
 
 #[no_mangle]
 unsafe fn increment(a: i32) -> i32 {
-    dallo::wrap_transaction(&mut A, a, |_: ()| SELF.increment())
+    dallo::wrap_transaction(STATE.buffer(), a, |_: ()| STATE.increment())
 }
 
 #[no_mangle]
 unsafe fn mogrify(a: i32) -> i32 {
-    dallo::wrap_transaction(&mut A, a, |by| SELF.mogrify(by))
+    dallo::wrap_transaction(STATE.buffer(), a, |by| STATE.mogrify(by))
 }
