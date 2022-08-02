@@ -7,7 +7,7 @@ license = "MPL-2.0"
 
 [dependencies]
 colored = "2.0.0"
-rkyv = { version = "0.7.38", default-features = false }
+rkyv = "0.7"
 wasmer = { git = "https://github.com/dusk-network/dusk-wasmer", tag = "2.3.0-dusk" }
 wasmer-vm = { git = "https://github.com/dusk-network/dusk-wasmer", tag = "2.3.0-dusk" }
 dallo = { path = "../dallo" }
