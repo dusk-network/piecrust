@@ -53,3 +53,17 @@ pub fn world_center_counter() -> Result<(), Error> {
 
     Ok(())
 }
+
+#[test]
+pub fn world_center_calls_self() -> Result<(), Error> {
+    let mut world = World::ephemeral()?;
+
+    let center_id = world.deploy(module_bytecode!("callcenter"))?;
+
+    // am i calling myself
+    let calling_self: bool =
+        world.query(center_id, "calling_self", center_id)?;
+    assert!(calling_self);
+
+    Ok(())
+}

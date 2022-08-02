@@ -6,7 +6,7 @@
 
 use colored::*;
 
-use dallo::{ModuleId, Ser, SCRATCH_BUF_BYTES};
+use dallo::{ModuleId, Ser, MODULE_ID_BYTES, SCRATCH_BUF_BYTES};
 use rkyv::{
     archived_value,
     ser::serializers::{BufferScratch, BufferSerializer, CompositeSerializer},
@@ -28,6 +28,8 @@ pub struct Instance {
     arg_buf_ofs: i32,
     arg_buf_len: i32,
     heap_base: i32,
+    callee_buf_ofs: i32,
+    caller_buf_ofs: i32,
 }
 
 impl Instance {
@@ -39,6 +41,8 @@ impl Instance {
         arg_buf_ofs: i32,
         arg_buf_len: i32,
         heap_base: i32,
+        callee_buf_ofs: i32,
+        caller_buf_ofs: i32,
     ) -> Self {
         Instance {
             id,
@@ -48,6 +52,8 @@ impl Instance {
             arg_buf_ofs,
             arg_buf_len,
             heap_base,
+            callee_buf_ofs,
+            caller_buf_ofs,
         }
     }
 
@@ -61,6 +67,9 @@ impl Instance {
         Ret: Archive,
         Ret::Archived: Deserialize<Ret, Infallible>,
     {
+        self.write_caller(self.world.caller());
+        self.write_callee(self.world.callee());
+
         let ret_pos = {
             let arg_ofs = self.write_to_arg_buffer(arg)?;
 
@@ -90,6 +99,9 @@ impl Instance {
         Ret: Archive,
         Ret::Archived: Deserialize<Ret, Infallible>,
     {
+        self.write_caller(self.world.caller());
+        self.write_callee(self.world.callee());
+
         let ret_pos = {
             let arg_ofs = self.write_to_arg_buffer(arg)?;
 
@@ -127,13 +139,50 @@ impl Instance {
     where
         F: FnOnce(&mut [u8]) -> R,
     {
-        let mem = self
-            .instance
-            .exports
-            .get_memory("memory")
-            .expect("memory export is checked at module creation time");
+        let mem =
+            self.instance.exports.get_memory("memory").expect(
+                "memory export should be checked at module creation time",
+            );
         let memory_bytes = unsafe { mem.data_unchecked_mut() };
         f(memory_bytes)
+    }
+
+    fn write_caller(&self, module_id: Option<ModuleId>) {
+        let mem =
+            self.instance.exports.get_memory("memory").expect(
+                "memory export should be checked at module creation time",
+            );
+
+        let ofs = self.caller_buf_ofs as usize;
+        let end = ofs + MODULE_ID_BYTES + 1;
+
+        let caller_buf = unsafe { mem.data_unchecked_mut() };
+        let caller_buf = &mut caller_buf[ofs..end];
+
+        match module_id {
+            None => {
+                caller_buf[0] = 0;
+            }
+            Some(module_id) => {
+                let caller_buf = &mut caller_buf[1..];
+                caller_buf.copy_from_slice(&module_id);
+            }
+        }
+    }
+
+    fn write_callee(&self, module_id: ModuleId) {
+        let mem =
+            self.instance.exports.get_memory("memory").expect(
+                "memory export should be checked at module creation time",
+            );
+
+        let ofs = self.callee_buf_ofs as usize;
+        let end = ofs + MODULE_ID_BYTES;
+
+        let callee_buf = unsafe { mem.data_unchecked_mut() };
+        let callee_buf = &mut callee_buf[ofs..end];
+
+        callee_buf.copy_from_slice(&module_id);
     }
 
     fn write_to_arg_buffer<T>(&self, value: T) -> Result<i32, Error>

@@ -11,7 +11,7 @@ extern crate alloc;
 
 use alloc::boxed::Box;
 
-use dallo::{HostAlloc, State};
+use dallo::{HostAlloc, State, MODULE_ID_BYTES};
 #[global_allocator]
 static ALLOCATOR: HostAlloc = HostAlloc;
 
@@ -28,6 +28,11 @@ const ARGBUF_LEN: usize = 8;
 static mut A: [u64; ARGBUF_LEN / 8] = [0; ARGBUF_LEN / 8];
 #[no_mangle]
 static AL: i32 = ARGBUF_LEN as i32;
+
+#[no_mangle]
+static CALLER: [u8; MODULE_ID_BYTES + 1] = [0u8; MODULE_ID_BYTES + 1];
+#[no_mangle]
+static CALLEE: [u8; MODULE_ID_BYTES] = [0u8; MODULE_ID_BYTES];
 
 static mut STATE: State<Boxen> =
     unsafe { State::new(Boxen { a: None, b: 0xbb }, &mut A) };
