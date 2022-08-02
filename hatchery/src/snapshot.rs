@@ -2,7 +2,7 @@ use bsdiff::diff::diff;
 use bsdiff::patch::patch;
 use dallo::SnapshotId;
 use std::fs::OpenOptions;
-use std::io::{Read, Seek, SeekFrom, Write};
+use std::io::{Read, Write};
 use std::mem;
 use std::path::{Path, PathBuf};
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
@@ -35,12 +35,8 @@ pub trait SnapshotLike {
             std::fs::metadata(self.path().as_path()).map_err(PersistenceError)?;
         let mut buffer = vec![0; metadata.len() as usize - (mem::size_of::<u32>() as usize) * 2];
         let size = f.read_u32::<LittleEndian>().map_err(PersistenceError)?;
-        f.seek(SeekFrom::Start(mem::size_of::<u32>() as u64));
         let original_len = f.read_u32::<LittleEndian>().map_err(PersistenceError)?;
-        f.seek(SeekFrom::Start(2 * (mem::size_of::<u32>() as u64)));
-        println!("readsz1={}", size);
         f.read(buffer.as_mut_slice()).map_err(PersistenceError)?;
-        println!("readsz2={} buffer={}", size, buffer.len());
         Ok((size as usize, original_len as usize, buffer))
     }
 }
@@ -136,9 +132,7 @@ impl Snapshot {
         println!("saving to {:?}", self.path());
         println!("writesz={}", size);
         file.write_u32::<LittleEndian>(size as u32).map_err(PersistenceError)?;
-        file.seek(SeekFrom::Start(mem::size_of::<u32>() as u64));
         file.write_u32::<LittleEndian>(original_len as u32).map_err(PersistenceError)?;
-        file.seek(SeekFrom::Start(2 * (mem::size_of::<u32>() as u64)));
         println!("write compressed buffer={}", buf.as_slice().len());
         file.write_all(buf.as_slice()).map_err(PersistenceError)?;
         Ok(())
