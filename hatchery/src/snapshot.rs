@@ -2,8 +2,10 @@ use bsdiff::diff::diff;
 use bsdiff::patch::patch;
 use dallo::SnapshotId;
 use std::fs::OpenOptions;
-use std::io::{Read, Write};
+use std::io::{Read, Seek, SeekFrom, Write};
+use std::mem;
 use std::path::{Path, PathBuf};
+use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 
 use crate::error::Error;
 use crate::storage_helpers::{
@@ -24,6 +26,22 @@ pub trait SnapshotLike {
         let mut buffer = vec![0; metadata.len() as usize];
         f.read(buffer.as_mut_slice()).map_err(PersistenceError)?;
         Ok(buffer)
+    }
+    /// Load snapshot as size and buffer
+    fn load_with_size(&self) -> Result<(usize, usize, Vec<u8>), Error> {
+        let mut f = std::fs::File::open(self.path().as_path())
+            .map_err(PersistenceError)?;
+        let metadata =
+            std::fs::metadata(self.path().as_path()).map_err(PersistenceError)?;
+        let mut buffer = vec![0; metadata.len() as usize - (mem::size_of::<u32>() as usize) * 2];
+        let size = f.read_u32::<LittleEndian>().map_err(PersistenceError)?;
+        f.seek(SeekFrom::Start(mem::size_of::<u32>() as u64));
+        let original_len = f.read_u32::<LittleEndian>().map_err(PersistenceError)?;
+        f.seek(SeekFrom::Start(2 * (mem::size_of::<u32>() as u64)));
+        println!("readsz1={}", size);
+        f.read(buffer.as_mut_slice()).map_err(PersistenceError)?;
+        println!("readsz2={} buffer={}", size, buffer.len());
+        Ok((size as usize, original_len as usize, buffer))
     }
 }
 
@@ -87,8 +105,11 @@ impl Snapshot {
         let diff2_buffer = diff2.load()?;
         diff(diff2_buffer.as_slice(), diff1_buffer.as_slice(), &mut delta)
             .unwrap();
+        println!("delta1={} original_len1={} original_len2={}", delta.len(), diff2_buffer.as_slice().len(), diff1_buffer.as_slice().len());
         let compressed_delta = compressor.compress(&delta, COMPRESSION_LEVEL).unwrap();
-        self.save(compressed_delta)?;
+        println!("delta2={} compressed delta={}", delta.len(), compressed_delta.len());
+        self.save_with_size(compressed_delta, delta.len(), diff2_buffer.as_slice().len())?;
+        // self.save(compressed_delta)?;
         Ok(())
     }
 
@@ -104,23 +125,42 @@ impl Snapshot {
         Ok(())
     }
 
+    /// Save buffer and size into current snapshot
+    pub fn save_with_size(&self, buf: Vec<u8>, size: usize, original_len: usize) -> Result<(), Error> {
+        let file_path_exists = self.path().exists();
+        let mut file = OpenOptions::new()
+            .write(true)
+            .create(!file_path_exists)
+            .open(self.path())
+            .map_err(PersistenceError)?;
+        println!("saving to {:?}", self.path());
+        println!("writesz={}", size);
+        file.write_u32::<LittleEndian>(size as u32).map_err(PersistenceError)?;
+        file.seek(SeekFrom::Start(mem::size_of::<u32>() as u64));
+        file.write_u32::<LittleEndian>(original_len as u32).map_err(PersistenceError)?;
+        file.seek(SeekFrom::Start(2 * (mem::size_of::<u32>() as u64)));
+        println!("write compressed buffer={}", buf.as_slice().len());
+        file.write_all(buf.as_slice()).map_err(PersistenceError)?;
+        Ok(())
+    }
+
     /// Decompress current snapshot into the given snapshot
     pub fn decompress(
         &self,
         old_snapshot: &Snapshot,
         to_snapshot: &Snapshot,
     ) -> Result<(), Error> {
-        const MAX_DATA_LEN: usize = 4096 * 1024; // todo! we need to store this in a file, should not be hardcoded
-        let compressed = self.load()?;
+        let (original_size, old_size, compressed) = self.load_with_size()?;
+        println!("about to decompress!!!! original size={} compressed_size={}", original_size, compressed.len());
         let old = old_snapshot.load()?;
         let mut decompressor = zstd::block::Decompressor::new();
         let mut patch_data = std::io::Cursor::new(
             decompressor
-                .decompress(compressed.as_slice(), MAX_DATA_LEN)
+                .decompress(compressed.as_slice(), original_size)
                 .map_err(PersistenceError)?,
         );
-        let mut patched = vec![0; MAX_DATA_LEN];
-        patched.resize(old.len(), 0u8); // todo! old.len cannot be used here, as it might be wrong, size needs to be read from a file
+        println!("old len={} original_size={}", old.len(), original_size);
+        let mut patched = vec![0; old_size];
         patch(old.as_slice(), &mut patch_data, patched.as_mut_slice())
             .map_err(PersistenceError)?;
         to_snapshot.save(patched)?;
