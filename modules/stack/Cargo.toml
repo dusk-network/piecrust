@@ -10,8 +10,8 @@ license = "MPL-2.0"
 
 [dependencies]
 dallo = { path = "../../dallo", default-features = false }
-nstack = { git = "ssh://git@github.com/dusk-network/nstack", branch = "ad-hoc-annotations" }
-ranno = { git = "ssh://git@github.com/dusk-network/ranno", branch = "main", default-features = false, features = ["alloc"] }
+nstack = { git = "https://github.com/dusk-network/nstack", tag = "v0.0.0-hatchery" }
+ranno = { git = "https://github.com/dusk-network/ranno", tag = "v0.0.0-hatchery", default-features = false, features = ["alloc"] }
 
 [lib]
 crate-type = ["cdylib", "rlib"]
