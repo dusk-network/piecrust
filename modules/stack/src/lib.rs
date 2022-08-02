@@ -11,8 +11,10 @@ use nstack::annotation::Cardinality;
 use nstack::NStack;
 use ranno::Annotation;
 
+use dallo::{HostAlloc, State};
+
 #[global_allocator]
-static ALLOCATOR: dallo::HostAlloc = dallo::HostAlloc;
+static ALLOCATOR: HostAlloc = HostAlloc;
 
 #[derive(Default)]
 pub struct Stack {
@@ -22,13 +24,16 @@ pub struct Stack {
 const ARGBUF_LEN: usize = 8;
 
 #[no_mangle]
-static mut A: [u8; ARGBUF_LEN] = [0u8; ARGBUF_LEN];
+static mut A: [u64; ARGBUF_LEN / 8] = [0; ARGBUF_LEN / 8];
 #[no_mangle]
 static AL: i32 = ARGBUF_LEN as i32;
 
-static mut SELF: Stack = Stack {
-    inner: NStack::new(),
-};
+static mut STATE: State<Stack> = State::new(
+    Stack {
+        inner: NStack::new(),
+    },
+    unsafe { &mut A },
+);
 
 impl Stack {
     pub fn push(&mut self, elem: i32) {
@@ -46,15 +51,15 @@ impl Stack {
 
 #[no_mangle]
 unsafe fn push(a: i32) -> i32 {
-    dallo::wrap_transaction(&mut A, a, |elem: i32| SELF.push(elem))
+    dallo::wrap_transaction(STATE.buffer(), a, |elem: i32| STATE.push(elem))
 }
 
 #[no_mangle]
 unsafe fn pop(a: i32) -> i32 {
-    dallo::wrap_transaction(&mut A, a, |_arg: ()| SELF.pop())
+    dallo::wrap_transaction(STATE.buffer(), a, |_arg: ()| STATE.pop())
 }
 
 #[no_mangle]
 unsafe fn len(a: i32) -> i32 {
-    dallo::wrap_query(&mut A, a, |_arg: ()| SELF.len())
+    dallo::wrap_query(STATE.buffer(), a, |_arg: ()| STATE.len())
 }

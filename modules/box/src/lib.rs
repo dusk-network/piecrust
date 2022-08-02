@@ -11,7 +11,7 @@ extern crate alloc;
 
 use alloc::boxed::Box;
 
-use dallo::HostAlloc;
+use dallo::{HostAlloc, State};
 #[global_allocator]
 static ALLOCATOR: HostAlloc = HostAlloc;
 
@@ -22,14 +22,15 @@ pub struct Boxen {
     b: i16,
 }
 
-const ARGBUF_LEN: usize = 6;
+const ARGBUF_LEN: usize = 8;
 
 #[no_mangle]
-static mut A: [u8; ARGBUF_LEN] = [0u8; ARGBUF_LEN];
+static mut A: [u64; ARGBUF_LEN / 8] = [0; ARGBUF_LEN / 8];
 #[no_mangle]
 static AL: i32 = ARGBUF_LEN as i32;
 
-static mut SELF: Boxen = Boxen { a: None, b: 0xbb };
+static mut STATE: State<Boxen> =
+    unsafe { State::new(Boxen { a: None, b: 0xbb }, &mut A) };
 
 impl Boxen {
     pub fn set(&mut self, x: i16) {
@@ -46,10 +47,10 @@ impl Boxen {
 
 #[no_mangle]
 unsafe fn set(a: i32) -> i32 {
-    dallo::wrap_transaction(&mut A, a, |to| SELF.set(to))
+    dallo::wrap_transaction(STATE.buffer(), a, |to| STATE.set(to))
 }
 
 #[no_mangle]
 unsafe fn get(a: i32) -> i32 {
-    dallo::wrap_transaction(&mut A, a, |_: ()| SELF.get())
+    dallo::wrap_transaction(STATE.buffer(), a, |_: ()| STATE.get())
 }

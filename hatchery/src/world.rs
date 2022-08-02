@@ -99,6 +99,9 @@ impl World {
         let arg_buf_len_pos = global_i32(&instance.exports, "AL")?;
         let heap_base = global_i32(&instance.exports, "__heap_base")?;
 
+        // check buffer alignment
+        // debug_assert_eq!(arg_buf_ofs % 8, 0);
+
         // We need to read the actual value of AL from the offset into memory
 
         let mem = instance.exports.get_memory("memory")?;
