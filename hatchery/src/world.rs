@@ -106,7 +106,7 @@ impl World {
         let arg_buf_len_pos = global_i32(&instance.exports, "AL")?;
 
         // TODO: We should check these buffers have the correct length.
-        let callee_buf_ofs = global_i32(&instance.exports, "CALLEE")?;
+        let self_id_buf_ofs = global_i32(&instance.exports, "SELF_ID")?;
         let caller_buf_ofs = global_i32(&instance.exports, "CALLER")?;
 
         let heap_base = global_i32(&instance.exports, "__heap_base")?;
@@ -132,10 +132,10 @@ impl World {
             arg_buf_ofs,
             arg_buf_len,
             heap_base,
-            callee_buf_ofs,
+            self_id_buf_ofs,
             caller_buf_ofs,
         );
-        instance.write_callee(id);
+        instance.write_self_id(id);
 
         env.initialize(instance);
 

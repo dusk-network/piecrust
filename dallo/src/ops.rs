@@ -11,7 +11,7 @@ mod ext {
 
     extern "C" {
         pub static CALLER: [u8; MODULE_ID_BYTES + 1];
-        pub static CALLEE: [u8; MODULE_ID_BYTES];
+        pub static SELF_ID: [u8; MODULE_ID_BYTES];
     }
 }
 
@@ -28,9 +28,9 @@ pub fn caller() -> Option<&'static ModuleId> {
     }
 }
 
-pub fn callee() -> &'static ModuleId {
+pub fn self_id() -> &'static ModuleId {
     unsafe {
-        let callee_ptr = ext::CALLEE.as_ptr();
+        let callee_ptr = ext::SELF_ID.as_ptr();
         let callee = callee_ptr as *const ModuleId;
         &*callee
     }

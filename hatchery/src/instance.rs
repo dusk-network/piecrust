@@ -28,7 +28,7 @@ pub struct Instance {
     arg_buf_ofs: i32,
     arg_buf_len: i32,
     heap_base: i32,
-    callee_buf_ofs: i32,
+    self_id_buf_ofs: i32,
     caller_buf_ofs: i32,
 }
 
@@ -41,7 +41,7 @@ impl Instance {
         arg_buf_ofs: i32,
         arg_buf_len: i32,
         heap_base: i32,
-        callee_buf_ofs: i32,
+        self_id_buf_ofs: i32,
         caller_buf_ofs: i32,
     ) -> Self {
         Instance {
@@ -52,7 +52,7 @@ impl Instance {
             arg_buf_ofs,
             arg_buf_len,
             heap_base,
-            callee_buf_ofs,
+            self_id_buf_ofs,
             caller_buf_ofs,
         }
     }
@@ -168,13 +168,13 @@ impl Instance {
         }
     }
 
-    pub(crate) fn write_callee(&self, module_id: ModuleId) {
+    pub(crate) fn write_self_id(&self, module_id: ModuleId) {
         let mem =
             self.instance.exports.get_memory("memory").expect(
                 "memory export should be checked at module creation time",
             );
 
-        let ofs = self.callee_buf_ofs as usize;
+        let ofs = self.self_id_buf_ofs as usize;
         let end = ofs + MODULE_ID_BYTES;
 
         let callee_buf = unsafe { mem.data_unchecked_mut() };

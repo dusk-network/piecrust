@@ -26,7 +26,7 @@ static AL: i32 = ARGBUF_LEN as i32;
 #[no_mangle]
 static CALLER: [u8; MODULE_ID_BYTES + 1] = [0u8; MODULE_ID_BYTES + 1];
 #[no_mangle]
-static CALLEE: [u8; MODULE_ID_BYTES] = [0u8; MODULE_ID_BYTES];
+static SELF_ID: [u8; MODULE_ID_BYTES] = [0u8; MODULE_ID_BYTES];
 
 static mut STATE: State<Callcenter> = unsafe { State::new(Callcenter, &mut A) };
 
@@ -39,8 +39,8 @@ impl Callcenter {
         self.transact(counter_id, "increment", ())
     }
 
-    pub fn calling_self(self: &mut State<Self>, self_id: ModuleId) -> bool {
-        callee() == &self_id
+    pub fn calling_self(self: &mut State<Self>, id: ModuleId) -> bool {
+        self_id() == &id
     }
 }
 
