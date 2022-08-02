@@ -68,7 +68,6 @@ impl Instance {
         Ret::Archived: Deserialize<Ret, Infallible>,
     {
         self.write_caller(self.world.caller());
-        self.write_callee(self.world.callee());
 
         let ret_pos = {
             let arg_ofs = self.write_to_arg_buffer(arg)?;
@@ -100,7 +99,6 @@ impl Instance {
         Ret::Archived: Deserialize<Ret, Infallible>,
     {
         self.write_caller(self.world.caller());
-        self.write_callee(self.world.callee());
 
         let ret_pos = {
             let arg_ofs = self.write_to_arg_buffer(arg)?;
@@ -170,7 +168,7 @@ impl Instance {
         }
     }
 
-    fn write_callee(&self, module_id: ModuleId) {
+    pub(crate) fn write_callee(&self, module_id: ModuleId) {
         let mem =
             self.instance.exports.get_memory("memory").expect(
                 "memory export should be checked at module creation time",

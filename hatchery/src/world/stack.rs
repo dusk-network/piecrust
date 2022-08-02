@@ -56,10 +56,4 @@ impl CallStack {
             }
         }
     }
-
-    /// The contract currently being executed.
-    pub fn callee(&self) -> ModuleId {
-        let index = self.elems.len() - 1;
-        self.elems[index].module_id
-    }
 }

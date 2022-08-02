@@ -135,6 +135,7 @@ impl World {
             callee_buf_ofs,
             caller_buf_ofs,
         );
+        instance.write_callee(id);
 
         env.initialize(instance);
 
@@ -298,18 +299,6 @@ impl World {
 
         let stack = w.stack.borrow();
         stack.as_ref().expect("call stack should be set").caller()
-    }
-
-    /// Returns the contract being executed.
-    ///
-    /// # Panics
-    /// If the call stack isn't set.
-    pub(crate) fn callee(&self) -> ModuleId {
-        let guard = self.0.lock();
-        let w = unsafe { &mut *guard.get() };
-
-        let stack = w.stack.borrow();
-        stack.as_ref().expect("call stack should be set").callee()
     }
 
     pub fn storage_path(&self) -> &Path {
