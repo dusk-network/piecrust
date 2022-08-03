@@ -160,7 +160,7 @@ impl Instance {
         Ok(self.with_arg_buffer(|abuf| {
             let ta: &T::Archived =
                 unsafe { archived_value::<T>(abuf, arg_ofs as usize) };
-            ta.deserialize(&mut rkyv::Infallible).unwrap()
+            ta.deserialize(&mut Infallible).unwrap()
         }))
     }
 
@@ -181,9 +181,7 @@ impl Instance {
         self.mem_handler.alloc(amount, align)
     }
 
-    pub(crate) fn dealloc(&mut self, _addr: usize) {
-        ()
-    }
+    pub(crate) fn dealloc(&mut self, _addr: usize) {}
 
     pub fn id(&self) -> ModuleId {
         self.id

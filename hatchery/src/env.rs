@@ -12,6 +12,7 @@ use wasmer::WasmerEnv;
 use crate::instance::Instance;
 
 #[derive(Debug)]
+#[allow(clippy::large_enum_variant)]
 enum EnvInner {
     Uninitialized,
     Initialized(Instance),
@@ -36,12 +37,13 @@ impl Env {
 
     pub(crate) fn inner(&self) -> &Instance {
         if let EnvInner::Initialized(ei) = unsafe { &*self.0.get() } {
-            &ei
+            ei
         } else {
             unreachable!("uninitialized env")
         }
     }
 
+    #[allow(clippy::mut_from_ref)]
     pub(crate) fn inner_mut(&self) -> &mut Instance {
         if let EnvInner::Initialized(ref mut ei) = unsafe { &mut *self.0.get() }
         {
