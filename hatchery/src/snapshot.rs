@@ -114,7 +114,8 @@ impl Snapshot {
         Ok(())
     }
 
-    /// Decompress current snapshot into the given snapshot
+    /// Decompress current snapshot and patch an old snapshot
+    /// Result will be returned in a new snapshot equivalent to memory path
     pub fn decompress(
         &self,
         old_snapshot: &Snapshot,

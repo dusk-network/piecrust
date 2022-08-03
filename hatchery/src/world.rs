@@ -154,7 +154,7 @@ impl World {
         base_snapshot_id: SnapshotId,
         compressed_snapshot_id: SnapshotId,
     ) -> Result<ModuleId, Error> {
-        let module_id: ModuleId = blake3::hash(bytecode).into(); // todo - suboptimal that this has to be done here as well
+        let module_id: ModuleId = blake3::hash(bytecode).into();
         let full_path = self
             .storage_path()
             .join(module_id_to_name(module_id));
