@@ -98,7 +98,7 @@ impl World {
     }
 
     /// Deploys module from a given uncompressed snapshot.
-    pub fn restore_from_uncompressed_snapshot(
+    pub fn deploy_from_uncompressed_snapshot(
         &mut self,
         bytecode: &[u8],
         mem_grow_by: u32,
@@ -123,7 +123,7 @@ impl World {
 
     /// Deploys module from a given base (uncompressed) snapshot
     /// and a compressed snapshot.
-    pub fn restore_from_compressed_snapshot(
+    pub fn deploy_from_compressed_snapshot(
         &mut self,
         bytecode: &[u8],
         mem_grow_by: u32,
@@ -144,7 +144,7 @@ impl World {
             &base_snapshot,
             &MemoryPath::new(memory_path.as_path()),
         )?;
-        self.restore_from_uncompressed_snapshot(
+        self.deploy_from_uncompressed_snapshot(
             bytecode,
             mem_grow_by,
             decompressed_snapshot.id(),
