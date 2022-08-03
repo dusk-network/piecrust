@@ -4,9 +4,7 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-mod stack;
-
-use std::cell::{RefCell, UnsafeCell};
+use std::cell::UnsafeCell;
 use std::collections::BTreeMap;
 use std::ops::{Deref, DerefMut};
 use std::path::{Path, PathBuf};
@@ -15,7 +13,6 @@ use std::sync::Arc;
 use dallo::{ModuleId, Ser};
 use parking_lot::ReentrantMutex;
 use rkyv::{archived_value, Archive, Deserialize, Infallible, Serialize};
-use stack::CallStack;
 use tempfile::tempdir;
 use wasmer::{imports, Exports, Function, Val};
 
@@ -30,8 +27,6 @@ use crate::Error::PersistenceError;
 pub struct WorldInner {
     environments: BTreeMap<ModuleId, Env>,
     storage_path: PathBuf,
-
-    stack: RefCell<Option<CallStack>>,
 }
 
 impl Deref for WorldInner {
@@ -59,7 +54,6 @@ impl World {
         World(Arc::new(ReentrantMutex::new(UnsafeCell::new(WorldInner {
             environments: BTreeMap::new(),
             storage_path: path.into(),
-            stack: RefCell::new(None),
         }))))
     }
 
@@ -71,7 +65,6 @@ impl World {
                     .map_err(PersistenceError)?
                     .path()
                     .into(),
-                stack: RefCell::new(None),
             },
         )))))
     }
@@ -107,7 +100,6 @@ impl World {
 
         // TODO: We should check these buffers have the correct length.
         let self_id_buf_ofs = global_i32(&instance.exports, "SELF_ID")?;
-        let caller_buf_ofs = global_i32(&instance.exports, "CALLER")?;
 
         let heap_base = global_i32(&instance.exports, "__heap_base")?;
 
@@ -133,7 +125,6 @@ impl World {
             arg_buf_len,
             heap_base,
             self_id_buf_ofs,
-            caller_buf_ofs,
         );
         instance.write_self_id(id);
 
@@ -160,12 +151,6 @@ impl World {
         let guard = self.0.lock();
         let w = unsafe { &*guard.get() };
 
-        // The mutex should prevent multiple threads from messing up the
-        // call stack.
-        // If that ever happens, we could always check using `CallStack::swap`.
-        let call_stack = CallStack::new(m_id);
-        w.stack.replace(Some(call_stack));
-
         w.get(&m_id)
             .expect("invalid module id")
             .inner()
@@ -186,9 +171,6 @@ impl World {
         let w = self.0.lock();
         let w = unsafe { &mut *w.get() };
 
-        let call_stack = CallStack::new(m_id);
-        w.stack.replace(Some(call_stack));
-
         w.get_mut(&m_id)
             .expect("invalid module id")
             .inner_mut()
@@ -204,13 +186,6 @@ impl World {
     ) -> Result<i32, Error> {
         let guard = self.0.lock();
         let w = unsafe { &mut *guard.get() };
-
-        let stack = w
-            .stack
-            .get_mut()
-            .as_mut()
-            .expect("call stack should be set");
-        stack.push(callee);
 
         let caller = w.get(&caller).expect("oh no").inner();
         let callee = w.get(&callee).expect("no oh").inner();
@@ -232,13 +207,6 @@ impl World {
             })
         });
 
-        let stack = w
-            .stack
-            .get_mut()
-            .as_mut()
-            .expect("call stack should be set");
-        stack.pop();
-
         Ok(ret_ofs)
     }
 
@@ -251,13 +219,6 @@ impl World {
     ) -> Result<i32, Error> {
         let guard = self.0.lock();
         let w = unsafe { &mut *guard.get() };
-
-        let stack = w
-            .stack
-            .get_mut()
-            .as_mut()
-            .expect("call stack should be set");
-        stack.push(callee);
 
         let caller = w.get(&caller).expect("oh no").inner();
         let callee = w.get(&callee).expect("no oh").inner();
@@ -278,27 +239,7 @@ impl World {
             })
         });
 
-        let stack = w
-            .stack
-            .get_mut()
-            .as_mut()
-            .expect("call stack should be set");
-        stack.pop();
-
         Ok(ret_ofs)
-    }
-
-    /// Returns the caller of the currently executing contract. `None` if first
-    /// call.
-    ///
-    /// # Panics
-    /// If the call stack isn't set.
-    pub(crate) fn caller(&self) -> Option<ModuleId> {
-        let guard = self.0.lock();
-        let w = unsafe { &mut *guard.get() };
-
-        let stack = w.stack.borrow();
-        stack.as_ref().expect("call stack should be set").caller()
     }
 
     pub fn storage_path(&self) -> &Path {

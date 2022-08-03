@@ -10,21 +10,7 @@ mod ext {
     use crate::MODULE_ID_BYTES;
 
     extern "C" {
-        pub static CALLER: [u8; MODULE_ID_BYTES + 1];
         pub static SELF_ID: [u8; MODULE_ID_BYTES];
-    }
-}
-
-pub fn caller() -> Option<&'static ModuleId> {
-    unsafe {
-        match ext::CALLER[0] == 0 {
-            true => None,
-            false => {
-                let caller_ptr = ext::CALLER[1..].as_ptr();
-                let caller = caller_ptr as *const ModuleId;
-                Some(&*caller)
-            }
-        }
     }
 }
 

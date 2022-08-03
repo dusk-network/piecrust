@@ -20,12 +20,9 @@ const ARGBUF_LEN: usize = 64;
 
 #[no_mangle]
 static mut A: [u64; ARGBUF_LEN / 8] = [0; ARGBUF_LEN / 8];
-
 #[no_mangle]
 static AL: i32 = ARGBUF_LEN as i32;
 
-#[no_mangle]
-static CALLER: [u8; MODULE_ID_BYTES + 1] = [0u8; MODULE_ID_BYTES + 1];
 #[no_mangle]
 static SELF_ID: [u8; MODULE_ID_BYTES] = [0u8; MODULE_ID_BYTES];
 
