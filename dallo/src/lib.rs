@@ -30,9 +30,9 @@ pub type ModuleId = [u8; MODULE_ID_BYTES];
 /// How many bytes to use for scratch space when serializing
 pub const SCRATCH_BUF_BYTES: usize = 16;
 
-#[cfg(feature = "wasm")]
+#[cfg(not(feature = "std"))]
 mod handlers;
-#[cfg(feature = "wasm")]
+#[cfg(not(feature = "std"))]
 mod host_allocator;
-#[cfg(feature = "wasm")]
+#[cfg(not(feature = "std"))]
 pub use host_allocator::HostAlloc;
