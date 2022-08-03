@@ -29,19 +29,19 @@ pub trait SnapshotLike {
     }
 }
 
-pub struct MemoryEdge {
+pub struct MemoryPath {
     path: PathBuf,
 }
 
-impl MemoryEdge {
+impl MemoryPath {
     pub fn new(path: impl AsRef<Path>) -> Self {
-        MemoryEdge {
+        MemoryPath {
             path: path.as_ref().to_path_buf(),
         }
     }
 }
 
-impl SnapshotLike for MemoryEdge {
+impl SnapshotLike for MemoryPath {
     fn path(&self) -> &PathBuf {
         &self.path
     }
@@ -53,13 +53,13 @@ pub struct Snapshot {
 }
 
 impl Snapshot {
-    pub fn new(memory_edge: &MemoryEdge) -> Result<Self, Error> {
-        let snapshot_id: SnapshotId = blake3::hash(memory_edge.load()?.as_slice()).into();
-        Snapshot::from_id(snapshot_id, memory_edge)
+    pub fn new(memory_path: &MemoryPath) -> Result<Self, Error> {
+        let snapshot_id: SnapshotId = blake3::hash(memory_path.load()?.as_slice()).into();
+        Snapshot::from_id(snapshot_id, memory_path)
     }
 
-    pub fn from_id(snapshot_id: SnapshotId, memory_edge: &MemoryEdge) -> Result<Self, Error> {
-        let mut path = memory_edge.path().to_owned();
+    pub fn from_id(snapshot_id: SnapshotId, memory_path: &MemoryPath) -> Result<Self, Error> {
+        let mut path = memory_path.path().to_owned();
         path.set_file_name(combine_module_snapshot_names(
             path.file_name()
                 .expect("filename exists")
@@ -73,9 +73,9 @@ impl Snapshot {
         })
     }
 
-    pub fn from_buffer(buf: Vec<u8>, memory_edge: &MemoryEdge) -> Result<Self, Error> {
+    pub fn from_buffer(buf: Vec<u8>, memory_path: &MemoryPath) -> Result<Self, Error> {
         let snapshot_id: SnapshotId = blake3::hash(buf.as_slice()).into();
-        let snapshot = Snapshot::from_id(snapshot_id, memory_edge)?;
+        let snapshot = Snapshot::from_id(snapshot_id, memory_path)?;
         snapshot.save(buf)?;
         Ok(snapshot)
     }
@@ -92,8 +92,8 @@ impl Snapshot {
     }
 
     /// Save current snapshot as uncompressed
-    pub fn write_uncompressed(&self, memory_edge: &MemoryEdge) -> Result<(), Error> {
-        std::fs::copy(memory_edge.path(), self.path().as_path())
+    pub fn write_uncompressed(&self, memory_path: &MemoryPath) -> Result<(), Error> {
+        std::fs::copy(memory_path.path(), self.path().as_path())
             .map_err(PersistenceError)?;
         Ok(())
     }
@@ -101,7 +101,7 @@ impl Snapshot {
     /// Save current snapshot as compressed
     pub fn write_compressed(
         &self,
-        diff1: &MemoryEdge,
+        diff1: &MemoryPath,
         diff2: &Snapshot,
     ) -> Result<(), Error> {
         let mut compressor = zstd::block::Compressor::new();
@@ -118,7 +118,7 @@ impl Snapshot {
     pub fn decompress(
         &self,
         old_snapshot: &Snapshot,
-        edge: &MemoryEdge,
+        memory_path: &MemoryPath,
     ) -> Result<Snapshot, Error> {
         let (original_size, old_size, compressed) = self.load_with_sizes()?;
         let old = old_snapshot.load()?;
@@ -131,7 +131,7 @@ impl Snapshot {
         let mut patched = vec![0; old_size];
         patch(old.as_slice(), &mut patch_data, patched.as_mut_slice())
             .map_err(PersistenceError)?;
-        let out_snapshot = Snapshot::from_buffer(patched, edge)?;
+        let out_snapshot = Snapshot::from_buffer(patched, memory_path)?;
         Ok(out_snapshot)
     }
 

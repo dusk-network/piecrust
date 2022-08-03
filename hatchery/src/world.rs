@@ -13,7 +13,7 @@ use std::sync::Arc;
 use dallo::{ModuleId, Ser, SnapshotId};
 use parking_lot::ReentrantMutex;
 use rkyv::{archived_value, Archive, Deserialize, Infallible, Serialize};
-use snapshot::{MemoryEdge, Snapshot};
+use snapshot::{MemoryPath, Snapshot};
 use tempfile::tempdir;
 use wasmer::{imports, Exports, Function, Val};
 
@@ -73,35 +73,35 @@ impl World {
         )))))
     }
 
-    /// Writes memory edge as a non-compressed snapshot
+    /// Writes memory path as a non-compressed snapshot
     pub fn create_uncompressed_snapshot(
         &self,
         module_id: ModuleId,
     ) -> Result<Snapshot, Error> {
-        let memory_edge = MemoryEdge::new(
+        let memory_path = MemoryPath::new(
             self.storage_path()
                 .join(module_id_to_name(module_id))
                 .as_path(),
         );
-        let out_snapshot = Snapshot::new(&memory_edge)?;
-        out_snapshot.write_uncompressed(&memory_edge)?;
+        let out_snapshot = Snapshot::new(&memory_path)?;
+        out_snapshot.write_uncompressed(&memory_path)?;
         Ok(out_snapshot)
     }
 
-    /// Writes compressed snapshot of a diff between memory edge and a given
+    /// Writes compressed snapshot of a diff between memory path and a given
     /// base (non-compressed) snapshot
     pub fn create_compressed_snapshot(
         &self,
         module_id: ModuleId,
         base_snapshot: &Snapshot,
     ) -> Result<Snapshot, Error> {
-        let memory_edge = MemoryEdge::new(
+        let memory_path = MemoryPath::new(
             self.storage_path()
                 .join(module_id_to_name(module_id))
                 .as_path(),
         );
-        let out_snapshot = Snapshot::new(&memory_edge)?;
-        out_snapshot.write_compressed(&memory_edge, &base_snapshot)?;
+        let out_snapshot = Snapshot::new(&memory_path)?;
+        out_snapshot.write_compressed(&memory_path, &base_snapshot)?;
         Ok(out_snapshot)
     }
 
@@ -124,7 +124,7 @@ impl World {
         self.deploy_with_snapshot(bytecode, mem_grow_by, snapshot_id, build_filename)
     }
 
-    /// Deploys module off the edge
+    /// Deploys module off the memory path
     pub fn deploy(
         &mut self,
         bytecode: &[u8],
@@ -158,14 +158,14 @@ impl World {
         let full_path = self
             .storage_path()
             .join(module_id_to_name(module_id));
-        let memory_edge_path = full_path.as_path();
+        let memory_path = full_path.as_path();
         let compressed_snapshot = Snapshot::from_id(
             compressed_snapshot_id,
-            &MemoryEdge::new(memory_edge_path),
+            &MemoryPath::new(memory_path),
         )?;
         let base_snapshot =
-            Snapshot::from_id(base_snapshot_id, &MemoryEdge::new(memory_edge_path))?;
-        let decompressed_snapshot = compressed_snapshot.decompress(&base_snapshot, &MemoryEdge::new(memory_edge_path))?;
+            Snapshot::from_id(base_snapshot_id, &MemoryPath::new(memory_path))?;
+        let decompressed_snapshot = compressed_snapshot.decompress(&base_snapshot, &MemoryPath::new(memory_path))?;
         self.restore_from_snapshot(bytecode, mem_grow_by, decompressed_snapshot.id())
     }
 
