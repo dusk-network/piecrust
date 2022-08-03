@@ -9,7 +9,7 @@ edition = "2021"
 license = "MPL-2.0"
 
 [dependencies]
-dallo = { path = "../../dallo" }
+dallo = { path = "../../dallo", default-features = false }
 nstack = { git = "ssh://git@github.com/dusk-network/nstack", branch = "ad-hoc-annotations" }
 ranno = { git = "ssh://git@github.com/dusk-network/ranno", branch = "main", default-features = false, features = ["alloc"] }
 
