@@ -28,7 +28,7 @@ pub struct Instance {
     arg_buf_ofs: i32,
     arg_buf_len: i32,
     heap_base: i32,
-    self_id_buf_ofs: i32,
+    self_id_ofs: i32,
 }
 
 impl Instance {
@@ -41,7 +41,7 @@ impl Instance {
         arg_buf_ofs: i32,
         arg_buf_len: i32,
         heap_base: i32,
-        self_id_buf_ofs: i32,
+        self_id_ofs: i32,
     ) -> Self {
         Instance {
             id,
@@ -51,7 +51,7 @@ impl Instance {
             arg_buf_ofs,
             arg_buf_len,
             heap_base,
-            self_id_buf_ofs,
+            self_id_ofs,
         }
     }
 
@@ -145,7 +145,7 @@ impl Instance {
                 "memory export should be checked at module creation time",
             );
 
-        let ofs = self.self_id_buf_ofs as usize;
+        let ofs = self.self_id_ofs as usize;
         let end = ofs + MODULE_ID_BYTES;
 
         let callee_buf = unsafe { mem.data_unchecked_mut() };
