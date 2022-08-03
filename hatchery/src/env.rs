@@ -1,3 +1,9 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+//
+// Copyright (c) DUSK NETWORK. All rights reserved.
+
 use std::cell::UnsafeCell;
 use std::sync::Arc;
 
@@ -6,6 +12,7 @@ use wasmer::WasmerEnv;
 use crate::instance::Instance;
 
 #[derive(Debug)]
+#[allow(clippy::large_enum_variant)]
 enum EnvInner {
     Uninitialized,
     Initialized(Instance),
@@ -30,12 +37,13 @@ impl Env {
 
     pub(crate) fn inner(&self) -> &Instance {
         if let EnvInner::Initialized(ei) = unsafe { &*self.0.get() } {
-            &ei
+            ei
         } else {
             unreachable!("uninitialized env")
         }
     }
 
+    #[allow(clippy::mut_from_ref)]
     pub(crate) fn inner_mut(&self) -> &mut Instance {
         if let EnvInner::Initialized(ref mut ei) = unsafe { &mut *self.0.get() }
         {

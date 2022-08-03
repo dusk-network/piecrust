@@ -49,6 +49,9 @@ impl<S> State<S> {
         }
     }
 
+    /// # Safety
+    /// TODO write a good comment for why this is safe
+    #[allow(clippy::mut_from_ref)]
     pub unsafe fn buffer(&self) -> &mut [u8] {
         let buf = &mut **self.buffer.get();
         let len_in_bytes = buf.len() * 8;
@@ -95,9 +98,7 @@ impl<S> State<S> {
         self.with_arg_buf(|buf| {
             let ret = unsafe { archived_value::<Ret>(buf, ret_ofs as usize) };
 
-            let de = ret.deserialize(&mut Infallible).expect("Infallible");
-
-            de
+            ret.deserialize(&mut Infallible).expect("Infallible")
         })
     }
 
@@ -126,8 +127,7 @@ impl<S> State<S> {
 
         self.with_arg_buf(|buf| {
             let ret = unsafe { archived_value::<Ret>(buf, ret_ofs as usize) };
-            let de = ret.deserialize(&mut Infallible).expect("Infallible");
-            de
+            ret.deserialize(&mut Infallible).expect("Infallible")
         })
     }
 

@@ -1,5 +1,3 @@
-MODULE_DIRS := $(wildcard ./modules/*/.)
-
 all: test-contracts
 
 help: ## Display this help screen
@@ -8,14 +6,12 @@ help: ## Display this help screen
 test: test-contracts ## Run the contracts' tests
 	@cargo test --manifest-path=./hatchery/Cargo.toml
 
-test-contracts: $(MODULE_DIRS) ## Build the test contracts
-
-$(MODULE_DIRS):
+test-contracts: ## Build the test contracts
 	@cargo build \
 		--release \
-		--manifest-path=$@/Cargo.toml \
-        -Z build-std=core,alloc,panic_abort \
-        -Z build-std-features=panic_immediate_abort \
-        --target wasm32-unknown-unknown
+		--manifest-path=modules/Cargo.toml \
+		-Z build-std=core,alloc,panic_abort \
+		-Z build-std-features=panic_immediate_abort \
+		--target wasm32-unknown-unknown
 
-.PHONY: all test-contracts $(MODULE_DIRS)
+.PHONY: all test-contracts

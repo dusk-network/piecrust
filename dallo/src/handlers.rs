@@ -7,6 +7,7 @@
 use core::panic::PanicInfo;
 
 #[alloc_error_handler]
+#[allow(clippy::empty_loop)]
 fn foo(_: core::alloc::Layout) -> ! {
     loop {}
 }

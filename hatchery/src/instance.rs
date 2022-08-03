@@ -1,3 +1,9 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+//
+// Copyright (c) DUSK NETWORK. All rights reserved.
+
 use colored::*;
 
 use dallo::{ModuleId, Ser, SCRATCH_BUF_BYTES};
@@ -154,7 +160,7 @@ impl Instance {
         Ok(self.with_arg_buffer(|abuf| {
             let ta: &T::Archived =
                 unsafe { archived_value::<T>(abuf, arg_ofs as usize) };
-            ta.deserialize(&mut rkyv::Infallible).unwrap()
+            ta.deserialize(&mut Infallible).unwrap()
         }))
     }
 
@@ -175,9 +181,7 @@ impl Instance {
         self.mem_handler.alloc(amount, align)
     }
 
-    pub(crate) fn dealloc(&mut self, _addr: usize) {
-        ()
-    }
+    pub(crate) fn dealloc(&mut self, _addr: usize) {}
 
     pub fn id(&self) -> ModuleId {
         self.id

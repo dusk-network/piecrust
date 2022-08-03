@@ -1,0 +1,9 @@
+[workspace]
+members = [
+    "box",
+    "callcenter",
+    "counter",
+    "fibonacci",
+    "stack",
+    "vector",
+]

@@ -2,5 +2,7 @@
 members = [
     "dallo",
     "hatchery",
-    "modules/*",
+]
+exclude = [
+    "modules/",
 ]
