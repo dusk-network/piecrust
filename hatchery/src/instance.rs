@@ -33,6 +33,7 @@ pub struct Instance {
 }
 
 impl Instance {
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         id: ModuleId,
         instance: wasmer::Instance,
