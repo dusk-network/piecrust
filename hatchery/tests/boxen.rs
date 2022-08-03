@@ -71,8 +71,7 @@ pub fn box_create_and_restore_snapshots() -> Result<(), Error> {
     world.transact(id, "set", COMPRESSED_VALUE)?;
     let value: Option<i16> = world.query(id, "get", ())?;
     assert_eq!(value, Some(COMPRESSED_VALUE));
-    let snapshot2_compressed =
-        world.compressed_snapshot(id, &snapshot1)?;
+    let snapshot2_compressed = world.compressed_snapshot(id, &snapshot1)?;
     let value: Option<i16> = world.query(id, "get", ())?;
     assert_eq!(value, Some(COMPRESSED_VALUE));
 

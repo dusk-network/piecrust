@@ -17,8 +17,8 @@ const COMPRESSION_LEVEL: i32 = 11;
 
 pub trait SnapshotLike {
     fn path(&self) -> &PathBuf;
-    /// Load snapshot as buffer
-    fn load(&self) -> Result<Vec<u8>, Error> {
+    /// Read's snapshot's content into buffer
+    fn read(&self) -> Result<Vec<u8>, Error> {
         let mut f = std::fs::File::open(self.path().as_path())
             .map_err(PersistenceError)?;
         let metadata = std::fs::metadata(self.path().as_path())
@@ -55,7 +55,7 @@ pub struct Snapshot {
 impl Snapshot {
     pub fn new(memory_path: &MemoryPath) -> Result<Self, Error> {
         let snapshot_id: SnapshotId =
-            blake3::hash(memory_path.load()?.as_slice()).into();
+            blake3::hash(memory_path.read()?.as_slice()).into();
         Snapshot::from_id(snapshot_id, memory_path)
     }
 
@@ -83,11 +83,12 @@ impl Snapshot {
     ) -> Result<Self, Error> {
         let snapshot_id: SnapshotId = blake3::hash(buf.as_slice()).into();
         let snapshot = Snapshot::from_id(snapshot_id, memory_path)?;
-        snapshot.save(buf)?;
+        snapshot.write(buf)?;
         Ok(snapshot)
     }
 
-    fn save(&self, buf: Vec<u8>) -> Result<(), Error> {
+    /// Writes buffer to file at snapshot's path.
+    fn write(&self, buf: Vec<u8>) -> Result<(), Error> {
         let mut file = OpenOptions::new()
             .write(true)
             .create(true)
@@ -98,8 +99,8 @@ impl Snapshot {
         Ok(())
     }
 
-    /// Save current snapshot as uncompressed
-    pub fn write_uncompressed(
+    /// Saves current snapshot as uncompressed file.
+    pub fn save_uncompressed(
         &self,
         memory_path: &MemoryPath,
     ) -> Result<(), Error> {
@@ -108,54 +109,60 @@ impl Snapshot {
         Ok(())
     }
 
-    /// Save current snapshot as compressed
-    pub fn write_compressed(
+    /// Saves current snapshot as compressed file.
+    pub fn save_compressed(
         &self,
-        diff1: &MemoryPath,
-        diff2: &Snapshot,
+        base_snapshot: &Snapshot,
+        memory_path: &MemoryPath,
     ) -> Result<(), Error> {
         let mut compressor = zstd::block::Compressor::new();
         let mut delta: Vec<u8> = Vec::new();
-        let diff1_buffer = diff1.load()?;
-        let diff2_buffer = diff2.load()?;
-        diff(diff2_buffer.as_slice(), diff1_buffer.as_slice(), &mut delta)
+        let memory_buffer = memory_path.read()?;
+        let base_buffer = base_snapshot.read()?;
+        diff(base_buffer.as_slice(), memory_buffer.as_slice(), &mut delta)
             .unwrap();
         let compressed_delta =
             compressor.compress(&delta, COMPRESSION_LEVEL).unwrap();
-        self.save_with_sizes(
+        self.write_compressed(
             compressed_delta,
             delta.len(),
-            diff2_buffer.as_slice().len(),
+            base_buffer.as_slice().len(),
         )?;
         Ok(())
     }
 
-    /// Decompress current snapshot and patch an old snapshot
-    /// Result will be returned in a new snapshot equivalent to memory path
+    /// Decompresses current snapshot as patch and patches with it a given
+    /// snapshot. The result will be returned in a new snapshot
+    /// equivalent to given memory path.
     pub fn decompress(
         &self,
-        old_snapshot: &Snapshot,
+        snapshot_to_patch: &Snapshot,
         memory_path: &MemoryPath,
     ) -> Result<Snapshot, Error> {
-        let (original_size, old_size, compressed) = self.load_with_sizes()?;
-        let old = old_snapshot.load()?;
+        let (original_len, uncompressed_size, compressed) =
+            self.read_compressed()?;
         let mut decompressor = zstd::block::Decompressor::new();
         let mut patch_data = std::io::Cursor::new(
             decompressor
-                .decompress(compressed.as_slice(), original_size)
+                .decompress(compressed.as_slice(), original_len)
                 .map_err(PersistenceError)?,
         );
-        let mut patched = vec![0; old_size];
-        patch(old.as_slice(), &mut patch_data, patched.as_mut_slice())
-            .map_err(PersistenceError)?;
+        let mut patched = vec![0; uncompressed_size];
+        patch(
+            snapshot_to_patch.read()?.as_slice(),
+            &mut patch_data,
+            patched.as_mut_slice(),
+        )
+        .map_err(PersistenceError)?;
         let out_snapshot = Snapshot::from_buffer(patched, memory_path)?;
         Ok(out_snapshot)
     }
 
-    fn save_with_sizes(
+    /// Writes compressed data to snapshot's file.
+    fn write_compressed(
         &self,
         buf: Vec<u8>,
-        size: usize,
+        uncompressed_size: usize,
         original_len: usize,
     ) -> Result<(), Error> {
         let mut file = OpenOptions::new()
@@ -164,7 +171,7 @@ impl Snapshot {
             .truncate(true)
             .open(self.path())
             .map_err(PersistenceError)?;
-        file.write_u32::<LittleEndian>(size as u32)
+        file.write_u32::<LittleEndian>(uncompressed_size as u32)
             .map_err(PersistenceError)?;
         file.write_u32::<LittleEndian>(original_len as u32)
             .map_err(PersistenceError)?;
@@ -172,16 +179,14 @@ impl Snapshot {
         Ok(())
     }
 
-    fn load_with_sizes(&self) -> Result<(usize, usize, Vec<u8>), Error> {
+    /// Reads compressed data from snapshot's file.
+    fn read_compressed(&self) -> Result<(usize, usize, Vec<u8>), Error> {
         let mut f = std::fs::File::open(self.path().as_path())
             .map_err(PersistenceError)?;
         let metadata = std::fs::metadata(self.path().as_path())
             .map_err(PersistenceError)?;
-        let mut buffer = vec![
-            0;
-            metadata.len() as usize
-                - (mem::size_of::<u32>() as usize) * 2
-        ];
+        const SIZES_LEN: usize = (mem::size_of::<u32>() as usize) * 2;
+        let mut buffer = vec![0; metadata.len() as usize - SIZES_LEN];
         let size = f.read_u32::<LittleEndian>().map_err(PersistenceError)?;
         let original_len =
             f.read_u32::<LittleEndian>().map_err(PersistenceError)?;
@@ -189,7 +194,7 @@ impl Snapshot {
         Ok((size as usize, original_len as usize, buffer))
     }
 
-    /// Id
+    /// Provides snapshot's id
     pub fn id(&self) -> SnapshotId {
         self.id
     }
