@@ -26,7 +26,6 @@ use crate::storage_helpers::{
     combine_module_snapshot_names, module_id_to_name, snapshot_id_to_name,
 };
 use crate::Error::{MemoryError, PersistenceError};
-use crate::snapshot::SnapshotLike;
 
 #[derive(Debug)]
 pub struct WorldInner {
@@ -75,7 +74,7 @@ impl World {
     }
 
     /// Writes memory edge as a non-compressed snapshot
-    pub fn create_snapshot(
+    pub fn create_uncompressed_snapshot(
         &self,
         module_id: ModuleId,
     ) -> Result<Snapshot, Error> {
@@ -85,7 +84,7 @@ impl World {
                 .as_path(),
         );
         let out_snapshot = Snapshot::new(&memory_edge)?;
-        out_snapshot.write(&memory_edge)?;
+        out_snapshot.write_uncompressed(&memory_edge)?;
         Ok(out_snapshot)
     }
 
@@ -102,7 +101,6 @@ impl World {
                 .as_path(),
         );
         let out_snapshot = Snapshot::new(&memory_edge)?;
-        println!("created out compressed {:?}", out_snapshot.path());
         out_snapshot.write_compressed(&memory_edge, &base_snapshot)?;
         Ok(out_snapshot)
     }
@@ -126,23 +124,6 @@ impl World {
         self.deploy_with_snapshot(bytecode, mem_grow_by, snapshot_id, build_filename)
     }
 
-    /// Deploys module with a given base (non-compressed) snapshot and a
-    /// compressed snapshot
-    pub fn restore_from_compressed_snapshot(
-        &mut self,
-        bytecode: &[u8],
-        mem_grow_by: u32,
-        base_snapshot_id: SnapshotId,
-        compressed_snapshot_id: SnapshotId,
-    ) -> Result<ModuleId, Error> {
-        self.deploy_with_compressed_snapshot(
-            bytecode,
-            mem_grow_by,
-            base_snapshot_id,
-            compressed_snapshot_id,
-        )
-    }
-
     /// Deploys module off the edge
     pub fn deploy(
         &mut self,
@@ -164,8 +145,9 @@ impl World {
         )
     }
 
-    /// Deploys module but first it decompresses snapshot into edge
-    fn deploy_with_compressed_snapshot(
+    /// Deploys module with a given base (non-compressed) snapshot
+    /// and a compressed snapshot
+    pub fn restore_from_compressed_snapshot(
         &mut self,
         bytecode: &[u8],
         mem_grow_by: u32,
@@ -181,7 +163,6 @@ impl World {
             compressed_snapshot_id,
             &MemoryEdge::new(memory_edge_path),
         )?;
-        println!("xx compressed_snapshot path={:?}", compressed_snapshot.path());
         let base_snapshot =
             Snapshot::from_id(base_snapshot_id, &MemoryEdge::new(memory_edge_path))?;
         let decompressed_snapshot = compressed_snapshot.decompress(&base_snapshot, &MemoryEdge::new(memory_edge_path))?;
@@ -197,10 +178,6 @@ impl World {
         build_filename: fn(ModuleId, SnapshotId) -> String,
     ) -> Result<ModuleId, Error> {
         let id: ModuleId = blake3::hash(bytecode).into();
-        println!(
-            "deploy this path={:?}",
-            self.storage_path().join(build_filename(id, snapshot_id))
-        );
         let store = wasmer::Store::new_with_path(
             self.storage_path()
                 .join(build_filename(id, snapshot_id))

@@ -5,7 +5,7 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 use dallo::ModuleId;
-use hatchery::{snapshot_id_to_name, module_bytecode, Error, World};
+use hatchery::{module_bytecode, Error, World};
 use std::path::PathBuf;
 
 #[test]
@@ -65,7 +65,7 @@ pub fn box_create_and_restore_snapshots() -> Result<(), Error> {
     assert_eq!(value, None);
 
     world.transact(id, "set", 0x11)?;
-    let snapshot1 = world.create_snapshot(id)?;
+    let snapshot1 = world.create_uncompressed_snapshot(id)?;
     let value: Option<i16> = world.query(id, "get", ())?;
     assert_eq!(value, Some(0x11));
     world.transact(id, "set", COMPRESSED_VALUE)?;
