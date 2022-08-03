@@ -15,10 +15,6 @@ pub fn snapshot_id_to_name(snapshot_id: SnapshotId) -> String {
     format!("{}", ByteArrayWrapper(snapshot_id))
 }
 
-pub fn create_snapshot_id(s: impl AsRef<str>) -> SnapshotId {
-    blake3::hash(s.as_ref().as_bytes()).into()
-}
-
 struct ByteArrayWrapper(pub [u8; MODULE_ID_BYTES]);
 
 impl core::fmt::UpperHex for ByteArrayWrapper {

@@ -13,7 +13,7 @@ mod storage_helpers;
 mod world;
 
 pub use error::Error;
-pub use storage_helpers::create_snapshot_id;
+pub use storage_helpers::snapshot_id_to_name;
 pub use world::World;
 
 #[macro_export]

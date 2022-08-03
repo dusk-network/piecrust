@@ -26,6 +26,7 @@ use crate::storage_helpers::{
     combine_module_snapshot_names, module_id_to_name, snapshot_id_to_name,
 };
 use crate::Error::{MemoryError, PersistenceError};
+use crate::snapshot::SnapshotLike;
 
 #[derive(Debug)]
 pub struct WorldInner {
@@ -77,16 +78,15 @@ impl World {
     pub fn create_snapshot(
         &self,
         module_id: ModuleId,
-        out_snapshot_id: SnapshotId,
-    ) -> Result<(), Error> {
+    ) -> Result<Snapshot, Error> {
         let memory_edge = MemoryEdge::new(
             self.storage_path()
                 .join(module_id_to_name(module_id))
                 .as_path(),
         );
-        let out_snapshot = Snapshot::new(out_snapshot_id, &memory_edge);
+        let out_snapshot = Snapshot::new(&memory_edge)?;
         out_snapshot.write(&memory_edge)?;
-        Ok(())
+        Ok(out_snapshot)
     }
 
     /// Writes compressed snapshot of a diff between memory edge and a given
@@ -94,18 +94,17 @@ impl World {
     pub fn create_compressed_snapshot(
         &self,
         module_id: ModuleId,
-        base_snapshot_id: SnapshotId,
-        out_snapshot_id: SnapshotId,
-    ) -> Result<(), Error> {
+        base_snapshot: &Snapshot,
+    ) -> Result<Snapshot, Error> {
         let memory_edge = MemoryEdge::new(
             self.storage_path()
                 .join(module_id_to_name(module_id))
                 .as_path(),
         );
-        let base_snapshot = Snapshot::new(base_snapshot_id, &memory_edge);
-        let out_snapshot = Snapshot::new(out_snapshot_id, &memory_edge);
+        let out_snapshot = Snapshot::new(&memory_edge)?;
+        println!("created out compressed {:?}", out_snapshot.path());
         out_snapshot.write_compressed(&memory_edge, &base_snapshot)?;
-        Ok(())
+        Ok(out_snapshot)
     }
 
     /// Deploys module with a given non-compressed snapshot
@@ -178,15 +177,15 @@ impl World {
             .storage_path()
             .join(module_id_to_name(module_id));
         let memory_edge_path = full_path.as_path();
-        let compressed_snapshot = Snapshot::new(
+        let compressed_snapshot = Snapshot::from_id(
             compressed_snapshot_id,
             &MemoryEdge::new(memory_edge_path),
-        );
+        )?;
+        println!("xx compressed_snapshot path={:?}", compressed_snapshot.path());
         let base_snapshot =
-            Snapshot::new(base_snapshot_id, &MemoryEdge::new(memory_edge_path));
-        let edge = Snapshot::from_edge(&MemoryEdge::new(memory_edge_path));
-        compressed_snapshot.decompress(&base_snapshot, &edge)?;
-        self.deploy(bytecode, mem_grow_by)
+            Snapshot::from_id(base_snapshot_id, &MemoryEdge::new(memory_edge_path))?;
+        let decompressed_snapshot = compressed_snapshot.decompress(&base_snapshot, &MemoryEdge::new(memory_edge_path))?;
+        self.restore_from_snapshot(bytecode, mem_grow_by, decompressed_snapshot.id())
     }
 
     /// Deploys module with or without snapshot depending on the build_filename function

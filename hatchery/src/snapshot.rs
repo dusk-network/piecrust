@@ -28,7 +28,7 @@ pub trait SnapshotLike {
         Ok(buffer)
     }
     /// Load snapshot as size and buffer
-    fn load_with_size(&self) -> Result<(usize, usize, Vec<u8>), Error> {
+    fn load_with_sizes(&self) -> Result<(usize, usize, Vec<u8>), Error> {
         let mut f = std::fs::File::open(self.path().as_path())
             .map_err(PersistenceError)?;
         let metadata =
@@ -38,6 +38,18 @@ pub trait SnapshotLike {
         let original_len = f.read_u32::<LittleEndian>().map_err(PersistenceError)?;
         f.read(buffer.as_mut_slice()).map_err(PersistenceError)?;
         Ok((size as usize, original_len as usize, buffer))
+    }
+    /// Save buffer into current snapshot
+    fn save(&self, buf: Vec<u8>) -> Result<(), Error> {
+        println!("saving {:?}", self.path());
+        let mut file = OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .open(self.path())
+            .map_err(PersistenceError)?;
+        file.write_all(buf.as_slice()).map_err(PersistenceError)?;
+        Ok(())
     }
 }
 
@@ -61,10 +73,12 @@ impl SnapshotLike for MemoryEdge {
 
 pub struct Snapshot {
     path: PathBuf,
+    id: SnapshotId,
 }
 
 impl Snapshot {
-    pub fn new(snapshot_id: SnapshotId, memory_edge: &MemoryEdge) -> Self {
+    pub fn new(memory_edge: &MemoryEdge) -> Result<Self, Error> {
+        let snapshot_id: SnapshotId = blake3::hash(memory_edge.load()?.as_slice()).into();
         let mut path = memory_edge.path().to_owned();
         path.set_file_name(combine_module_snapshot_names(
             path.file_name()
@@ -73,14 +87,47 @@ impl Snapshot {
                 .expect("filename is UTF8"),
             snapshot_id_to_name(snapshot_id),
         ));
-        Snapshot { path }
+        Ok(Snapshot {
+            path,
+            id: snapshot_id
+        })
     }
 
-    pub fn from_edge(memory_edge: &MemoryEdge) -> Self {
-        Snapshot {
-            path: memory_edge.path().to_path_buf(),
-        }
+    pub fn from_id(snapshot_id: SnapshotId, memory_edge: &MemoryEdge) -> Result<Self, Error> {
+        let mut path = memory_edge.path().to_owned();
+        path.set_file_name(combine_module_snapshot_names(
+            path.file_name()
+                .expect("filename exists")
+                .to_str()
+                .expect("filename is UTF8"),
+            snapshot_id_to_name(snapshot_id),
+        ));
+        Ok(Snapshot {
+            path,
+            id: snapshot_id
+        })
     }
+
+    pub fn from_buffer(buf: Vec<u8>, memory_edge: &MemoryEdge) -> Result<Self, Error> {
+        let snapshot_id: SnapshotId = blake3::hash(buf.as_slice()).into();
+        let mut path = memory_edge.path().to_owned();
+        path.set_file_name(combine_module_snapshot_names(
+            path.file_name()
+                .expect("filename exists")
+                .to_str()
+                .expect("filename is UTF8"),
+            snapshot_id_to_name(snapshot_id),
+        ));
+        Ok(Snapshot {
+            path,
+            id: snapshot_id
+        })
+    }
+    // pub fn from_edge(memory_edge: &MemoryEdge) -> Self {
+    //     Snapshot {
+    //         path: memory_edge.path().to_path_buf(),
+    //     }
+    // }
 
     /// Create uncompressed snapshot
     pub fn write(&self, memory_edge: &MemoryEdge) -> Result<(), Error> {
@@ -103,30 +150,19 @@ impl Snapshot {
             .unwrap();
         println!("delta1={} original_len1={} original_len2={}", delta.len(), diff2_buffer.as_slice().len(), diff1_buffer.as_slice().len());
         let compressed_delta = compressor.compress(&delta, COMPRESSION_LEVEL).unwrap();
-        println!("delta2={} compressed delta={}", delta.len(), compressed_delta.len());
-        self.save_with_size(compressed_delta, delta.len(), diff2_buffer.as_slice().len())?;
-        // self.save(compressed_delta)?;
-        Ok(())
-    }
-
-    /// Save buffer into current snapshot
-    pub fn save(&self, buf: Vec<u8>) -> Result<(), Error> {
-        let file_path_exists = self.path().exists();
-        let mut file = OpenOptions::new()
-            .write(true)
-            .create(!file_path_exists)
-            .open(self.path())
-            .map_err(PersistenceError)?;
-        file.write_all(buf.as_slice()).map_err(PersistenceError)?;
+        println!("delta2={} compressed delta={} id of this={:?}", delta.len(), compressed_delta.len(), snapshot_id_to_name(self.id()));
+        self.save_with_sizes(compressed_delta, delta.len(), diff2_buffer.as_slice().len())?;
         Ok(())
     }
 
     /// Save buffer and size into current snapshot
-    pub fn save_with_size(&self, buf: Vec<u8>, size: usize, original_len: usize) -> Result<(), Error> {
+    pub fn save_with_sizes(&self, buf: Vec<u8>, size: usize, original_len: usize) -> Result<(), Error> {
         let file_path_exists = self.path().exists();
+        println!("file path exists={}", file_path_exists);
         let mut file = OpenOptions::new()
             .write(true)
-            .create(!file_path_exists)
+            .create(true)
+            .truncate(true)
             .open(self.path())
             .map_err(PersistenceError)?;
         println!("saving to {:?}", self.path());
@@ -142,10 +178,10 @@ impl Snapshot {
     pub fn decompress(
         &self,
         old_snapshot: &Snapshot,
-        to_snapshot: &Snapshot,
-    ) -> Result<(), Error> {
-        let (original_size, old_size, compressed) = self.load_with_size()?;
-        println!("about to decompress!!!! original size={} compressed_size={}", original_size, compressed.len());
+        edge: &MemoryEdge,
+    ) -> Result<Snapshot, Error> {
+        let (original_size, old_size, compressed) = self.load_with_sizes()?;
+        println!("about to decompress!!!! original size={} old_size={} compressed_size={}", original_size, old_size, compressed.len());
         let old = old_snapshot.load()?;
         let mut decompressor = zstd::block::Decompressor::new();
         let mut patch_data = std::io::Cursor::new(
@@ -157,8 +193,14 @@ impl Snapshot {
         let mut patched = vec![0; old_size];
         patch(old.as_slice(), &mut patch_data, patched.as_mut_slice())
             .map_err(PersistenceError)?;
-        to_snapshot.save(patched)?;
-        Ok(())
+        let out_snapshot = Snapshot::from_buffer(patched.clone(), edge)?;// todo eliminate clone
+        out_snapshot.save(patched);
+        Ok(out_snapshot)
+    }
+
+    /// Id
+    pub fn id(&self) -> SnapshotId {
+        self.id
     }
 }
 
