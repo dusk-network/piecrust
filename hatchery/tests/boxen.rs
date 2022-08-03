@@ -65,13 +65,14 @@ pub fn box_create_and_restore_snapshots() -> Result<(), Error> {
     assert_eq!(value, None);
 
     world.transact(id, "set", 0x11)?;
-    let snapshot1 = world.create_uncompressed_snapshot(id)?;
+    let snapshot1 = world.uncompressed_snapshot(id)?;
     let value: Option<i16> = world.query(id, "get", ())?;
     assert_eq!(value, Some(0x11));
     world.transact(id, "set", COMPRESSED_VALUE)?;
     let value: Option<i16> = world.query(id, "get", ())?;
     assert_eq!(value, Some(COMPRESSED_VALUE));
-    let snapshot2_compressed = world.create_compressed_snapshot(id, &snapshot1)?;
+    let snapshot2_compressed =
+        world.compressed_snapshot(id, &snapshot1)?;
     let value: Option<i16> = world.query(id, "get", ())?;
     assert_eq!(value, Some(COMPRESSED_VALUE));
 
@@ -79,11 +80,20 @@ pub fn box_create_and_restore_snapshots() -> Result<(), Error> {
     let value: Option<i16> = world.query(id, "get", ())?;
     assert_eq!(value, Some(0x10));
 
-    let id = world.restore_from_compressed_snapshot(module_bytecode!("box"), 0, snapshot1.id(), snapshot2_compressed.id())?;
+    let id = world.restore_from_compressed_snapshot(
+        module_bytecode!("box"),
+        0,
+        snapshot1.id(),
+        snapshot2_compressed.id(),
+    )?;
     let value: Option<i16> = world.query(id, "get", ())?;
     assert_eq!(value, Some(COMPRESSED_VALUE));
 
-    let id = world.restore_from_snapshot(module_bytecode!("box"), 0, snapshot1.id())?;
+    let id = world.restore_from_uncompressed_snapshot(
+        module_bytecode!("box"),
+        0,
+        snapshot1.id(),
+    )?;
     let value: Option<i16> = world.query(id, "get", ())?;
     assert_eq!(value, Some(0x11));
 

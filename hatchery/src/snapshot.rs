@@ -1,11 +1,11 @@
 use bsdiff::diff::diff;
 use bsdiff::patch::patch;
+use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use dallo::SnapshotId;
 use std::fs::OpenOptions;
 use std::io::{Read, Write};
 use std::mem;
 use std::path::{Path, PathBuf};
-use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 
 use crate::error::Error;
 use crate::storage_helpers::{
@@ -21,8 +21,8 @@ pub trait SnapshotLike {
     fn load(&self) -> Result<Vec<u8>, Error> {
         let mut f = std::fs::File::open(self.path().as_path())
             .map_err(PersistenceError)?;
-        let metadata =
-            std::fs::metadata(self.path().as_path()).map_err(PersistenceError)?;
+        let metadata = std::fs::metadata(self.path().as_path())
+            .map_err(PersistenceError)?;
         let mut buffer = vec![0; metadata.len() as usize];
         f.read(buffer.as_mut_slice()).map_err(PersistenceError)?;
         Ok(buffer)
@@ -54,11 +54,15 @@ pub struct Snapshot {
 
 impl Snapshot {
     pub fn new(memory_path: &MemoryPath) -> Result<Self, Error> {
-        let snapshot_id: SnapshotId = blake3::hash(memory_path.load()?.as_slice()).into();
+        let snapshot_id: SnapshotId =
+            blake3::hash(memory_path.load()?.as_slice()).into();
         Snapshot::from_id(snapshot_id, memory_path)
     }
 
-    pub fn from_id(snapshot_id: SnapshotId, memory_path: &MemoryPath) -> Result<Self, Error> {
+    pub fn from_id(
+        snapshot_id: SnapshotId,
+        memory_path: &MemoryPath,
+    ) -> Result<Self, Error> {
         let mut path = memory_path.path().to_owned();
         path.set_file_name(combine_module_snapshot_names(
             path.file_name()
@@ -69,11 +73,14 @@ impl Snapshot {
         ));
         Ok(Snapshot {
             path,
-            id: snapshot_id
+            id: snapshot_id,
         })
     }
 
-    pub fn from_buffer(buf: Vec<u8>, memory_path: &MemoryPath) -> Result<Self, Error> {
+    pub fn from_buffer(
+        buf: Vec<u8>,
+        memory_path: &MemoryPath,
+    ) -> Result<Self, Error> {
         let snapshot_id: SnapshotId = blake3::hash(buf.as_slice()).into();
         let snapshot = Snapshot::from_id(snapshot_id, memory_path)?;
         snapshot.save(buf)?;
@@ -92,7 +99,10 @@ impl Snapshot {
     }
 
     /// Save current snapshot as uncompressed
-    pub fn write_uncompressed(&self, memory_path: &MemoryPath) -> Result<(), Error> {
+    pub fn write_uncompressed(
+        &self,
+        memory_path: &MemoryPath,
+    ) -> Result<(), Error> {
         std::fs::copy(memory_path.path(), self.path().as_path())
             .map_err(PersistenceError)?;
         Ok(())
@@ -108,9 +118,15 @@ impl Snapshot {
         let mut delta: Vec<u8> = Vec::new();
         let diff1_buffer = diff1.load()?;
         let diff2_buffer = diff2.load()?;
-        diff(diff2_buffer.as_slice(), diff1_buffer.as_slice(), &mut delta).unwrap();
-        let compressed_delta = compressor.compress(&delta, COMPRESSION_LEVEL).unwrap();
-        self.save_with_sizes(compressed_delta, delta.len(), diff2_buffer.as_slice().len())?;
+        diff(diff2_buffer.as_slice(), diff1_buffer.as_slice(), &mut delta)
+            .unwrap();
+        let compressed_delta =
+            compressor.compress(&delta, COMPRESSION_LEVEL).unwrap();
+        self.save_with_sizes(
+            compressed_delta,
+            delta.len(),
+            diff2_buffer.as_slice().len(),
+        )?;
         Ok(())
     }
 
@@ -136,15 +152,22 @@ impl Snapshot {
         Ok(out_snapshot)
     }
 
-    fn save_with_sizes(&self, buf: Vec<u8>, size: usize, original_len: usize) -> Result<(), Error> {
+    fn save_with_sizes(
+        &self,
+        buf: Vec<u8>,
+        size: usize,
+        original_len: usize,
+    ) -> Result<(), Error> {
         let mut file = OpenOptions::new()
             .write(true)
             .create(true)
             .truncate(true)
             .open(self.path())
             .map_err(PersistenceError)?;
-        file.write_u32::<LittleEndian>(size as u32).map_err(PersistenceError)?;
-        file.write_u32::<LittleEndian>(original_len as u32).map_err(PersistenceError)?;
+        file.write_u32::<LittleEndian>(size as u32)
+            .map_err(PersistenceError)?;
+        file.write_u32::<LittleEndian>(original_len as u32)
+            .map_err(PersistenceError)?;
         file.write_all(buf.as_slice()).map_err(PersistenceError)?;
         Ok(())
     }
@@ -152,11 +175,16 @@ impl Snapshot {
     fn load_with_sizes(&self) -> Result<(usize, usize, Vec<u8>), Error> {
         let mut f = std::fs::File::open(self.path().as_path())
             .map_err(PersistenceError)?;
-        let metadata =
-            std::fs::metadata(self.path().as_path()).map_err(PersistenceError)?;
-        let mut buffer = vec![0; metadata.len() as usize - (mem::size_of::<u32>() as usize) * 2];
+        let metadata = std::fs::metadata(self.path().as_path())
+            .map_err(PersistenceError)?;
+        let mut buffer = vec![
+            0;
+            metadata.len() as usize
+                - (mem::size_of::<u32>() as usize) * 2
+        ];
         let size = f.read_u32::<LittleEndian>().map_err(PersistenceError)?;
-        let original_len = f.read_u32::<LittleEndian>().map_err(PersistenceError)?;
+        let original_len =
+            f.read_u32::<LittleEndian>().map_err(PersistenceError)?;
         f.read(buffer.as_mut_slice()).map_err(PersistenceError)?;
         Ok((size as usize, original_len as usize, buffer))
     }
