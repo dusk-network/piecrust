@@ -16,7 +16,7 @@ pub struct Counter {
     value: i64,
 }
 
-use dallo::State;
+use dallo::{ModuleId, State, MODULE_ID_BYTES};
 
 const ARGBUF_LEN: usize = 64;
 
@@ -24,6 +24,9 @@ const ARGBUF_LEN: usize = 64;
 static mut A: [u64; ARGBUF_LEN / 8] = [0; ARGBUF_LEN / 8];
 #[no_mangle]
 static AL: i32 = ARGBUF_LEN as i32;
+
+#[no_mangle]
+static SELF_ID: ModuleId = [0u8; MODULE_ID_BYTES];
 
 static mut STATE: State<Counter> =
     unsafe { State::new(Counter { value: 0xfc }, &mut A) };

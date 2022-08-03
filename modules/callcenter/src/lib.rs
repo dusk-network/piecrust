@@ -8,7 +8,9 @@
 #![no_std]
 #![no_main]
 
-use dallo::*;
+use dallo::{
+    wrap_query, wrap_transaction, HostAlloc, ModuleId, State, MODULE_ID_BYTES,
+};
 
 #[global_allocator]
 static ALLOCATOR: HostAlloc = HostAlloc;
@@ -23,6 +25,9 @@ static mut A: [u64; ARGBUF_LEN / 8] = [0; ARGBUF_LEN / 8];
 #[no_mangle]
 static AL: i32 = ARGBUF_LEN as i32;
 
+#[no_mangle]
+static SELF_ID: ModuleId = [0u8; MODULE_ID_BYTES];
+
 static mut STATE: State<Callcenter> = unsafe { State::new(Callcenter, &mut A) };
 
 impl Callcenter {
@@ -32,6 +37,10 @@ impl Callcenter {
 
     pub fn increment_counter(self: &mut State<Self>, counter_id: ModuleId) {
         self.transact(counter_id, "increment", ())
+    }
+
+    pub fn calling_self(self: &mut State<Self>, id: ModuleId) -> bool {
+        dallo::self_id() == &id
     }
 }
 
@@ -47,4 +56,9 @@ unsafe fn increment_counter(a: i32) -> i32 {
     wrap_transaction(STATE.buffer(), a, |counter_id| {
         STATE.increment_counter(counter_id)
     })
+}
+
+#[no_mangle]
+unsafe fn calling_self(a: i32) -> i32 {
+    wrap_query(STATE.buffer(), a, |self_id| STATE.calling_self(self_id))
 }

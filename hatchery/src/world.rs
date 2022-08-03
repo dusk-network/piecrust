@@ -97,6 +97,10 @@ impl World {
 
         let arg_buf_ofs = global_i32(&instance.exports, "A")?;
         let arg_buf_len_pos = global_i32(&instance.exports, "AL")?;
+
+        // TODO: We should check these buffers have the correct length.
+        let self_id_ofs = global_i32(&instance.exports, "SELF_ID")?;
+
         let heap_base = global_i32(&instance.exports, "__heap_base")?;
 
         // check buffer alignment
@@ -120,7 +124,9 @@ impl World {
             arg_buf_ofs,
             arg_buf_len,
             heap_base,
+            self_id_ofs,
         );
+        instance.write_self_id(id);
 
         env.initialize(instance);
 
@@ -179,7 +185,7 @@ impl World {
         arg_ofs: i32,
     ) -> Result<i32, Error> {
         let guard = self.0.lock();
-        let w = unsafe { &*guard.get() };
+        let w = unsafe { &mut *guard.get() };
 
         let caller = w.get(&caller).expect("oh no").inner();
         let callee = w.get(&callee).expect("no oh").inner();
