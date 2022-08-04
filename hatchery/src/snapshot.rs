@@ -1,7 +1,6 @@
 use bsdiff::diff::diff;
 use bsdiff::patch::patch;
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
-use dallo::SnapshotId;
 use std::fs::OpenOptions;
 use std::io::{Read, Write};
 use std::mem;
@@ -12,6 +11,9 @@ use crate::storage_helpers::{
     combine_module_snapshot_names, snapshot_id_to_name,
 };
 use crate::Error::PersistenceError;
+
+pub const SNAPSHOT_ID_BYTES: usize = 32;
+pub type SnapshotId = [u8; SNAPSHOT_ID_BYTES];
 
 const COMPRESSION_LEVEL: i32 = 11;
 

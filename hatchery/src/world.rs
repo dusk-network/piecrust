@@ -10,10 +10,10 @@ use std::ops::{Deref, DerefMut};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use dallo::{ModuleId, Ser, SnapshotId};
+use dallo::{ModuleId, Ser};
 use parking_lot::ReentrantMutex;
 use rkyv::{archived_value, Archive, Deserialize, Infallible, Serialize};
-use snapshot::{MemoryPath, Snapshot};
+use snapshot::{MemoryPath, Snapshot, SnapshotId};
 use tempfile::tempdir;
 use wasmer::{imports, Exports, Function, Val};
 

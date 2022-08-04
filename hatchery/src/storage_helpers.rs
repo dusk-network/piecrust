@@ -1,4 +1,5 @@
-use dallo::{ModuleId, SnapshotId, MODULE_ID_BYTES};
+use dallo::{ModuleId, MODULE_ID_BYTES};
+use crate::snapshot::SnapshotId;
 
 pub fn combine_module_snapshot_names(
     module_name: impl AsRef<str>,
