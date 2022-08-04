@@ -363,13 +363,14 @@ fn host_transact(
         .expect("TODO: error handling")
 }
 
-fn host_emit(env: &Env, arg_ofs: i32) {
+fn host_emit(env: &Env, arg_ofs: i32, arg_len: i32) {
     let instance = env.inner();
     let module_id = instance.id();
 
     let arg_ofs = arg_ofs as usize;
+    let arg_len = arg_len as usize;
 
-    let data = instance.with_arg_buffer(|buf| buf[arg_ofs..].to_vec());
+    let data = instance.with_arg_buffer(|buf| buf[arg_ofs..arg_len].to_vec());
 
     instance.world().perform_emit(module_id, data);
 }

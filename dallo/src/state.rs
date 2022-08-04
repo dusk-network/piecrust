@@ -17,7 +17,7 @@ use crate::Ser;
 extern "C" {
     fn q(mod_id: *const u8, name: *const u8, len: i32, arg_ofs: i32) -> i32;
     fn t(mod_id: *const u8, name: *const u8, len: i32, arg_ofs: i32) -> i32;
-    fn emit(arg_ofs: i32);
+    fn emit(arg_ofs: i32, arg_len: i32);
 }
 
 fn extern_query(module_id: ModuleId, name: &str, arg_ofs: i32) -> i32 {
@@ -145,7 +145,9 @@ impl<S> State<S> {
                 CompositeSerializer::new(ser, scratch, rkyv::Infallible);
 
             let arg_ofs = composite.serialize_value(&data).unwrap() as i32;
-            unsafe { emit(arg_ofs) }
+            let arg_len = composite.pos() as i32;
+
+            unsafe { emit(arg_ofs, arg_len) }
         });
     }
 
