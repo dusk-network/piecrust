@@ -54,3 +54,40 @@ pub fn box_set_store_restore_get() -> Result<(), Error> {
 
     Ok(())
 }
+#[test]
+pub fn box_create_and_restore_snapshots() -> Result<(), Error> {
+    const SNAPSHOT1_VALUE: i16 = 17;
+    const SNAPSHOT2_COMPRESSED_VALUE: i16 = 100;
+    const TRANSACT_VALUE: i16 = 16;
+    let mut world = World::ephemeral()?;
+    let id = world.deploy(module_bytecode!("box"))?;
+    let value: Option<i16> = world.query(id, "get", ())?;
+    assert_eq!(value, None);
+    world.transact(id, "set", SNAPSHOT1_VALUE)?;
+    let snapshot1 = world.uncompressed_snapshot(id)?;
+    let value: Option<i16> = world.query(id, "get", ())?;
+    assert_eq!(value, Some(SNAPSHOT1_VALUE));
+    world.transact(id, "set", SNAPSHOT2_COMPRESSED_VALUE)?;
+    let value: Option<i16> = world.query(id, "get", ())?;
+    assert_eq!(value, Some(SNAPSHOT2_COMPRESSED_VALUE));
+    let snapshot2_compressed = world.compressed_snapshot(id, &snapshot1)?;
+    let value: Option<i16> = world.query(id, "get", ())?;
+    assert_eq!(value, Some(SNAPSHOT2_COMPRESSED_VALUE));
+    world.transact(id, "set", TRANSACT_VALUE)?;
+    let value: Option<i16> = world.query(id, "get", ())?;
+    assert_eq!(value, Some(TRANSACT_VALUE));
+    let id = world.deploy_from_compressed_snapshot(
+        module_bytecode!("box"),
+        snapshot1.id(),
+        snapshot2_compressed.id(),
+    )?;
+    let value: Option<i16> = world.query(id, "get", ())?;
+    assert_eq!(value, Some(SNAPSHOT2_COMPRESSED_VALUE));
+    let id = world.deploy_from_uncompressed_snapshot(
+        module_bytecode!("box"),
+        snapshot1.id(),
+    )?;
+    let value: Option<i16> = world.query(id, "get", ())?;
+    assert_eq!(value, Some(SNAPSHOT1_VALUE));
+    Ok(())
+}

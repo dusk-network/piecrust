@@ -8,6 +8,7 @@ mod env;
 mod error;
 mod instance;
 mod memory;
+mod snapshot;
 mod storage_helpers;
 mod world;
 

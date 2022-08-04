@@ -13,6 +13,7 @@ use std::sync::Arc;
 use dallo::{ModuleId, Ser};
 use parking_lot::ReentrantMutex;
 use rkyv::{archived_value, Archive, Deserialize, Infallible, Serialize};
+use snapshot::{MemoryPath, Snapshot, SnapshotId};
 use tempfile::tempdir;
 use wasmer::{imports, Exports, Function, Val};
 
@@ -20,7 +21,10 @@ use crate::env::Env;
 use crate::error::Error;
 use crate::instance::Instance;
 use crate::memory::MemHandler;
-use crate::storage_helpers::module_id_to_filename;
+use crate::snapshot;
+use crate::storage_helpers::{
+    combine_module_snapshot_names, module_id_to_name, snapshot_id_to_name,
+};
 use crate::Error::PersistenceError;
 
 #[derive(Debug)]
@@ -69,11 +73,106 @@ impl World {
         )))))
     }
 
-    pub fn deploy(&mut self, bytecode: &[u8]) -> Result<ModuleId, Error> {
-        let id = blake3::hash(bytecode).into();
+    /// Writes memory path's file to uncompressed snapshot.
+    pub fn uncompressed_snapshot(
+        &self,
+        module_id: ModuleId,
+    ) -> Result<Snapshot, Error> {
+        let memory_path = MemoryPath::new(self.memory_path(module_id));
+        let out_snapshot = Snapshot::new(&memory_path)?;
+        out_snapshot.save_uncompressed(&memory_path)?;
+        Ok(out_snapshot)
+    }
+    /// Writes compressed snapshot of a diff between memory path and a given
+    /// base (uncompressed) snapshot.
+    pub fn compressed_snapshot(
+        &self,
+        module_id: ModuleId,
+        base_snapshot: &Snapshot,
+    ) -> Result<Snapshot, Error> {
+        let memory_path = MemoryPath::new(self.memory_path(module_id));
+        let out_snapshot = Snapshot::new(&memory_path)?;
+        out_snapshot.save_compressed(&base_snapshot, &memory_path)?;
+        Ok(out_snapshot)
+    }
+    /// Deploys module from a given uncompressed snapshot.
+    pub fn deploy_from_uncompressed_snapshot(
+        &mut self,
+        bytecode: &[u8],
+        snapshot_id: SnapshotId,
+    ) -> Result<ModuleId, Error> {
+        fn build_filename(
+            module_id: ModuleId,
+            snapshot_id: SnapshotId,
+        ) -> String {
+            combine_module_snapshot_names(
+                module_id_to_name(module_id),
+                snapshot_id_to_name(snapshot_id),
+            )
+        }
+        self.deploy_with_snapshot(
+            bytecode,
+            snapshot_id,
+            build_filename,
+        )
+    }
+    /// Deploys module from a given base (uncompressed) snapshot
+    /// and a compressed snapshot.
+    pub fn deploy_from_compressed_snapshot(
+        &mut self,
+        bytecode: &[u8],
+        base_snapshot_id: SnapshotId,
+        compressed_snapshot_id: SnapshotId,
+    ) -> Result<ModuleId, Error> {
+        let module_id: ModuleId = blake3::hash(bytecode).into();
+        let memory_path = self.memory_path(module_id);
+        let compressed_snapshot = Snapshot::from_id(
+            compressed_snapshot_id,
+            &MemoryPath::new(memory_path.as_path()),
+        )?;
+        let base_snapshot = Snapshot::from_id(
+            base_snapshot_id,
+            &MemoryPath::new(memory_path.as_path()),
+        )?;
+        let decompressed_snapshot = compressed_snapshot.decompress(
+            &base_snapshot,
+            &MemoryPath::new(memory_path.as_path()),
+        )?;
+        self.deploy_from_uncompressed_snapshot(
+            bytecode,
+            decompressed_snapshot.id(),
+        )
+    }
+    /// Deploys module off the memory path's file.
+    pub fn deploy(
+        &mut self,
+        bytecode: &[u8],
+    ) -> Result<ModuleId, Error> {
+        fn build_filename(
+            module_id: ModuleId,
+            _snapshot_id: SnapshotId,
+        ) -> String {
+            module_id_to_name(module_id)
+        }
+        const EMPTY_SNAPSHOT_ID: SnapshotId = [0u8; 32];
+        self.deploy_with_snapshot(
+            bytecode,
+            EMPTY_SNAPSHOT_ID,
+            build_filename,
+        )
+    }
+    /// Deploys module from a path's file produced with the help of
+    /// build_filename function.
+    fn deploy_with_snapshot(
+        &mut self,
+        bytecode: &[u8],
+        snapshot_id: SnapshotId,
+        build_filename: fn(ModuleId, SnapshotId) -> String,
+    ) -> Result<ModuleId, Error> {
+        let id: ModuleId = blake3::hash(bytecode).into();
         let store = wasmer::Store::new_with_path(
             self.storage_path()
-                .join(module_id_to_filename(id))
+                .join(build_filename(id, snapshot_id))
                 .as_path(),
         );
         let module = wasmer::Module::new(&store, bytecode)?;
@@ -95,6 +194,8 @@ impl World {
 
         let instance = wasmer::Instance::new(&module, &imports)?;
 
+        let mem = instance.exports.get_memory("memory")?;
+
         let arg_buf_ofs = global_i32(&instance.exports, "A")?;
         let arg_buf_len_pos = global_i32(&instance.exports, "AL")?;
 
@@ -108,7 +209,6 @@ impl World {
 
         // We need to read the actual value of AL from the offset into memory
 
-        let mem = instance.exports.get_memory("memory")?;
         let data =
             &unsafe { mem.data_unchecked() }[arg_buf_len_pos as usize..][..4];
 
@@ -246,6 +346,9 @@ impl World {
         let guard = self.0.lock();
         let world_inner = unsafe { &*guard.get() };
         world_inner.storage_path.as_path()
+    }
+    pub fn memory_path(&self, module_id: ModuleId) -> PathBuf {
+        self.storage_path().join(module_id_to_name(module_id))
     }
 }
 
