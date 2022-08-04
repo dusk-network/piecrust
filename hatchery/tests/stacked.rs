@@ -65,8 +65,7 @@ pub fn multi_push_store_restore_pop() -> Result<(), Error> {
     const N: i32 = 1_000;
     {
         let mut first_world = World::ephemeral()?;
-        first_id =
-            first_world.deploy(module_bytecode!("stack"))?;
+        first_id = first_world.deploy(module_bytecode!("stack"))?;
         for i in 0..N {
             first_world.transact(first_id, "push", i)?;
             let len: i32 = first_world.query(first_id, "len", ())?;
@@ -75,8 +74,7 @@ pub fn multi_push_store_restore_pop() -> Result<(), Error> {
         first_world.storage_path().clone_into(&mut storage_path);
     }
     let mut second_world = World::new(storage_path);
-    let second_id =
-        second_world.deploy(module_bytecode!("stack"))?;
+    let second_id = second_world.deploy(module_bytecode!("stack"))?;
     assert_eq!(first_id, second_id);
     for i in (0..N).rev() {
         let popped: Option<i32> =

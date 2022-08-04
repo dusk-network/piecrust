@@ -4,8 +4,8 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use dallo::{ModuleId, MODULE_ID_BYTES};
 use crate::snapshot::SnapshotId;
+use dallo::{ModuleId, MODULE_ID_BYTES};
 
 pub fn combine_module_snapshot_names(
     module_name: impl AsRef<str>,

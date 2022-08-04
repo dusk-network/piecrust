@@ -110,11 +110,7 @@ impl World {
                 snapshot_id_to_name(snapshot_id),
             )
         }
-        self.deploy_with_snapshot(
-            bytecode,
-            snapshot_id,
-            build_filename,
-        )
+        self.deploy_with_snapshot(bytecode, snapshot_id, build_filename)
     }
     /// Deploys module from a given base (uncompressed) snapshot
     /// and a compressed snapshot.
@@ -144,10 +140,7 @@ impl World {
         )
     }
     /// Deploys module off the memory path's file.
-    pub fn deploy(
-        &mut self,
-        bytecode: &[u8],
-    ) -> Result<ModuleId, Error> {
+    pub fn deploy(&mut self, bytecode: &[u8]) -> Result<ModuleId, Error> {
         fn build_filename(
             module_id: ModuleId,
             _snapshot_id: SnapshotId,
@@ -155,11 +148,7 @@ impl World {
             module_id_to_name(module_id)
         }
         const EMPTY_SNAPSHOT_ID: SnapshotId = [0u8; 32];
-        self.deploy_with_snapshot(
-            bytecode,
-            EMPTY_SNAPSHOT_ID,
-            build_filename,
-        )
+        self.deploy_with_snapshot(bytecode, EMPTY_SNAPSHOT_ID, build_filename)
     }
     /// Deploys module from a path's file produced with the help of
     /// build_filename function.
