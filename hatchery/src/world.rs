@@ -4,6 +4,8 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
+mod event;
+
 use std::cell::UnsafeCell;
 use std::collections::BTreeMap;
 use std::ops::{Deref, DerefMut};
@@ -21,12 +23,14 @@ use crate::error::Error;
 use crate::instance::Instance;
 use crate::memory::MemHandler;
 use crate::storage_helpers::module_id_to_filename;
+use crate::world::event::Event;
 use crate::Error::PersistenceError;
 
 #[derive(Debug)]
 pub struct WorldInner {
     environments: BTreeMap<ModuleId, Env>,
     storage_path: PathBuf,
+    events: Vec<Event>,
 }
 
 impl Deref for WorldInner {
@@ -54,6 +58,7 @@ impl World {
         World(Arc::new(ReentrantMutex::new(UnsafeCell::new(WorldInner {
             environments: BTreeMap::new(),
             storage_path: path.into(),
+            events: vec![],
         }))))
     }
 
@@ -65,6 +70,7 @@ impl World {
                     .map_err(PersistenceError)?
                     .path()
                     .into(),
+                events: vec![],
             },
         )))))
     }
@@ -90,6 +96,8 @@ impl World {
 
                 "q" => Function::new_native_with_env(&store, env.clone(), host_query),
 		        "t" => Function::new_native_with_env(&store, env.clone(), host_transact),
+
+                "emit" => Function::new_native_with_env(&store, env.clone(), host_emit),
             }
         };
 
@@ -242,6 +250,13 @@ impl World {
         Ok(ret_ofs)
     }
 
+    fn perform_emit(&self, module_id: ModuleId, data: Vec<u8>) {
+        let guard = self.0.lock();
+        let w = unsafe { &mut *guard.get() };
+
+        w.events.push(Event::new(module_id, data));
+    }
+
     pub fn storage_path(&self) -> &Path {
         let guard = self.0.lock();
         let world_inner = unsafe { &*guard.get() };
@@ -335,4 +350,15 @@ fn host_transact(
         .world()
         .perform_transaction(&name, instance.id(), mod_id, arg_ofs)
         .expect("TODO: error handling")
+}
+
+fn host_emit(env: &Env, arg_ofs: i32) {
+    let instance = env.inner();
+    let module_id = instance.id();
+
+    let arg_ofs = arg_ofs as usize;
+
+    let data = instance.with_arg_buffer(|buf| buf[arg_ofs..].to_vec());
+
+    instance.world().perform_emit(module_id, data);
 }
