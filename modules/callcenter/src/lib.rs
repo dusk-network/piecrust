@@ -36,6 +36,7 @@ impl Callcenter {
     }
 
     pub fn increment_counter(self: &mut State<Self>, counter_id: ModuleId) {
+        self.emit(counter_id);
         self.transact(counter_id, "increment", ())
     }
 

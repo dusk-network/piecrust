@@ -37,7 +37,10 @@ impl Counter {
     }
 
     pub fn increment(self: &mut State<Counter>) {
-        self.value += 1;
+        let value = self.value + 1;
+
+        self.emit(value);
+        self.value = value;
     }
 
     pub fn mogrify(self: &mut State<Counter>, x: i64) -> i64 {

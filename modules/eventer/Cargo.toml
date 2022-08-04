@@ -1,0 +1,15 @@
+[package]
+name = "eventer"
+version = "0.1.0"
+authors = [
+    "Eduardo Leegwater Simões <eduardo@dusk.network>",
+]
+edition = "2021"
+
+license = "MPL-2.0"
+
+[dependencies]
+dallo = { path = "../../dallo", default-features = false }
+
+[lib]
+crate-type = ["cdylib", "rlib"]
