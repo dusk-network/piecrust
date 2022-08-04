@@ -14,6 +14,6 @@ mod ext {
     }
 }
 
-pub fn self_id() -> &'static ModuleId {
-    unsafe { &ext::SELF_ID }
+pub fn self_id() -> ModuleId {
+    unsafe { ext::SELF_ID }
 }

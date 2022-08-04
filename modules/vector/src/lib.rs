@@ -8,7 +8,7 @@
 #![no_main]
 extern crate alloc;
 
-use dallo::{HostAlloc, ModuleId, State, MODULE_ID_BYTES};
+use dallo::{HostAlloc, ModuleId, State};
 
 #[global_allocator]
 static ALLOCATOR: HostAlloc = HostAlloc;
@@ -27,7 +27,7 @@ static mut A: [u64; ARGBUF_LEN / 8] = [0; ARGBUF_LEN / 8];
 static AL: i32 = ARGBUF_LEN as i32;
 
 #[no_mangle]
-static SELF_ID: ModuleId = [0u8; MODULE_ID_BYTES];
+static SELF_ID: ModuleId = ModuleId::uninitialized();
 
 static mut STATE: State<Vector> =
     unsafe { State::new(Vector { a: Vec::new() }, &mut A) };

@@ -151,7 +151,7 @@ impl Instance {
         let callee_buf = unsafe { mem.data_unchecked_mut() };
         let callee_buf = &mut callee_buf[ofs..end];
 
-        callee_buf.copy_from_slice(&module_id);
+        callee_buf.copy_from_slice(module_id.as_bytes());
     }
 
     fn write_to_arg_buffer<T>(&self, value: T) -> Result<i32, Error>
