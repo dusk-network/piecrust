@@ -25,7 +25,7 @@ use crate::snapshot;
 use crate::storage_helpers::{
     combine_module_snapshot_names, module_id_to_name, snapshot_id_to_name,
 };
-use crate::Error::{MemoryError, PersistenceError};
+use crate::Error::PersistenceError;
 
 #[derive(Debug)]
 pub struct WorldInner {
@@ -101,7 +101,6 @@ impl World {
     pub fn deploy_from_uncompressed_snapshot(
         &mut self,
         bytecode: &[u8],
-        mem_grow_by: u32,
         snapshot_id: SnapshotId,
     ) -> Result<ModuleId, Error> {
         fn build_filename(
@@ -115,7 +114,6 @@ impl World {
         }
         self.deploy_with_snapshot(
             bytecode,
-            mem_grow_by,
             snapshot_id,
             build_filename,
         )
@@ -126,7 +124,6 @@ impl World {
     pub fn deploy_from_compressed_snapshot(
         &mut self,
         bytecode: &[u8],
-        mem_grow_by: u32,
         base_snapshot_id: SnapshotId,
         compressed_snapshot_id: SnapshotId,
     ) -> Result<ModuleId, Error> {
@@ -146,7 +143,6 @@ impl World {
         )?;
         self.deploy_from_uncompressed_snapshot(
             bytecode,
-            mem_grow_by,
             decompressed_snapshot.id(),
         )
     }
@@ -155,7 +151,6 @@ impl World {
     pub fn deploy(
         &mut self,
         bytecode: &[u8],
-        mem_grow_by: u32,
     ) -> Result<ModuleId, Error> {
         fn build_filename(
             module_id: ModuleId,
@@ -166,7 +161,6 @@ impl World {
         const EMPTY_SNAPSHOT_ID: SnapshotId = [0u8; 32];
         self.deploy_with_snapshot(
             bytecode,
-            mem_grow_by,
             EMPTY_SNAPSHOT_ID,
             build_filename,
         )
@@ -177,7 +171,6 @@ impl World {
     fn deploy_with_snapshot(
         &mut self,
         bytecode: &[u8],
-        mem_grow_by: u32,
         snapshot_id: SnapshotId,
         build_filename: fn(ModuleId, SnapshotId) -> String,
     ) -> Result<ModuleId, Error> {
@@ -207,9 +200,6 @@ impl World {
         let instance = wasmer::Instance::new(&module, &imports)?;
 
         let mem = instance.exports.get_memory("memory")?;
-        if mem_grow_by != 0 {
-            let _ = mem.grow(mem_grow_by).map_err(MemoryError)?;
-        }
 
         let arg_buf_ofs = global_i32(&instance.exports, "A")?;
         let arg_buf_len_pos = global_i32(&instance.exports, "AL")?;

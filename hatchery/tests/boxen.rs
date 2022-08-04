@@ -12,7 +12,7 @@ use std::path::PathBuf;
 pub fn box_set_get() -> Result<(), Error> {
     let mut world = World::ephemeral()?;
 
-    let id = world.deploy(module_bytecode!("box"), 0)?;
+    let id = world.deploy(module_bytecode!("box"))?;
 
     let value: Option<i32> = world.query(id, "get", ())?;
 
@@ -35,7 +35,7 @@ pub fn box_set_store_restore_get() -> Result<(), Error> {
     {
         let mut first_world = World::ephemeral()?;
 
-        first_id = first_world.deploy(module_bytecode!("box"), 0)?;
+        first_id = first_world.deploy(module_bytecode!("box"))?;
 
         first_world.transact(first_id, "set", 0x23)?;
 
@@ -44,7 +44,7 @@ pub fn box_set_store_restore_get() -> Result<(), Error> {
 
     let mut second_world = World::new(storage_path);
 
-    let second_id = second_world.deploy(module_bytecode!("box"), 0)?;
+    let second_id = second_world.deploy(module_bytecode!("box"))?;
 
     assert_eq!(first_id, second_id);
 
@@ -62,7 +62,7 @@ pub fn box_create_and_restore_snapshots() -> Result<(), Error> {
     const TRANSACT_VALUE: i16 = 16;
     let mut world = World::ephemeral()?;
 
-    let id = world.deploy(module_bytecode!("box"), 0)?;
+    let id = world.deploy(module_bytecode!("box"))?;
     let value: Option<i16> = world.query(id, "get", ())?;
     assert_eq!(value, None);
 
@@ -83,7 +83,6 @@ pub fn box_create_and_restore_snapshots() -> Result<(), Error> {
 
     let id = world.deploy_from_compressed_snapshot(
         module_bytecode!("box"),
-        0,
         snapshot1.id(),
         snapshot2_compressed.id(),
     )?;
@@ -92,7 +91,6 @@ pub fn box_create_and_restore_snapshots() -> Result<(), Error> {
 
     let id = world.deploy_from_uncompressed_snapshot(
         module_bytecode!("box"),
-        0,
         snapshot1.id(),
     )?;
     let value: Option<i16> = world.query(id, "get", ())?;
