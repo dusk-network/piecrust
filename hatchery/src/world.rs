@@ -5,9 +5,11 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 mod event;
+pub use event::{Event, Receipt};
 
 use std::cell::UnsafeCell;
 use std::collections::BTreeMap;
+use std::mem;
 use std::ops::{Deref, DerefMut};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -23,7 +25,6 @@ use crate::error::Error;
 use crate::instance::Instance;
 use crate::memory::MemHandler;
 use crate::storage_helpers::module_id_to_filename;
-use crate::world::event::Event;
 use crate::Error::PersistenceError;
 
 #[derive(Debug)]
@@ -150,19 +151,24 @@ impl World {
         m_id: ModuleId,
         name: &str,
         arg: Arg,
-    ) -> Result<Ret, Error>
+    ) -> Result<Receipt<Ret>, Error>
     where
         Arg: for<'a> Serialize<Ser<'a>>,
         Ret: Archive,
         Ret::Archived: Deserialize<Ret, Infallible>,
     {
         let guard = self.0.lock();
-        let w = unsafe { &*guard.get() };
+        let w = unsafe { &mut *guard.get() };
 
-        w.get(&m_id)
+        let ret = w
+            .get(&m_id)
             .expect("invalid module id")
             .inner()
-            .query(name, arg)
+            .query(name, arg)?;
+
+        let events = mem::take(&mut w.events);
+
+        Ok(Receipt::new(ret, events))
     }
 
     pub fn transact<Arg, Ret>(
@@ -170,7 +176,7 @@ impl World {
         m_id: ModuleId,
         name: &str,
         arg: Arg,
-    ) -> Result<Ret, Error>
+    ) -> Result<Receipt<Ret>, Error>
     where
         Arg: for<'a> Serialize<Ser<'a>>,
         Ret: Archive,
@@ -179,10 +185,15 @@ impl World {
         let w = self.0.lock();
         let w = unsafe { &mut *w.get() };
 
-        w.get_mut(&m_id)
+        let ret = w
+            .get_mut(&m_id)
             .expect("invalid module id")
             .inner_mut()
-            .transact(name, arg)
+            .transact(name, arg)?;
+
+        let events = mem::take(&mut w.events);
+
+        Ok(Receipt::new(ret, events))
     }
 
     fn perform_query(

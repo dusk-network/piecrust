@@ -5,7 +5,7 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 use dallo::ModuleId;
-use hatchery::{module_bytecode, Error, World};
+use hatchery::{module_bytecode, Error, Receipt, World};
 use std::path::PathBuf;
 
 #[test]
@@ -14,15 +14,15 @@ pub fn box_set_get() -> Result<(), Error> {
 
     let id = world.deploy(module_bytecode!("box"))?;
 
-    let value: Option<i32> = world.query(id, "get", ())?;
+    let value: Receipt<Option<i32>> = world.query(id, "get", ())?;
 
-    assert_eq!(value, None);
+    assert_eq!(*value, None);
 
-    world.transact(id, "set", 0x11)?;
+    let _: Receipt<()> = world.transact(id, "set", 0x11)?;
 
-    let value: Option<i16> = world.query(id, "get", ())?;
+    let value: Receipt<Option<i16>> = world.query(id, "get", ())?;
 
-    assert_eq!(value, Some(0x11));
+    assert_eq!(*value, Some(0x11));
 
     Ok(())
 }
@@ -37,7 +37,7 @@ pub fn box_set_store_restore_get() -> Result<(), Error> {
 
         first_id = first_world.deploy(module_bytecode!("box"))?;
 
-        first_world.transact(first_id, "set", 0x23)?;
+        let _: Receipt<()> = first_world.transact(first_id, "set", 0x23)?;
 
         first_world.storage_path().clone_into(&mut storage_path);
     }
@@ -48,9 +48,10 @@ pub fn box_set_store_restore_get() -> Result<(), Error> {
 
     assert_eq!(first_id, second_id);
 
-    let value: Option<i16> = second_world.query(second_id, "get", ())?;
+    let value: Receipt<Option<i16>> =
+        second_world.query(second_id, "get", ())?;
 
-    assert_eq!(value, Some(0x23));
+    assert_eq!(*value, Some(0x23));
 
     Ok(())
 }

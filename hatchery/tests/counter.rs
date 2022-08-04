@@ -4,7 +4,7 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use hatchery::{module_bytecode, Error, World};
+use hatchery::{module_bytecode, Error, Receipt, World};
 
 #[test]
 pub fn counter_trivial() -> Result<(), Error> {
@@ -12,9 +12,9 @@ pub fn counter_trivial() -> Result<(), Error> {
 
     let id = world.deploy(module_bytecode!("counter"))?;
 
-    let value: i32 = world.query(id, "read_value", ())?;
+    let value: Receipt<i32> = world.query(id, "read_value", ())?;
 
-    assert_eq!(value, 0xfc);
+    assert_eq!(*value, 0xfc);
 
     Ok(())
 }
@@ -25,15 +25,15 @@ pub fn counter_increment() -> Result<(), Error> {
 
     let id = world.deploy(module_bytecode!("counter"))?;
 
-    world.transact(id, "increment", ())?;
+    let _: Receipt<()> = world.transact(id, "increment", ())?;
 
-    let value: i32 = world.query(id, "read_value", ())?;
-    assert_eq!(value, 0xfd);
+    let value: Receipt<i32> = world.query(id, "read_value", ())?;
+    assert_eq!(*value, 0xfd);
 
-    world.transact(id, "increment", ())?;
+    let _: Receipt<()> = world.transact(id, "increment", ())?;
 
-    let value: i32 = world.query(id, "read_value", ())?;
-    assert_eq!(value, 0xfe);
+    let value: Receipt<i32> = world.query(id, "read_value", ())?;
+    assert_eq!(*value, 0xfe);
 
     Ok(())
 }
@@ -44,12 +44,12 @@ pub fn counter_mogrify() -> Result<(), Error> {
 
     let id = world.deploy(module_bytecode!("counter"))?;
 
-    let value: i32 = world.transact(id, "mogrify", 32)?;
+    let value: Receipt<i32> = world.transact(id, "mogrify", 32)?;
 
-    assert_eq!(value, 0xfc);
+    assert_eq!(*value, 0xfc);
 
-    let value: i32 = world.query(id, "read_value", ())?;
-    assert_eq!(value, 0xfc - 32);
+    let value: Receipt<i32> = world.query(id, "read_value", ())?;
+    assert_eq!(*value, 0xfc - 32);
 
     Ok(())
 }
