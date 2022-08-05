@@ -17,8 +17,8 @@ use wasmer::NativeFunc;
 
 use crate::error::*;
 use crate::memory::MemHandler;
-use crate::world::World;
 use crate::snapshot::SnapshotId;
+use crate::world::World;
 
 #[derive(Debug)]
 pub struct Instance {
@@ -208,8 +208,7 @@ impl Instance {
         self.id
     }
 
-    pub fn set_snapshot_id(&mut self, snapshot_id: SnapshotId)
-    {
+    pub fn set_snapshot_id(&mut self, snapshot_id: SnapshotId) {
         self.snapshot_id = Some(snapshot_id);
     }
     pub fn snapshot_id(&self) -> Option<&SnapshotId> {

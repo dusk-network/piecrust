@@ -69,7 +69,6 @@ impl SnapshotLike for MemoryPath {
     }
 }
 
-
 pub struct Snapshot {
     path: PathBuf,
     id: SnapshotId,
@@ -77,8 +76,9 @@ pub struct Snapshot {
 
 impl Snapshot {
     pub fn new(memory_path: &MemoryPath) -> Result<Self, Error> {
-        let snapshot_id: SnapshotId =
-            SnapshotId::from(*blake3::hash(memory_path.read()?.as_slice()).as_bytes());
+        let snapshot_id: SnapshotId = SnapshotId::from(
+            *blake3::hash(memory_path.read()?.as_slice()).as_bytes(),
+        );
         Snapshot::from_id(snapshot_id, memory_path)
     }
 
