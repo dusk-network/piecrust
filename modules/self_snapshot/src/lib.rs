@@ -73,7 +73,7 @@ impl SelfSnapshot {
         // A: we live with inconsistencies and communicate them.
         // B: we update self, which then should be passed to the transaction
 
-        if self.query::<_, i32>(callee, "crossover", 999) == old_value {
+        if self.query::<_, i32>(callee, "crossover", new_value) == old_value {
             panic!("OH NOES")
         }
     }
@@ -100,7 +100,5 @@ unsafe fn self_call_test_a(a: i32) -> i32 {
 
 #[no_mangle]
 unsafe fn self_call_test_b(a: i32) -> i32 {
-    dallo::wrap_transaction(STATE.buffer(), a, |arg: ()| {
-        STATE.self_call_test_b()
-    })
+    dallo::wrap_transaction(STATE.buffer(), a, |_: ()| STATE.self_call_test_b())
 }

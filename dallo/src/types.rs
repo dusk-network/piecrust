@@ -17,6 +17,7 @@ pub const MODULE_ID_BYTES: usize = 32;
     Deserialize,
     PartialOrd,
     Ord,
+    Hash,
     Clone,
     Copy,
 )]
