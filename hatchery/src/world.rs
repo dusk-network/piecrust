@@ -24,8 +24,9 @@ use crate::env::Env;
 use crate::error::Error;
 use crate::instance::Instance;
 use crate::memory::MemHandler;
-use crate::storage_helpers::module_id_to_filename;
+use crate::storage_helpers::module_id_to_name;
 use crate::Error::PersistenceError;
+use crate::snapshot::{MemoryPath, Snapshot, SnapshotLike};
 
 #[derive(Debug)]
 pub struct WorldInner {
@@ -76,12 +77,40 @@ impl World {
         )))))
     }
 
+    pub fn persist(&self) -> Result<(), Error> {
+        let guard = self.0.lock();
+        let w = unsafe { &mut *guard.get() };
+        for (module_id, environment) in w.environments.iter() {
+            let memory_path = MemoryPath::new(self.memory_path(module_id));
+            let snapshot = Snapshot::new(&memory_path)?;
+            environment.inner_mut().set_snapshot_id(snapshot.id());
+            snapshot.save_uncompressed(&memory_path)?;
+            println!("persisted state of module: {:?} to file: {:?}", module_id_to_name(*module_id), snapshot.path());
+        }
+        Ok(())
+    }
+    pub fn restore(&self) -> Result<(), Error> {
+        let guard = self.0.lock();
+        let w = unsafe { &mut *guard.get() };
+        for (module_id, environment) in w.environments.iter() {
+            let memory_path = MemoryPath::new(self.memory_path(module_id));
+            if let Some(snapshot_id) = environment.inner().snapshot_id() {
+                let snapshot = Snapshot::from_id(*snapshot_id, &memory_path)?;
+                snapshot.load_uncompressed(&memory_path)?;
+                println!("restored state of module: {:?} from file: {:?}", module_id_to_name(*module_id), snapshot.path());
+            }
+        }
+        Ok(())
+    }
+    pub fn memory_path(&self, module_id: &ModuleId) -> PathBuf {
+        self.storage_path().join(module_id_to_name(*module_id))
+    }
     pub fn deploy(&mut self, bytecode: &[u8]) -> Result<ModuleId, Error> {
         let id_bytes: [u8; MODULE_ID_BYTES] = blake3::hash(bytecode).into();
         let id = ModuleId::from(id_bytes);
         let store = wasmer::Store::new_with_path(
             self.storage_path()
-                .join(module_id_to_filename(id))
+                .join(module_id_to_name(id))
                 .as_path(),
         );
         let module = wasmer::Module::new(&store, bytecode)?;
