@@ -41,6 +41,16 @@ impl Callcenter {
     pub fn calling_self(self: &mut State<Self>, id: ModuleId) -> bool {
         dallo::self_id() == id
     }
+
+    pub fn call_self(self: &mut State<Self>) -> bool {
+        let self_id = dallo::self_id();
+        let caller = self.caller();
+
+        match self.caller().is_uninitialized() {
+            true => self.query(self_id, "call_self", ()),
+            false => caller == self_id,
+        }
+    }
 }
 
 #[no_mangle]
@@ -60,4 +70,9 @@ unsafe fn increment_counter(a: i32) -> i32 {
 #[no_mangle]
 unsafe fn calling_self(a: i32) -> i32 {
     wrap_query(STATE.buffer(), a, |self_id| STATE.calling_self(self_id))
+}
+
+#[no_mangle]
+unsafe fn call_self(a: i32) -> i32 {
+    wrap_query(STATE.buffer(), a, |_: ()| STATE.call_self())
 }
