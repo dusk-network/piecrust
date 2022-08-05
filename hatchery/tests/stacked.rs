@@ -4,7 +4,7 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use hatchery::{module_bytecode, Error, World};
+use hatchery::{module_bytecode, Error, Receipt, World};
 
 #[test]
 pub fn push_pop() -> Result<(), Error> {
@@ -14,16 +14,16 @@ pub fn push_pop() -> Result<(), Error> {
 
     let val = 42;
 
-    world.transact(id, "push", val)?;
+    let _: Receipt<()> = world.transact(id, "push", val)?;
 
-    let len: i32 = world.query(id, "len", ())?;
-    assert_eq!(len, 1);
+    let len: Receipt<i32> = world.query(id, "len", ())?;
+    assert_eq!(*len, 1);
 
-    let popped: Option<i32> = world.transact(id, "pop", ())?;
-    let len: i32 = world.query(id, "len", ())?;
+    let popped: Receipt<Option<i32>> = world.transact(id, "pop", ())?;
+    let len: Receipt<i32> = world.query(id, "len", ())?;
 
-    assert_eq!(len, 0);
-    assert_eq!(popped, Some(val));
+    assert_eq!(*len, 0);
+    assert_eq!(*popped, Some(val));
 
     Ok(())
 }
@@ -37,22 +37,22 @@ pub fn multi_push_pop() -> Result<(), Error> {
     const N: i32 = 1_000;
 
     for i in 0..N {
-        world.transact(id, "push", i)?;
-        let len: i32 = world.query(id, "len", ())?;
+        let _: Receipt<()> = world.transact(id, "push", i)?;
+        let len: Receipt<i32> = world.query(id, "len", ())?;
 
-        assert_eq!(len, i + 1);
+        assert_eq!(*len, i + 1);
     }
 
     for i in (0..N).rev() {
-        let popped: Option<i32> = world.transact(id, "pop", ())?;
-        let len: i32 = world.query(id, "len", ())?;
+        let popped: Receipt<Option<i32>> = world.transact(id, "pop", ())?;
+        let len: Receipt<i32> = world.query(id, "len", ())?;
 
-        assert_eq!(len, i);
-        assert_eq!(popped, Some(i));
+        assert_eq!(*len, i);
+        assert_eq!(*popped, Some(i));
     }
 
-    let popped: Option<i32> = world.transact(id, "pop", ())?;
-    assert_eq!(popped, None);
+    let popped: Receipt<Option<i32>> = world.transact(id, "pop", ())?;
+    assert_eq!(*popped, None);
 
     Ok(())
 }

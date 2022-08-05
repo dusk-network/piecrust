@@ -4,8 +4,12 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
+mod event;
+pub use event::{Event, Receipt};
+
 use std::cell::UnsafeCell;
 use std::collections::BTreeMap;
+use std::mem;
 use std::ops::{Deref, DerefMut};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -27,6 +31,7 @@ use crate::Error::PersistenceError;
 pub struct WorldInner {
     environments: BTreeMap<ModuleId, Env>,
     storage_path: PathBuf,
+    events: Vec<Event>,
 }
 
 impl Deref for WorldInner {
@@ -54,6 +59,7 @@ impl World {
         World(Arc::new(ReentrantMutex::new(UnsafeCell::new(WorldInner {
             environments: BTreeMap::new(),
             storage_path: path.into(),
+            events: vec![],
         }))))
     }
 
@@ -65,6 +71,7 @@ impl World {
                     .map_err(PersistenceError)?
                     .path()
                     .into(),
+                events: vec![],
             },
         )))))
     }
@@ -90,6 +97,8 @@ impl World {
 
                 "q" => Function::new_native_with_env(&store, env.clone(), host_query),
 		        "t" => Function::new_native_with_env(&store, env.clone(), host_transact),
+
+                "emit" => Function::new_native_with_env(&store, env.clone(), host_emit),
             }
         };
 
@@ -142,19 +151,24 @@ impl World {
         m_id: ModuleId,
         name: &str,
         arg: Arg,
-    ) -> Result<Ret, Error>
+    ) -> Result<Receipt<Ret>, Error>
     where
         Arg: for<'a> Serialize<Ser<'a>>,
         Ret: Archive,
         Ret::Archived: Deserialize<Ret, Infallible>,
     {
         let guard = self.0.lock();
-        let w = unsafe { &*guard.get() };
+        let w = unsafe { &mut *guard.get() };
 
-        w.get(&m_id)
+        let ret = w
+            .get(&m_id)
             .expect("invalid module id")
             .inner()
-            .query(name, arg)
+            .query(name, arg)?;
+
+        let events = mem::take(&mut w.events);
+
+        Ok(Receipt::new(ret, events))
     }
 
     pub fn transact<Arg, Ret>(
@@ -162,7 +176,7 @@ impl World {
         m_id: ModuleId,
         name: &str,
         arg: Arg,
-    ) -> Result<Ret, Error>
+    ) -> Result<Receipt<Ret>, Error>
     where
         Arg: for<'a> Serialize<Ser<'a>>,
         Ret: Archive,
@@ -171,10 +185,15 @@ impl World {
         let w = self.0.lock();
         let w = unsafe { &mut *w.get() };
 
-        w.get_mut(&m_id)
+        let ret = w
+            .get_mut(&m_id)
             .expect("invalid module id")
             .inner_mut()
-            .transact(name, arg)
+            .transact(name, arg)?;
+
+        let events = mem::take(&mut w.events);
+
+        Ok(Receipt::new(ret, events))
     }
 
     fn perform_query(
@@ -240,6 +259,13 @@ impl World {
         });
 
         Ok(ret_ofs)
+    }
+
+    fn perform_emit(&self, module_id: ModuleId, data: Vec<u8>) {
+        let guard = self.0.lock();
+        let w = unsafe { &mut *guard.get() };
+
+        w.events.push(Event::new(module_id, data));
     }
 
     pub fn storage_path(&self) -> &Path {
@@ -335,4 +361,16 @@ fn host_transact(
         .world()
         .perform_transaction(&name, instance.id(), mod_id, arg_ofs)
         .expect("TODO: error handling")
+}
+
+fn host_emit(env: &Env, arg_ofs: i32, arg_len: i32) {
+    let instance = env.inner();
+    let module_id = instance.id();
+
+    let arg_ofs = arg_ofs as usize;
+    let arg_len = arg_len as usize;
+
+    let data = instance.with_arg_buffer(|buf| buf[arg_ofs..arg_len].to_vec());
+
+    instance.world().perform_emit(module_id, data);
 }

@@ -4,7 +4,7 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use hatchery::{module_bytecode, Error, World};
+use hatchery::{module_bytecode, Error, Receipt, World};
 
 #[test]
 pub fn vector_push_pop() -> Result<(), Error> {
@@ -15,18 +15,18 @@ pub fn vector_push_pop() -> Result<(), Error> {
     const N: usize = 128;
 
     for i in 0..N {
-        world.transact(id, "push", i)?;
+        let _: Receipt<()> = world.transact(id, "push", i)?;
     }
 
     for i in 0..N {
-        let popped: Option<i16> = world.transact(id, "pop", ())?;
+        let popped: Receipt<Option<i16>> = world.transact(id, "pop", ())?;
 
-        assert_eq!(popped, Some((N - i - 1) as i16));
+        assert_eq!(*popped, Some((N - i - 1) as i16));
     }
 
-    let popped: Option<i16> = world.transact(id, "pop", ())?;
+    let popped: Receipt<Option<i16>> = world.transact(id, "pop", ())?;
 
-    assert_eq!(popped, None);
+    assert_eq!(*popped, None);
 
     Ok(())
 }

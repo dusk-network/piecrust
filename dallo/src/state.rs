@@ -17,6 +17,7 @@ use crate::Ser;
 extern "C" {
     fn q(mod_id: *const u8, name: *const u8, len: i32, arg_ofs: i32) -> i32;
     fn t(mod_id: *const u8, name: *const u8, len: i32, arg_ofs: i32) -> i32;
+    fn emit(arg_ofs: i32, arg_len: i32);
 }
 
 fn extern_query(module_id: ModuleId, name: &str, arg_ofs: i32) -> i32 {
@@ -129,6 +130,25 @@ impl<S> State<S> {
             let ret = unsafe { archived_value::<Ret>(buf, ret_ofs as usize) };
             ret.deserialize(&mut Infallible).expect("Infallible")
         })
+    }
+
+    /// Emits an event with the given data.
+    pub fn emit<D>(&self, data: D)
+    where
+        for<'a> D: Serialize<Ser<'a>>,
+    {
+        self.with_arg_buf(|buf| {
+            let mut sbuf = [0u8; 16];
+            let scratch = BufferScratch::new(&mut sbuf);
+            let ser = BufferSerializer::new(buf);
+            let mut composite =
+                CompositeSerializer::new(ser, scratch, rkyv::Infallible);
+
+            let arg_ofs = composite.serialize_value(&data).unwrap() as i32;
+            let arg_len = composite.pos() as i32;
+
+            unsafe { emit(arg_ofs, arg_len) }
+        });
     }
 
     pub fn with_arg_buf<F, R>(&self, f: F) -> R

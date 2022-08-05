@@ -3,6 +3,7 @@ members = [
     "box",
     "callcenter",
     "counter",
+    "eventer",
     "fibonacci",
     "stack",
     "vector",
