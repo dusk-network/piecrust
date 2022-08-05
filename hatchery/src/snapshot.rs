@@ -27,12 +27,8 @@ pub const SNAPSHOT_ID_BYTES: usize = 32;
     Clone,
     Copy,
 )]
-#[repr(C)]
 pub struct SnapshotId([u8; SNAPSHOT_ID_BYTES]);
 impl SnapshotId {
-    pub const fn uninitialized() -> Self {
-        SnapshotId([0u8; SNAPSHOT_ID_BYTES])
-    }
     pub fn as_bytes(&self) -> &[u8] {
         &self.0
     }
@@ -107,7 +103,7 @@ impl Snapshot {
     }
 
     /// Saves current snapshot as uncompressed file.
-    pub fn save_uncompressed(
+    pub fn save(
         &self,
         memory_path: &MemoryPath,
     ) -> Result<(), Error> {
@@ -117,7 +113,7 @@ impl Snapshot {
     }
 
     /// Restores current snapshot from uncompressed file.
-    pub fn load_uncompressed(
+    pub fn load(
         &self,
         memory_path: &MemoryPath,
     ) -> Result<(), Error> {

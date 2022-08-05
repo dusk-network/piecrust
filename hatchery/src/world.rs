@@ -84,7 +84,7 @@ impl World {
             let memory_path = MemoryPath::new(self.memory_path(module_id));
             let snapshot = Snapshot::new(&memory_path)?;
             environment.inner_mut().set_snapshot_id(snapshot.id());
-            snapshot.save_uncompressed(&memory_path)?;
+            snapshot.save(&memory_path)?;
             println!(
                 "persisted state of module: {:?} to file: {:?}",
                 module_id_to_name(*module_id),
@@ -100,7 +100,7 @@ impl World {
             let memory_path = MemoryPath::new(self.memory_path(module_id));
             if let Some(snapshot_id) = environment.inner().snapshot_id() {
                 let snapshot = Snapshot::from_id(*snapshot_id, &memory_path)?;
-                snapshot.load_uncompressed(&memory_path)?;
+                snapshot.load(&memory_path)?;
                 println!(
                     "restored state of module: {:?} from file: {:?}",
                     module_id_to_name(*module_id),
