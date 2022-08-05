@@ -154,7 +154,7 @@ impl Instance {
         callee_buf.copy_from_slice(module_id.as_bytes());
     }
 
-    fn write_to_arg_buffer<T>(&self, value: T) -> Result<i32, Error>
+    pub(crate) fn write_to_arg_buffer<T>(&self, value: T) -> Result<i32, Error>
     where
         T: for<'a> Serialize<Ser<'a>>,
     {

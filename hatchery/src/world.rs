@@ -5,6 +5,8 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 mod event;
+mod stack;
+
 pub use event::{Event, Receipt};
 
 use std::cell::UnsafeCell;
@@ -17,6 +19,7 @@ use std::sync::Arc;
 use dallo::{ModuleId, Ser, MODULE_ID_BYTES};
 use parking_lot::ReentrantMutex;
 use rkyv::{archived_value, Archive, Deserialize, Infallible, Serialize};
+use stack::CallStack;
 use tempfile::tempdir;
 use wasmer::{imports, Exports, Function, Val};
 
@@ -32,6 +35,7 @@ pub struct WorldInner {
     environments: BTreeMap<ModuleId, Env>,
     storage_path: PathBuf,
     events: Vec<Event>,
+    call_stack: CallStack,
 }
 
 impl Deref for WorldInner {
@@ -60,6 +64,7 @@ impl World {
             environments: BTreeMap::new(),
             storage_path: path.into(),
             events: vec![],
+            call_stack: CallStack::new(ModuleId::uninitialized()),
         }))))
     }
 
@@ -72,6 +77,7 @@ impl World {
                     .path()
                     .into(),
                 events: vec![],
+                call_stack: CallStack::new(ModuleId::uninitialized()),
             },
         )))))
     }
@@ -100,6 +106,7 @@ impl World {
 		        "t" => Function::new_native_with_env(&store, env.clone(), host_transact),
 
                 "emit" => Function::new_native_with_env(&store, env.clone(), host_emit),
+                "caller" => Function::new_native_with_env(&store, env.clone(), host_caller),
             }
         };
 
@@ -161,6 +168,8 @@ impl World {
         let guard = self.0.lock();
         let w = unsafe { &mut *guard.get() };
 
+        w.call_stack = CallStack::new(m_id);
+
         let ret = w
             .get(&m_id)
             .expect("invalid module id")
@@ -186,6 +195,8 @@ impl World {
         let w = self.0.lock();
         let w = unsafe { &mut *w.get() };
 
+        w.call_stack = CallStack::new(m_id);
+
         let ret = w
             .get_mut(&m_id)
             .expect("invalid module id")
@@ -207,6 +218,8 @@ impl World {
         let guard = self.0.lock();
         let w = unsafe { &mut *guard.get() };
 
+        w.call_stack.push(callee);
+
         let caller = w.get(&caller).expect("oh no").inner();
         let callee = w.get(&callee).expect("no oh").inner();
 
@@ -227,6 +240,8 @@ impl World {
             })
         });
 
+        w.call_stack.pop();
+
         Ok(ret_ofs)
     }
 
@@ -239,6 +254,8 @@ impl World {
     ) -> Result<i32, Error> {
         let guard = self.0.lock();
         let w = unsafe { &mut *guard.get() };
+
+        w.call_stack.push(callee);
 
         let caller = w.get(&caller).expect("oh no").inner();
         let callee = w.get(&callee).expect("no oh").inner();
@@ -259,6 +276,8 @@ impl World {
             })
         });
 
+        w.call_stack.pop();
+
         Ok(ret_ofs)
     }
 
@@ -267,6 +286,15 @@ impl World {
         let w = unsafe { &mut *guard.get() };
 
         w.events.push(Event::new(module_id, data));
+    }
+
+    fn perform_caller(&self, instance: &Instance) -> Result<i32, Error> {
+        let guard = self.0.lock();
+        let w = unsafe { &*guard.get() };
+
+        let caller = w.call_stack.caller().unwrap_or(ModuleId::uninitialized());
+
+        instance.write_to_arg_buffer(caller)
     }
 
     pub fn storage_path(&self) -> &Path {
@@ -374,4 +402,12 @@ fn host_emit(env: &Env, arg_ofs: i32, arg_len: i32) {
     let data = instance.with_arg_buffer(|buf| buf[arg_ofs..arg_len].to_vec());
 
     instance.world().perform_emit(module_id, data);
+}
+
+fn host_caller(env: &Env) -> i32 {
+    let instance = env.inner();
+    instance
+        .world()
+        .perform_caller(instance)
+        .expect("TODO: error handling")
 }
