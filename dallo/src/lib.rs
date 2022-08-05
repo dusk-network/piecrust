@@ -22,8 +22,8 @@ pub use helpers::*;
 mod ops;
 pub use ops::*;
 
-pub const MODULE_ID_BYTES: usize = 32;
-pub type ModuleId = [u8; MODULE_ID_BYTES];
+mod types;
+pub use types::*;
 
 /// How many bytes to use for scratch space when serializing
 pub const SCRATCH_BUF_BYTES: usize = 16;

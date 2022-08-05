@@ -14,7 +14,7 @@ static ALLOCATOR: dallo::HostAlloc = dallo::HostAlloc;
 #[derive(Default)]
 pub struct Fibonacci;
 
-use dallo::{ModuleId, State, MODULE_ID_BYTES};
+use dallo::{ModuleId, State};
 
 const ARGBUF_LEN: usize = 64;
 
@@ -24,7 +24,7 @@ static mut A: [u64; ARGBUF_LEN / 8] = [0; ARGBUF_LEN / 8];
 static AL: i32 = ARGBUF_LEN as i32;
 
 #[no_mangle]
-static SELF_ID: ModuleId = [0u8; MODULE_ID_BYTES];
+static SELF_ID: ModuleId = ModuleId::uninitialized();
 
 #[allow(unused)]
 static mut STATE: State<Fibonacci> = State::new(Fibonacci, unsafe { &mut A });

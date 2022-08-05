@@ -1,5 +1,6 @@
 [workspace]
 members = [
+    "self_snapshot",
     "box",
     "callcenter",
     "counter",

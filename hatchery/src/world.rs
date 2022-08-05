@@ -14,7 +14,7 @@ use std::ops::{Deref, DerefMut};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use dallo::{ModuleId, Ser};
+use dallo::{ModuleId, Ser, MODULE_ID_BYTES};
 use parking_lot::ReentrantMutex;
 use rkyv::{archived_value, Archive, Deserialize, Infallible, Serialize};
 use tempfile::tempdir;
@@ -77,7 +77,8 @@ impl World {
     }
 
     pub fn deploy(&mut self, bytecode: &[u8]) -> Result<ModuleId, Error> {
-        let id = blake3::hash(bytecode).into();
+        let id_bytes: [u8; MODULE_ID_BYTES] = blake3::hash(bytecode).into();
+        let id = ModuleId::from(id_bytes);
         let store = wasmer::Store::new_with_path(
             self.storage_path()
                 .join(module_id_to_filename(id))
@@ -311,12 +312,12 @@ fn host_query(
     let method_name_len = method_name_len as usize;
 
     let instance = env.inner();
-    let mut mod_id = ModuleId::default();
+    let mut mod_id = ModuleId::uninitialized();
     // performance: use a dedicated buffer here?
     let mut name = String::new();
 
     instance.with_memory(|buf| {
-        mod_id[..].copy_from_slice(
+        mod_id.as_bytes_mut()[..].copy_from_slice(
             &buf[module_id_adr..][..core::mem::size_of::<ModuleId>()],
         );
         let utf =
@@ -343,12 +344,12 @@ fn host_transact(
     let method_name_len = method_name_len as usize;
 
     let instance = env.inner();
-    let mut mod_id = ModuleId::default();
+    let mut mod_id = ModuleId::uninitialized();
     // performance: use a dedicated buffer here?
     let mut name = String::new();
 
     instance.with_memory(|buf| {
-        mod_id[..].copy_from_slice(
+        mod_id.as_bytes_mut()[..].copy_from_slice(
             &buf[module_id_adr..][..core::mem::size_of::<ModuleId>()],
         );
         let utf =

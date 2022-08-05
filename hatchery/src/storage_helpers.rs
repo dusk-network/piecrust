@@ -14,7 +14,7 @@ struct ModuleIdWrapper(pub ModuleId);
 
 impl core::fmt::UpperHex for ModuleIdWrapper {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        let bytes = &self.0[..];
+        let bytes = self.0.as_bytes();
         if f.alternate() {
             write!(f, "0x")?
         }
