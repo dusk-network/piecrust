@@ -4,28 +4,39 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
+use crate::snapshot::SnapshotId;
 use dallo::ModuleId;
 
-pub fn module_id_to_filename(module_id: ModuleId) -> String {
-    format!("{}", ModuleIdWrapper(module_id))
+pub fn combine_module_snapshot_names(
+    module_name: impl AsRef<str>,
+    snapshot_name: impl AsRef<str>,
+) -> String {
+    format!("{}_{}", module_name.as_ref(), snapshot_name.as_ref())
 }
 
-struct ModuleIdWrapper(pub ModuleId);
+pub fn module_id_to_name(module_id: ModuleId) -> String {
+    format!("{}", ByteArrayWrapper(module_id.as_bytes()))
+}
 
-impl core::fmt::UpperHex for ModuleIdWrapper {
+pub fn snapshot_id_to_name(snapshot_id: SnapshotId) -> String {
+    format!("{}", ByteArrayWrapper(snapshot_id.as_bytes()))
+}
+
+struct ByteArrayWrapper<'a>(&'a [u8]);
+
+impl<'a> core::fmt::UpperHex for ByteArrayWrapper<'a> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        let bytes = self.0.as_bytes();
         if f.alternate() {
             write!(f, "0x")?
         }
-        for byte in bytes {
+        for byte in self.0 {
             write!(f, "{:02X}", &byte)?
         }
         Ok(())
     }
 }
 
-impl core::fmt::Display for ModuleIdWrapper {
+impl<'a> core::fmt::Display for ByteArrayWrapper<'a> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         core::fmt::UpperHex::fmt(self, f)
     }
