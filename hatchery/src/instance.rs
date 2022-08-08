@@ -208,7 +208,7 @@ impl Instance {
         self.id
     }
 
-    pub fn set_snapshot_id(&mut self, snapshot_id: SnapshotId) {
+    pub(crate) fn set_snapshot_id(&mut self, snapshot_id: SnapshotId) {
         self.snapshot_id = Some(snapshot_id);
     }
     pub fn snapshot_id(&self) -> Option<&SnapshotId> {
