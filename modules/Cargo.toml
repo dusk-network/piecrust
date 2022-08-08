@@ -5,6 +5,7 @@ members = [
     "callcenter",
     "counter",
     "eventer",
+    "everest",
     "fibonacci",
     "stack",
     "vector",
