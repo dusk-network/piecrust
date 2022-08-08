@@ -22,7 +22,7 @@ pub fn snapshot_id_to_name(snapshot_id: SnapshotId) -> String {
     format!("{}", ByteArrayWrapper(snapshot_id.as_bytes()))
 }
 
-struct ByteArrayWrapper<'a>(pub &'a[u8]);
+struct ByteArrayWrapper<'a>(pub &'a [u8]);
 
 impl<'a> core::fmt::UpperHex for ByteArrayWrapper<'a> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
