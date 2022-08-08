@@ -12,14 +12,14 @@ pub fn world_center_counter_read() -> Result<(), Error> {
 
     let counter_id = world.deploy(module_bytecode!("counter"))?;
 
-    let value: Receipt<i64> = world.query(counter_id, "read_value", ())?;
+    let value: Receipt<i64> = world.query(0, counter_id, "read_value", ())?;
     assert_eq!(*value, 0xfc);
 
     let center_id = world.deploy(module_bytecode!("callcenter"))?;
 
     // read value through callcenter
     let value: Receipt<i64> =
-        world.query(center_id, "query_counter", counter_id)?;
+        world.query(0, center_id, "query_counter", counter_id)?;
     assert_eq!(*value, 0xfc);
 
     Ok(())
@@ -32,27 +32,27 @@ pub fn world_center_counter() -> Result<(), Error> {
     let counter_id = world.deploy(module_bytecode!("counter"))?;
 
     // read value directly
-    let value: Receipt<i64> = world.query(counter_id, "read_value", ())?;
+    let value: Receipt<i64> = world.query(0, counter_id, "read_value", ())?;
     assert_eq!(*value, 0xfc);
 
     let center_id = world.deploy(module_bytecode!("callcenter"))?;
 
     // read value through callcenter
     let value: Receipt<i64> =
-        world.query(center_id, "query_counter", counter_id)?;
+        world.query(0, center_id, "query_counter", counter_id)?;
     assert_eq!(*value, 0xfc);
 
     // increment through call center
     let _: Receipt<()> =
-        world.transact(center_id, "increment_counter", counter_id)?;
+        world.transact(0, center_id, "increment_counter", counter_id)?;
 
     // read value directly
-    let value: Receipt<i64> = world.query(counter_id, "read_value", ())?;
+    let value: Receipt<i64> = world.query(0, counter_id, "read_value", ())?;
     assert_eq!(*value, 0xfd);
 
     // read value through callcenter
     let value: Receipt<i64> =
-        world.query(center_id, "query_counter", counter_id)?;
+        world.query(0, center_id, "query_counter", counter_id)?;
     assert_eq!(*value, 0xfd);
 
     Ok(())
@@ -66,7 +66,7 @@ pub fn world_center_calls_self() -> Result<(), Error> {
 
     // am i calling myself
     let calling_self: Receipt<bool> =
-        world.query(center_id, "calling_self", center_id)?;
+        world.query(0, center_id, "calling_self", center_id)?;
     assert!(*calling_self);
 
     Ok(())
@@ -78,7 +78,7 @@ pub fn world_center_caller() -> Result<(), Error> {
 
     let center_id = world.deploy(module_bytecode!("callcenter"))?;
 
-    let value: Receipt<bool> = world.query(center_id, "call_self", ())?;
+    let value: Receipt<bool> = world.query(0, center_id, "call_self", ())?;
     assert!(*value);
 
     Ok(())

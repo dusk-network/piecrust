@@ -15,16 +15,16 @@ pub fn vector_push_pop() -> Result<(), Error> {
     const N: usize = 128;
 
     for i in 0..N {
-        let _: Receipt<()> = world.transact(id, "push", i)?;
+        let _: Receipt<()> = world.transact(0, id, "push", i)?;
     }
 
     for i in 0..N {
-        let popped: Receipt<Option<i16>> = world.transact(id, "pop", ())?;
+        let popped: Receipt<Option<i16>> = world.transact(0, id, "pop", ())?;
 
         assert_eq!(*popped, Some((N - i - 1) as i16));
     }
 
-    let popped: Receipt<Option<i16>> = world.transact(id, "pop", ())?;
+    let popped: Receipt<Option<i16>> = world.transact(0, id, "pop", ())?;
 
     assert_eq!(*popped, None);
 

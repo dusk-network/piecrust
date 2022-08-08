@@ -65,7 +65,7 @@ impl World {
             environments: BTreeMap::new(),
             storage_path: path.into(),
             events: vec![],
-            call_stack: CallStack::new(ModuleId::uninitialized()),
+            call_stack: CallStack::default(),
         }))))
     }
 
@@ -78,7 +78,7 @@ impl World {
                     .path()
                     .into(),
                 events: vec![],
-                call_stack: CallStack::new(ModuleId::uninitialized()),
+                call_stack: CallStack::default(),
             },
         )))))
     }
@@ -140,6 +140,7 @@ impl World {
                 "q" => Function::new_native_with_env(&store, env.clone(), host_query),
 		        "t" => Function::new_native_with_env(&store, env.clone(), host_transact),
 
+                "block_height" => Function::new_native_with_env(&store, env.clone(), host_block_height),
                 "emit" => Function::new_native_with_env(&store, env.clone(), host_emit),
                 "caller" => Function::new_native_with_env(&store, env.clone(), host_caller),
             }
@@ -191,6 +192,7 @@ impl World {
 
     pub fn query<Arg, Ret>(
         &self,
+        block_height: u64,
         m_id: ModuleId,
         name: &str,
         arg: Arg,
@@ -203,7 +205,7 @@ impl World {
         let guard = self.0.lock();
         let w = unsafe { &mut *guard.get() };
 
-        w.call_stack = CallStack::new(m_id);
+        w.call_stack = CallStack::new(block_height, m_id);
 
         let ret = w
             .get(&m_id)
@@ -218,6 +220,7 @@ impl World {
 
     pub fn transact<Arg, Ret>(
         &mut self,
+        block_height: u64,
         m_id: ModuleId,
         name: &str,
         arg: Arg,
@@ -230,7 +233,7 @@ impl World {
         let w = self.0.lock();
         let w = unsafe { &mut *w.get() };
 
-        w.call_stack = CallStack::new(m_id);
+        w.call_stack = CallStack::new(block_height, m_id);
 
         let ret = w
             .get_mut(&m_id)
@@ -314,6 +317,15 @@ impl World {
         w.call_stack.pop();
 
         Ok(ret_ofs)
+    }
+
+    fn perform_block_height(&self, instance: &Instance) -> Result<i32, Error> {
+        let guard = self.0.lock();
+        let w = unsafe { &*guard.get() };
+
+        let block_height = w.call_stack.block_height();
+
+        instance.write_to_arg_buffer(block_height)
     }
 
     fn perform_emit(&self, module_id: ModuleId, data: Vec<u8>) {
@@ -424,6 +436,14 @@ fn host_transact(
     instance
         .world()
         .perform_transaction(&name, instance.id(), mod_id, arg_ofs)
+        .expect("TODO: error handling")
+}
+
+fn host_block_height(env: &Env) -> i32 {
+    let instance = env.inner();
+    instance
+        .world()
+        .perform_block_height(instance)
         .expect("TODO: error handling")
 }
 

@@ -12,24 +12,24 @@ fn self_snapshot() -> Result<(), Error> {
 
     let id = world.deploy(module_bytecode!("self_snapshot"))?;
 
-    assert_eq!(*world.query::<_, i32>(id, "crossover", ())?, 7);
+    assert_eq!(*world.query::<_, i32>(0, id, "crossover", ())?, 7);
 
     // returns old value
-    assert_eq!(*world.transact::<_, i32>(id, "set_crossover", 9)?, 7);
+    assert_eq!(*world.transact::<_, i32>(0, id, "set_crossover", 9)?, 7);
 
-    assert_eq!(*world.query::<_, i32>(id, "crossover", ())?, 9);
+    assert_eq!(*world.query::<_, i32>(0, id, "crossover", ())?, 9);
 
-    world.transact::<_, i32>(id, "self_call_test_a", 10)?;
+    world.transact::<_, i32>(0, id, "self_call_test_a", 10)?;
 
-    assert_eq!(*world.query::<_, i32>(id, "crossover", ())?, 10);
+    assert_eq!(*world.query::<_, i32>(0, id, "crossover", ())?, 10);
 
-    let result = world.transact::<_, i32>(id, "update_and_panic", 11);
+    let result = world.transact::<_, i32>(0, id, "update_and_panic", 11);
 
     assert!(result.is_err());
 
     // panic reverted the change!
 
-    assert_eq!(*world.query::<_, i32>(id, "crossover", ())?, 10);
+    assert_eq!(*world.query::<_, i32>(0, id, "crossover", ())?, 10);
 
     Ok(())
 }

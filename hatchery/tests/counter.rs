@@ -12,7 +12,7 @@ pub fn counter_trivial() -> Result<(), Error> {
 
     let id = world.deploy(module_bytecode!("counter"))?;
 
-    let value: Receipt<i32> = world.query(id, "read_value", ())?;
+    let value: Receipt<i32> = world.query(0, id, "read_value", ())?;
 
     assert_eq!(*value, 0xfc);
 
@@ -25,14 +25,14 @@ pub fn counter_increment() -> Result<(), Error> {
 
     let id = world.deploy(module_bytecode!("counter"))?;
 
-    let _: Receipt<()> = world.transact(id, "increment", ())?;
+    let _: Receipt<()> = world.transact(0, id, "increment", ())?;
 
-    let value: Receipt<i32> = world.query(id, "read_value", ())?;
+    let value: Receipt<i32> = world.query(0, id, "read_value", ())?;
     assert_eq!(*value, 0xfd);
 
-    let _: Receipt<()> = world.transact(id, "increment", ())?;
+    let _: Receipt<()> = world.transact(0, id, "increment", ())?;
 
-    let value: Receipt<i32> = world.query(id, "read_value", ())?;
+    let value: Receipt<i32> = world.query(0, id, "read_value", ())?;
     assert_eq!(*value, 0xfe);
 
     Ok(())
@@ -44,11 +44,11 @@ pub fn counter_mogrify() -> Result<(), Error> {
 
     let id = world.deploy(module_bytecode!("counter"))?;
 
-    let value: Receipt<i32> = world.transact(id, "mogrify", 32)?;
+    let value: Receipt<i32> = world.transact(0, id, "mogrify", 32)?;
 
     assert_eq!(*value, 0xfc);
 
-    let value: Receipt<i32> = world.query(id, "read_value", ())?;
+    let value: Receipt<i32> = world.query(0, id, "read_value", ())?;
     assert_eq!(*value, 0xfc - 32);
 
     Ok(())
