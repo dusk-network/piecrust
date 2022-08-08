@@ -17,6 +17,8 @@ use crate::Ser;
 extern "C" {
     fn q(mod_id: *const u8, name: *const u8, len: i32, arg_ofs: i32) -> i32;
     fn t(mod_id: *const u8, name: *const u8, len: i32, arg_ofs: i32) -> i32;
+
+    fn caller() -> i32;
     fn emit(arg_ofs: i32, arg_len: i32);
 }
 
@@ -128,6 +130,19 @@ impl<S> State<S> {
 
         self.with_arg_buf(|buf| {
             let ret = unsafe { archived_value::<Ret>(buf, ret_ofs as usize) };
+            ret.deserialize(&mut Infallible).expect("Infallible")
+        })
+    }
+
+    /// Return the ID of the calling module. The returned id will be
+    /// uninitialized if there is no caller - meaning this is the first module
+    /// to be called.
+    pub fn caller(&self) -> ModuleId {
+        self.with_arg_buf(|buf| {
+            let ret_ofs = unsafe { caller() };
+
+            let ret =
+                unsafe { archived_value::<ModuleId>(buf, ret_ofs as usize) };
             ret.deserialize(&mut Infallible).expect("Infallible")
         })
     }

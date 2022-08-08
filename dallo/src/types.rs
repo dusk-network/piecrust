@@ -40,6 +40,10 @@ impl ModuleId {
     pub fn as_bytes_mut(&mut self) -> &mut [u8] {
         &mut self.0
     }
+
+    pub fn is_uninitialized(&self) -> bool {
+        self == &Self::uninitialized()
+    }
 }
 
 impl From<[u8; 32]> for ModuleId {

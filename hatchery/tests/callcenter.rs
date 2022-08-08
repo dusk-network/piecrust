@@ -71,3 +71,15 @@ pub fn world_center_calls_self() -> Result<(), Error> {
 
     Ok(())
 }
+
+#[test]
+pub fn world_center_caller() -> Result<(), Error> {
+    let mut world = World::ephemeral()?;
+
+    let center_id = world.deploy(module_bytecode!("callcenter"))?;
+
+    let value: Receipt<bool> = world.query(center_id, "call_self", ())?;
+    assert!(*value);
+
+    Ok(())
+}
