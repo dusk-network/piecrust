@@ -26,11 +26,10 @@ struct ByteArrayWrapper<'a>(&'a [u8]);
 
 impl<'a> core::fmt::UpperHex for ByteArrayWrapper<'a> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        let bytes = &self.0[..];
         if f.alternate() {
             write!(f, "0x")?
         }
-        for byte in bytes {
+        for byte in self.0 {
             write!(f, "{:02X}", &byte)?
         }
         Ok(())
