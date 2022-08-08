@@ -15,16 +15,16 @@ pub fn combine_module_snapshot_names(
 }
 
 pub fn module_id_to_name(module_id: ModuleId) -> String {
-    format!("{}", ByteArrayWrapper(Box::from(module_id.as_bytes())))
+    format!("{}", ByteArrayWrapper(module_id.as_bytes()))
 }
 
 pub fn snapshot_id_to_name(snapshot_id: SnapshotId) -> String {
-    format!("{}", ByteArrayWrapper(Box::from(snapshot_id.as_bytes())))
+    format!("{}", ByteArrayWrapper(snapshot_id.as_bytes()))
 }
 
-struct ByteArrayWrapper(pub Box<[u8]>);
+struct ByteArrayWrapper<'a>(pub &'a[u8]);
 
-impl core::fmt::UpperHex for ByteArrayWrapper {
+impl<'a> core::fmt::UpperHex for ByteArrayWrapper<'a> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         let bytes = &self.0[..];
         if f.alternate() {
@@ -37,7 +37,7 @@ impl core::fmt::UpperHex for ByteArrayWrapper {
     }
 }
 
-impl core::fmt::Display for ByteArrayWrapper {
+impl<'a> core::fmt::Display for ByteArrayWrapper<'a> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         core::fmt::UpperHex::fmt(self, f)
     }
