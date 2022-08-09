@@ -16,7 +16,7 @@ pub fn world_center_events() -> Result<(), Error> {
 
     // increment through call center
     let receipt: Receipt<()> =
-        world.transact(0, eventer_id, "emit_events", EVENT_NUM)?;
+        world.transact(eventer_id, "emit_events", EVENT_NUM)?;
 
     let events = receipt.events();
     assert_eq!(events.len() as u32, EVENT_NUM);

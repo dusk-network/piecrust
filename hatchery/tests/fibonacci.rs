@@ -12,11 +12,11 @@ pub fn fibo() -> Result<(), Error> {
 
     let id = world.deploy(module_bytecode!("fibonacci"))?;
 
-    assert_eq!(*world.query::<u32, u64>(0, id, "nth", 0)?, 1);
-    assert_eq!(*world.query::<u32, u64>(0, id, "nth", 1)?, 1);
-    assert_eq!(*world.query::<u32, u64>(0, id, "nth", 2)?, 2);
-    assert_eq!(*world.query::<u32, u64>(0, id, "nth", 3)?, 3);
-    assert_eq!(*world.query::<u32, u64>(0, id, "nth", 4)?, 5);
+    assert_eq!(*world.query::<u32, u64>(id, "nth", 0)?, 1);
+    assert_eq!(*world.query::<u32, u64>(id, "nth", 1)?, 1);
+    assert_eq!(*world.query::<u32, u64>(id, "nth", 2)?, 2);
+    assert_eq!(*world.query::<u32, u64>(id, "nth", 3)?, 3);
+    assert_eq!(*world.query::<u32, u64>(id, "nth", 4)?, 5);
 
     Ok(())
 }

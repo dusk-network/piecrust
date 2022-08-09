@@ -37,6 +37,7 @@ pub struct WorldInner {
     storage_path: PathBuf,
     events: Vec<Event>,
     call_stack: CallStack,
+    block_height: u64,
 }
 
 impl Deref for WorldInner {
@@ -66,6 +67,7 @@ impl World {
             storage_path: path.into(),
             events: vec![],
             call_stack: CallStack::default(),
+            block_height: 0,
         }))))
     }
 
@@ -79,6 +81,7 @@ impl World {
                     .into(),
                 events: vec![],
                 call_stack: CallStack::default(),
+                block_height: 0,
             },
         )))))
     }
@@ -192,7 +195,6 @@ impl World {
 
     pub fn query<Arg, Ret>(
         &self,
-        block_height: u64,
         m_id: ModuleId,
         name: &str,
         arg: Arg,
@@ -205,7 +207,7 @@ impl World {
         let guard = self.0.lock();
         let w = unsafe { &mut *guard.get() };
 
-        w.call_stack = CallStack::new(block_height, m_id);
+        w.call_stack = CallStack::new(m_id);
 
         let ret = w
             .get(&m_id)
@@ -220,7 +222,6 @@ impl World {
 
     pub fn transact<Arg, Ret>(
         &mut self,
-        block_height: u64,
         m_id: ModuleId,
         name: &str,
         arg: Arg,
@@ -233,7 +234,7 @@ impl World {
         let w = self.0.lock();
         let w = unsafe { &mut *w.get() };
 
-        w.call_stack = CallStack::new(block_height, m_id);
+        w.call_stack = CallStack::new(m_id);
 
         let ret = w
             .get_mut(&m_id)
@@ -244,6 +245,14 @@ impl World {
         let events = mem::take(&mut w.events);
 
         Ok(Receipt::new(ret, events))
+    }
+
+    /// Set the block height available to modules.
+    pub fn set_block_height(&mut self, block_height: u64) {
+        let w = self.0.lock();
+        let w = unsafe { &mut *w.get() };
+
+        w.block_height = block_height;
     }
 
     fn perform_query(
@@ -323,9 +332,7 @@ impl World {
         let guard = self.0.lock();
         let w = unsafe { &*guard.get() };
 
-        let block_height = w.call_stack.block_height();
-
-        instance.write_to_arg_buffer(block_height)
+        instance.write_to_arg_buffer(w.block_height)
     }
 
     fn perform_emit(&self, module_id: ModuleId, data: Vec<u8>) {

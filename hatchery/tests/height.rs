@@ -12,9 +12,10 @@ pub fn block_height() -> Result<(), Error> {
 
     let id = world.deploy(module_bytecode!("everest"))?;
 
-    for i in 0..1024 {
-        let block_height: Receipt<u64> = world.transact(i, id, "get_bh", ())?;
-        assert_eq!(*block_height, i);
+    for bh in 0..1024 {
+        world.set_block_height(bh);
+        let block_height: Receipt<u64> = world.transact(id, "get_bh", ())?;
+        assert_eq!(*block_height, bh);
     }
 
     Ok(())

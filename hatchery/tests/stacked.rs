@@ -14,13 +14,13 @@ pub fn push_pop() -> Result<(), Error> {
 
     let val = 42;
 
-    let _: Receipt<()> = world.transact(0, id, "push", val)?;
+    let _: Receipt<()> = world.transact(id, "push", val)?;
 
-    let len: Receipt<i32> = world.query(0, id, "len", ())?;
+    let len: Receipt<i32> = world.query(id, "len", ())?;
     assert_eq!(*len, 1);
 
-    let popped: Receipt<Option<i32>> = world.transact(0, id, "pop", ())?;
-    let len: Receipt<i32> = world.query(0, id, "len", ())?;
+    let popped: Receipt<Option<i32>> = world.transact(id, "pop", ())?;
+    let len: Receipt<i32> = world.query(id, "len", ())?;
 
     assert_eq!(*len, 0);
     assert_eq!(*popped, Some(val));
@@ -37,21 +37,21 @@ pub fn multi_push_pop() -> Result<(), Error> {
     const N: i32 = 1_000;
 
     for i in 0..N {
-        let _: Receipt<()> = world.transact(0, id, "push", i)?;
-        let len: Receipt<i32> = world.query(0, id, "len", ())?;
+        let _: Receipt<()> = world.transact(id, "push", i)?;
+        let len: Receipt<i32> = world.query(id, "len", ())?;
 
         assert_eq!(*len, i + 1);
     }
 
     for i in (0..N).rev() {
-        let popped: Receipt<Option<i32>> = world.transact(0, id, "pop", ())?;
-        let len: Receipt<i32> = world.query(0, id, "len", ())?;
+        let popped: Receipt<Option<i32>> = world.transact(id, "pop", ())?;
+        let len: Receipt<i32> = world.query(id, "len", ())?;
 
         assert_eq!(*len, i);
         assert_eq!(*popped, Some(i));
     }
 
-    let popped: Receipt<Option<i32>> = world.transact(0, id, "pop", ())?;
+    let popped: Receipt<Option<i32>> = world.transact(id, "pop", ())?;
     assert_eq!(*popped, None);
 
     Ok(())

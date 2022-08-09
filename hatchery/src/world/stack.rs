@@ -13,16 +13,14 @@ struct CallData {
 
 #[derive(Debug, Default)]
 pub struct CallStack {
-    block_height: u64,
     inner: Vec<CallData>,
 }
 
 impl CallStack {
     /// Create a new call stack, with the initiating call being made to
-    /// `module_id` and the given `block_height`.
-    pub fn new(block_height: u64, module_id: ModuleId) -> Self {
+    /// `module_id`.
+    pub fn new(module_id: ModuleId) -> Self {
         Self {
-            block_height,
             inner: vec![CallData { module_id }],
         }
     }
@@ -50,10 +48,5 @@ impl CallStack {
         }
 
         None
-    }
-
-    /// Returns the height used to create this stack.
-    pub fn block_height(&self) -> u64 {
-        self.block_height
     }
 }
