@@ -7,15 +7,15 @@
 use hatchery::{module_bytecode, Error, Receipt, World};
 
 #[test]
-pub fn block_height() -> Result<(), Error> {
+pub fn height() -> Result<(), Error> {
     let mut world = World::ephemeral()?;
 
     let id = world.deploy(module_bytecode!("everest"))?;
 
-    for bh in 0..1024 {
-        world.set_block_height(bh);
-        let block_height: Receipt<u64> = world.transact(id, "get_bh", ())?;
-        assert_eq!(*block_height, bh);
+    for h in 0..1024 {
+        world.set_height(h);
+        let height: Receipt<u64> = world.transact(id, "get_height", ())?;
+        assert_eq!(*height, h);
     }
 
     Ok(())

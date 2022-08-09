@@ -29,12 +29,12 @@ static SELF_ID: ModuleId = ModuleId::uninitialized();
 static mut STATE: State<Height> = unsafe { State::new(Height, &mut A) };
 
 impl Height {
-    pub fn get_bh(self: &State<Height>) -> u64 {
-        self.block_height()
+    pub fn get_height(self: &State<Height>) -> u64 {
+        self.height()
     }
 }
 
 #[no_mangle]
-unsafe fn get_bh(a: i32) -> i32 {
-    dallo::wrap_query(STATE.buffer(), a, |_: ()| STATE.get_bh())
+unsafe fn get_height(a: i32) -> i32 {
+    dallo::wrap_query(STATE.buffer(), a, |_: ()| STATE.get_height())
 }

@@ -37,7 +37,7 @@ pub struct WorldInner {
     storage_path: PathBuf,
     events: Vec<Event>,
     call_stack: CallStack,
-    block_height: u64,
+    height: u64,
 }
 
 impl Deref for WorldInner {
@@ -67,7 +67,7 @@ impl World {
             storage_path: path.into(),
             events: vec![],
             call_stack: CallStack::default(),
-            block_height: 0,
+            height: 0,
         }))))
     }
 
@@ -81,7 +81,7 @@ impl World {
                     .into(),
                 events: vec![],
                 call_stack: CallStack::default(),
-                block_height: 0,
+                height: 0,
             },
         )))))
     }
@@ -143,7 +143,7 @@ impl World {
                 "q" => Function::new_native_with_env(&store, env.clone(), host_query),
 		        "t" => Function::new_native_with_env(&store, env.clone(), host_transact),
 
-                "block_height" => Function::new_native_with_env(&store, env.clone(), host_block_height),
+                "height" => Function::new_native_with_env(&store, env.clone(), host_height),
                 "emit" => Function::new_native_with_env(&store, env.clone(), host_emit),
                 "caller" => Function::new_native_with_env(&store, env.clone(), host_caller),
             }
@@ -247,12 +247,12 @@ impl World {
         Ok(Receipt::new(ret, events))
     }
 
-    /// Set the block height available to modules.
-    pub fn set_block_height(&mut self, block_height: u64) {
+    /// Set the height available to modules.
+    pub fn set_height(&mut self, height: u64) {
         let w = self.0.lock();
         let w = unsafe { &mut *w.get() };
 
-        w.block_height = block_height;
+        w.height = height;
     }
 
     fn perform_query(
@@ -328,11 +328,11 @@ impl World {
         Ok(ret_ofs)
     }
 
-    fn perform_block_height(&self, instance: &Instance) -> Result<i32, Error> {
+    fn perform_height(&self, instance: &Instance) -> Result<i32, Error> {
         let guard = self.0.lock();
         let w = unsafe { &*guard.get() };
 
-        instance.write_to_arg_buffer(w.block_height)
+        instance.write_to_arg_buffer(w.height)
     }
 
     fn perform_emit(&self, module_id: ModuleId, data: Vec<u8>) {
@@ -446,11 +446,11 @@ fn host_transact(
         .expect("TODO: error handling")
 }
 
-fn host_block_height(env: &Env) -> i32 {
+fn host_height(env: &Env) -> i32 {
     let instance = env.inner();
     instance
         .world()
-        .perform_block_height(instance)
+        .perform_height(instance)
         .expect("TODO: error handling")
 }
 
