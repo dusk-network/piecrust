@@ -18,6 +18,7 @@ extern "C" {
     fn q(mod_id: *const u8, name: *const u8, len: i32, arg_ofs: i32) -> i32;
     fn t(mod_id: *const u8, name: *const u8, len: i32, arg_ofs: i32) -> i32;
 
+    fn height() -> i32;
     fn caller() -> i32;
     fn emit(arg_ofs: i32, arg_len: i32);
 }
@@ -130,6 +131,16 @@ impl<S> State<S> {
 
         self.with_arg_buf(|buf| {
             let ret = unsafe { archived_value::<Ret>(buf, ret_ofs as usize) };
+            ret.deserialize(&mut Infallible).expect("Infallible")
+        })
+    }
+
+    /// Return the current height.
+    pub fn height(&self) -> u64 {
+        self.with_arg_buf(|buf| {
+            let ret_ofs = unsafe { height() };
+
+            let ret = unsafe { archived_value::<u64>(buf, ret_ofs as usize) };
             ret.deserialize(&mut Infallible).expect("Infallible")
         })
     }

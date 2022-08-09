@@ -37,6 +37,7 @@ pub struct WorldInner {
     storage_path: PathBuf,
     events: Vec<Event>,
     call_stack: CallStack,
+    height: u64,
 }
 
 impl Deref for WorldInner {
@@ -65,7 +66,8 @@ impl World {
             environments: BTreeMap::new(),
             storage_path: path.into(),
             events: vec![],
-            call_stack: CallStack::new(ModuleId::uninitialized()),
+            call_stack: CallStack::default(),
+            height: 0,
         }))))
     }
 
@@ -78,7 +80,8 @@ impl World {
                     .path()
                     .into(),
                 events: vec![],
-                call_stack: CallStack::new(ModuleId::uninitialized()),
+                call_stack: CallStack::default(),
+                height: 0,
             },
         )))))
     }
@@ -140,6 +143,7 @@ impl World {
                 "q" => Function::new_native_with_env(&store, env.clone(), host_query),
 		        "t" => Function::new_native_with_env(&store, env.clone(), host_transact),
 
+                "height" => Function::new_native_with_env(&store, env.clone(), host_height),
                 "emit" => Function::new_native_with_env(&store, env.clone(), host_emit),
                 "caller" => Function::new_native_with_env(&store, env.clone(), host_caller),
             }
@@ -243,6 +247,14 @@ impl World {
         Ok(Receipt::new(ret, events))
     }
 
+    /// Set the height available to modules.
+    pub fn set_height(&mut self, height: u64) {
+        let w = self.0.lock();
+        let w = unsafe { &mut *w.get() };
+
+        w.height = height;
+    }
+
     fn perform_query(
         &self,
         name: &str,
@@ -314,6 +326,13 @@ impl World {
         w.call_stack.pop();
 
         Ok(ret_ofs)
+    }
+
+    fn perform_height(&self, instance: &Instance) -> Result<i32, Error> {
+        let guard = self.0.lock();
+        let w = unsafe { &*guard.get() };
+
+        instance.write_to_arg_buffer(w.height)
     }
 
     fn perform_emit(&self, module_id: ModuleId, data: Vec<u8>) {
@@ -424,6 +443,14 @@ fn host_transact(
     instance
         .world()
         .perform_transaction(&name, instance.id(), mod_id, arg_ofs)
+        .expect("TODO: error handling")
+}
+
+fn host_height(env: &Env) -> i32 {
+    let instance = env.inner();
+    instance
+        .world()
+        .perform_height(instance)
         .expect("TODO: error handling")
 }
 

@@ -11,7 +11,7 @@ struct CallData {
     module_id: ModuleId,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct CallStack {
     inner: Vec<CallData>,
 }
