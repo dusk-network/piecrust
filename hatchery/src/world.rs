@@ -6,6 +6,7 @@
 
 mod event;
 mod stack;
+mod store;
 
 pub use event::{Event, Receipt};
 
@@ -20,6 +21,7 @@ use dallo::{ModuleId, StandardBufSerializer, MODULE_ID_BYTES};
 use parking_lot::ReentrantMutex;
 use rkyv::{archived_root, Archive, Deserialize, Infallible, Serialize};
 use stack::CallStack;
+use store::new_store;
 use tempfile::tempdir;
 use wasmer::{imports, Exports, Function, Val};
 
@@ -120,23 +122,23 @@ impl World {
     pub fn deploy(&mut self, bytecode: &[u8]) -> Result<ModuleId, Error> {
         let id_bytes: [u8; MODULE_ID_BYTES] = blake3::hash(bytecode).into();
         let id = ModuleId::from(id_bytes);
-        let store = wasmer::Store::new_with_path(
+
+        let store = new_store(
             self.storage_path().join(module_id_to_name(id)).as_path(),
         );
         let module = wasmer::Module::new(&store, bytecode)?;
 
         let mut env = Env::uninitialized();
 
-        #[rustfmt::skip]
         let imports = imports! {
             "env" => {
                 "alloc" => Function::new_native_with_env(&store, env.clone(), host_alloc),
-		        "dealloc" => Function::new_native_with_env(&store, env.clone(), host_dealloc),
+                "dealloc" => Function::new_native_with_env(&store, env.clone(), host_dealloc),
 
                 "snap" => Function::new_native_with_env(&store, env.clone(), host_snapshot),
 
                 "q" => Function::new_native_with_env(&store, env.clone(), host_query),
-		        "t" => Function::new_native_with_env(&store, env.clone(), host_transact),
+                "t" => Function::new_native_with_env(&store, env.clone(), host_transact),
 
                 "height" => Function::new_native_with_env(&store, env.clone(), host_height),
                 "emit" => Function::new_native_with_env(&store, env.clone(), host_emit),
