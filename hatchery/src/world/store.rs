@@ -13,7 +13,7 @@ use wasmer_compiler_singlepass::Singlepass;
 use wasmer_middlewares::Metering;
 
 fn cost_function(_: &Operator) -> u64 {
-    0
+    1
 }
 
 /// Creates a new store using the singlepass compiler configured to meter using

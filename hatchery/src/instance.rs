@@ -16,6 +16,9 @@ use rkyv::{
     Archive, Deserialize, Infallible, Serialize,
 };
 use wasmer::NativeFunc;
+use wasmer_middlewares::metering::{
+    get_remaining_points, set_remaining_points, MeteringPoints,
+};
 
 use crate::error::*;
 use crate::memory::MemHandler;
@@ -114,6 +117,17 @@ impl Instance {
         let fun: NativeFunc<u32, u32> =
             self.instance.exports.get_native_function(name)?;
         Ok(fun.call(arg_len)?)
+    }
+
+    pub(crate) fn remaining_points(&self) -> u64 {
+        match get_remaining_points(&self.instance) {
+            MeteringPoints::Remaining(r) => r,
+            MeteringPoints::Exhausted => 0,
+        }
+    }
+
+    pub(crate) fn set_remaining_points(&self, points: u64) {
+        set_remaining_points(&self.instance, points)
     }
 
     pub(crate) fn with_memory<F, R>(&self, f: F) -> R
