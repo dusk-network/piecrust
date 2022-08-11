@@ -14,13 +14,13 @@ pub fn box_set_get() -> Result<(), Error> {
 
     let id = world.deploy(module_bytecode!("box"))?;
 
-    let value: Receipt<Option<i32>> = world.query(id, "get", ())?;
+    let value: Receipt<Option<i16>> = world.query(id, "get", ())?;
 
     assert_eq!(*value, None);
 
-    let _: Receipt<()> = world.transact(id, "set", 0x11)?;
+    world.transact::<i16, ()>(id, "set", 0x11)?;
 
-    let value: Receipt<Option<i16>> = world.query(id, "get", ())?;
+    let value = world.query::<_, Option<i16>>(id, "get", ())?;
 
     assert_eq!(*value, Some(0x11));
 
@@ -37,7 +37,7 @@ pub fn box_set_store_restore_get() -> Result<(), Error> {
 
         first_id = first_world.deploy(module_bytecode!("box"))?;
 
-        let _: Receipt<()> = first_world.transact(first_id, "set", 0x23)?;
+        first_world.transact::<i16, ()>(first_id, "set", 0x23)?;
 
         first_world.storage_path().clone_into(&mut storage_path);
     }
@@ -48,8 +48,7 @@ pub fn box_set_store_restore_get() -> Result<(), Error> {
 
     assert_eq!(first_id, second_id);
 
-    let value: Receipt<Option<i16>> =
-        second_world.query(second_id, "get", ())?;
+    let value = second_world.query::<_, Option<i16>>(second_id, "get", ())?;
 
     assert_eq!(*value, Some(0x23));
 
@@ -61,14 +60,16 @@ pub fn world_persist_restore() -> Result<(), Error> {
     let mut world = World::ephemeral()?;
     let id = world.deploy(module_bytecode!("box"))?;
 
-    let _: Receipt<()> = world.transact(id, "set", 17)?;
-    let value: Receipt<Option<i16>> = world.query(id, "get", ())?;
+    world.transact::<i16, ()>(id, "set", 17)?;
+
+    let value = world.query::<_, Option<i16>>(id, "get", ())?;
+
     assert_eq!(*value, Some(17));
 
     world.persist()?;
 
-    let _: Receipt<()> = world.transact(id, "set", 18)?;
-    let value: Receipt<Option<i16>> = world.query(id, "get", ())?;
+    world.transact::<i16, ()>(id, "set", 18)?;
+    let value = world.query::<_, Option<i16>>(id, "get", ())?;
     assert_eq!(*value, Some(18));
 
     world.restore()?;

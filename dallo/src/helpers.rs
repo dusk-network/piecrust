@@ -4,54 +4,63 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
+use crate::SCRATCH_BUF_BYTES;
+
 use rkyv::ser::serializers::{
     BufferScratch, BufferSerializer, CompositeSerializer,
 };
 use rkyv::ser::Serializer;
-use rkyv::{archived_value, Archive, Deserialize, Serialize};
+use rkyv::{archived_root, Archive, Deserialize, Serialize};
 
-pub type Ser<'a> = CompositeSerializer<
+pub type StandardBufSerializer<'a> = CompositeSerializer<
     BufferSerializer<&'a mut [u8]>,
-    BufferScratch<&'a mut [u8; 16]>,
+    BufferScratch<&'a mut [u8; SCRATCH_BUF_BYTES]>,
 >;
 
-pub fn wrap_query<A, R, F>(buf: &mut [u8], arg_ofs: i32, f: F) -> i32
+/// Wrap a query with its respcective (de)serializers.
+///
+/// Returns the length of result written to buffer.
+pub fn wrap_query<A, R, F>(buf: &mut [u8], arg_len: u32, f: F) -> u32
 where
     A: Archive,
     A::Archived: Deserialize<A, rkyv::Infallible>,
-    R: for<'a> Serialize<Ser<'a>>,
+    R: for<'a> Serialize<StandardBufSerializer<'a>>,
     F: Fn(A) -> R,
 {
-    let aa: &A::Archived =
-        unsafe { archived_value::<A>(buf, arg_ofs as usize) };
+    let slice = &buf[..arg_len as usize];
+    let aa: &A::Archived = unsafe { archived_root::<A>(slice) };
     let a: A = aa.deserialize(&mut rkyv::Infallible).unwrap();
     let ret = f(a);
 
-    let mut sbuf = [0u8; 16];
+    let mut sbuf = [0u8; SCRATCH_BUF_BYTES];
     let scratch = BufferScratch::new(&mut sbuf);
     let ser = BufferSerializer::new(buf);
     let mut composite =
         CompositeSerializer::new(ser, scratch, rkyv::Infallible);
-
-    composite.serialize_value(&ret).unwrap() as i32
+    composite.serialize_value(&ret).expect("infallible");
+    composite.pos() as u32
 }
 
-pub fn wrap_transaction<A, R, F>(buf: &mut [u8], arg_ofs: i32, f: F) -> i32
+/// Wrap a transaction with its respcective (de)serializers.
+///
+/// Returns the length of result written to buffer.
+pub fn wrap_transaction<A, R, F>(buf: &mut [u8], arg_len: u32, f: F) -> u32
 where
     A: Archive,
     A::Archived: Deserialize<A, rkyv::Infallible>,
-    R: for<'a> Serialize<Ser<'a>>,
+    R: for<'a> Serialize<StandardBufSerializer<'a>>,
     F: FnOnce(A) -> R,
 {
-    let aa: &A::Archived =
-        unsafe { archived_value::<A>(buf, arg_ofs as usize) };
+    let slice = &buf[..arg_len as usize];
+    let aa: &A::Archived = unsafe { archived_root::<A>(slice) };
     let a: A = aa.deserialize(&mut rkyv::Infallible).unwrap();
     let ret = f(a);
 
-    let mut sbuf = [0u8; 16];
+    let mut sbuf = [0u8; SCRATCH_BUF_BYTES];
     let scratch = BufferScratch::new(&mut sbuf);
     let ser = BufferSerializer::new(buf);
     let mut composite =
         CompositeSerializer::new(ser, scratch, rkyv::Infallible);
-    composite.serialize_value(&ret).unwrap() as i32
+    composite.serialize_value(&ret).expect("infallible");
+    composite.pos() as u32
 }

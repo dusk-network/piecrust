@@ -4,6 +4,7 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
+use dallo::{RawQuery, RawResult, RawTransaction};
 use hatchery::{module_bytecode, Error, Receipt, World};
 
 #[test]
@@ -26,7 +27,7 @@ pub fn world_center_counter_read() -> Result<(), Error> {
 }
 
 #[test]
-pub fn world_center_counter() -> Result<(), Error> {
+pub fn world_center_counter_direct() -> Result<(), Error> {
     let mut world = World::ephemeral()?;
 
     let counter_id = world.deploy(module_bytecode!("counter"))?;
@@ -37,10 +38,14 @@ pub fn world_center_counter() -> Result<(), Error> {
 
     let center_id = world.deploy(module_bytecode!("callcenter"))?;
 
+    println!("urf");
+
     // read value through callcenter
     let value: Receipt<i64> =
         world.query(center_id, "query_counter", counter_id)?;
     assert_eq!(*value, 0xfc);
+
+    println!("gruff");
 
     // increment through call center
     let _: Receipt<()> =
@@ -53,6 +58,47 @@ pub fn world_center_counter() -> Result<(), Error> {
     // read value through callcenter
     let value: Receipt<i64> =
         world.query(center_id, "query_counter", counter_id)?;
+    assert_eq!(*value, 0xfd);
+
+    Ok(())
+}
+
+#[test]
+pub fn world_center_counter_delegated() -> Result<(), Error> {
+    let mut world = World::ephemeral()?;
+
+    let counter_id = world.deploy(module_bytecode!("counter"))?;
+    let center_id = world.deploy(module_bytecode!("callcenter"))?;
+
+    let rq = RawQuery::new("read_value", ());
+
+    println!("raw query {:?}", rq);
+
+    let res: Receipt<RawQuery> =
+        world.query(center_id, "query_passthrough", rq.clone())?;
+
+    assert_eq!(rq, res.into_inner());
+
+    // read value through callcenter
+    let res = world.query::<_, RawResult>(
+        center_id,
+        "delegate_query",
+        (counter_id, rq),
+    )?;
+
+    let value: i64 = res.cast();
+
+    assert_eq!(value, 0xfc);
+
+    // increment through delegated transaction
+
+    let rt = RawTransaction::new("increment", ());
+
+    let _: Receipt<()> =
+        world.transact(center_id, "delegate_transaction", (counter_id, rt))?;
+
+    // read value directly
+    let value: Receipt<i64> = world.query(counter_id, "read_value", ())?;
     assert_eq!(*value, 0xfd);
 
     Ok(())

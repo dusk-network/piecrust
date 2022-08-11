@@ -26,7 +26,7 @@ mod types;
 pub use types::*;
 
 /// How many bytes to use for scratch space when serializing
-pub const SCRATCH_BUF_BYTES: usize = 16;
+pub const SCRATCH_BUF_BYTES: usize = 64;
 
 #[cfg(not(feature = "std"))]
 mod handlers;

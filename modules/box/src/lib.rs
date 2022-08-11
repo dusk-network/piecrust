@@ -27,7 +27,7 @@ const ARGBUF_LEN: usize = 8;
 #[no_mangle]
 static mut A: [u64; ARGBUF_LEN / 8] = [0; ARGBUF_LEN / 8];
 #[no_mangle]
-static AL: i32 = ARGBUF_LEN as i32;
+static AL: u32 = ARGBUF_LEN as u32;
 
 #[no_mangle]
 static SELF_ID: ModuleId = ModuleId::uninitialized();
@@ -49,11 +49,11 @@ impl Boxen {
 }
 
 #[no_mangle]
-unsafe fn set(a: i32) -> i32 {
-    dallo::wrap_transaction(STATE.buffer(), a, |to| STATE.set(to))
+unsafe fn set(arg_len: u32) -> u32 {
+    dallo::wrap_transaction(STATE.buffer(), arg_len, |to| STATE.set(to))
 }
 
 #[no_mangle]
-unsafe fn get(a: i32) -> i32 {
-    dallo::wrap_transaction(STATE.buffer(), a, |_: ()| STATE.get())
+unsafe fn get(arg_len: u32) -> u32 {
+    dallo::wrap_transaction(STATE.buffer(), arg_len, |_: ()| STATE.get())
 }

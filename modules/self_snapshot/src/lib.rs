@@ -21,7 +21,7 @@ const ARGBUF_LEN: usize = 64;
 #[no_mangle]
 static mut A: [u64; ARGBUF_LEN / 8] = [0; ARGBUF_LEN / 8];
 #[no_mangle]
-static AL: i32 = ARGBUF_LEN as i32;
+static AL: u32 = ARGBUF_LEN as u32;
 
 #[no_mangle]
 static SELF_ID: ModuleId = ModuleId::uninitialized();
@@ -80,25 +80,27 @@ impl SelfSnapshot {
 }
 
 #[no_mangle]
-unsafe fn crossover(a: i32) -> i32 {
-    dallo::wrap_query(STATE.buffer(), a, |_: ()| STATE.crossover())
+unsafe fn crossover(arg_len: u32) -> u32 {
+    dallo::wrap_query(STATE.buffer(), arg_len, |_: ()| STATE.crossover())
 }
 
 #[no_mangle]
-unsafe fn set_crossover(a: i32) -> i32 {
-    dallo::wrap_transaction(STATE.buffer(), a, |arg: i32| {
+unsafe fn set_crossover(arg_len: u32) -> u32 {
+    dallo::wrap_transaction(STATE.buffer(), arg_len, |arg: i32| {
         STATE.set_crossover(arg)
     })
 }
 
 #[no_mangle]
-unsafe fn self_call_test_a(a: i32) -> i32 {
-    dallo::wrap_transaction(STATE.buffer(), a, |arg: i32| {
+unsafe fn self_call_test_a(arg_len: u32) -> u32 {
+    dallo::wrap_transaction(STATE.buffer(), arg_len, |arg: i32| {
         STATE.self_call_test_a(arg)
     })
 }
 
 #[no_mangle]
-unsafe fn self_call_test_b(a: i32) -> i32 {
-    dallo::wrap_transaction(STATE.buffer(), a, |_: ()| STATE.self_call_test_b())
+unsafe fn self_call_test_b(arg_len: u32) -> u32 {
+    dallo::wrap_transaction(STATE.buffer(), arg_len, |_: ()| {
+        STATE.self_call_test_b()
+    })
 }
