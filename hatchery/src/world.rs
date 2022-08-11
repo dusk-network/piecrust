@@ -94,11 +94,6 @@ impl World {
             let snapshot = Snapshot::new(&memory_path)?;
             environment.inner_mut().set_snapshot_id(snapshot.id());
             snapshot.save(&memory_path)?;
-            println!(
-                "persisted state of module: {:?} to file: {:?}",
-                module_id_to_name(*module_id),
-                snapshot.path()
-            );
         }
         Ok(())
     }
@@ -267,8 +262,6 @@ impl World {
 
         w.call_stack.push(callee);
 
-        println!("perform query\n{:?}\n{:?}", caller, callee);
-
         let caller = w.get(&caller).expect("oh no").inner();
         let callee = w.get(&callee).expect("no oh").inner();
 
@@ -305,8 +298,6 @@ impl World {
         let w = unsafe { &mut *guard.get() };
 
         w.call_stack.push(callee);
-
-        println!("perform transaction\n{:?}\n{:?}", caller, callee);
 
         let caller = w.get(&caller).expect("oh no").inner();
         let callee = w.get(&callee).expect("no oh").inner();
@@ -350,8 +341,6 @@ impl World {
         let guard = self.0.lock();
         let w = unsafe { &*guard.get() };
         let caller = w.call_stack.caller();
-
-        println!("perform_caller id {:?}", caller);
 
         instance.write_to_arg_buffer(caller)
     }

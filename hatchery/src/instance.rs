@@ -98,7 +98,6 @@ impl Instance {
         Ret: Archive,
         Ret::Archived: Deserialize<Ret, Infallible>,
     {
-        println!("arg {:?}", arg);
         let ret_len = {
             let arg_ofs = self.write_to_arg_buffer(arg)?;
             self.perform_transaction(name, arg_ofs)?
@@ -180,7 +179,6 @@ impl Instance {
         T::Archived: Deserialize<T, Infallible>,
     {
         // TODO use bytecheck here
-        println!("read {:?} len {:?}", core::any::type_name::<T>(), arg_len);
         Ok(self.with_arg_buffer(|abuf| {
             let slice = &abuf[..arg_len as usize];
             let ta: &T::Archived = unsafe { archived_root::<T>(slice) };

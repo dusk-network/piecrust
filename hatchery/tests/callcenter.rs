@@ -38,14 +38,10 @@ pub fn world_center_counter_direct() -> Result<(), Error> {
 
     let center_id = world.deploy(module_bytecode!("callcenter"))?;
 
-    println!("urf");
-
     // read value through callcenter
     let value: Receipt<i64> =
         world.query(center_id, "query_counter", counter_id)?;
     assert_eq!(*value, 0xfc);
-
-    println!("gruff");
 
     // increment through call center
     let _: Receipt<()> =
@@ -71,8 +67,6 @@ pub fn world_center_counter_delegated() -> Result<(), Error> {
     let center_id = world.deploy(module_bytecode!("callcenter"))?;
 
     let rq = RawQuery::new("read_value", ());
-
-    println!("raw query {:?}", rq);
 
     let res: Receipt<RawQuery> =
         world.query(center_id, "query_passthrough", rq.clone())?;
