@@ -323,7 +323,7 @@ impl World {
         Ok(ret_len)
     }
 
-    fn perform_height(&self, instance: &Instance) -> Result<i32, Error> {
+    fn perform_height(&self, instance: &Instance) -> Result<u32, Error> {
         let guard = self.0.lock();
         let w = unsafe { &*guard.get() };
 
@@ -440,7 +440,7 @@ fn host_transact(
         .expect("TODO: error handling")
 }
 
-fn host_height(env: &Env) -> i32 {
+fn host_height(env: &Env) -> u32 {
     let instance = env.inner();
     instance
         .world()

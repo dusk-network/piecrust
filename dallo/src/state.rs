@@ -184,9 +184,9 @@ impl<S> State<S> {
     /// Return the current height.
     pub fn height(&self) -> u64 {
         self.with_arg_buf(|buf| {
-            let ret_ofs = unsafe { height() };
+            let ret_len = unsafe { height() };
 
-            let ret = unsafe { archived_value::<u64>(buf, ret_ofs as usize) };
+            let ret = unsafe { archived_root::<u64>(&buf[..ret_len as usize]) };
             ret.deserialize(&mut Infallible).expect("Infallible")
         })
     }
