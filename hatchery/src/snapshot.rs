@@ -9,10 +9,17 @@ use crate::storage_helpers::{
     combine_module_snapshot_names, snapshot_id_to_name,
 };
 use crate::Error::PersistenceError;
-use std::io::Read;
+use bsdiff::diff::diff;
+use bsdiff::patch::patch;
+use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
+use rand::Rng;
+use rkyv::{Archive, Deserialize, Serialize};
+use std::fs::OpenOptions;
+use std::io::{Read, Write};
+use std::mem;
 use std::path::{Path, PathBuf};
 
-use rkyv::{Archive, Deserialize, Serialize};
+const COMPRESSION_LEVEL: i32 = 11;
 pub const SNAPSHOT_ID_BYTES: usize = 32;
 #[derive(
     Debug,
@@ -31,6 +38,9 @@ pub struct SnapshotId([u8; SNAPSHOT_ID_BYTES]);
 impl SnapshotId {
     pub fn as_bytes(&self) -> &[u8] {
         &self.0
+    }
+    pub fn random() -> SnapshotId {
+        SnapshotId(rand::thread_rng().gen::<[u8; SNAPSHOT_ID_BYTES]>())
     }
 }
 impl From<[u8; 32]> for SnapshotId {
@@ -84,6 +94,9 @@ impl Snapshot {
         Snapshot::from_id(snapshot_id, memory_path)
     }
 
+    /// Creates snapshot with a given snapshot id.
+    /// Memory path is only used as path pattern,
+    /// no contents are captured.
     pub fn from_id(
         snapshot_id: SnapshotId,
         memory_path: &MemoryPath,
@@ -102,18 +115,112 @@ impl Snapshot {
         })
     }
 
-    /// Saves current snapshot as uncompressed file.
-    pub fn save(&self, memory_path: &MemoryPath) -> Result<(), Error> {
-        std::fs::copy(memory_path.path(), self.path().as_path())
+    /// Captures contents of a given snapshot into 'this' snapshot.
+    pub fn capture(&self, snapshot: &dyn SnapshotLike) -> Result<(), Error> {
+        std::fs::copy(snapshot.path(), self.path().as_path())
             .map_err(PersistenceError)?;
         Ok(())
     }
 
-    /// Restores current snapshot from uncompressed file.
-    pub fn load(&self, memory_path: &MemoryPath) -> Result<(), Error> {
+    /// Restores contents of 'this' snapshot into current memory.
+    pub fn restore(&self, memory_path: &MemoryPath) -> Result<(), Error> {
         std::fs::copy(self.path().as_path(), memory_path.path())
             .map_err(PersistenceError)?;
         Ok(())
+    }
+
+    /// Captured the difference of memory path and the given base snapshot
+    /// into 'this' snapshot.
+    pub fn capture_diff(
+        &self,
+        base_snapshot: &Snapshot,
+        memory_path: &MemoryPath,
+    ) -> Result<(), Error> {
+        let mut compressor = zstd::block::Compressor::new();
+        let mut delta: Vec<u8> = Vec::new();
+        let memory_buffer = memory_path.read()?;
+        let base_buffer = base_snapshot.read()?;
+        diff(base_buffer.as_slice(), memory_buffer.as_slice(), &mut delta)
+            .unwrap();
+        let compressed_delta =
+            compressor.compress(&delta, COMPRESSION_LEVEL).unwrap();
+        self.write_compressed(
+            compressed_delta,
+            delta.len(),
+            base_buffer.as_slice().len(),
+        )?;
+        Ok(())
+    }
+
+    /// Writes uncompressed size, original length and data to file
+    /// associated with 'this' snapshot.
+    fn write_compressed(
+        &self,
+        data: Vec<u8>,
+        uncompressed_size: usize,
+        original_len: usize,
+    ) -> Result<(), Error> {
+        let mut file = OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .open(self.path())
+            .map_err(PersistenceError)?;
+        file.write_u32::<LittleEndian>(uncompressed_size as u32)
+            .map_err(PersistenceError)?;
+        file.write_u32::<LittleEndian>(original_len as u32)
+            .map_err(PersistenceError)?;
+        file.write_all(data.as_slice()).map_err(PersistenceError)?;
+        Ok(())
+    }
+
+    /// Decompresses 'this' snapshot as patch and patches a given snapshot.
+    /// Result is written to a result snapshot.
+    pub fn decompress_and_patch(
+        &self,
+        snapshot_to_patch: &Snapshot,
+        result_snapshot: &dyn SnapshotLike,
+    ) -> Result<(), Error> {
+        let (original_len, uncompressed_size, compressed) =
+            self.read_compressed()?;
+        let mut decompressor = zstd::block::Decompressor::new();
+        let mut patch_data = std::io::Cursor::new(
+            decompressor
+                .decompress(compressed.as_slice(), original_len)
+                .map_err(PersistenceError)?,
+        );
+        let mut patched = vec![0; uncompressed_size];
+        patch(
+            snapshot_to_patch.read()?.as_slice(),
+            &mut patch_data,
+            patched.as_mut_slice(),
+        )
+        .map_err(PersistenceError)?;
+        let mut file = OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .open(result_snapshot.path())
+            .map_err(PersistenceError)?;
+        file.write_all(patched.as_slice())
+            .map_err(PersistenceError)?;
+        Ok(())
+    }
+
+    /// Reads uncompressed size, original length and data from file
+    /// associated with 'this' snapshot.
+    fn read_compressed(&self) -> Result<(usize, usize, Vec<u8>), Error> {
+        let mut file = std::fs::File::open(self.path().as_path())
+            .map_err(PersistenceError)?;
+        let metadata = std::fs::metadata(self.path().as_path())
+            .map_err(PersistenceError)?;
+        const SIZES_LEN: usize = (mem::size_of::<u32>() as usize) * 2;
+        let mut data = vec![0; metadata.len() as usize - SIZES_LEN];
+        let size = file.read_u32::<LittleEndian>().map_err(PersistenceError)?;
+        let original_len =
+            file.read_u32::<LittleEndian>().map_err(PersistenceError)?;
+        file.read(data.as_mut_slice()).map_err(PersistenceError)?;
+        Ok((size as usize, original_len as usize, data))
     }
 
     pub fn id(&self) -> SnapshotId {

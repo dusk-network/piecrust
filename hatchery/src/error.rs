@@ -25,6 +25,7 @@ pub enum Error {
     MissingModuleExport,
     CompositeSerializerError(Compo),
     PersistenceError(io::Error),
+    SnapshotError(String),
 }
 
 impl From<wasmer::InstantiationError> for Error {

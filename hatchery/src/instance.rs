@@ -17,7 +17,7 @@ use wasmer::NativeFunc;
 
 use crate::error::*;
 use crate::memory::MemHandler;
-use crate::snapshot::SnapshotId;
+use crate::snapshot_bag::SnapshotBag;
 use crate::world::World;
 
 #[derive(Debug)]
@@ -30,7 +30,7 @@ pub struct Instance {
     arg_buf_len: i32,
     heap_base: i32,
     self_id_ofs: i32,
-    snapshot_id: Option<SnapshotId>,
+    snapshot_bag: SnapshotBag,
 }
 
 impl Instance {
@@ -54,7 +54,7 @@ impl Instance {
             arg_buf_len,
             heap_base,
             self_id_ofs,
-            snapshot_id: None,
+            snapshot_bag: SnapshotBag::new(),
         }
     }
 
@@ -208,12 +208,14 @@ impl Instance {
         self.id
     }
 
-    pub(crate) fn set_snapshot_id(&mut self, snapshot_id: SnapshotId) {
-        self.snapshot_id = Some(snapshot_id);
+    pub(crate) fn snapshot_bag(&mut self) -> &SnapshotBag {
+        &self.snapshot_bag
     }
-    pub fn snapshot_id(&self) -> Option<&SnapshotId> {
-        self.snapshot_id.as_ref()
+
+    pub(crate) fn snapshot_bag_mut(&mut self) -> &mut SnapshotBag {
+        &mut self.snapshot_bag
     }
+
     pub(crate) fn world(&self) -> &World {
         &self.world
     }

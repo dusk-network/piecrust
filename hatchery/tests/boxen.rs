@@ -5,7 +5,7 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 use dallo::ModuleId;
-use hatchery::{module_bytecode, Error, Receipt, World};
+use hatchery::{module_bytecode, Error, Receipt, World, WorldSnapshotId};
 use std::path::PathBuf;
 
 #[test]
@@ -57,23 +57,41 @@ pub fn box_set_store_restore_get() -> Result<(), Error> {
 }
 
 #[test]
-pub fn world_persist_restore() -> Result<(), Error> {
+pub fn world_snapshot_persist_restore() -> Result<(), Error> {
     let mut world = World::ephemeral()?;
     let id = world.deploy(module_bytecode!("box"))?;
 
-    let _: Receipt<()> = world.transact(id, "set", 17)?;
-    let value: Receipt<Option<i16>> = world.query(id, "get", ())?;
-    assert_eq!(*value, Some(17));
+    fn create_snapshot(
+        world: &mut World,
+        id: ModuleId,
+        arg: i16,
+    ) -> Result<WorldSnapshotId, Error> {
+        let _: Receipt<()> = world.transact(id, "set", arg)?;
+        let value: Receipt<Option<i16>> = world.query(id, "get", ())?;
+        assert_eq!(*value, Some(arg));
 
-    world.persist()?;
+        world.persist()
+    }
 
-    let _: Receipt<()> = world.transact(id, "set", 18)?;
-    let value: Receipt<Option<i16>> = world.query(id, "get", ())?;
-    assert_eq!(*value, Some(18));
+    fn restore_snapshot(
+        world: &mut World,
+        id: ModuleId,
+        world_snapshot_id: &WorldSnapshotId,
+        arg: i16,
+    ) -> Result<(), Error> {
+        world.restore(&world_snapshot_id)?;
+        let value: Receipt<Option<i16>> = world.query(id, "get", ())?;
+        assert_eq!(*value, Some(arg));
+        Ok(())
+    }
 
-    world.restore()?;
-    let value: Receipt<Option<i16>> = world.query(id, "get", ())?;
-    assert_eq!(*value, Some(17));
-
+    let mut snapshot_ids = Vec::new();
+    let random_i = vec![3, 1, 0, 4, 2];
+    for i in 0..random_i.len() {
+        snapshot_ids.push(create_snapshot(&mut world, id, i as i16)?);
+    }
+    for i in random_i {
+        restore_snapshot(&mut world, id, &snapshot_ids[i], (i) as i16)?;
+    }
     Ok(())
 }
