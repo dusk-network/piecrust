@@ -75,7 +75,8 @@ impl Instance {
     {
         let ret_len = {
             let arg_len = self.write_to_arg_buffer(arg)?;
-            self.perform_query(name, arg_len)?
+            self.perform_query(name, arg_len)
+                .map_err(|e| map_call_err(self, e))?
         };
 
         self.read_from_arg_buffer(ret_len)
@@ -102,8 +103,9 @@ impl Instance {
         Ret::Archived: Deserialize<Ret, Infallible>,
     {
         let ret_len = {
-            let arg_ofs = self.write_to_arg_buffer(arg)?;
-            self.perform_transaction(name, arg_ofs)?
+            let arg_len = self.write_to_arg_buffer(arg)?;
+            self.perform_transaction(name, arg_len)
+                .map_err(|e| map_call_err(self, e))?
         };
 
         self.read_from_arg_buffer(ret_len)
@@ -277,5 +279,17 @@ impl Instance {
                 }
             }
         }
+    }
+}
+
+fn map_call_err(instance: &Instance, err: Error) -> Error {
+    match err {
+        e @ Error::RuntimeError(_) => {
+            match get_remaining_points(&instance.instance) {
+                MeteringPoints::Remaining(_) => e,
+                MeteringPoints::Exhausted => Error::OutOfPoints(instance.id),
+            }
+        }
+        e => e,
     }
 }

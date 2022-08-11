@@ -4,10 +4,12 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
+use std::io;
+
+use dallo::ModuleId;
 use rkyv::ser::serializers::{
     BufferSerializerError, CompositeSerializerError, FixedSizeScratchError,
 };
-use std::io;
 
 pub type Compo = CompositeSerializerError<
     BufferSerializerError,
@@ -25,7 +27,7 @@ pub enum Error {
     MissingModuleExport,
     CompositeSerializerError(Compo),
     PersistenceError(io::Error),
-    OutOfPoints,
+    OutOfPoints(ModuleId),
 }
 
 impl From<wasmer::InstantiationError> for Error {

@@ -34,9 +34,7 @@ pub fn fails_with_out_of_points() -> Result<(), Error> {
         .query::<(), i64>(counter_id, "read_value", ())
         .expect_err("should error with no gas");
 
-    println!("{:?}", err);
-
-    assert!(matches!(err, Error::OutOfPoints));
+    assert!(matches!(err, Error::OutOfPoints(mid) if mid == counter_id));
 
     Ok(())
 }
