@@ -38,7 +38,7 @@ impl WorldSnapshotId {
     pub fn add(&mut self, snapshot_id: &SnapshotId) {
         let p = snapshot_id.as_bytes().as_ptr();
         for (i, b) in self.0.iter_mut().enumerate() {
-            *b = *b ^ unsafe { *p.offset(i as isize) };
+            *b ^= unsafe { *p.add(i) };
         }
     }
 }

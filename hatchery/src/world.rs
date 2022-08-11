@@ -116,10 +116,10 @@ impl World {
         let guard = self.0.lock();
         let w = unsafe { &mut *guard.get() };
         let world_snapshot: &WorldSnapshot =
-            w.snapshots.get(world_snapshot_id).ok_or(SnapshotError(
-                String::from("world snapshot id not found"),
-            ))?;
-        world_snapshot.restore_snapshots(&self)?;
+            w.snapshots.get(world_snapshot_id).ok_or_else(|| {
+                SnapshotError(String::from("world snapshot id not found"))
+            })?;
+        world_snapshot.restore_snapshots(self)?;
         Ok(())
     }
 
@@ -138,7 +138,7 @@ impl World {
         let instance = w
             .environments
             .get(module_id)
-            .ok_or(SnapshotError(String::from("invalid module id")))?
+            .ok_or_else(|| SnapshotError(String::from("invalid module id")))?
             .inner_mut();
         instance
             .snapshot_bag()
