@@ -6,35 +6,48 @@
 
 use core::cell::UnsafeCell;
 use rkyv::{
-    archived_value,
+    archived_root,
     ser::serializers::{BufferScratch, BufferSerializer, CompositeSerializer},
     ser::Serializer,
     Archive, Deserialize, Infallible, Serialize,
 };
 
-use crate::Ser;
+use crate::{
+    RawQuery, RawResult, RawTransaction, StandardBufSerializer,
+    SCRATCH_BUF_BYTES,
+};
 
 extern "C" {
-    fn q(mod_id: *const u8, name: *const u8, len: i32, arg_ofs: i32) -> i32;
-    fn t(mod_id: *const u8, name: *const u8, len: i32, arg_ofs: i32) -> i32;
+    fn q(
+        mod_id: *const u8,
+        name: *const u8,
+        name_len: u32,
+        arg_len: u32,
+    ) -> u32;
+    fn t(
+        mod_id: *const u8,
+        name: *const u8,
+        name_len: u32,
+        arg_len: u32,
+    ) -> u32;
 
     fn height() -> i32;
-    fn caller() -> i32;
-    fn emit(arg_ofs: i32, arg_len: i32);
+    fn caller() -> u32;
+    fn emit(arg_len: u32);
 }
 
-fn extern_query(module_id: ModuleId, name: &str, arg_ofs: i32) -> i32 {
+fn extern_query(module_id: ModuleId, name: &str, arg_len: u32) -> u32 {
     let mod_ptr = module_id.as_ptr();
-    let nme_ptr = name.as_ptr();
-    let nme_len = name.as_bytes().len() as i32;
-    unsafe { q(mod_ptr, nme_ptr, nme_len, arg_ofs) }
+    let name_ptr = name.as_ptr();
+    let name_len = name.as_bytes().len() as u32;
+    unsafe { q(mod_ptr, name_ptr, name_len, arg_len) }
 }
 
-fn extern_transaction(module_id: ModuleId, name: &str, arg_ofs: i32) -> i32 {
+fn extern_transaction(module_id: ModuleId, name: &str, arg_len: u32) -> u32 {
     let mod_ptr = module_id.as_ptr();
-    let nme_ptr = name.as_ptr();
-    let nme_len = name.as_bytes().len() as i32;
-    unsafe { t(mod_ptr, nme_ptr, nme_len, arg_ofs) }
+    let name_ptr = name.as_ptr();
+    let name_len = name.as_bytes().len() as u32;
+    unsafe { t(mod_ptr, name_ptr, name_len, arg_len) }
 }
 
 use crate::ModuleId;
@@ -83,27 +96,58 @@ impl<S> DerefMut for State<S> {
 impl<S> State<S> {
     pub fn query<Arg, Ret>(&self, mod_id: ModuleId, name: &str, arg: Arg) -> Ret
     where
-        Arg: for<'a> Serialize<Ser<'a>>,
+        Arg: for<'a> Serialize<StandardBufSerializer<'a>>,
         Ret: Archive,
         Ret::Archived: Deserialize<Ret, Infallible>,
     {
-        let arg_ofs = self.with_arg_buf(|buf| {
-            let mut sbuf = [0u8; 16];
+        let arg_len = self.with_arg_buf(|buf| {
+            let mut sbuf = [0u8; SCRATCH_BUF_BYTES];
             let scratch = BufferScratch::new(&mut sbuf);
             let ser = BufferSerializer::new(buf);
             let mut composite =
                 CompositeSerializer::new(ser, scratch, rkyv::Infallible);
 
-            composite.serialize_value(&arg).unwrap() as i32
+            composite.serialize_value(&arg).expect("infallible");
+            composite.pos() as u32
         });
 
-        let ret_ofs = extern_query(mod_id, name, arg_ofs);
+        let ret_len = extern_query(mod_id, name, arg_len);
 
         self.with_arg_buf(|buf| {
-            let ret = unsafe { archived_value::<Ret>(buf, ret_ofs as usize) };
-
+            let slice = &buf[..ret_len as usize];
+            let ret = unsafe { archived_root::<Ret>(slice) };
             ret.deserialize(&mut Infallible).expect("Infallible")
         })
+    }
+
+    pub fn query_raw(&self, mod_id: ModuleId, raw: RawQuery) -> RawResult {
+        self.with_arg_buf(|buf| {
+            let bytes = raw.arg_bytes();
+            buf[..bytes.len()].copy_from_slice(bytes);
+        });
+
+        let name = raw.name();
+        let arg_len = raw.arg_bytes().len() as u32;
+        let ret_len = extern_query(mod_id, name, arg_len);
+
+        self.with_arg_buf(|buf| RawResult::new(&buf[..ret_len as usize]))
+    }
+
+    pub fn transact_raw(
+        &self,
+        mod_id: ModuleId,
+        raw: RawTransaction,
+    ) -> RawResult {
+        self.with_arg_buf(|buf| {
+            let bytes = raw.arg_bytes();
+            buf[..bytes.len()].copy_from_slice(bytes);
+        });
+
+        let name = raw.name();
+        let arg_len = raw.arg_bytes().len() as u32;
+        let ret_len = extern_query(mod_id, name, arg_len);
+
+        self.with_arg_buf(|buf| RawResult::new(&buf[..ret_len as usize]))
     }
 
     pub fn transact<Arg, Ret>(
@@ -113,24 +157,26 @@ impl<S> State<S> {
         arg: Arg,
     ) -> Ret
     where
-        Arg: for<'a> Serialize<Ser<'a>>,
+        Arg: for<'a> Serialize<StandardBufSerializer<'a>>,
         Ret: Archive,
         Ret::Archived: Deserialize<Ret, Infallible>,
     {
-        let arg_ofs = self.with_arg_buf(|buf| {
-            let mut sbuf = [0u8; 16];
+        let arg_len = self.with_arg_buf(|buf| {
+            let mut sbuf = [0u8; SCRATCH_BUF_BYTES];
             let scratch = BufferScratch::new(&mut sbuf);
             let ser = BufferSerializer::new(buf);
             let mut composite =
                 CompositeSerializer::new(ser, scratch, rkyv::Infallible);
 
-            composite.serialize_value(&arg).unwrap() as i32
+            composite.serialize_value(&arg).unwrap();
+            composite.pos() as u32
         });
 
-        let ret_ofs = extern_transaction(mod_id, name, arg_ofs);
+        let ret_len = extern_transaction(mod_id, name, arg_len);
 
         self.with_arg_buf(|buf| {
-            let ret = unsafe { archived_value::<Ret>(buf, ret_ofs as usize) };
+            let slice = &buf[..ret_len as usize];
+            let ret = unsafe { archived_root::<Ret>(slice) };
             ret.deserialize(&mut Infallible).expect("Infallible")
         })
     }
@@ -138,9 +184,9 @@ impl<S> State<S> {
     /// Return the current height.
     pub fn height(&self) -> u64 {
         self.with_arg_buf(|buf| {
-            let ret_ofs = unsafe { height() };
+            let ret_len = unsafe { height() };
 
-            let ret = unsafe { archived_value::<u64>(buf, ret_ofs as usize) };
+            let ret = unsafe { archived_root::<u64>(&buf[..ret_len as usize]) };
             ret.deserialize(&mut Infallible).expect("Infallible")
         })
     }
@@ -150,10 +196,9 @@ impl<S> State<S> {
     /// to be called.
     pub fn caller(&self) -> ModuleId {
         self.with_arg_buf(|buf| {
-            let ret_ofs = unsafe { caller() };
-
+            let ret_len = unsafe { caller() };
             let ret =
-                unsafe { archived_value::<ModuleId>(buf, ret_ofs as usize) };
+                unsafe { archived_root::<ModuleId>(&buf[..ret_len as usize]) };
             ret.deserialize(&mut Infallible).expect("Infallible")
         })
     }
@@ -161,19 +206,19 @@ impl<S> State<S> {
     /// Emits an event with the given data.
     pub fn emit<D>(&self, data: D)
     where
-        for<'a> D: Serialize<Ser<'a>>,
+        for<'a> D: Serialize<StandardBufSerializer<'a>>,
     {
         self.with_arg_buf(|buf| {
-            let mut sbuf = [0u8; 16];
+            let mut sbuf = [0u8; SCRATCH_BUF_BYTES];
             let scratch = BufferScratch::new(&mut sbuf);
             let ser = BufferSerializer::new(buf);
             let mut composite =
                 CompositeSerializer::new(ser, scratch, rkyv::Infallible);
 
-            let arg_ofs = composite.serialize_value(&data).unwrap() as i32;
-            let arg_len = composite.pos() as i32;
+            composite.serialize_value(&data).unwrap();
+            let arg_len = composite.pos() as u32;
 
-            unsafe { emit(arg_ofs, arg_len) }
+            unsafe { emit(arg_len) }
         });
     }
 

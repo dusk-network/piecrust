@@ -21,7 +21,7 @@ const ARGBUF_LEN: usize = 64;
 #[no_mangle]
 static mut A: [u64; ARGBUF_LEN / 8] = [0; ARGBUF_LEN / 8];
 #[no_mangle]
-static AL: i32 = ARGBUF_LEN as i32;
+static AL: u32 = ARGBUF_LEN as u32;
 
 #[no_mangle]
 static SELF_ID: ModuleId = ModuleId::uninitialized();
@@ -37,6 +37,6 @@ impl Eventer {
 }
 
 #[no_mangle]
-unsafe fn emit_events(a: i32) -> i32 {
-    dallo::wrap_query(STATE.buffer(), a, |num| STATE.emit_num(num))
+unsafe fn emit_events(arg_len: u32) -> u32 {
+    dallo::wrap_query(STATE.buffer(), arg_len, |num| STATE.emit_num(num))
 }

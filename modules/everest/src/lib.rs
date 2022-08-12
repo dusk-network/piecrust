@@ -21,7 +21,7 @@ const ARGBUF_LEN: usize = 64;
 #[no_mangle]
 static mut A: [u64; ARGBUF_LEN / 8] = [0; ARGBUF_LEN / 8];
 #[no_mangle]
-static AL: i32 = ARGBUF_LEN as i32;
+static AL: u32 = ARGBUF_LEN as u32;
 
 #[no_mangle]
 static SELF_ID: ModuleId = ModuleId::uninitialized();
@@ -35,6 +35,6 @@ impl Height {
 }
 
 #[no_mangle]
-unsafe fn get_height(a: i32) -> i32 {
+unsafe fn get_height(a: u32) -> u32 {
     dallo::wrap_query(STATE.buffer(), a, |_: ()| STATE.get_height())
 }

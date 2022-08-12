@@ -154,7 +154,6 @@ impl Snapshot {
         self.write_compressed(compressed_delta, base_buffer.as_slice().len())?;
         Ok(())
     }
-
     /// Writes uncompressed size, original length and data to file
     /// associated with 'this' snapshot.
     fn write_compressed(
@@ -173,7 +172,6 @@ impl Snapshot {
         file.write_all(data.as_slice()).map_err(PersistenceError)?;
         Ok(())
     }
-
     /// Decompresses 'this' snapshot as patch and patches a given snapshot.
     /// Result is written to a result snapshot.
     pub fn decompress_and_patch(
@@ -210,7 +208,6 @@ impl Snapshot {
             .map_err(PersistenceError)?;
         Ok(())
     }
-
     /// Reads uncompressed size, original length and data from file
     /// associated with 'this' snapshot.
     fn read_compressed(&self) -> Result<(usize, Vec<u8>), Error> {
@@ -224,7 +221,6 @@ impl Snapshot {
         file.read(data.as_mut_slice()).map_err(PersistenceError)?;
         Ok((size as usize, data))
     }
-
     pub fn id(&self) -> ModuleSnapshotId {
         self.id
     }

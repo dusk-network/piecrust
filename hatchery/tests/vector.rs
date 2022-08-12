@@ -15,7 +15,7 @@ pub fn vector_push_pop() -> Result<(), Error> {
     const N: usize = 128;
 
     for i in 0..N {
-        let _: Receipt<()> = world.transact(id, "push", i)?;
+        world.transact::<_, ()>(id, "push", i as i16)?;
     }
 
     for i in 0..N {

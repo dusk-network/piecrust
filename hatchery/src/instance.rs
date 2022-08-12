@@ -6,9 +6,11 @@
 
 use colored::*;
 
-use dallo::{ModuleId, Ser, MODULE_ID_BYTES, SCRATCH_BUF_BYTES};
+use dallo::{
+    ModuleId, StandardBufSerializer, MODULE_ID_BYTES, SCRATCH_BUF_BYTES,
+};
 use rkyv::{
-    archived_value,
+    archived_root,
     ser::serializers::{BufferScratch, BufferSerializer, CompositeSerializer},
     ser::Serializer,
     Archive, Deserialize, Infallible, Serialize,
@@ -27,7 +29,7 @@ pub struct Instance {
     world: World,
     mem_handler: MemHandler,
     arg_buf_ofs: i32,
-    arg_buf_len: i32,
+    arg_buf_len: u32,
     heap_base: i32,
     self_id_ofs: i32,
     snapshot_bag: SnapshotBag,
@@ -41,7 +43,7 @@ impl Instance {
         world: World,
         mem_handler: MemHandler,
         arg_buf_ofs: i32,
-        arg_buf_len: i32,
+        arg_buf_len: u32,
         heap_base: i32,
         self_id_ofs: i32,
     ) -> Self {
@@ -64,27 +66,26 @@ impl Instance {
         arg: Arg,
     ) -> Result<Ret, Error>
     where
-        Arg: for<'a> Serialize<Ser<'a>>,
+        Arg: for<'a> Serialize<StandardBufSerializer<'a>>,
         Ret: Archive,
         Ret::Archived: Deserialize<Ret, Infallible>,
     {
-        let ret_pos = {
-            let arg_ofs = self.write_to_arg_buffer(arg)?;
-
-            self.perform_query(name, arg_ofs)?
+        let ret_len = {
+            let arg_len = self.write_to_arg_buffer(arg)?;
+            self.perform_query(name, arg_len)?
         };
 
-        self.read_from_arg_buffer(ret_pos)
+        self.read_from_arg_buffer(ret_len)
     }
 
     pub(crate) fn perform_query(
         &self,
         name: &str,
-        arg_ofs: i32,
-    ) -> Result<i32, Error> {
-        let fun: NativeFunc<i32, i32> =
+        arg_len: u32,
+    ) -> Result<u32, Error> {
+        let fun: NativeFunc<u32, u32> =
             self.instance.exports.get_native_function(name)?;
-        Ok(fun.call(arg_ofs as i32)?)
+        Ok(fun.call(arg_len)?)
     }
 
     pub(crate) fn transact<Arg, Ret>(
@@ -93,27 +94,26 @@ impl Instance {
         arg: Arg,
     ) -> Result<Ret, Error>
     where
-        Arg: for<'a> Serialize<Ser<'a>>,
+        Arg: for<'a> Serialize<StandardBufSerializer<'a>> + core::fmt::Debug,
         Ret: Archive,
         Ret::Archived: Deserialize<Ret, Infallible>,
     {
-        let ret_pos = {
+        let ret_len = {
             let arg_ofs = self.write_to_arg_buffer(arg)?;
-
             self.perform_transaction(name, arg_ofs)?
         };
 
-        self.read_from_arg_buffer(ret_pos)
+        self.read_from_arg_buffer(ret_len)
     }
 
     pub(crate) fn perform_transaction(
         &self,
         name: &str,
-        arg_ofs: i32,
-    ) -> Result<i32, Error> {
-        let fun: NativeFunc<i32, i32> =
+        arg_len: u32,
+    ) -> Result<u32, Error> {
+        let fun: NativeFunc<u32, u32> =
             self.instance.exports.get_native_function(name)?;
-        Ok(fun.call(arg_ofs as i32)?)
+        Ok(fun.call(arg_len)?)
     }
 
     pub(crate) fn with_memory<F, R>(&self, f: F) -> R
@@ -149,38 +149,39 @@ impl Instance {
             );
 
         let ofs = self.self_id_ofs as usize;
-        let end = ofs + MODULE_ID_BYTES;
 
-        let callee_buf = unsafe { mem.data_unchecked_mut() };
-        let callee_buf = &mut callee_buf[ofs..end];
+        let memory = unsafe { mem.data_unchecked_mut() };
+        let self_id_buf = &mut memory[ofs..][..MODULE_ID_BYTES];
 
-        callee_buf.copy_from_slice(module_id.as_bytes());
+        self_id_buf.copy_from_slice(module_id.as_bytes());
     }
 
-    pub(crate) fn write_to_arg_buffer<T>(&self, value: T) -> Result<i32, Error>
+    pub(crate) fn write_to_arg_buffer<T>(&self, value: T) -> Result<u32, Error>
     where
-        T: for<'a> Serialize<Ser<'a>>,
+        T: for<'a> Serialize<StandardBufSerializer<'a>>,
     {
         self.with_arg_buffer(|abuf| {
             let mut sbuf = [0u8; SCRATCH_BUF_BYTES];
             let scratch = BufferScratch::new(&mut sbuf);
             let ser = BufferSerializer::new(abuf);
-            let mut composite =
+            let mut ser =
                 CompositeSerializer::new(ser, scratch, rkyv::Infallible);
 
-            Ok(composite.serialize_value(&value)? as i32)
+            ser.serialize_value(&value)?;
+
+            Ok(ser.pos() as u32)
         })
     }
 
-    fn read_from_arg_buffer<T>(&self, arg_ofs: i32) -> Result<T, Error>
+    fn read_from_arg_buffer<T>(&self, arg_len: u32) -> Result<T, Error>
     where
         T: Archive,
         T::Archived: Deserialize<T, Infallible>,
     {
         // TODO use bytecheck here
         Ok(self.with_arg_buffer(|abuf| {
-            let ta: &T::Archived =
-                unsafe { archived_value::<T>(abuf, arg_ofs as usize) };
+            let slice = &abuf[..arg_len as usize];
+            let ta: &T::Archived = unsafe { archived_root::<T>(slice) };
             ta.deserialize(&mut Infallible).unwrap()
         }))
     }
@@ -211,11 +212,9 @@ impl Instance {
     pub(crate) fn snapshot_bag(&mut self) -> &SnapshotBag {
         &self.snapshot_bag
     }
-
     pub(crate) fn snapshot_bag_mut(&mut self) -> &mut SnapshotBag {
         &mut self.snapshot_bag
     }
-
     pub(crate) fn world(&self) -> &World {
         &self.world
     }

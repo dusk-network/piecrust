@@ -16,7 +16,7 @@ pub fn push_pop() -> Result<(), Error> {
 
     let _: Receipt<()> = world.transact(id, "push", val)?;
 
-    let len: Receipt<i32> = world.query(id, "len", ())?;
+    let len: Receipt<u32> = world.query(id, "len", ())?;
     assert_eq!(*len, 1);
 
     let popped: Receipt<Option<i32>> = world.transact(id, "pop", ())?;
