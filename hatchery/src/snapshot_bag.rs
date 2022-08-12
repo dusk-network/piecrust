@@ -6,22 +6,22 @@
 
 use crate::error::Error;
 use crate::snapshot::Snapshot;
-use crate::snapshot::{MemoryPath, SnapshotId};
+use crate::snapshot::{MemoryPath, ModuleSnapshotId};
 use crate::Error::SnapshotError;
 
 #[derive(Debug)]
 pub struct SnapshotBag {
     // first snapshot is always uncompressed
-    ids: Vec<SnapshotId>,
+    ids: Vec<ModuleSnapshotId>,
     // we keep top uncompressed snapshot to make save snapshot efficient
-    top: SnapshotId,
+    top: ModuleSnapshotId,
 }
 
 impl SnapshotBag {
     pub fn new() -> Self {
         Self {
             ids: Vec::new(),
-            top: SnapshotId::random(),
+            top: ModuleSnapshotId::random(),
         }
     }
     pub fn save_snapshot(
@@ -39,7 +39,7 @@ impl SnapshotBag {
             let from_id =
                 |snapshot_id| Snapshot::from_id(snapshot_id, memory_path);
             let top_snapshot = from_id(self.top)?;
-            let accu_snapshot = from_id(SnapshotId::random())?;
+            let accu_snapshot = from_id(ModuleSnapshotId::random())?;
             accu_snapshot.capture(snapshot)?;
             // accu and snapshot are both uncompressed
             // compressing snapshot against the top
@@ -66,7 +66,7 @@ impl SnapshotBag {
         } else if is_top(snapshot_index) {
             from_id(self.top)?
         } else {
-            let accu_snapshot = from_id(SnapshotId::random())?;
+            let accu_snapshot = from_id(ModuleSnapshotId::random())?;
             accu_snapshot.capture(&from_id(self.ids[0])?)?;
             for i in 1..(snapshot_index + 1) {
                 let snapshot = from_id(self.ids[i])?;

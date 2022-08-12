@@ -9,11 +9,12 @@ use std::collections::BTreeMap;
 use dallo::ModuleId;
 
 use crate::error::Error;
-use crate::snapshot::{MemoryPath, SnapshotId};
+use crate::snapshot::{MemoryPath, ModuleSnapshotId};
 use crate::world::World;
 use rkyv::{Archive, Deserialize, Serialize};
 
-pub const WORLD_SNAPSHOT_ID_BYTES: usize = 32;
+pub const SNAPSHOT_ID_BYTES: usize = 32;
+/// Snapshot of the world encompassing states of all world's modules.
 #[derive(
     Debug,
     PartialEq,
@@ -27,44 +28,44 @@ pub const WORLD_SNAPSHOT_ID_BYTES: usize = 32;
     Clone,
     Copy,
 )]
-pub struct WorldSnapshotId([u8; WORLD_SNAPSHOT_ID_BYTES]);
-impl WorldSnapshotId {
+pub struct SnapshotId([u8; SNAPSHOT_ID_BYTES]);
+impl SnapshotId {
     pub const fn uninitialized() -> Self {
-        WorldSnapshotId([0u8; WORLD_SNAPSHOT_ID_BYTES])
+        SnapshotId([0u8; SNAPSHOT_ID_BYTES])
     }
     pub fn as_bytes(&self) -> &[u8] {
         &self.0
     }
-    pub fn add(&mut self, snapshot_id: &SnapshotId) {
+    pub fn add(&mut self, snapshot_id: &ModuleSnapshotId) {
         let p = snapshot_id.as_bytes().as_ptr();
         for (i, b) in self.0.iter_mut().enumerate() {
             *b ^= unsafe { *p.add(i) };
         }
     }
 }
-impl From<[u8; 32]> for WorldSnapshotId {
+impl From<[u8; 32]> for SnapshotId {
     fn from(array: [u8; 32]) -> Self {
-        WorldSnapshotId(array)
+        SnapshotId(array)
     }
 }
 
 #[derive(Debug)]
 pub struct WorldSnapshot {
-    id: WorldSnapshotId,
+    id: SnapshotId,
     snapshot_indices: BTreeMap<ModuleId, usize>,
 }
 
 impl WorldSnapshot {
     pub fn new() -> Self {
         Self {
-            id: WorldSnapshotId::uninitialized(),
+            id: SnapshotId::uninitialized(),
             snapshot_indices: BTreeMap::new(),
         }
     }
     pub fn add(&mut self, module_id: ModuleId, snapshot_index: usize) {
         self.snapshot_indices.insert(module_id, snapshot_index);
     }
-    pub fn finalize_id(&mut self, world_snapshot_id: WorldSnapshotId) {
+    pub fn finalize_id(&mut self, world_snapshot_id: SnapshotId) {
         self.id = world_snapshot_id
     }
     pub fn restore_snapshots(&self, world: &World) -> Result<(), Error> {

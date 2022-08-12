@@ -29,7 +29,7 @@ use crate::instance::Instance;
 use crate::memory::MemHandler;
 use crate::snapshot::{MemoryPath, Snapshot};
 use crate::storage_helpers::module_id_to_name;
-use crate::world_snapshot::{WorldSnapshot, WorldSnapshotId};
+use crate::world_snapshot::{SnapshotId, WorldSnapshot};
 use crate::Error::{PersistenceError, SnapshotError};
 
 #[derive(Debug)]
@@ -39,7 +39,7 @@ pub struct WorldInner {
     events: Vec<Event>,
     call_stack: CallStack,
     height: u64,
-    snapshots: BTreeMap<WorldSnapshotId, WorldSnapshot>,
+    snapshots: BTreeMap<SnapshotId, WorldSnapshot>,
 }
 
 impl Deref for WorldInner {
@@ -90,10 +90,10 @@ impl World {
         )))))
     }
 
-    pub fn persist(&self) -> Result<WorldSnapshotId, Error> {
+    pub fn persist(&self) -> Result<SnapshotId, Error> {
         let guard = self.0.lock();
         let w = unsafe { &mut *guard.get() };
-        let mut world_snapshot_id = WorldSnapshotId::uninitialized();
+        let mut world_snapshot_id = SnapshotId::uninitialized();
         let mut world_snapshot = WorldSnapshot::new();
         for (module_id, environment) in w.environments.iter() {
             let memory_path = MemoryPath::new(self.memory_path(module_id));
@@ -109,10 +109,7 @@ impl World {
         Ok(world_snapshot_id)
     }
 
-    pub fn restore(
-        &self,
-        world_snapshot_id: &WorldSnapshotId,
-    ) -> Result<(), Error> {
+    pub fn restore(&self, world_snapshot_id: &SnapshotId) -> Result<(), Error> {
         let guard = self.0.lock();
         let w = unsafe { &mut *guard.get() };
         let world_snapshot: &WorldSnapshot =

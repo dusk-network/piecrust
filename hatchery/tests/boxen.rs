@@ -5,7 +5,7 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 use dallo::ModuleId;
-use hatchery::{module_bytecode, Error, Receipt, World, WorldSnapshotId};
+use hatchery::{module_bytecode, Error, Receipt, SnapshotId, World};
 use std::path::PathBuf;
 
 #[test]
@@ -65,7 +65,7 @@ pub fn world_snapshot_persist_restore() -> Result<(), Error> {
         world: &mut World,
         id: ModuleId,
         arg: i16,
-    ) -> Result<WorldSnapshotId, Error> {
+    ) -> Result<SnapshotId, Error> {
         let _: Receipt<()> = world.transact(id, "set", arg)?;
         let value: Receipt<Option<i16>> = world.query(id, "get", ())?;
         assert_eq!(*value, Some(arg));
@@ -76,7 +76,7 @@ pub fn world_snapshot_persist_restore() -> Result<(), Error> {
     fn restore_snapshot(
         world: &mut World,
         id: ModuleId,
-        world_snapshot_id: &WorldSnapshotId,
+        world_snapshot_id: &SnapshotId,
         arg: i16,
     ) -> Result<(), Error> {
         world.restore(&world_snapshot_id)?;

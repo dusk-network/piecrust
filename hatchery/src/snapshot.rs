@@ -9,9 +9,9 @@ use crate::storage_helpers::{
     combine_module_snapshot_names, snapshot_id_to_name,
 };
 use crate::Error::PersistenceError;
+use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use qbsdiff::Bsdiff;
 use qbsdiff::Bspatch;
-use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use rand::Rng;
 use rkyv::{Archive, Deserialize, Serialize};
 use std::fs::OpenOptions;
@@ -20,7 +20,7 @@ use std::mem;
 use std::path::{Path, PathBuf};
 
 const COMPRESSION_LEVEL: i32 = 11;
-pub const SNAPSHOT_ID_BYTES: usize = 32;
+pub const MODULE_SNAPSHOT_ID_BYTES: usize = 32;
 #[derive(
     Debug,
     PartialEq,
@@ -34,18 +34,20 @@ pub const SNAPSHOT_ID_BYTES: usize = 32;
     Clone,
     Copy,
 )]
-pub struct SnapshotId([u8; SNAPSHOT_ID_BYTES]);
-impl SnapshotId {
+pub struct ModuleSnapshotId([u8; MODULE_SNAPSHOT_ID_BYTES]);
+impl ModuleSnapshotId {
     pub fn as_bytes(&self) -> &[u8] {
         &self.0
     }
-    pub fn random() -> SnapshotId {
-        SnapshotId(rand::thread_rng().gen::<[u8; SNAPSHOT_ID_BYTES]>())
+    pub fn random() -> ModuleSnapshotId {
+        ModuleSnapshotId(
+            rand::thread_rng().gen::<[u8; MODULE_SNAPSHOT_ID_BYTES]>(),
+        )
     }
 }
-impl From<[u8; 32]> for SnapshotId {
+impl From<[u8; 32]> for ModuleSnapshotId {
     fn from(array: [u8; 32]) -> Self {
-        SnapshotId(array)
+        ModuleSnapshotId(array)
     }
 }
 
@@ -83,12 +85,12 @@ impl SnapshotLike for MemoryPath {
 
 pub struct Snapshot {
     path: PathBuf,
-    id: SnapshotId,
+    id: ModuleSnapshotId,
 }
 
 impl Snapshot {
     pub fn new(memory_path: &MemoryPath) -> Result<Self, Error> {
-        let snapshot_id: SnapshotId = SnapshotId::from(
+        let snapshot_id: ModuleSnapshotId = ModuleSnapshotId::from(
             *blake3::hash(memory_path.read()?.as_slice()).as_bytes(),
         );
         Snapshot::from_id(snapshot_id, memory_path)
@@ -98,7 +100,7 @@ impl Snapshot {
     /// Memory path is only used as path pattern,
     /// no contents are captured.
     pub fn from_id(
-        snapshot_id: SnapshotId,
+        snapshot_id: ModuleSnapshotId,
         memory_path: &MemoryPath,
     ) -> Result<Self, Error> {
         let mut path = memory_path.path().to_owned();
@@ -145,13 +147,11 @@ impl Snapshot {
                 .compare(std::io::Cursor::new(&mut patch))?;
             Ok(patch)
         }
-        let delta = bsdiff(base_buffer.as_slice(), memory_buffer.as_slice()).map_err(PersistenceError)?;
+        let delta = bsdiff(base_buffer.as_slice(), memory_buffer.as_slice())
+            .map_err(PersistenceError)?;
         let compressed_delta =
             compressor.compress(&delta, COMPRESSION_LEVEL).unwrap();
-        self.write_compressed(
-            compressed_delta,
-            base_buffer.as_slice().len(),
-        )?;
+        self.write_compressed(compressed_delta, base_buffer.as_slice().len())?;
         Ok(())
     }
 
@@ -181,8 +181,7 @@ impl Snapshot {
         snapshot_to_patch: &Snapshot,
         result_snapshot: &dyn SnapshotLike,
     ) -> Result<(), Error> {
-        let (original_len, compressed) =
-            self.read_compressed()?;
+        let (original_len, compressed) = self.read_compressed()?;
         let mut decompressor = zstd::block::Decompressor::new();
         let patch_data = std::io::Cursor::new(
             decompressor
@@ -191,14 +190,16 @@ impl Snapshot {
         );
         fn bspatch(source: &[u8], patch: &[u8]) -> std::io::Result<Vec<u8>> {
             let patcher = Bspatch::new(patch)?;
-            let mut target = Vec::with_capacity(patcher.hint_target_size() as usize);
+            let mut target =
+                Vec::with_capacity(patcher.hint_target_size() as usize);
             patcher.apply(source, std::io::Cursor::new(&mut target))?;
             Ok(target)
         }
         let patched = bspatch(
             snapshot_to_patch.read()?.as_slice(),
             patch_data.into_inner().as_slice(),
-        ).map_err(PersistenceError)?;
+        )
+        .map_err(PersistenceError)?;
         let mut file = OpenOptions::new()
             .write(true)
             .create(true)
@@ -224,7 +225,7 @@ impl Snapshot {
         Ok((size as usize, data))
     }
 
-    pub fn id(&self) -> SnapshotId {
+    pub fn id(&self) -> ModuleSnapshotId {
         self.id
     }
 }
