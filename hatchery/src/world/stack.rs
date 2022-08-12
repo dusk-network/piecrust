@@ -37,16 +37,14 @@ impl CallStack {
         }
     }
 
-    /// Return the `caller` of the currently running contract, if it is not the
-    /// first call. Otherwise return `None`.
-    pub fn caller(&self) -> Option<ModuleId> {
+    /// Return the `caller` of the currently running contract, may be
+    /// uninitialized
+    pub fn caller(&self) -> ModuleId {
         let len = self.inner.len();
-
         if len > 1 {
-            let module_id = self.inner[len - 2].module_id;
-            return Some(module_id);
+            self.inner[len - 2].module_id
+        } else {
+            ModuleId::uninitialized()
         }
-
-        None
     }
 }

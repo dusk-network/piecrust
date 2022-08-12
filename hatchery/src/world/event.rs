@@ -29,6 +29,11 @@ impl<T> Receipt<T> {
     pub fn events(&self) -> &[Event] {
         &self.events
     }
+
+    /// Convert into result
+    pub fn into_inner(self) -> T {
+        self.ret
+    }
 }
 
 impl<T> Deref for Receipt<T> {

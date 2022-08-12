@@ -21,7 +21,7 @@ const ARGBUF_LEN: usize = 64;
 #[no_mangle]
 static mut A: [u64; ARGBUF_LEN / 8] = [0; ARGBUF_LEN / 8];
 #[no_mangle]
-static AL: i32 = ARGBUF_LEN as i32;
+static AL: u32 = ARGBUF_LEN as u32;
 
 #[no_mangle]
 static SELF_ID: ModuleId = ModuleId::uninitialized();
@@ -31,7 +31,6 @@ static mut STATE: State<Fibonacci> = State::new(Fibonacci, unsafe { &mut A });
 
 impl Fibonacci {
     fn nth(n: u32) -> u64 {
-        dallo::snap();
         match n {
             0 | 1 => 1,
             n => Self::nth(n - 1) + Self::nth(n - 2),
@@ -40,6 +39,6 @@ impl Fibonacci {
 }
 
 #[no_mangle]
-unsafe fn nth(a: i32) -> i32 {
-    dallo::wrap_query(STATE.buffer(), a, |n: u32| Fibonacci::nth(n))
+unsafe fn nth(arg_len: u32) -> u32 {
+    dallo::wrap_query(STATE.buffer(), arg_len, |n: u32| Fibonacci::nth(n))
 }

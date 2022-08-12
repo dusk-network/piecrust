@@ -16,9 +16,9 @@ use std::ops::{Deref, DerefMut};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use dallo::{ModuleId, Ser, MODULE_ID_BYTES};
+use dallo::{ModuleId, StandardBufSerializer, MODULE_ID_BYTES};
 use parking_lot::ReentrantMutex;
-use rkyv::{archived_value, Archive, Deserialize, Infallible, Serialize};
+use rkyv::{archived_root, Archive, Deserialize, Infallible, Serialize};
 use stack::CallStack;
 use tempfile::tempdir;
 use wasmer::{imports, Exports, Function, Val};
@@ -94,11 +94,6 @@ impl World {
             let snapshot = Snapshot::new(&memory_path)?;
             environment.inner_mut().set_snapshot_id(snapshot.id());
             snapshot.save(&memory_path)?;
-            println!(
-                "persisted state of module: {:?} to file: {:?}",
-                module_id_to_name(*module_id),
-                snapshot.path()
-            );
         }
         Ok(())
     }
@@ -167,8 +162,8 @@ impl World {
         let mem = instance.exports.get_memory("memory")?;
         let data =
             &unsafe { mem.data_unchecked() }[arg_buf_len_pos as usize..][..4];
-
-        let arg_buf_len: i32 = unsafe { archived_value::<i32>(data, 0) }
+        let slice = &data[..mem::size_of::<<u32 as Archive>::Archived>()];
+        let arg_buf_len: u32 = unsafe { archived_root::<u32>(slice) }
             .deserialize(&mut Infallible)
             .expect("infallible");
 
@@ -200,7 +195,7 @@ impl World {
         arg: Arg,
     ) -> Result<Receipt<Ret>, Error>
     where
-        Arg: for<'a> Serialize<Ser<'a>>,
+        Arg: for<'a> Serialize<StandardBufSerializer<'a>>,
         Ret: Archive,
         Ret::Archived: Deserialize<Ret, Infallible>,
     {
@@ -227,7 +222,7 @@ impl World {
         arg: Arg,
     ) -> Result<Receipt<Ret>, Error>
     where
-        Arg: for<'a> Serialize<Ser<'a>>,
+        Arg: for<'a> Serialize<StandardBufSerializer<'a>> + core::fmt::Debug,
         Ret: Archive,
         Ret::Archived: Deserialize<Ret, Infallible>,
     {
@@ -260,8 +255,8 @@ impl World {
         name: &str,
         caller: ModuleId,
         callee: ModuleId,
-        arg_ofs: i32,
-    ) -> Result<i32, Error> {
+        arg_len: u32,
+    ) -> Result<u32, Error> {
         let guard = self.0.lock();
         let w = unsafe { &mut *guard.get() };
 
@@ -279,7 +274,7 @@ impl World {
             })
         });
 
-        let ret_ofs = callee.perform_query(name, arg_ofs)?;
+        let ret_ofs = callee.perform_query(name, arg_len)?;
 
         callee.with_arg_buffer(|buf_callee| {
             caller.with_arg_buffer(|buf_caller| {
@@ -297,8 +292,8 @@ impl World {
         name: &str,
         caller: ModuleId,
         callee: ModuleId,
-        arg_ofs: i32,
-    ) -> Result<i32, Error> {
+        arg_len: u32,
+    ) -> Result<u32, Error> {
         let guard = self.0.lock();
         let w = unsafe { &mut *guard.get() };
 
@@ -314,7 +309,7 @@ impl World {
             })
         });
 
-        let ret_ofs = callee.perform_transaction(name, arg_ofs)?;
+        let ret_len = callee.perform_transaction(name, arg_len)?;
 
         callee.with_arg_buffer(|buf_callee| {
             caller.with_arg_buffer(|buf_caller| {
@@ -325,10 +320,10 @@ impl World {
 
         w.call_stack.pop();
 
-        Ok(ret_ofs)
+        Ok(ret_len)
     }
 
-    fn perform_height(&self, instance: &Instance) -> Result<i32, Error> {
+    fn perform_height(&self, instance: &Instance) -> Result<u32, Error> {
         let guard = self.0.lock();
         let w = unsafe { &*guard.get() };
 
@@ -342,11 +337,10 @@ impl World {
         w.events.push(Event::new(module_id, data));
     }
 
-    fn perform_caller(&self, instance: &Instance) -> Result<i32, Error> {
+    fn perform_caller(&self, instance: &Instance) -> Result<u32, Error> {
         let guard = self.0.lock();
         let w = unsafe { &*guard.get() };
-
-        let caller = w.call_stack.caller().unwrap_or(ModuleId::uninitialized());
+        let caller = w.call_stack.caller();
 
         instance.write_to_arg_buffer(caller)
     }
@@ -386,9 +380,9 @@ fn host_query(
     env: &Env,
     module_id_adr: i32,
     method_name_adr: i32,
-    method_name_len: i32,
-    arg_ofs: i32,
-) -> i32 {
+    method_name_len: u32,
+    arg_len: u32,
+) -> u32 {
     let module_id_adr = module_id_adr as usize;
     let method_name_adr = method_name_adr as usize;
     let method_name_len = method_name_len as usize;
@@ -410,7 +404,7 @@ fn host_query(
 
     instance
         .world()
-        .perform_query(&name, instance.id(), mod_id, arg_ofs)
+        .perform_query(&name, instance.id(), mod_id, arg_len)
         .expect("TODO: error handling")
 }
 
@@ -418,9 +412,9 @@ fn host_transact(
     env: &Env,
     module_id_adr: i32,
     method_name_adr: i32,
-    method_name_len: i32,
-    arg_ofs: i32,
-) -> i32 {
+    method_name_len: u32,
+    arg_len: u32,
+) -> u32 {
     let module_id_adr = module_id_adr as usize;
     let method_name_adr = method_name_adr as usize;
     let method_name_len = method_name_len as usize;
@@ -442,11 +436,11 @@ fn host_transact(
 
     instance
         .world()
-        .perform_transaction(&name, instance.id(), mod_id, arg_ofs)
+        .perform_transaction(&name, instance.id(), mod_id, arg_len)
         .expect("TODO: error handling")
 }
 
-fn host_height(env: &Env) -> i32 {
+fn host_height(env: &Env) -> u32 {
     let instance = env.inner();
     instance
         .world()
@@ -454,19 +448,18 @@ fn host_height(env: &Env) -> i32 {
         .expect("TODO: error handling")
 }
 
-fn host_emit(env: &Env, arg_ofs: i32, arg_len: i32) {
+fn host_emit(env: &Env, arg_len: u32) {
     let instance = env.inner();
     let module_id = instance.id();
 
-    let arg_ofs = arg_ofs as usize;
     let arg_len = arg_len as usize;
 
-    let data = instance.with_arg_buffer(|buf| buf[arg_ofs..arg_len].to_vec());
+    let data = instance.with_arg_buffer(|buf| buf[..arg_len].to_vec());
 
     instance.world().perform_emit(module_id, data);
 }
 
-fn host_caller(env: &Env) -> i32 {
+fn host_caller(env: &Env) -> u32 {
     let instance = env.inner();
     instance
         .world()

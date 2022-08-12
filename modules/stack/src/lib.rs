@@ -26,7 +26,7 @@ const ARGBUF_LEN: usize = 8;
 #[no_mangle]
 static mut A: [u64; ARGBUF_LEN / 8] = [0; ARGBUF_LEN / 8];
 #[no_mangle]
-static AL: i32 = ARGBUF_LEN as i32;
+static AL: u32 = ARGBUF_LEN as u32;
 
 #[no_mangle]
 static SELF_ID: ModuleId = ModuleId::uninitialized();
@@ -47,22 +47,24 @@ impl Stack {
         self.inner.pop()
     }
 
-    pub fn len(&self) -> i32 {
-        *Cardinality::from_child(&self.inner) as i32
+    pub fn len(&self) -> u32 {
+        *Cardinality::from_child(&self.inner) as u32
     }
 }
 
 #[no_mangle]
-unsafe fn push(a: i32) -> i32 {
-    dallo::wrap_transaction(STATE.buffer(), a, |elem: i32| STATE.push(elem))
+unsafe fn push(arg_len: u32) -> u32 {
+    dallo::wrap_transaction(STATE.buffer(), arg_len, |elem: i32| {
+        STATE.push(elem)
+    })
 }
 
 #[no_mangle]
-unsafe fn pop(a: i32) -> i32 {
-    dallo::wrap_transaction(STATE.buffer(), a, |_arg: ()| STATE.pop())
+unsafe fn pop(arg_len: u32) -> u32 {
+    dallo::wrap_transaction(STATE.buffer(), arg_len, |_arg: ()| STATE.pop())
 }
 
 #[no_mangle]
-unsafe fn len(a: i32) -> i32 {
-    dallo::wrap_query(STATE.buffer(), a, |_arg: ()| STATE.len())
+unsafe fn len(arg_len: u32) -> u32 {
+    dallo::wrap_query(STATE.buffer(), arg_len, |_arg: ()| STATE.len())
 }
