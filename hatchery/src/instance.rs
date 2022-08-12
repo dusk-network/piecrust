@@ -16,6 +16,9 @@ use rkyv::{
     Archive, Deserialize, Infallible, Serialize,
 };
 use wasmer::NativeFunc;
+use wasmer_middlewares::metering::{
+    get_remaining_points, set_remaining_points, MeteringPoints,
+};
 
 use crate::error::*;
 use crate::memory::MemHandler;
@@ -72,7 +75,8 @@ impl Instance {
     {
         let ret_len = {
             let arg_len = self.write_to_arg_buffer(arg)?;
-            self.perform_query(name, arg_len)?
+            self.perform_query(name, arg_len)
+                .map_err(|e| map_call_err(self, e))?
         };
 
         self.read_from_arg_buffer(ret_len)
@@ -99,8 +103,9 @@ impl Instance {
         Ret::Archived: Deserialize<Ret, Infallible>,
     {
         let ret_len = {
-            let arg_ofs = self.write_to_arg_buffer(arg)?;
-            self.perform_transaction(name, arg_ofs)?
+            let arg_len = self.write_to_arg_buffer(arg)?;
+            self.perform_transaction(name, arg_len)
+                .map_err(|e| map_call_err(self, e))?
         };
 
         self.read_from_arg_buffer(ret_len)
@@ -114,6 +119,17 @@ impl Instance {
         let fun: NativeFunc<u32, u32> =
             self.instance.exports.get_native_function(name)?;
         Ok(fun.call(arg_len)?)
+    }
+
+    pub(crate) fn remaining_points(&self) -> u64 {
+        match get_remaining_points(&self.instance) {
+            MeteringPoints::Remaining(r) => r,
+            MeteringPoints::Exhausted => 0,
+        }
+    }
+
+    pub(crate) fn set_remaining_points(&self, points: u64) {
+        set_remaining_points(&self.instance, points)
     }
 
     pub(crate) fn with_memory<F, R>(&self, f: F) -> R
@@ -263,5 +279,17 @@ impl Instance {
                 }
             }
         }
+    }
+}
+
+fn map_call_err(instance: &Instance, err: Error) -> Error {
+    match err {
+        e @ Error::RuntimeError(_) => {
+            match get_remaining_points(&instance.instance) {
+                MeteringPoints::Remaining(_) => e,
+                MeteringPoints::Exhausted => Error::OutOfPoints(instance.id),
+            }
+        }
+        e => e,
     }
 }

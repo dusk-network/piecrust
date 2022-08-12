@@ -6,6 +6,7 @@
 
 mod event;
 mod stack;
+mod store;
 
 pub use event::{Event, Receipt};
 
@@ -20,6 +21,7 @@ use dallo::{ModuleId, StandardBufSerializer, MODULE_ID_BYTES};
 use parking_lot::ReentrantMutex;
 use rkyv::{archived_root, Archive, Deserialize, Infallible, Serialize};
 use stack::CallStack;
+use store::new_store;
 use tempfile::tempdir;
 use wasmer::{imports, Exports, Function, Val};
 
@@ -31,6 +33,9 @@ use crate::snapshot::{MemoryPath, Snapshot, SnapshotLike};
 use crate::storage_helpers::module_id_to_name;
 use crate::Error::PersistenceError;
 
+const DEFAULT_POINT_LIMIT: u64 = 4096;
+const POINT_PASS_PERCENTAGE: u64 = 93;
+
 #[derive(Debug)]
 pub struct WorldInner {
     environments: BTreeMap<ModuleId, Env>,
@@ -38,6 +43,7 @@ pub struct WorldInner {
     events: Vec<Event>,
     call_stack: CallStack,
     height: u64,
+    limit: u64,
 }
 
 impl Deref for WorldInner {
@@ -68,6 +74,7 @@ impl World {
             events: vec![],
             call_stack: CallStack::default(),
             height: 0,
+            limit: DEFAULT_POINT_LIMIT,
         }))))
     }
 
@@ -82,6 +89,7 @@ impl World {
                 events: vec![],
                 call_stack: CallStack::default(),
                 height: 0,
+                limit: DEFAULT_POINT_LIMIT,
             },
         )))))
     }
@@ -120,23 +128,23 @@ impl World {
     pub fn deploy(&mut self, bytecode: &[u8]) -> Result<ModuleId, Error> {
         let id_bytes: [u8; MODULE_ID_BYTES] = blake3::hash(bytecode).into();
         let id = ModuleId::from(id_bytes);
-        let store = wasmer::Store::new_with_path(
+
+        let store = new_store(
             self.storage_path().join(module_id_to_name(id)).as_path(),
         );
         let module = wasmer::Module::new(&store, bytecode)?;
 
         let mut env = Env::uninitialized();
 
-        #[rustfmt::skip]
         let imports = imports! {
             "env" => {
                 "alloc" => Function::new_native_with_env(&store, env.clone(), host_alloc),
-		        "dealloc" => Function::new_native_with_env(&store, env.clone(), host_dealloc),
+                "dealloc" => Function::new_native_with_env(&store, env.clone(), host_dealloc),
 
                 "snap" => Function::new_native_with_env(&store, env.clone(), host_snapshot),
 
                 "q" => Function::new_native_with_env(&store, env.clone(), host_query),
-		        "t" => Function::new_native_with_env(&store, env.clone(), host_transact),
+                "t" => Function::new_native_with_env(&store, env.clone(), host_transact),
 
                 "height" => Function::new_native_with_env(&store, env.clone(), host_height),
                 "emit" => Function::new_native_with_env(&store, env.clone(), host_emit),
@@ -204,15 +212,15 @@ impl World {
 
         w.call_stack = CallStack::new(m_id);
 
-        let ret = w
-            .get(&m_id)
-            .expect("invalid module id")
-            .inner()
-            .query(name, arg)?;
+        let instance = w.get(&m_id).expect("invalid module id").inner();
+        instance.set_remaining_points(w.limit);
+
+        let ret = instance.query(name, arg)?;
+        let remaining = instance.remaining_points();
 
         let events = mem::take(&mut w.events);
 
-        Ok(Receipt::new(ret, events))
+        Ok(Receipt::new(ret, events, w.limit - remaining))
     }
 
     pub fn transact<Arg, Ret>(
@@ -231,15 +239,15 @@ impl World {
 
         w.call_stack = CallStack::new(m_id);
 
-        let ret = w
-            .get_mut(&m_id)
-            .expect("invalid module id")
-            .inner_mut()
-            .transact(name, arg)?;
+        let instance = w.get(&m_id).expect("invalid module id").inner_mut();
+        instance.set_remaining_points(w.limit);
+
+        let ret = instance.transact(name, arg)?;
+        let remaining = instance.remaining_points();
 
         let events = mem::take(&mut w.events);
 
-        Ok(Receipt::new(ret, events))
+        Ok(Receipt::new(ret, events, w.limit - remaining))
     }
 
     /// Set the height available to modules.
@@ -248,6 +256,14 @@ impl World {
         let w = unsafe { &mut *w.get() };
 
         w.height = height;
+    }
+
+    /// Set the point limit for the next call.
+    pub fn set_point_limit(&mut self, limit: u64) {
+        let w = self.0.lock();
+        let w = unsafe { &mut *w.get() };
+
+        w.limit = limit;
     }
 
     fn perform_query(
@@ -265,6 +281,11 @@ impl World {
         let caller = w.get(&caller).expect("oh no").inner();
         let callee = w.get(&callee).expect("no oh").inner();
 
+        let remaining = caller.remaining_points();
+        let limit = remaining * POINT_PASS_PERCENTAGE / 100;
+
+        callee.set_remaining_points(limit);
+
         let mut min_len = 0;
 
         caller.with_arg_buffer(|buf_caller| {
@@ -281,6 +302,9 @@ impl World {
                 buf_caller[..min_len].copy_from_slice(&buf_callee[..min_len]);
             })
         });
+
+        let callee_used = limit - callee.remaining_points();
+        caller.set_remaining_points(remaining - callee_used);
 
         w.call_stack.pop();
 
@@ -302,6 +326,11 @@ impl World {
         let caller = w.get(&caller).expect("oh no").inner();
         let callee = w.get(&callee).expect("no oh").inner();
 
+        let remaining = caller.remaining_points();
+        let limit = remaining * POINT_PASS_PERCENTAGE / 100;
+
+        callee.set_remaining_points(limit);
+
         caller.with_arg_buffer(|buf_caller| {
             callee.with_arg_buffer(|buf_callee| {
                 let min_len = std::cmp::min(buf_caller.len(), buf_callee.len());
@@ -317,6 +346,9 @@ impl World {
                 buf_caller[..min_len].copy_from_slice(&buf_callee[..min_len]);
             })
         });
+
+        let callee_used = limit - callee.remaining_points();
+        caller.set_remaining_points(remaining - callee_used);
 
         w.call_stack.pop();
 
