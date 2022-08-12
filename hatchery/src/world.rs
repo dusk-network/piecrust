@@ -17,9 +17,11 @@ use std::ops::{Deref, DerefMut};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use dallo::{ModuleId, StandardBufSerializer, MODULE_ID_BYTES};
+use dallo::{
+    ModuleId, StandardBufSerializer, StandardDeserialize, MODULE_ID_BYTES,
+};
 use parking_lot::ReentrantMutex;
-use rkyv::{archived_root, Archive, Deserialize, Infallible, Serialize};
+use rkyv::{check_archived_root, Archive, Deserialize, Infallible, Serialize};
 use stack::CallStack;
 use store::new_store;
 use tempfile::tempdir;
@@ -105,6 +107,7 @@ impl World {
         }
         Ok(())
     }
+
     pub fn restore(&self) -> Result<(), Error> {
         let guard = self.0.lock();
         let w = unsafe { &mut *guard.get() };
@@ -122,9 +125,11 @@ impl World {
         }
         Ok(())
     }
+
     pub fn memory_path(&self, module_id: &ModuleId) -> PathBuf {
         self.storage_path().join(module_id_to_name(*module_id))
     }
+
     pub fn deploy(&mut self, bytecode: &[u8]) -> Result<ModuleId, Error> {
         let id_bytes: [u8; MODULE_ID_BYTES] = blake3::hash(bytecode).into();
         let id = ModuleId::from(id_bytes);
@@ -171,7 +176,7 @@ impl World {
         let data =
             &unsafe { mem.data_unchecked() }[arg_buf_len_pos as usize..][..4];
         let slice = &data[..mem::size_of::<<u32 as Archive>::Archived>()];
-        let arg_buf_len: u32 = unsafe { archived_root::<u32>(slice) }
+        let arg_buf_len: u32 = check_archived_root::<u32>(slice)?
             .deserialize(&mut Infallible)
             .expect("infallible");
 
@@ -205,7 +210,7 @@ impl World {
     where
         Arg: for<'a> Serialize<StandardBufSerializer<'a>>,
         Ret: Archive,
-        Ret::Archived: Deserialize<Ret, Infallible>,
+        Ret::Archived: StandardDeserialize<Ret>,
     {
         let guard = self.0.lock();
         let w = unsafe { &mut *guard.get() };
@@ -232,7 +237,7 @@ impl World {
     where
         Arg: for<'a> Serialize<StandardBufSerializer<'a>> + core::fmt::Debug,
         Ret: Archive,
-        Ret::Archived: Deserialize<Ret, Infallible>,
+        Ret::Archived: StandardDeserialize<Ret>,
     {
         let w = self.0.lock();
         let w = unsafe { &mut *w.get() };

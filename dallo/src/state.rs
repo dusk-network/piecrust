@@ -6,7 +6,7 @@
 
 use core::cell::UnsafeCell;
 use rkyv::{
-    archived_root,
+    check_archived_root,
     ser::serializers::{BufferScratch, BufferSerializer, CompositeSerializer},
     ser::Serializer,
     Archive, Deserialize, Infallible, Serialize,
@@ -14,7 +14,7 @@ use rkyv::{
 
 use crate::{
     RawQuery, RawResult, RawTransaction, StandardBufSerializer,
-    SCRATCH_BUF_BYTES,
+    StandardDeserialize, SCRATCH_BUF_BYTES,
 };
 
 extern "C" {
@@ -98,7 +98,7 @@ impl<S> State<S> {
     where
         Arg: for<'a> Serialize<StandardBufSerializer<'a>>,
         Ret: Archive,
-        Ret::Archived: Deserialize<Ret, Infallible>,
+        Ret::Archived: StandardDeserialize<Ret>,
     {
         let arg_len = self.with_arg_buf(|buf| {
             let mut sbuf = [0u8; SCRATCH_BUF_BYTES];
@@ -115,7 +115,8 @@ impl<S> State<S> {
 
         self.with_arg_buf(|buf| {
             let slice = &buf[..ret_len as usize];
-            let ret = unsafe { archived_root::<Ret>(slice) };
+            let ret = check_archived_root::<Ret>(slice)
+                .expect("invalid return value");
             ret.deserialize(&mut Infallible).expect("Infallible")
         })
     }
@@ -159,7 +160,7 @@ impl<S> State<S> {
     where
         Arg: for<'a> Serialize<StandardBufSerializer<'a>>,
         Ret: Archive,
-        Ret::Archived: Deserialize<Ret, Infallible>,
+        Ret::Archived: StandardDeserialize<Ret>,
     {
         let arg_len = self.with_arg_buf(|buf| {
             let mut sbuf = [0u8; SCRATCH_BUF_BYTES];
@@ -176,7 +177,8 @@ impl<S> State<S> {
 
         self.with_arg_buf(|buf| {
             let slice = &buf[..ret_len as usize];
-            let ret = unsafe { archived_root::<Ret>(slice) };
+            let ret = check_archived_root::<Ret>(slice)
+                .expect("invalid return value");
             ret.deserialize(&mut Infallible).expect("Infallible")
         })
     }
@@ -186,7 +188,8 @@ impl<S> State<S> {
         self.with_arg_buf(|buf| {
             let ret_len = unsafe { height() };
 
-            let ret = unsafe { archived_root::<u64>(&buf[..ret_len as usize]) };
+            let ret = check_archived_root::<u64>(&buf[..ret_len as usize])
+                .expect("invalid height");
             ret.deserialize(&mut Infallible).expect("Infallible")
         })
     }
@@ -197,8 +200,8 @@ impl<S> State<S> {
     pub fn caller(&self) -> ModuleId {
         self.with_arg_buf(|buf| {
             let ret_len = unsafe { caller() };
-            let ret =
-                unsafe { archived_root::<ModuleId>(&buf[..ret_len as usize]) };
+            let ret = check_archived_root::<ModuleId>(&buf[..ret_len as usize])
+                .expect("invalid caller");
             ret.deserialize(&mut Infallible).expect("Infallible")
         })
     }

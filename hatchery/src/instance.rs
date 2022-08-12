@@ -7,10 +7,11 @@
 use colored::*;
 
 use dallo::{
-    ModuleId, StandardBufSerializer, MODULE_ID_BYTES, SCRATCH_BUF_BYTES,
+    ModuleId, StandardBufSerializer, StandardDeserialize, MODULE_ID_BYTES,
+    SCRATCH_BUF_BYTES,
 };
 use rkyv::{
-    archived_root,
+    check_archived_root,
     ser::serializers::{BufferScratch, BufferSerializer, CompositeSerializer},
     ser::Serializer,
     Archive, Deserialize, Infallible, Serialize,
@@ -71,7 +72,7 @@ impl Instance {
     where
         Arg: for<'a> Serialize<StandardBufSerializer<'a>>,
         Ret: Archive,
-        Ret::Archived: Deserialize<Ret, Infallible>,
+        Ret::Archived: StandardDeserialize<Ret>,
     {
         let ret_len = {
             let arg_len = self.write_to_arg_buffer(arg)?;
@@ -100,7 +101,7 @@ impl Instance {
     where
         Arg: for<'a> Serialize<StandardBufSerializer<'a>> + core::fmt::Debug,
         Ret: Archive,
-        Ret::Archived: Deserialize<Ret, Infallible>,
+        Ret::Archived: StandardDeserialize<Ret>,
     {
         let ret_len = {
             let arg_len = self.write_to_arg_buffer(arg)?;
@@ -192,14 +193,15 @@ impl Instance {
     fn read_from_arg_buffer<T>(&self, arg_len: u32) -> Result<T, Error>
     where
         T: Archive,
-        T::Archived: Deserialize<T, Infallible>,
+        T::Archived: StandardDeserialize<T>,
     {
         // TODO use bytecheck here
-        Ok(self.with_arg_buffer(|abuf| {
+        self.with_arg_buffer(|abuf| {
             let slice = &abuf[..arg_len as usize];
-            let ta: &T::Archived = unsafe { archived_root::<T>(slice) };
-            ta.deserialize(&mut Infallible).unwrap()
-        }))
+            let ta: &T::Archived = check_archived_root::<T>(slice)?;
+            let t = ta.deserialize(&mut Infallible).expect("Infallible");
+            Ok(t)
+        })
     }
 
     pub(crate) fn with_arg_buffer<F, R>(&self, f: F) -> R
