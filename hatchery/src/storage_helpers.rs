@@ -4,7 +4,7 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use crate::snapshot::SnapshotId;
+use crate::snapshot::ModuleSnapshotId;
 use dallo::ModuleId;
 
 pub fn combine_module_snapshot_names(
@@ -18,7 +18,7 @@ pub fn module_id_to_name(module_id: ModuleId) -> String {
     format!("{}", ByteArrayWrapper(module_id.as_bytes()))
 }
 
-pub fn snapshot_id_to_name(snapshot_id: SnapshotId) -> String {
+pub fn snapshot_id_to_name(snapshot_id: ModuleSnapshotId) -> String {
     format!("{}", ByteArrayWrapper(snapshot_id.as_bytes()))
 }
 

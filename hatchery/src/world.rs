@@ -27,9 +27,10 @@ use crate::env::Env;
 use crate::error::Error;
 use crate::instance::Instance;
 use crate::memory::MemHandler;
-use crate::snapshot::{MemoryPath, Snapshot, SnapshotLike};
+use crate::snapshot::{MemoryPath, Snapshot};
 use crate::storage_helpers::module_id_to_name;
-use crate::Error::PersistenceError;
+use crate::world_snapshot::{SnapshotId, WorldSnapshot};
+use crate::Error::{PersistenceError, SnapshotError};
 
 #[derive(Debug)]
 pub struct WorldInner {
@@ -38,6 +39,7 @@ pub struct WorldInner {
     events: Vec<Event>,
     call_stack: CallStack,
     height: u64,
+    snapshots: BTreeMap<SnapshotId, WorldSnapshot>,
 }
 
 impl Deref for WorldInner {
@@ -68,6 +70,7 @@ impl World {
             events: vec![],
             call_stack: CallStack::default(),
             height: 0,
+            snapshots: BTreeMap::new(),
         }))))
     }
 
@@ -82,40 +85,59 @@ impl World {
                 events: vec![],
                 call_stack: CallStack::default(),
                 height: 0,
+                snapshots: BTreeMap::new(),
             },
         )))))
     }
 
-    pub fn persist(&self) -> Result<(), Error> {
+    pub fn persist(&self) -> Result<SnapshotId, Error> {
         let guard = self.0.lock();
         let w = unsafe { &mut *guard.get() };
+        let mut world_snapshot_id = SnapshotId::uninitialized();
+        let mut world_snapshot = WorldSnapshot::new();
         for (module_id, environment) in w.environments.iter() {
             let memory_path = MemoryPath::new(self.memory_path(module_id));
             let snapshot = Snapshot::new(&memory_path)?;
-            environment.inner_mut().set_snapshot_id(snapshot.id());
-            snapshot.save(&memory_path)?;
+            let snapshot_bag = environment.inner_mut().snapshot_bag_mut();
+            world_snapshot_id.add(&snapshot.id());
+            let snapshot_index =
+                snapshot_bag.save_snapshot(&snapshot, &memory_path)?;
+            world_snapshot.add(*module_id, snapshot_index);
         }
-        Ok(())
+        world_snapshot.finalize_id(world_snapshot_id);
+        w.snapshots.insert(world_snapshot_id, world_snapshot);
+        Ok(world_snapshot_id)
     }
-    pub fn restore(&self) -> Result<(), Error> {
+    pub fn restore(&self, world_snapshot_id: &SnapshotId) -> Result<(), Error> {
         let guard = self.0.lock();
         let w = unsafe { &mut *guard.get() };
-        for (module_id, environment) in w.environments.iter() {
-            let memory_path = MemoryPath::new(self.memory_path(module_id));
-            if let Some(snapshot_id) = environment.inner().snapshot_id() {
-                let snapshot = Snapshot::from_id(*snapshot_id, &memory_path)?;
-                snapshot.load(&memory_path)?;
-                println!(
-                    "restored state of module: {:?} from file: {:?}",
-                    module_id_to_name(*module_id),
-                    snapshot.path()
-                );
-            }
-        }
+        let world_snapshot: &WorldSnapshot =
+            w.snapshots.get(world_snapshot_id).ok_or_else(|| {
+                SnapshotError(String::from("world snapshot id not found"))
+            })?;
+        world_snapshot.restore_snapshots(self)?;
         Ok(())
     }
     pub fn memory_path(&self, module_id: &ModuleId) -> PathBuf {
         self.storage_path().join(module_id_to_name(*module_id))
+    }
+    pub fn restore_snapshot_with_index(
+        &self,
+        module_id: &ModuleId,
+        snapshot_index: usize,
+        memory_path: &MemoryPath,
+    ) -> Result<(), Error> {
+        let guard = self.0.lock();
+        let w = unsafe { &mut *guard.get() };
+        let instance = w
+            .environments
+            .get(module_id)
+            .ok_or_else(|| SnapshotError(String::from("invalid module id")))?
+            .inner_mut();
+        instance
+            .snapshot_bag()
+            .restore_snapshot(snapshot_index, memory_path)?;
+        Ok(())
     }
     pub fn deploy(&mut self, bytecode: &[u8]) -> Result<ModuleId, Error> {
         let id_bytes: [u8; MODULE_ID_BYTES] = blake3::hash(bytecode).into();
