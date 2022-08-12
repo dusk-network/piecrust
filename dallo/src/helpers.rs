@@ -17,9 +17,9 @@ pub type StandardBufSerializer<'a> = CompositeSerializer<
     BufferScratch<&'a mut [u8; SCRATCH_BUF_BYTES]>,
 >;
 
-/// Wrap a query with its respcective (de)serializers.
+/// Wrap a query with its respective (de)serializers.
 ///
-/// Returns the length of result written to buffer.
+/// Returns the length of result written to the buffer.
 pub fn wrap_query<A, R, F>(buf: &mut [u8], arg_len: u32, f: F) -> u32
 where
     A: Archive,
@@ -41,9 +41,9 @@ where
     composite.pos() as u32
 }
 
-/// Wrap a transaction with its respcective (de)serializers.
+/// Wrap a transaction with its respective (de)serializers.
 ///
-/// Returns the length of result written to buffer.
+/// Returns the length of result written to the buffer.
 pub fn wrap_transaction<A, R, F>(buf: &mut [u8], arg_len: u32, f: F) -> u32
 where
     A: Archive,
