@@ -33,7 +33,7 @@ use crate::snapshot::{MemoryPath, Snapshot, SnapshotLike};
 use crate::storage_helpers::module_id_to_name;
 use crate::Error::PersistenceError;
 
-const DEFAULT_POINT_LIMIT: u64 = 1_000_000;
+const DEFAULT_POINT_LIMIT: u64 = 4096;
 const POINT_PASS_PERCENTAGE: u64 = 93;
 
 #[derive(Debug)]
