@@ -18,7 +18,7 @@ pub fn points_get_used() -> Result<(), Error> {
     let receipt_center: Receipt<i64> =
         world.query(center_id, "query_counter", counter_id)?;
 
-    assert!(receipt_counter.points_used() < receipt_center.points_used());
+    assert!(receipt_counter.spent() < receipt_center.spent());
 
     Ok(())
 }
@@ -65,7 +65,7 @@ pub fn limit_and_spent() -> Result<(), Error> {
     println!("spent after : {}\n", spent_after);
 
     println!("=== Actual cost  ===");
-    println!("actual cost : {}", receipt_spender.points_used());
+    println!("actual cost : {}", receipt_spender.spent());
 
     Ok(())
 }

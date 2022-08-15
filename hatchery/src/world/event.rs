@@ -13,16 +13,12 @@ use std::ops::Deref;
 pub struct Receipt<T> {
     ret: T,
     events: Vec<Event>,
-    points_used: u64,
+    spent: u64,
 }
 
 impl<T> Receipt<T> {
-    pub(crate) fn new(ret: T, events: Vec<Event>, points_used: u64) -> Self {
-        Self {
-            ret,
-            events,
-            points_used,
-        }
+    pub(crate) fn new(ret: T, events: Vec<Event>, spent: u64) -> Self {
+        Self { ret, events, spent }
     }
 
     /// Get the return of the query or transaction.
@@ -35,9 +31,9 @@ impl<T> Receipt<T> {
         &self.events
     }
 
-    /// Return the points used by the call.
-    pub fn points_used(&self) -> u64 {
-        self.points_used
+    /// Return the points spent by the call.
+    pub fn spent(&self) -> u64 {
+        self.spent
     }
 
     /// Convert into result
