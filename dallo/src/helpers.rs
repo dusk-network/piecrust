@@ -4,18 +4,14 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use crate::SCRATCH_BUF_BYTES;
-
+use crate::{StandardDeserialize, SCRATCH_BUF_BYTES};
 use rkyv::ser::serializers::{
     BufferScratch, BufferSerializer, CompositeSerializer,
 };
 use rkyv::ser::Serializer;
-use rkyv::{archived_root, Archive, Deserialize, Serialize};
+use rkyv::{check_archived_root, Archive, Deserialize, Serialize};
 
-pub type StandardBufSerializer<'a> = CompositeSerializer<
-    BufferSerializer<&'a mut [u8]>,
-    BufferScratch<&'a mut [u8; SCRATCH_BUF_BYTES]>,
->;
+use crate::types::StandardBufSerializer;
 
 /// Wrap a query with its respective (de)serializers.
 ///
@@ -23,12 +19,12 @@ pub type StandardBufSerializer<'a> = CompositeSerializer<
 pub fn wrap_query<A, R, F>(buf: &mut [u8], arg_len: u32, f: F) -> u32
 where
     A: Archive,
-    A::Archived: Deserialize<A, rkyv::Infallible>,
+    A::Archived: StandardDeserialize<A>,
     R: for<'a> Serialize<StandardBufSerializer<'a>>,
     F: Fn(A) -> R,
 {
     let slice = &buf[..arg_len as usize];
-    let aa: &A::Archived = unsafe { archived_root::<A>(slice) };
+    let aa: &A::Archived = check_archived_root::<A>(slice).unwrap();
     let a: A = aa.deserialize(&mut rkyv::Infallible).unwrap();
     let ret = f(a);
 
@@ -47,12 +43,12 @@ where
 pub fn wrap_transaction<A, R, F>(buf: &mut [u8], arg_len: u32, f: F) -> u32
 where
     A: Archive,
-    A::Archived: Deserialize<A, rkyv::Infallible>,
+    A::Archived: StandardDeserialize<A>,
     R: for<'a> Serialize<StandardBufSerializer<'a>>,
     F: FnOnce(A) -> R,
 {
     let slice = &buf[..arg_len as usize];
-    let aa: &A::Archived = unsafe { archived_root::<A>(slice) };
+    let aa: &A::Archived = check_archived_root::<A>(slice).unwrap();
     let a: A = aa.deserialize(&mut rkyv::Infallible).unwrap();
     let ret = f(a);
 
