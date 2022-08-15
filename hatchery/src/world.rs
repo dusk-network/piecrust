@@ -154,6 +154,7 @@ impl World {
                 "height" => Function::new_native_with_env(&store, env.clone(), host_height),
                 "emit" => Function::new_native_with_env(&store, env.clone(), host_emit),
                 "caller" => Function::new_native_with_env(&store, env.clone(), host_caller),
+                "spent" => Function::new_native_with_env(&store, env.clone(), host_spent),
             }
         };
 
@@ -205,7 +206,7 @@ impl World {
         let guard = self.0.lock();
         let w = unsafe { &mut *guard.get() };
 
-        w.call_stack = CallStack::new(m_id);
+        w.call_stack = CallStack::new(m_id, w.limit);
 
         let instance = w.get(&m_id).expect("invalid module id").inner();
         instance.set_remaining_points(w.limit);
@@ -232,7 +233,7 @@ impl World {
         let w = self.0.lock();
         let w = unsafe { &mut *w.get() };
 
-        w.call_stack = CallStack::new(m_id);
+        w.call_stack = CallStack::new(m_id, w.limit);
 
         let instance = w.get(&m_id).expect("invalid module id").inner_mut();
         instance.set_remaining_points(w.limit);
@@ -264,20 +265,22 @@ impl World {
     fn perform_query(
         &self,
         name: &str,
-        caller: ModuleId,
-        callee: ModuleId,
+        caller_id: ModuleId,
+        callee_id: ModuleId,
         arg_len: u32,
     ) -> Result<u32, Error> {
         let guard = self.0.lock();
         let w = unsafe { &mut *guard.get() };
 
-        w.call_stack.push(callee);
-
-        let caller = w.get(&caller).expect("oh no").inner();
-        let callee = w.get(&callee).expect("no oh").inner();
+        let caller = w.get(&caller_id).expect("oh no").inner();
 
         let remaining = caller.remaining_points();
         let limit = remaining * POINT_PASS_PERCENTAGE / 100;
+
+        w.call_stack.push(callee_id, limit);
+
+        let caller = w.get(&caller_id).expect("oh no").inner();
+        let callee = w.get(&callee_id).expect("no oh").inner();
 
         callee.set_remaining_points(limit);
 
@@ -309,20 +312,22 @@ impl World {
     fn perform_transaction(
         &self,
         name: &str,
-        caller: ModuleId,
-        callee: ModuleId,
+        caller_id: ModuleId,
+        callee_id: ModuleId,
         arg_len: u32,
     ) -> Result<u32, Error> {
         let guard = self.0.lock();
         let w = unsafe { &mut *guard.get() };
 
-        w.call_stack.push(callee);
-
-        let caller = w.get(&caller).expect("oh no").inner();
-        let callee = w.get(&callee).expect("no oh").inner();
+        let caller = w.get(&caller_id).expect("oh no").inner();
 
         let remaining = caller.remaining_points();
         let limit = remaining * POINT_PASS_PERCENTAGE / 100;
+
+        w.call_stack.push(callee_id, limit);
+
+        let caller = w.get(&caller_id).expect("oh no").inner();
+        let callee = w.get(&callee_id).expect("no oh").inner();
 
         callee.set_remaining_points(limit);
 
@@ -362,6 +367,16 @@ impl World {
         let w = unsafe { &mut *guard.get() };
 
         w.events.push(Event::new(module_id, data));
+    }
+
+    fn perform_spent(&self, instance: &Instance) -> Result<u32, Error> {
+        let guard = self.0.lock();
+        let w = unsafe { &*guard.get() };
+
+        let limit = w.call_stack.limit();
+        let remaining = instance.remaining_points();
+
+        instance.write_to_arg_buffer(limit - remaining)
     }
 
     fn perform_caller(&self, instance: &Instance) -> Result<u32, Error> {
@@ -484,6 +499,14 @@ fn host_emit(env: &Env, arg_len: u32) {
     let data = instance.with_arg_buffer(|buf| buf[..arg_len].to_vec());
 
     instance.world().perform_emit(module_id, data);
+}
+
+fn host_spent(env: &Env) -> u32 {
+    let instance = env.inner();
+    instance
+        .world()
+        .perform_spent(instance)
+        .expect("TODO: error handling")
 }
 
 fn host_caller(env: &Env) -> u32 {

@@ -9,6 +9,7 @@ use dallo::ModuleId;
 #[derive(Debug)]
 struct CallData {
     module_id: ModuleId,
+    limit: u64,
 }
 
 #[derive(Debug, Default)]
@@ -18,16 +19,16 @@ pub struct CallStack {
 
 impl CallStack {
     /// Create a new call stack, with the initiating call being made to
-    /// `module_id`.
-    pub fn new(module_id: ModuleId) -> Self {
+    /// `module_id` with the given `limit`.
+    pub fn new(module_id: ModuleId, limit: u64) -> Self {
         Self {
-            inner: vec![CallData { module_id }],
+            inner: vec![CallData { module_id, limit }],
         }
     }
 
     /// Push a call onto the call stack.
-    pub fn push(&mut self, module_id: ModuleId) {
-        self.inner.push(CallData { module_id })
+    pub fn push(&mut self, module_id: ModuleId, limit: u64) {
+        self.inner.push(CallData { module_id, limit })
     }
 
     /// Pop a call from the call stack.
@@ -46,5 +47,10 @@ impl CallStack {
         } else {
             ModuleId::uninitialized()
         }
+    }
+
+    /// Return the point limit given to the currently executing contract
+    pub fn limit(&self) -> u64 {
+        self.inner[self.inner.len() - 1].limit
     }
 }
