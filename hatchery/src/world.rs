@@ -154,6 +154,7 @@ impl World {
                 "height" => Function::new_native_with_env(&store, env.clone(), host_height),
                 "emit" => Function::new_native_with_env(&store, env.clone(), host_emit),
                 "caller" => Function::new_native_with_env(&store, env.clone(), host_caller),
+                "limit" => Function::new_native_with_env(&store, env.clone(), host_limit),
                 "spent" => Function::new_native_with_env(&store, env.clone(), host_spent),
             }
         };
@@ -369,6 +370,14 @@ impl World {
         w.events.push(Event::new(module_id, data));
     }
 
+    fn perform_limit(&self, instance: &Instance) -> Result<u32, Error> {
+        let guard = self.0.lock();
+        let w = unsafe { &*guard.get() };
+
+        let limit = w.call_stack.limit();
+        instance.write_to_arg_buffer(limit)
+    }
+
     fn perform_spent(&self, instance: &Instance) -> Result<u32, Error> {
         let guard = self.0.lock();
         let w = unsafe { &*guard.get() };
@@ -506,6 +515,14 @@ fn host_spent(env: &Env) -> u32 {
     instance
         .world()
         .perform_spent(instance)
+        .expect("TODO: error handling")
+}
+
+fn host_limit(env: &Env) -> u32 {
+    let instance = env.inner();
+    instance
+        .world()
+        .perform_limit(instance)
         .expect("TODO: error handling")
 }
 
