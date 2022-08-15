@@ -21,7 +21,7 @@ use dallo::{
     ModuleId, StandardBufSerializer, StandardDeserialize, MODULE_ID_BYTES,
 };
 use parking_lot::ReentrantMutex;
-use rkyv::{check_archived_root, Archive, Deserialize, Infallible, Serialize};
+use rkyv::{Archive, Serialize};
 use stack::CallStack;
 use store::new_store;
 use tempfile::tempdir;
@@ -160,7 +160,6 @@ impl World {
         let instance = wasmer::Instance::new(&module, &imports)?;
 
         let arg_buf_ofs = global_i32(&instance.exports, "A")?;
-        let arg_buf_len_pos = global_i32(&instance.exports, "AL")?;
 
         // TODO: We should check these buffers have the correct length.
         let self_id_ofs = global_i32(&instance.exports, "SELF_ID")?;
@@ -172,21 +171,12 @@ impl World {
 
         // We need to read the actual value of AL from the offset into memory
 
-        let mem = instance.exports.get_memory("memory")?;
-        let data =
-            &unsafe { mem.data_unchecked() }[arg_buf_len_pos as usize..][..4];
-        let slice = &data[..mem::size_of::<<u32 as Archive>::Archived>()];
-        let arg_buf_len: u32 = check_archived_root::<u32>(slice)?
-            .deserialize(&mut Infallible)
-            .expect("infallible");
-
         let instance = Instance::new(
             id,
             instance,
             self.clone(),
             MemHandler::new(heap_base as usize),
             arg_buf_ofs,
-            arg_buf_len,
             heap_base,
             self_id_ofs,
         );

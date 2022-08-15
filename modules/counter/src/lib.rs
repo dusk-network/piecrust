@@ -18,28 +18,21 @@ pub struct Counter {
 
 use dallo::{ModuleId, State};
 
-const ARGBUF_LEN: usize = 64;
-
-#[no_mangle]
-static mut A: [u64; ARGBUF_LEN / 8] = [0; ARGBUF_LEN / 8];
-#[no_mangle]
-static AL: u32 = ARGBUF_LEN as u32;
-
 #[no_mangle]
 static SELF_ID: ModuleId = ModuleId::uninitialized();
 
-static mut STATE: State<Counter> =
-    unsafe { State::new(Counter { value: 0xfc }, &mut A) };
+static mut STATE: State<Counter> = State::new(Counter { value: 0xfc });
 
 impl Counter {
     pub fn read_value(&self) -> i64 {
         self.value
     }
 
-    pub fn increment(self: &mut State<Counter>) {
+    pub fn increment(&mut self) {
         let value = self.value + 1;
 
-        self.emit(value);
+        // TODO, use dallo::emit() when available
+        dallo::emit(value);
         self.value = value;
     }
 
@@ -52,15 +45,15 @@ impl Counter {
 
 #[no_mangle]
 unsafe fn read_value(arg_len: u32) -> u32 {
-    dallo::wrap_query(STATE.buffer(), arg_len, |_: ()| STATE.read_value())
+    dallo::wrap_query(arg_len, |_: ()| STATE.read_value())
 }
 
 #[no_mangle]
 unsafe fn increment(arg_len: u32) -> u32 {
-    dallo::wrap_transaction(STATE.buffer(), arg_len, |_: ()| STATE.increment())
+    dallo::wrap_transaction(arg_len, |_: ()| STATE.increment())
 }
 
 #[no_mangle]
 unsafe fn mogrify(arg_len: u32) -> u32 {
-    dallo::wrap_transaction(STATE.buffer(), arg_len, |by| STATE.mogrify(by))
+    dallo::wrap_transaction(arg_len, |by| STATE.mogrify(by))
 }

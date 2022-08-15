@@ -33,7 +33,6 @@ pub struct Instance {
     world: World,
     mem_handler: MemHandler,
     arg_buf_ofs: i32,
-    arg_buf_len: u32,
     heap_base: i32,
     self_id_ofs: i32,
     snapshot_id: Option<SnapshotId>,
@@ -47,7 +46,6 @@ impl Instance {
         world: World,
         mem_handler: MemHandler,
         arg_buf_ofs: i32,
-        arg_buf_len: u32,
         heap_base: i32,
         self_id_ofs: i32,
     ) -> Self {
@@ -57,7 +55,6 @@ impl Instance {
             world,
             mem_handler,
             arg_buf_ofs,
-            arg_buf_len,
             heap_base,
             self_id_ofs,
             snapshot_id: None,
@@ -210,7 +207,7 @@ impl Instance {
     {
         self.with_memory_mut(|memory_bytes| {
             let a = self.arg_buf_ofs as usize;
-            let b = self.arg_buf_len as usize;
+            let b = dallo::ARGBUF_LEN;
             let begin = &mut memory_bytes[a..];
             let trimmed = &mut begin[..b];
             f(trimmed)
@@ -264,7 +261,7 @@ impl Instance {
                         }
 
                         let buf_start = self.arg_buf_ofs as usize;
-                        let buf_end = buf_start + self.arg_buf_len as usize;
+                        let buf_end = buf_start + dallo::ARGBUF_LEN as usize;
                         let heap_base = self.heap_base as usize;
 
                         if ofs + i >= buf_start && ofs + i < buf_end {
