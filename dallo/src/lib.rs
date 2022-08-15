@@ -14,7 +14,7 @@ mod snap;
 pub use snap::snap;
 
 mod state;
-pub use state::*;
+pub use state::{caller, emit, height, query, query_raw, State};
 
 mod helpers;
 pub use helpers::*;
@@ -27,6 +27,9 @@ pub use types::*;
 
 /// How many bytes to use for scratch space when serializing
 pub const SCRATCH_BUF_BYTES: usize = 64;
+
+/// The size of the argument buffer in bytes
+pub const ARGBUF_LEN: usize = 64 * 1024;
 
 #[cfg(not(feature = "std"))]
 mod handlers;

@@ -16,18 +16,11 @@ use dallo::{HostAlloc, ModuleId, State};
 #[global_allocator]
 static ALLOCATOR: HostAlloc = HostAlloc;
 
-const ARGBUF_LEN: usize = 64;
-
-#[no_mangle]
-static mut A: [u64; ARGBUF_LEN / 8] = [0; ARGBUF_LEN / 8];
-#[no_mangle]
-static AL: u32 = ARGBUF_LEN as u32;
-
 #[no_mangle]
 static SELF_ID: ModuleId = ModuleId::uninitialized();
 
 static mut STATE: State<SelfSnapshot> =
-    unsafe { State::new(SelfSnapshot { crossover: 7 }, &mut A) };
+    State::new(SelfSnapshot { crossover: 7 });
 
 pub struct SelfSnapshot {
     crossover: i32,
@@ -40,11 +33,6 @@ impl SelfSnapshot {
 
     pub fn set_crossover(&mut self, to: i32) -> i32 {
         let old_val = self.crossover;
-        // dallo::debug!(
-        //     "setting crossover from {:?} to {:?}",
-        //     self.crossover,
-        //     to
-        // );
         self.crossover = to;
         old_val
     }
@@ -64,7 +52,7 @@ impl SelfSnapshot {
         self.crossover
     }
 
-    pub fn update_and_panic(self: &mut State<Self>, new_value: i32) {
+    pub fn update_and_panic(&mut self, new_value: i32) {
         let old_value = self.crossover;
         let callee = dallo::self_id();
 
@@ -73,7 +61,7 @@ impl SelfSnapshot {
         // A: we live with inconsistencies and communicate them.
         // B: we update self, which then should be passed to the transaction
 
-        if self.query::<_, i32>(callee, "crossover", new_value) == old_value {
+        if dallo::query::<_, i32>(callee, "crossover", new_value) == old_value {
             panic!("OH NOES")
         }
     }
@@ -81,26 +69,20 @@ impl SelfSnapshot {
 
 #[no_mangle]
 unsafe fn crossover(arg_len: u32) -> u32 {
-    dallo::wrap_query(STATE.buffer(), arg_len, |_: ()| STATE.crossover())
+    dallo::wrap_query(arg_len, |_: ()| STATE.crossover())
 }
 
 #[no_mangle]
 unsafe fn set_crossover(arg_len: u32) -> u32 {
-    dallo::wrap_transaction(STATE.buffer(), arg_len, |arg: i32| {
-        STATE.set_crossover(arg)
-    })
+    dallo::wrap_transaction(arg_len, |arg: i32| STATE.set_crossover(arg))
 }
 
 #[no_mangle]
 unsafe fn self_call_test_a(arg_len: u32) -> u32 {
-    dallo::wrap_transaction(STATE.buffer(), arg_len, |arg: i32| {
-        STATE.self_call_test_a(arg)
-    })
+    dallo::wrap_transaction(arg_len, |arg: i32| STATE.self_call_test_a(arg))
 }
 
 #[no_mangle]
 unsafe fn self_call_test_b(arg_len: u32) -> u32 {
-    dallo::wrap_transaction(STATE.buffer(), arg_len, |_: ()| {
-        STATE.self_call_test_b()
-    })
+    dallo::wrap_transaction(arg_len, |_: ()| STATE.self_call_test_b())
 }

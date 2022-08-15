@@ -22,18 +22,10 @@ pub struct Boxen {
     b: i16,
 }
 
-const ARGBUF_LEN: usize = 8;
-
-#[no_mangle]
-static mut A: [u64; ARGBUF_LEN / 8] = [0; ARGBUF_LEN / 8];
-#[no_mangle]
-static AL: u32 = ARGBUF_LEN as u32;
-
 #[no_mangle]
 static SELF_ID: ModuleId = ModuleId::uninitialized();
 
-static mut STATE: State<Boxen> =
-    unsafe { State::new(Boxen { a: None, b: 0xbb }, &mut A) };
+static mut STATE: State<Boxen> = State::new(Boxen { a: None, b: 0xbb });
 
 impl Boxen {
     pub fn set(&mut self, x: i16) {
@@ -50,10 +42,10 @@ impl Boxen {
 
 #[no_mangle]
 unsafe fn set(arg_len: u32) -> u32 {
-    dallo::wrap_transaction(STATE.buffer(), arg_len, |to| STATE.set(to))
+    dallo::wrap_transaction(arg_len, |to| STATE.set(to))
 }
 
 #[no_mangle]
 unsafe fn get(arg_len: u32) -> u32 {
-    dallo::wrap_transaction(STATE.buffer(), arg_len, |_: ()| STATE.get())
+    dallo::wrap_transaction(arg_len, |_: ()| STATE.get())
 }

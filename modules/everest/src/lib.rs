@@ -16,25 +16,18 @@ pub struct Height;
 
 use dallo::{ModuleId, State};
 
-const ARGBUF_LEN: usize = 64;
-
-#[no_mangle]
-static mut A: [u64; ARGBUF_LEN / 8] = [0; ARGBUF_LEN / 8];
-#[no_mangle]
-static AL: u32 = ARGBUF_LEN as u32;
-
 #[no_mangle]
 static SELF_ID: ModuleId = ModuleId::uninitialized();
 
-static mut STATE: State<Height> = unsafe { State::new(Height, &mut A) };
+static mut STATE: State<Height> = State::new(Height);
 
 impl Height {
-    pub fn get_height(self: &State<Height>) -> u64 {
-        self.height()
+    pub fn get_height(&self) -> u64 {
+        dallo::height()
     }
 }
 
 #[no_mangle]
 unsafe fn get_height(a: u32) -> u32 {
-    dallo::wrap_query(STATE.buffer(), a, |_: ()| STATE.get_height())
+    dallo::wrap_query(a, |_: ()| STATE.get_height())
 }

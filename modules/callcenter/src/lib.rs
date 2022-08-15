@@ -19,34 +19,27 @@ static ALLOCATOR: HostAlloc = HostAlloc;
 #[derive(Default)]
 pub struct Callcenter;
 
-const ARGBUF_LEN: usize = 2048;
-
-#[no_mangle]
-static mut A: [u64; ARGBUF_LEN / 8] = [0; ARGBUF_LEN / 8];
-#[no_mangle]
-static AL: u32 = ARGBUF_LEN as u32;
-
 #[no_mangle]
 static SELF_ID: ModuleId = ModuleId::uninitialized();
 
-static mut STATE: State<Callcenter> = unsafe { State::new(Callcenter, &mut A) };
+static mut STATE: State<Callcenter> = State::new(Callcenter);
 
 impl Callcenter {
-    pub fn query_counter(self: &State<Self>, counter_id: ModuleId) -> i64 {
-        self.query(counter_id, "read_value", ())
+    pub fn query_counter(&self, counter_id: ModuleId) -> i64 {
+        dallo::query(counter_id, "read_value", ())
     }
 
     pub fn increment_counter(self: &mut State<Self>, counter_id: ModuleId) {
-        self.emit(counter_id);
+        dallo::emit(counter_id);
         self.transact(counter_id, "increment", ())
     }
 
     pub fn delegate_query(
-        self: &mut State<Self>,
+        &self,
         module_id: ModuleId,
         raw: RawQuery,
     ) -> RawResult {
-        self.query_raw(module_id, raw)
+        dallo::query_raw(module_id, raw)
     }
 
     pub fn query_passthrough(&mut self, raw: RawQuery) -> RawQuery {
@@ -61,16 +54,16 @@ impl Callcenter {
         self.transact_raw(module_id, raw)
     }
 
-    pub fn calling_self(&mut self, id: ModuleId) -> bool {
+    pub fn calling_self(&self, id: ModuleId) -> bool {
         dallo::self_id() == id
     }
 
-    pub fn call_self(self: &mut State<Self>) -> bool {
+    pub fn call_self(&self) -> bool {
         let self_id = dallo::self_id();
-        let caller = self.caller();
+        let caller = dallo::caller();
 
-        match self.caller().is_uninitialized() {
-            true => self.query(self_id, "call_self", ()),
+        match caller.is_uninitialized() {
+            true => dallo::query(self_id, "call_self", ()),
             false => caller == self_id,
         }
     }
@@ -78,53 +71,39 @@ impl Callcenter {
 
 #[no_mangle]
 unsafe fn query_counter(arg_len: u32) -> u32 {
-    wrap_query(STATE.buffer(), arg_len, |counter_id| {
-        STATE.query_counter(counter_id)
-    })
+    wrap_query(arg_len, |counter_id| STATE.query_counter(counter_id))
 }
 
 #[no_mangle]
 unsafe fn increment_counter(arg_len: u32) -> u32 {
-    wrap_transaction(STATE.buffer(), arg_len, |counter_id| {
-        STATE.increment_counter(counter_id)
-    })
+    wrap_transaction(arg_len, |counter_id| STATE.increment_counter(counter_id))
 }
 
 #[no_mangle]
 unsafe fn calling_self(arg_len: u32) -> u32 {
-    wrap_query(STATE.buffer(), arg_len, |self_id| {
-        STATE.calling_self(self_id)
-    })
+    wrap_query(arg_len, |self_id| STATE.calling_self(self_id))
 }
 
 #[no_mangle]
 unsafe fn call_self(arg_len: u32) -> u32 {
-    wrap_query(STATE.buffer(), arg_len, |_: ()| STATE.call_self())
+    wrap_query(arg_len, |_: ()| STATE.call_self())
 }
 
 #[no_mangle]
 unsafe fn delegate_query(arg_len: u32) -> u32 {
-    wrap_query(
-        STATE.buffer(),
-        arg_len,
-        |(mod_id, rq): (ModuleId, RawQuery)| STATE.delegate_query(mod_id, rq),
-    )
-}
-
-#[no_mangle]
-unsafe fn query_passthrough(arg_len: u32) -> u32 {
-    wrap_query(STATE.buffer(), arg_len, |rq: RawQuery| {
-        STATE.query_passthrough(rq)
+    wrap_query(arg_len, |(mod_id, rq): (ModuleId, RawQuery)| {
+        STATE.delegate_query(mod_id, rq)
     })
 }
 
 #[no_mangle]
+unsafe fn query_passthrough(arg_len: u32) -> u32 {
+    wrap_query(arg_len, |rq: RawQuery| STATE.query_passthrough(rq))
+}
+
+#[no_mangle]
 unsafe fn delegate_transaction(arg_len: u32) -> u32 {
-    wrap_query(
-        STATE.buffer(),
-        arg_len,
-        |(mod_id, rt): (ModuleId, RawTransaction)| {
-            STATE.delegate_transaction(mod_id, rt)
-        },
-    )
+    wrap_query(arg_len, |(mod_id, rt): (ModuleId, RawTransaction)| {
+        STATE.delegate_transaction(mod_id, rt)
+    })
 }
