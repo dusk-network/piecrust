@@ -8,5 +8,6 @@ members = [
     "everest",
     "fibonacci",
     "stack",
+    "spender",
     "vector",
 ]
