@@ -57,6 +57,7 @@ mod ext {
         pub(crate) fn height() -> u32;
         pub(crate) fn caller() -> u32;
         pub(crate) fn emit(arg_len: u32);
+        pub(crate) fn limit() -> u32;
         pub(crate) fn spent() -> u32;
     }
 }
@@ -180,6 +181,15 @@ where
 
         unsafe { ext::emit(arg_len) }
     });
+}
+
+pub fn limit() -> u64 {
+    with_arg_buf(|buf| {
+        let ret_len = unsafe { ext::limit() };
+
+        let ret = check_archived_root::<u64>(&buf[..ret_len as usize]).unwrap();
+        ret.deserialize(&mut Infallible).expect("Infallible")
+    })
 }
 
 pub fn spent() -> u64 {
