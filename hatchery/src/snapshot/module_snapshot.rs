@@ -5,16 +5,15 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 use crate::error::Error;
+use crate::snapshot::diff_data::DiffData;
 use crate::storage_helpers::ByteArrayWrapper;
 use crate::Error::PersistenceError;
-use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use qbsdiff::Bsdiff;
 use qbsdiff::Bspatch;
 use rand::Rng;
 use rkyv::{Archive, Deserialize, Serialize};
 use std::fs::OpenOptions;
 use std::io::{Read, Write};
-use std::mem;
 use std::path::{Path, PathBuf};
 
 const COMPRESSION_LEVEL: i32 = 11;
@@ -165,28 +164,11 @@ impl ModuleSnapshot {
         }
         let delta = bsdiff(base_buffer.as_slice(), memory_buffer.as_slice())
             .map_err(PersistenceError)?;
-        let compressed_delta =
-            compressor.compress(&delta, COMPRESSION_LEVEL).unwrap();
-        self.write_compressed(compressed_delta, base_buffer.as_slice().len())?;
-        Ok(())
-    }
-
-    /// Writes uncompressed size, original length and data to file
-    /// associated with 'this' module snapshot.
-    fn write_compressed(
-        &self,
-        data: Vec<u8>,
-        original_len: usize,
-    ) -> Result<(), Error> {
-        let mut file = OpenOptions::new()
-            .write(true)
-            .create(true)
-            .truncate(true)
-            .open(self.path())
-            .map_err(PersistenceError)?;
-        file.write_u32::<LittleEndian>(original_len as u32)
-            .map_err(PersistenceError)?;
-        file.write_all(data.as_slice()).map_err(PersistenceError)?;
+        let diff_data = DiffData::new(
+            base_buffer.as_slice().len(),
+            compressor.compress(&delta, COMPRESSION_LEVEL).unwrap(),
+        );
+        diff_data.write(self.path())?;
         Ok(())
     }
 
@@ -197,11 +179,11 @@ impl ModuleSnapshot {
         snapshot_to_patch: &ModuleSnapshot,
         result_snapshot: &dyn ModuleSnapshotLike,
     ) -> Result<(), Error> {
-        let (original_len, compressed) = self.read_compressed()?;
+        let diff_data = DiffData::read(self.path())?;
         let mut decompressor = zstd::block::Decompressor::new();
         let patch_data = std::io::Cursor::new(
             decompressor
-                .decompress(compressed.as_slice(), original_len)
+                .decompress(diff_data.data(), diff_data.original_len())
                 .map_err(PersistenceError)?,
         );
         fn bspatch(source: &[u8], patch: &[u8]) -> std::io::Result<Vec<u8>> {
@@ -225,20 +207,6 @@ impl ModuleSnapshot {
         file.write_all(patched.as_slice())
             .map_err(PersistenceError)?;
         Ok(())
-    }
-
-    /// Reads uncompressed size, original length and data from file
-    /// associated with 'this' module snapshot.
-    fn read_compressed(&self) -> Result<(usize, Vec<u8>), Error> {
-        let mut file = std::fs::File::open(self.path().as_path())
-            .map_err(PersistenceError)?;
-        let metadata = std::fs::metadata(self.path().as_path())
-            .map_err(PersistenceError)?;
-        const SIZES_LEN: usize = mem::size_of::<u32>() as usize;
-        let mut data = vec![0; metadata.len() as usize - SIZES_LEN];
-        let size = file.read_u32::<LittleEndian>().map_err(PersistenceError)?;
-        file.read(data.as_mut_slice()).map_err(PersistenceError)?;
-        Ok((size as usize, data))
     }
 
     pub fn id(&self) -> ModuleSnapshotId {

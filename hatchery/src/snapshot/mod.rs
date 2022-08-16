@@ -4,6 +4,7 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
+mod diff_data;
 mod module_snapshot;
 mod module_snapshot_bag;
 
