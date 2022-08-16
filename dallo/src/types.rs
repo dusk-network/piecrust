@@ -5,9 +5,32 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 use rkyv::{
-    ser::serializers::AllocSerializer, ser::Serializer, Archive, Deserialize,
-    Infallible, Serialize,
+    ser::serializers::{
+        AllocSerializer, BufferScratch, BufferSerializer, CompositeSerializer,
+    },
+    ser::Serializer,
+    validation::validators::DefaultValidator,
+    Archive, Deserialize, Infallible, Serialize,
 };
+
+use bytecheck::CheckBytes;
+
+use crate::SCRATCH_BUF_BYTES;
+
+pub type StandardBufSerializer<'a> = CompositeSerializer<
+    BufferSerializer<&'a mut [u8]>,
+    BufferScratch<&'a mut [u8; SCRATCH_BUF_BYTES]>,
+>;
+
+pub trait StandardDeserialize<T>:
+    Deserialize<T, Infallible> + for<'a> CheckBytes<DefaultValidator<'a>>
+{
+}
+
+impl<T, U> StandardDeserialize<T> for U where
+    U: Deserialize<T, Infallible> + for<'a> CheckBytes<DefaultValidator<'a>>
+{
+}
 
 pub const MODULE_ID_BYTES: usize = 32;
 
@@ -23,6 +46,7 @@ pub const MODULE_ID_BYTES: usize = 32;
     Clone,
     Copy,
 )]
+#[archive_attr(derive(CheckBytes))]
 #[repr(C)]
 pub struct ModuleId([u8; MODULE_ID_BYTES]);
 
@@ -53,6 +77,7 @@ impl From<[u8; 32]> for ModuleId {
         ModuleId(array)
     }
 }
+
 impl core::fmt::Debug for ModuleId {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         if f.alternate() {
@@ -66,6 +91,7 @@ impl core::fmt::Debug for ModuleId {
 }
 
 #[derive(Archive, Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
+#[archive_attr(derive(CheckBytes))]
 pub struct RawQuery {
     arg_len: u32,
     data: alloc::vec::Vec<u8>,
@@ -103,6 +129,7 @@ impl RawQuery {
 }
 
 #[derive(Archive, Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
+#[archive_attr(derive(CheckBytes))]
 pub struct RawTransaction {
     arg_len: u32,
     // TODO: use AlignedVec
@@ -139,6 +166,7 @@ impl RawTransaction {
 }
 
 #[derive(Archive, Serialize, Deserialize)]
+#[archive_attr(derive(CheckBytes))]
 pub struct RawResult {
     data: alloc::vec::Vec<u8>,
 }

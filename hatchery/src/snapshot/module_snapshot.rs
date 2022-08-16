@@ -5,9 +5,7 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 use crate::error::Error;
-use crate::storage_helpers::{
-    combine_module_snapshot_names, snapshot_id_to_name,
-};
+use crate::storage_helpers::ByteArrayWrapper;
 use crate::Error::PersistenceError;
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use qbsdiff::Bsdiff;
@@ -51,9 +49,9 @@ impl From<[u8; 32]> for ModuleSnapshotId {
     }
 }
 
-pub trait SnapshotLike {
+pub trait ModuleSnapshotLike {
     fn path(&self) -> &PathBuf;
-    /// Read's snapshot's content into buffer
+    /// Read's module snapshot's content into buffer
     fn read(&self) -> Result<Vec<u8>, Error> {
         let mut f = std::fs::File::open(self.path().as_path())
             .map_err(PersistenceError)?;
@@ -77,30 +75,41 @@ impl MemoryPath {
     }
 }
 
-impl SnapshotLike for MemoryPath {
+impl ModuleSnapshotLike for MemoryPath {
     fn path(&self) -> &PathBuf {
         &self.path
     }
 }
 
-pub struct Snapshot {
+fn combine_module_snapshot_names(
+    module_name: impl AsRef<str>,
+    snapshot_name: impl AsRef<str>,
+) -> String {
+    format!("{}_{}", module_name.as_ref(), snapshot_name.as_ref())
+}
+
+fn module_snapshot_id_to_name(module_snapshot_id: ModuleSnapshotId) -> String {
+    format!("{}", ByteArrayWrapper(module_snapshot_id.as_bytes()))
+}
+
+pub struct ModuleSnapshot {
     path: PathBuf,
     id: ModuleSnapshotId,
 }
 
-impl Snapshot {
-    pub fn new(memory_path: &MemoryPath) -> Result<Self, Error> {
-        let snapshot_id: ModuleSnapshotId = ModuleSnapshotId::from(
+impl ModuleSnapshot {
+    pub(crate) fn new(memory_path: &MemoryPath) -> Result<Self, Error> {
+        let module_snapshot_id: ModuleSnapshotId = ModuleSnapshotId::from(
             *blake3::hash(memory_path.read()?.as_slice()).as_bytes(),
         );
-        Snapshot::from_id(snapshot_id, memory_path)
+        ModuleSnapshot::from_id(module_snapshot_id, memory_path)
     }
 
-    /// Creates snapshot with a given snapshot id.
+    /// Creates module snapshot with a given module snapshot id.
     /// Memory path is only used as path pattern,
     /// no contents are captured.
-    pub fn from_id(
-        snapshot_id: ModuleSnapshotId,
+    pub(crate) fn from_id(
+        module_snapshot_id: ModuleSnapshotId,
         memory_path: &MemoryPath,
     ) -> Result<Self, Error> {
         let mut path = memory_path.path().to_owned();
@@ -109,33 +118,40 @@ impl Snapshot {
                 .expect("filename exists")
                 .to_str()
                 .expect("filename is UTF8"),
-            snapshot_id_to_name(snapshot_id),
+            module_snapshot_id_to_name(module_snapshot_id),
         ));
-        Ok(Snapshot {
+        Ok(ModuleSnapshot {
             path,
-            id: snapshot_id,
+            id: module_snapshot_id,
         })
     }
 
-    /// Captures contents of a given snapshot into 'this' snapshot.
-    pub fn capture(&self, snapshot: &dyn SnapshotLike) -> Result<(), Error> {
+    /// Captures contents of a given module snapshot into 'this' module
+    /// snapshot.
+    pub(crate) fn capture(
+        &self,
+        snapshot: &dyn ModuleSnapshotLike,
+    ) -> Result<(), Error> {
         std::fs::copy(snapshot.path(), self.path().as_path())
             .map_err(PersistenceError)?;
         Ok(())
     }
 
-    /// Restores contents of 'this' snapshot into current memory.
-    pub fn restore(&self, memory_path: &MemoryPath) -> Result<(), Error> {
+    /// Restores contents of 'this' module snapshot into current memory.
+    pub(crate) fn restore(
+        &self,
+        memory_path: &MemoryPath,
+    ) -> Result<(), Error> {
         std::fs::copy(self.path().as_path(), memory_path.path())
             .map_err(PersistenceError)?;
         Ok(())
     }
 
-    /// Captured the difference of memory path and the given base snapshot
-    /// into 'this' snapshot.
-    pub fn capture_diff(
+    /// Captured the difference of memory path and the given base module
+    /// snapshot into 'this' module snapshot.
+    pub(crate) fn capture_diff(
         &self,
-        base_snapshot: &Snapshot,
+        base_snapshot: &ModuleSnapshot,
         memory_path: &MemoryPath,
     ) -> Result<(), Error> {
         let mut compressor = zstd::block::Compressor::new();
@@ -154,8 +170,9 @@ impl Snapshot {
         self.write_compressed(compressed_delta, base_buffer.as_slice().len())?;
         Ok(())
     }
+
     /// Writes uncompressed size, original length and data to file
-    /// associated with 'this' snapshot.
+    /// associated with 'this' module snapshot.
     fn write_compressed(
         &self,
         data: Vec<u8>,
@@ -172,12 +189,13 @@ impl Snapshot {
         file.write_all(data.as_slice()).map_err(PersistenceError)?;
         Ok(())
     }
-    /// Decompresses 'this' snapshot as patch and patches a given snapshot.
-    /// Result is written to a result snapshot.
-    pub fn decompress_and_patch(
+
+    /// Decompresses 'this' module snapshot as patch and patches a given module
+    /// snapshot. Result is written to a result module snapshot.
+    pub(crate) fn decompress_and_patch(
         &self,
-        snapshot_to_patch: &Snapshot,
-        result_snapshot: &dyn SnapshotLike,
+        snapshot_to_patch: &ModuleSnapshot,
+        result_snapshot: &dyn ModuleSnapshotLike,
     ) -> Result<(), Error> {
         let (original_len, compressed) = self.read_compressed()?;
         let mut decompressor = zstd::block::Decompressor::new();
@@ -208,8 +226,9 @@ impl Snapshot {
             .map_err(PersistenceError)?;
         Ok(())
     }
+
     /// Reads uncompressed size, original length and data from file
-    /// associated with 'this' snapshot.
+    /// associated with 'this' module snapshot.
     fn read_compressed(&self) -> Result<(usize, Vec<u8>), Error> {
         let mut file = std::fs::File::open(self.path().as_path())
             .map_err(PersistenceError)?;
@@ -221,12 +240,13 @@ impl Snapshot {
         file.read(data.as_mut_slice()).map_err(PersistenceError)?;
         Ok((size as usize, data))
     }
+
     pub fn id(&self) -> ModuleSnapshotId {
         self.id
     }
 }
 
-impl SnapshotLike for Snapshot {
+impl ModuleSnapshotLike for ModuleSnapshot {
     fn path(&self) -> &PathBuf {
         &self.path
     }

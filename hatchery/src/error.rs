@@ -4,10 +4,10 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
+use dallo::ModuleId;
 use rkyv::ser::serializers::{
     BufferSerializerError, CompositeSerializerError, FixedSizeScratchError,
 };
-use std::io;
 
 pub type Compo = CompositeSerializerError<
     BufferSerializerError,
@@ -24,7 +24,9 @@ pub enum Error {
     Trap(wasmer_vm::Trap),
     MissingModuleExport,
     CompositeSerializerError(Compo),
-    PersistenceError(io::Error),
+    OutOfPoints(ModuleId),
+    PersistenceError(std::io::Error),
+    ValidationError,
     SnapshotError(String),
 }
 
@@ -61,5 +63,11 @@ impl From<Compo> for Error {
 impl From<wasmer_vm::Trap> for Error {
     fn from(e: wasmer_vm::Trap) -> Self {
         Error::Trap(e)
+    }
+}
+
+impl<A, B> From<rkyv::validation::CheckArchiveError<A, B>> for Error {
+    fn from(_e: rkyv::validation::CheckArchiveError<A, B>) -> Self {
+        Error::ValidationError
     }
 }

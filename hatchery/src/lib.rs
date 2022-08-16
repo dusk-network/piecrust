@@ -15,6 +15,7 @@ mod world;
 mod world_snapshot;
 
 pub use error::Error;
+pub use snapshot::SnapshotId;
 pub use world::{Event, Receipt, World};
 pub use world_snapshot::SnapshotId;
 

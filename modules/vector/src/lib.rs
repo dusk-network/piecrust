@@ -19,18 +19,10 @@ pub struct Vector {
     a: Vec<i16>,
 }
 
-const ARGBUF_LEN: usize = 8;
-
-#[no_mangle]
-static mut A: [u64; ARGBUF_LEN / 8] = [0; ARGBUF_LEN / 8];
-#[no_mangle]
-static AL: u32 = ARGBUF_LEN as u32;
-
 #[no_mangle]
 static SELF_ID: ModuleId = ModuleId::uninitialized();
 
-static mut STATE: State<Vector> =
-    unsafe { State::new(Vector { a: Vec::new() }, &mut A) };
+static mut STATE: State<Vector> = State::new(Vector { a: Vec::new() });
 
 impl Vector {
     pub fn push(&mut self, x: i16) {
@@ -44,10 +36,10 @@ impl Vector {
 
 #[no_mangle]
 unsafe fn push(arg_len: u32) -> u32 {
-    dallo::wrap_transaction(STATE.buffer(), arg_len, |arg| STATE.push(arg))
+    dallo::wrap_transaction(arg_len, |arg| STATE.push(arg))
 }
 
 #[no_mangle]
 unsafe fn pop(arg_len: u32) -> u32 {
-    dallo::wrap_transaction(STATE.buffer(), arg_len, |_arg: ()| STATE.pop())
+    dallo::wrap_transaction(arg_len, |_arg: ()| STATE.pop())
 }

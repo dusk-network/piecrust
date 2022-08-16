@@ -6,7 +6,8 @@ edition = "2021"
 license = "MPL-2.0"
 
 [dependencies]
-rkyv = { version = "0.7", default-features = false, features = ["size_32", "alloc"] }
+rkyv = { version = "0.7", default-features = false, features = ["size_32", "alloc", "validation"] }
+bytecheck = { version = "0.6", default-features = false } 
 
 [features]
 default = ["std"]

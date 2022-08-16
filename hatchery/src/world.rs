@@ -6,6 +6,7 @@
 
 mod event;
 mod stack;
+mod store;
 
 pub use event::{Event, Receipt};
 
@@ -16,10 +17,13 @@ use std::ops::{Deref, DerefMut};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use dallo::{ModuleId, StandardBufSerializer, MODULE_ID_BYTES};
+use dallo::{
+    ModuleId, StandardBufSerializer, StandardDeserialize, MODULE_ID_BYTES,
+};
 use parking_lot::ReentrantMutex;
-use rkyv::{archived_root, Archive, Deserialize, Infallible, Serialize};
+use rkyv::{Archive, Serialize};
 use stack::CallStack;
+use store::new_store;
 use tempfile::tempdir;
 use wasmer::{imports, Exports, Function, Val};
 
@@ -27,10 +31,12 @@ use crate::env::Env;
 use crate::error::Error;
 use crate::instance::Instance;
 use crate::memory::MemHandler;
-use crate::snapshot::{MemoryPath, Snapshot};
+use crate::snapshot::{MemoryPath, Snapshot, SnapshotId};
 use crate::storage_helpers::module_id_to_name;
-use crate::world_snapshot::{SnapshotId, WorldSnapshot};
 use crate::Error::{PersistenceError, SnapshotError};
+
+const DEFAULT_POINT_LIMIT: u64 = 4096;
+const POINT_PASS_PERCENTAGE: u64 = 93;
 
 #[derive(Debug)]
 pub struct WorldInner {
@@ -39,7 +45,8 @@ pub struct WorldInner {
     events: Vec<Event>,
     call_stack: CallStack,
     height: u64,
-    snapshots: BTreeMap<SnapshotId, WorldSnapshot>,
+    limit: u64,
+    snapshots: BTreeMap<SnapshotId, Snapshot>,
 }
 
 impl Deref for WorldInner {
@@ -70,7 +77,8 @@ impl World {
             events: vec![],
             call_stack: CallStack::default(),
             height: 0,
-            snapshots: BTreeMap::new(),
+            limit: DEFAULT_POINT_LIMIT,
+	    snapshots: BTreeMap::new(),
         }))))
     }
 
@@ -85,91 +93,86 @@ impl World {
                 events: vec![],
                 call_stack: CallStack::default(),
                 height: 0,
-                snapshots: BTreeMap::new(),
+                limit: DEFAULT_POINT_LIMIT,
+		snapshots: BTreeMap::new(),
             },
         )))))
     }
 
-    pub fn persist(&self) -> Result<SnapshotId, Error> {
+    pub fn persist(&mut self) -> Result<SnapshotId, Error> {
         let guard = self.0.lock();
         let w = unsafe { &mut *guard.get() };
-        let mut world_snapshot_id = SnapshotId::uninitialized();
-        let mut world_snapshot = WorldSnapshot::new();
+        let mut snapshot = Snapshot::new();
         for (module_id, environment) in w.environments.iter() {
-            let memory_path = MemoryPath::new(self.memory_path(module_id));
-            let snapshot = Snapshot::new(&memory_path)?;
-            let snapshot_bag = environment.inner_mut().snapshot_bag_mut();
-            world_snapshot_id.add(&snapshot.id());
-            let snapshot_index =
-                snapshot_bag.save_snapshot(&snapshot, &memory_path)?;
-            world_snapshot.add(*module_id, snapshot_index);
+            snapshot.persist_module_snapshot(
+                &self.memory_path(module_id),
+                environment.inner_mut(),
+                module_id,
+            )?;
         }
-        world_snapshot.finalize_id(world_snapshot_id);
-        w.snapshots.insert(world_snapshot_id, world_snapshot);
-        Ok(world_snapshot_id)
+        let snapshot_id = snapshot.id();
+        w.snapshots.insert(snapshot_id, snapshot);
+        Ok(snapshot_id)
     }
-    pub fn restore(&self, world_snapshot_id: &SnapshotId) -> Result<(), Error> {
+
+    pub fn restore(&self, snapshot_id: &SnapshotId) -> Result<(), Error> {
         let guard = self.0.lock();
         let w = unsafe { &mut *guard.get() };
-        let world_snapshot: &WorldSnapshot =
-            w.snapshots.get(world_snapshot_id).ok_or_else(|| {
-                SnapshotError(String::from("world snapshot id not found"))
+        let snapshot: &Snapshot =
+            w.snapshots.get(snapshot_id).ok_or_else(|| {
+                SnapshotError(String::from("snapshot id not found"))
             })?;
-        world_snapshot.restore_snapshots(self)?;
+        let get_memory_path =
+            |module_id: ModuleId| self.memory_path(&module_id);
+        let get_instance = |module_id: ModuleId| self.get_instance(&module_id);
+        snapshot.restore_module_snapshots(get_memory_path, get_instance)?;
         Ok(())
     }
-    pub fn memory_path(&self, module_id: &ModuleId) -> PathBuf {
-        self.storage_path().join(module_id_to_name(*module_id))
+
+    fn memory_path(&self, module_id: &ModuleId) -> MemoryPath {
+        MemoryPath::new(self.storage_path().join(module_id_to_name(*module_id)))
     }
-    pub fn restore_snapshot_with_index(
-        &self,
-        module_id: &ModuleId,
-        snapshot_index: usize,
-        memory_path: &MemoryPath,
-    ) -> Result<(), Error> {
+
+    fn get_instance(&self, module_id: &ModuleId) -> &Instance {
         let guard = self.0.lock();
         let w = unsafe { &mut *guard.get() };
-        let instance = w
-            .environments
+        w.environments
             .get(module_id)
-            .ok_or_else(|| SnapshotError(String::from("invalid module id")))?
-            .inner_mut();
-        instance
-            .snapshot_bag()
-            .restore_snapshot(snapshot_index, memory_path)?;
-        Ok(())
+            .expect("valid module id")
+            .inner()
     }
     pub fn deploy(&mut self, bytecode: &[u8]) -> Result<ModuleId, Error> {
         let id_bytes: [u8; MODULE_ID_BYTES] = blake3::hash(bytecode).into();
         let id = ModuleId::from(id_bytes);
-        let store = wasmer::Store::new_with_path(
+
+        let store = new_store(
             self.storage_path().join(module_id_to_name(id)).as_path(),
         );
         let module = wasmer::Module::new(&store, bytecode)?;
 
         let mut env = Env::uninitialized();
 
-        #[rustfmt::skip]
         let imports = imports! {
             "env" => {
                 "alloc" => Function::new_native_with_env(&store, env.clone(), host_alloc),
-		        "dealloc" => Function::new_native_with_env(&store, env.clone(), host_dealloc),
+                "dealloc" => Function::new_native_with_env(&store, env.clone(), host_dealloc),
 
                 "snap" => Function::new_native_with_env(&store, env.clone(), host_snapshot),
 
                 "q" => Function::new_native_with_env(&store, env.clone(), host_query),
-		        "t" => Function::new_native_with_env(&store, env.clone(), host_transact),
+                "t" => Function::new_native_with_env(&store, env.clone(), host_transact),
 
                 "height" => Function::new_native_with_env(&store, env.clone(), host_height),
                 "emit" => Function::new_native_with_env(&store, env.clone(), host_emit),
                 "caller" => Function::new_native_with_env(&store, env.clone(), host_caller),
+                "limit" => Function::new_native_with_env(&store, env.clone(), host_limit),
+                "spent" => Function::new_native_with_env(&store, env.clone(), host_spent),
             }
         };
 
         let instance = wasmer::Instance::new(&module, &imports)?;
 
         let arg_buf_ofs = global_i32(&instance.exports, "A")?;
-        let arg_buf_len_pos = global_i32(&instance.exports, "AL")?;
 
         // TODO: We should check these buffers have the correct length.
         let self_id_ofs = global_i32(&instance.exports, "SELF_ID")?;
@@ -181,21 +184,12 @@ impl World {
 
         // We need to read the actual value of AL from the offset into memory
 
-        let mem = instance.exports.get_memory("memory")?;
-        let data =
-            &unsafe { mem.data_unchecked() }[arg_buf_len_pos as usize..][..4];
-        let slice = &data[..mem::size_of::<<u32 as Archive>::Archived>()];
-        let arg_buf_len: u32 = unsafe { archived_root::<u32>(slice) }
-            .deserialize(&mut Infallible)
-            .expect("infallible");
-
         let instance = Instance::new(
             id,
             instance,
             self.clone(),
             MemHandler::new(heap_base as usize),
             arg_buf_ofs,
-            arg_buf_len,
             heap_base,
             self_id_ofs,
         );
@@ -219,22 +213,22 @@ impl World {
     where
         Arg: for<'a> Serialize<StandardBufSerializer<'a>>,
         Ret: Archive,
-        Ret::Archived: Deserialize<Ret, Infallible>,
+        Ret::Archived: StandardDeserialize<Ret>,
     {
         let guard = self.0.lock();
         let w = unsafe { &mut *guard.get() };
 
-        w.call_stack = CallStack::new(m_id);
+        w.call_stack = CallStack::new(m_id, w.limit);
 
-        let ret = w
-            .get(&m_id)
-            .expect("invalid module id")
-            .inner()
-            .query(name, arg)?;
+        let instance = w.get(&m_id).expect("invalid module id").inner();
+        instance.set_remaining_points(w.limit);
+
+        let ret = instance.query(name, arg)?;
+        let remaining = instance.remaining_points();
 
         let events = mem::take(&mut w.events);
 
-        Ok(Receipt::new(ret, events))
+        Ok(Receipt::new(ret, events, w.limit - remaining))
     }
 
     pub fn transact<Arg, Ret>(
@@ -246,22 +240,22 @@ impl World {
     where
         Arg: for<'a> Serialize<StandardBufSerializer<'a>> + core::fmt::Debug,
         Ret: Archive,
-        Ret::Archived: Deserialize<Ret, Infallible>,
+        Ret::Archived: StandardDeserialize<Ret>,
     {
         let w = self.0.lock();
         let w = unsafe { &mut *w.get() };
 
-        w.call_stack = CallStack::new(m_id);
+        w.call_stack = CallStack::new(m_id, w.limit);
 
-        let ret = w
-            .get_mut(&m_id)
-            .expect("invalid module id")
-            .inner_mut()
-            .transact(name, arg)?;
+        let instance = w.get(&m_id).expect("invalid module id").inner_mut();
+        instance.set_remaining_points(w.limit);
+
+        let ret = instance.transact(name, arg)?;
+        let remaining = instance.remaining_points();
 
         let events = mem::take(&mut w.events);
 
-        Ok(Receipt::new(ret, events))
+        Ok(Receipt::new(ret, events, w.limit - remaining))
     }
 
     /// Set the height available to modules.
@@ -272,20 +266,35 @@ impl World {
         w.height = height;
     }
 
+    /// Set the point limit for the next call.
+    pub fn set_point_limit(&mut self, limit: u64) {
+        let w = self.0.lock();
+        let w = unsafe { &mut *w.get() };
+
+        w.limit = limit;
+    }
+
     fn perform_query(
         &self,
         name: &str,
-        caller: ModuleId,
-        callee: ModuleId,
+        caller_id: ModuleId,
+        callee_id: ModuleId,
         arg_len: u32,
     ) -> Result<u32, Error> {
         let guard = self.0.lock();
         let w = unsafe { &mut *guard.get() };
 
-        w.call_stack.push(callee);
+        let caller = w.get(&caller_id).expect("oh no").inner();
 
-        let caller = w.get(&caller).expect("oh no").inner();
-        let callee = w.get(&callee).expect("no oh").inner();
+        let remaining = caller.remaining_points();
+        let limit = remaining * POINT_PASS_PERCENTAGE / 100;
+
+        w.call_stack.push(callee_id, limit);
+
+        let caller = w.get(&caller_id).expect("oh no").inner();
+        let callee = w.get(&callee_id).expect("no oh").inner();
+
+        callee.set_remaining_points(limit);
 
         let mut min_len = 0;
 
@@ -304,6 +313,9 @@ impl World {
             })
         });
 
+        let callee_used = limit - callee.remaining_points();
+        caller.set_remaining_points(remaining - callee_used);
+
         w.call_stack.pop();
 
         Ok(ret_ofs)
@@ -312,17 +324,24 @@ impl World {
     fn perform_transaction(
         &self,
         name: &str,
-        caller: ModuleId,
-        callee: ModuleId,
+        caller_id: ModuleId,
+        callee_id: ModuleId,
         arg_len: u32,
     ) -> Result<u32, Error> {
         let guard = self.0.lock();
         let w = unsafe { &mut *guard.get() };
 
-        w.call_stack.push(callee);
+        let caller = w.get(&caller_id).expect("oh no").inner();
 
-        let caller = w.get(&caller).expect("oh no").inner();
-        let callee = w.get(&callee).expect("no oh").inner();
+        let remaining = caller.remaining_points();
+        let limit = remaining * POINT_PASS_PERCENTAGE / 100;
+
+        w.call_stack.push(callee_id, limit);
+
+        let caller = w.get(&caller_id).expect("oh no").inner();
+        let callee = w.get(&callee_id).expect("no oh").inner();
+
+        callee.set_remaining_points(limit);
 
         caller.with_arg_buffer(|buf_caller| {
             callee.with_arg_buffer(|buf_callee| {
@@ -339,6 +358,9 @@ impl World {
                 buf_caller[..min_len].copy_from_slice(&buf_callee[..min_len]);
             })
         });
+
+        let callee_used = limit - callee.remaining_points();
+        caller.set_remaining_points(remaining - callee_used);
 
         w.call_stack.pop();
 
@@ -357,6 +379,24 @@ impl World {
         let w = unsafe { &mut *guard.get() };
 
         w.events.push(Event::new(module_id, data));
+    }
+
+    fn perform_limit(&self, instance: &Instance) -> Result<u32, Error> {
+        let guard = self.0.lock();
+        let w = unsafe { &*guard.get() };
+
+        let limit = w.call_stack.limit();
+        instance.write_to_arg_buffer(limit)
+    }
+
+    fn perform_spent(&self, instance: &Instance) -> Result<u32, Error> {
+        let guard = self.0.lock();
+        let w = unsafe { &*guard.get() };
+
+        let limit = w.call_stack.limit();
+        let remaining = instance.remaining_points();
+
+        instance.write_to_arg_buffer(limit - remaining)
     }
 
     fn perform_caller(&self, instance: &Instance) -> Result<u32, Error> {
@@ -479,6 +519,22 @@ fn host_emit(env: &Env, arg_len: u32) {
     let data = instance.with_arg_buffer(|buf| buf[..arg_len].to_vec());
 
     instance.world().perform_emit(module_id, data);
+}
+
+fn host_spent(env: &Env) -> u32 {
+    let instance = env.inner();
+    instance
+        .world()
+        .perform_spent(instance)
+        .expect("TODO: error handling")
+}
+
+fn host_limit(env: &Env) -> u32 {
+    let instance = env.inner();
+    instance
+        .world()
+        .perform_limit(instance)
+        .expect("TODO: error handling")
 }
 
 fn host_caller(env: &Env) -> u32 {
