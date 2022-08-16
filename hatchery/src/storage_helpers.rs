@@ -6,11 +6,9 @@
 
 use dallo::ModuleId;
 
-
 pub fn module_id_to_name(module_id: ModuleId) -> String {
     format!("{}", ByteArrayWrapper(module_id.as_bytes()))
 }
-
 
 pub struct ByteArrayWrapper<'a>(pub &'a [u8]);
 

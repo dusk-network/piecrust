@@ -78,7 +78,7 @@ impl World {
             call_stack: CallStack::default(),
             height: 0,
             limit: DEFAULT_POINT_LIMIT,
-	    snapshots: BTreeMap::new(),
+            snapshots: BTreeMap::new(),
         }))))
     }
 
@@ -94,7 +94,7 @@ impl World {
                 call_stack: CallStack::default(),
                 height: 0,
                 limit: DEFAULT_POINT_LIMIT,
-		snapshots: BTreeMap::new(),
+                snapshots: BTreeMap::new(),
             },
         )))))
     }

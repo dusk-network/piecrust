@@ -67,7 +67,7 @@ pub fn world_snapshot_persist_restore() -> Result<(), Error> {
     ) -> Result<SnapshotId, Error> {
         let _: Receipt<()> = world.transact(id, "set", arg)?;
 
-    let value = world.query::<_, Option<i16>>(id, "get", ())?;
+        let value = world.query::<_, Option<i16>>(id, "get", ())?;
 
         assert_eq!(*value, Some(arg));
 
@@ -81,7 +81,7 @@ pub fn world_snapshot_persist_restore() -> Result<(), Error> {
         arg: i16,
     ) -> Result<(), Error> {
         world.restore(&snapshot_id)?;
-    let value = world.query::<_, Option<i16>>(id, "get", ())?;
+        let value = world.query::<_, Option<i16>>(id, "get", ())?;
         assert_eq!(*value, Some(arg));
         Ok(())
     }

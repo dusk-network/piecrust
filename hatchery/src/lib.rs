@@ -9,15 +9,12 @@ mod error;
 mod instance;
 mod memory;
 mod snapshot;
-mod snapshot_bag;
 mod storage_helpers;
 mod world;
-mod world_snapshot;
 
 pub use error::Error;
 pub use snapshot::SnapshotId;
 pub use world::{Event, Receipt, World};
-pub use world_snapshot::SnapshotId;
 
 #[macro_export]
 macro_rules! module_bytecode {
