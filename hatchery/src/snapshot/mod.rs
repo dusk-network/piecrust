@@ -74,10 +74,10 @@ impl Snapshot {
         instance: &mut Instance,
         module_id: &ModuleId,
     ) -> Result<(), Error> {
-        let module_snapshot = ModuleSnapshot::new(&memory_path)?;
+        let module_snapshot = ModuleSnapshot::new(memory_path)?;
         let module_snapshot_index = instance
             .module_snapshot_bag_mut()
-            .save_module_snapshot(&module_snapshot, &memory_path)?;
+            .save_module_snapshot(&module_snapshot, memory_path)?;
         self.id.add(&module_snapshot.id());
         self.module_snapshot_indices
             .insert(*module_id, module_snapshot_index);
