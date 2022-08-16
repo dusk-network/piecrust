@@ -31,9 +31,9 @@ use crate::env::Env;
 use crate::error::Error;
 use crate::instance::Instance;
 use crate::memory::MemHandler;
-use crate::snapshot::{MemoryPath, Snapshot, SnapshotLike};
+use crate::snapshot::{MemoryPath, Snapshot, SnapshotId};
 use crate::storage_helpers::module_id_to_name;
-use crate::Error::PersistenceError;
+use crate::Error::{PersistenceError, SnapshotError};
 
 const DEFAULT_POINT_LIMIT: u64 = 4096;
 const POINT_PASS_PERCENTAGE: u64 = 93;
@@ -46,6 +46,7 @@ pub struct WorldInner {
     call_stack: CallStack,
     height: u64,
     limit: u64,
+    snapshots: BTreeMap<SnapshotId, Snapshot>,
 }
 
 impl Deref for WorldInner {
@@ -77,6 +78,7 @@ impl World {
             call_stack: CallStack::default(),
             height: 0,
             limit: DEFAULT_POINT_LIMIT,
+	    snapshots: BTreeMap::new(),
         }))))
     }
 
@@ -92,44 +94,53 @@ impl World {
                 call_stack: CallStack::default(),
                 height: 0,
                 limit: DEFAULT_POINT_LIMIT,
+		snapshots: BTreeMap::new(),
             },
         )))))
     }
 
-    pub fn persist(&self) -> Result<(), Error> {
+    pub fn persist(&mut self) -> Result<SnapshotId, Error> {
         let guard = self.0.lock();
         let w = unsafe { &mut *guard.get() };
+        let mut snapshot = Snapshot::new();
         for (module_id, environment) in w.environments.iter() {
-            let memory_path = MemoryPath::new(self.memory_path(module_id));
-            let snapshot = Snapshot::new(&memory_path)?;
-            environment.inner_mut().set_snapshot_id(snapshot.id());
-            snapshot.save(&memory_path)?;
+            snapshot.persist_module_snapshot(
+                &self.memory_path(module_id),
+                environment.inner_mut(),
+                module_id,
+            )?;
         }
+        let snapshot_id = snapshot.id();
+        w.snapshots.insert(snapshot_id, snapshot);
+        Ok(snapshot_id)
+    }
+
+    pub fn restore(&self, snapshot_id: &SnapshotId) -> Result<(), Error> {
+        let guard = self.0.lock();
+        let w = unsafe { &mut *guard.get() };
+        let snapshot: &Snapshot =
+            w.snapshots.get(snapshot_id).ok_or_else(|| {
+                SnapshotError(String::from("snapshot id not found"))
+            })?;
+        let get_memory_path =
+            |module_id: ModuleId| self.memory_path(&module_id);
+        let get_instance = |module_id: ModuleId| self.get_instance(&module_id);
+        snapshot.restore_module_snapshots(get_memory_path, get_instance)?;
         Ok(())
     }
 
-    pub fn restore(&self) -> Result<(), Error> {
+    fn memory_path(&self, module_id: &ModuleId) -> MemoryPath {
+        MemoryPath::new(self.storage_path().join(module_id_to_name(*module_id)))
+    }
+
+    fn get_instance(&self, module_id: &ModuleId) -> &Instance {
         let guard = self.0.lock();
         let w = unsafe { &mut *guard.get() };
-        for (module_id, environment) in w.environments.iter() {
-            let memory_path = MemoryPath::new(self.memory_path(module_id));
-            if let Some(snapshot_id) = environment.inner().snapshot_id() {
-                let snapshot = Snapshot::from_id(*snapshot_id, &memory_path)?;
-                snapshot.load(&memory_path)?;
-                println!(
-                    "restored state of module: {:?} from file: {:?}",
-                    module_id_to_name(*module_id),
-                    snapshot.path()
-                );
-            }
-        }
-        Ok(())
+        w.environments
+            .get(module_id)
+            .expect("valid module id")
+            .inner()
     }
-
-    pub fn memory_path(&self, module_id: &ModuleId) -> PathBuf {
-        self.storage_path().join(module_id_to_name(*module_id))
-    }
-
     pub fn deploy(&mut self, bytecode: &[u8]) -> Result<ModuleId, Error> {
         let id_bytes: [u8; MODULE_ID_BYTES] = blake3::hash(bytecode).into();
         let id = ModuleId::from(id_bytes);

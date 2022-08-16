@@ -27,6 +27,7 @@ pub enum Error {
     OutOfPoints(ModuleId),
     PersistenceError(std::io::Error),
     ValidationError,
+    SnapshotError(String),
 }
 
 impl From<wasmer::InstantiationError> for Error {

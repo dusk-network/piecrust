@@ -23,7 +23,7 @@ use wasmer_middlewares::metering::{
 
 use crate::error::*;
 use crate::memory::MemHandler;
-use crate::snapshot::SnapshotId;
+use crate::snapshot::ModuleSnapshotBag;
 use crate::world::World;
 
 #[derive(Debug)]
@@ -35,7 +35,7 @@ pub struct Instance {
     arg_buf_ofs: i32,
     heap_base: i32,
     self_id_ofs: i32,
-    snapshot_id: Option<SnapshotId>,
+    module_snapshot_bag: ModuleSnapshotBag,
 }
 
 impl Instance {
@@ -57,7 +57,7 @@ impl Instance {
             arg_buf_ofs,
             heap_base,
             self_id_ofs,
-            snapshot_id: None,
+            module_snapshot_bag: ModuleSnapshotBag::new(),
         }
     }
 
@@ -224,11 +224,11 @@ impl Instance {
         self.id
     }
 
-    pub(crate) fn set_snapshot_id(&mut self, snapshot_id: SnapshotId) {
-        self.snapshot_id = Some(snapshot_id);
+    pub(crate) fn module_snapshot_bag(&self) -> &ModuleSnapshotBag {
+        &self.module_snapshot_bag
     }
-    pub fn snapshot_id(&self) -> Option<&SnapshotId> {
-        self.snapshot_id.as_ref()
+    pub(crate) fn module_snapshot_bag_mut(&mut self) -> &mut ModuleSnapshotBag {
+        &mut self.module_snapshot_bag
     }
     pub(crate) fn world(&self) -> &World {
         &self.world
