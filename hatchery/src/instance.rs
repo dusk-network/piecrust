@@ -227,9 +227,11 @@ impl Instance {
     pub(crate) fn module_snapshot_bag(&self) -> &ModuleSnapshotBag {
         &self.module_snapshot_bag
     }
+
     pub(crate) fn module_snapshot_bag_mut(&mut self) -> &mut ModuleSnapshotBag {
         &mut self.module_snapshot_bag
     }
+    
     pub(crate) fn world(&self) -> &World {
         &self.world
     }
