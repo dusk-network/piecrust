@@ -39,10 +39,8 @@ impl DiffData {
     pub fn read<P: AsRef<Path>>(path: P) -> Result<Self, Error> {
         let mut file =
             std::fs::File::open(path.as_ref()).map_err(PersistenceError)?;
-        let metadata =
-            std::fs::metadata(path.as_ref()).map_err(PersistenceError)?;
-        let mut data = vec![0; metadata.len() as usize];
-        file.read(data.as_mut_slice()).map_err(PersistenceError)?;
+        let mut data = Vec::new();
+        file.read_to_end(&mut data).map_err(PersistenceError)?;
         let archived = rkyv::check_archived_root::<Self>(&data[..]).unwrap();
         let diff_data: Self =
             archived.deserialize(&mut rkyv::Infallible).unwrap();
