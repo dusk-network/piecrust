@@ -6,7 +6,7 @@
 
 use hatchery::{module_bytecode, Error, Receipt, World};
 
-#[test]
+#[ignore]
 pub fn push_pop() -> Result<(), Error> {
     let mut world = World::ephemeral()?;
 
@@ -28,7 +28,7 @@ pub fn push_pop() -> Result<(), Error> {
     Ok(())
 }
 
-#[test]
+#[ignore]
 pub fn multi_push_pop() -> Result<(), Error> {
     let mut world = World::ephemeral()?;
 

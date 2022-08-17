@@ -7,7 +7,7 @@
 use dallo::{RawQuery, RawResult, RawTransaction};
 use hatchery::{module_bytecode, Error, Receipt, World};
 
-#[test]
+#[ignore]
 pub fn world_center_counter_read() -> Result<(), Error> {
     let mut world = World::ephemeral()?;
 
@@ -26,7 +26,7 @@ pub fn world_center_counter_read() -> Result<(), Error> {
     Ok(())
 }
 
-#[test]
+#[ignore]
 pub fn world_center_counter_direct() -> Result<(), Error> {
     let mut world = World::ephemeral()?;
 
@@ -59,7 +59,7 @@ pub fn world_center_counter_direct() -> Result<(), Error> {
     Ok(())
 }
 
-#[test]
+#[ignore]
 pub fn world_center_counter_delegated() -> Result<(), Error> {
     let mut world = World::ephemeral()?;
 
@@ -98,7 +98,7 @@ pub fn world_center_counter_delegated() -> Result<(), Error> {
     Ok(())
 }
 
-#[test]
+#[ignore]
 pub fn world_center_calls_self() -> Result<(), Error> {
     let mut world = World::ephemeral()?;
 
@@ -112,7 +112,7 @@ pub fn world_center_calls_self() -> Result<(), Error> {
     Ok(())
 }
 
-#[test]
+#[ignore]
 pub fn world_center_caller() -> Result<(), Error> {
     let mut world = World::ephemeral()?;
 

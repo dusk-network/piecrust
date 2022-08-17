@@ -16,6 +16,8 @@ pub use error::Error;
 pub use snapshot::SnapshotId;
 pub use world::{Event, Receipt, World};
 
+pub use storage_helpers::ByteArrayWrapper; // todo removeme
+
 #[macro_export]
 macro_rules! module_bytecode {
     ($name:literal) => {

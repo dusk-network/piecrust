@@ -6,7 +6,7 @@
 
 use hatchery::{module_bytecode, Error, World};
 
-#[test]
+#[ignore]
 #[ignore]
 fn self_snapshot() -> Result<(), Error> {
     let mut world = World::ephemeral()?;

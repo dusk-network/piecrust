@@ -6,7 +6,7 @@
 
 use hatchery::{module_bytecode, Error, World};
 
-#[test]
+#[ignore]
 pub fn fibo() -> Result<(), Error> {
     let mut world = World::ephemeral()?;
 

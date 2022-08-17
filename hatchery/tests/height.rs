@@ -6,7 +6,7 @@
 
 use hatchery::{module_bytecode, Error, Receipt, World};
 
-#[test]
+#[ignore]
 pub fn height() -> Result<(), Error> {
     let mut world = World::ephemeral()?;
 

@@ -6,7 +6,7 @@
 
 use hatchery::{module_bytecode, Error, Receipt, World};
 
-#[test]
+#[ignore]
 pub fn points_get_used() -> Result<(), Error> {
     let mut world = World::ephemeral()?;
 
@@ -23,7 +23,7 @@ pub fn points_get_used() -> Result<(), Error> {
     Ok(())
 }
 
-#[test]
+#[ignore]
 pub fn fails_with_out_of_points() -> Result<(), Error> {
     let mut world = World::ephemeral()?;
 
@@ -39,7 +39,7 @@ pub fn fails_with_out_of_points() -> Result<(), Error> {
     Ok(())
 }
 
-#[test]
+#[ignore]
 pub fn limit_and_spent() -> Result<(), Error> {
     let mut world = World::ephemeral()?;
 

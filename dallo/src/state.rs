@@ -20,7 +20,7 @@ mod arg_buf {
     use crate::ARGBUF_LEN;
 
     #[no_mangle]
-    static mut A: [u64; ARGBUF_LEN / 8] = [0; ARGBUF_LEN / 8];
+    static mut A: [u64; ARGBUF_LEN / 8] = [0x13; ARGBUF_LEN / 8];
 
     pub fn with_arg_buf<F, R>(f: F) -> R
     where

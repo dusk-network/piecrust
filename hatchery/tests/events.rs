@@ -6,7 +6,7 @@
 
 use hatchery::{module_bytecode, Error, Receipt, World};
 
-#[test]
+#[ignore]
 pub fn world_center_events() -> Result<(), Error> {
     let mut world = World::ephemeral()?;
 
