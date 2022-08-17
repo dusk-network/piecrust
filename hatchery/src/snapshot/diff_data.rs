@@ -6,14 +6,15 @@
 
 use bytecheck::CheckBytes;
 use rkyv::{
-    ser::serializers::AllocSerializer, ser::Serializer, Archive, Deserialize,
-    Serialize,
+    ser::serializers::{BufferScratch, CompositeSerializer, WriteSerializer},
+    ser::Serializer,
+    Archive, Deserialize, Serialize,
 };
 
 use crate::error::Error;
 use crate::Error::PersistenceError;
 use std::fs::OpenOptions;
-use std::io::{Read, Write};
+use std::io::Read;
 use std::path::Path;
 
 #[derive(Debug, Archive, Serialize, Deserialize)]
@@ -22,6 +23,8 @@ pub(crate) struct DiffData {
     original_len: usize,
     data: Vec<u8>,
 }
+
+const DIFF_DATA_SCRATCH_SIZE: usize = 64;
 
 impl DiffData {
     pub fn new(original_len: usize, data: Vec<u8>) -> Self {
@@ -48,17 +51,20 @@ impl DiffData {
     }
 
     pub fn write<P: AsRef<Path>>(&self, path: P) -> Result<(), Error> {
-        let mut file = OpenOptions::new()
+        let file = OpenOptions::new()
             .write(true)
             .create(true)
             .truncate(true)
             .open(path)
             .map_err(PersistenceError)?;
 
-        let mut serializer = AllocSerializer::<0>::default();
-        serializer.serialize_value(self).unwrap();
-        let data = serializer.into_serializer().into_inner().to_vec();
-        file.write(data.as_slice()).map_err(PersistenceError)?;
+        let mut scratch_buf = [0u8; DIFF_DATA_SCRATCH_SIZE];
+        let scratch = BufferScratch::new(&mut scratch_buf);
+        let serializer = WriteSerializer::new(file);
+        let mut composite =
+            CompositeSerializer::new(serializer, scratch, rkyv::Infallible);
+
+        composite.serialize_value(self).unwrap();
         Ok(())
     }
 }
