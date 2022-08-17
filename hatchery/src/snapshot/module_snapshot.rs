@@ -51,6 +51,7 @@ impl From<[u8; 32]> for ModuleSnapshotId {
 
 pub trait ModuleSnapshotLike {
     fn path(&self) -> &PathBuf;
+
     /// Read's module snapshot's content into buffer
     fn read(&self) -> Result<Vec<u8>, Error> {
         let mut f = std::fs::File::open(self.path().as_path())
@@ -61,7 +62,8 @@ pub trait ModuleSnapshotLike {
         f.read(buffer.as_mut_slice()).map_err(PersistenceError)?;
         Ok(buffer)
     }
-    fn read_excluding(&self, span: ArgBufferSpan) -> Result<Vec<u8>, Error> {
+
+    fn read_excluding_all_but_state(&self, span: ArgBufferSpan) -> Result<Vec<u8>, Error> {
         let mut f = std::fs::File::open(self.path().as_path())
             .map_err(PersistenceError)?;
         let metadata = std::fs::metadata(self.path().as_path())
@@ -81,6 +83,44 @@ pub trait ModuleSnapshotLike {
         println!("span={:?}", span);
         Ok(buffer)
     }
+
+    fn read_excluding_all_but_front_and_state(&self, span: ArgBufferSpan) -> Result<Vec<u8>, Error> {
+        let mut f = std::fs::File::open(self.path().as_path())
+            .map_err(PersistenceError)?;
+        let metadata = std::fs::metadata(self.path().as_path())
+            .map_err(PersistenceError)?;
+        const MEGA: usize = 1024*1024;
+        let mut buffer = vec![0; metadata.len() as usize - span.len()];
+        let mut arg_buffer = vec![0; span.len()];
+        f.read(&mut buffer.as_mut_slice()[..(span.begin as usize)])
+            .map_err(PersistenceError)?;
+        // f.read(arg_buffer.as_mut_slice())
+        //     .map_err(PersistenceError)?;
+        // f.read(&mut buffer.as_mut_slice()[(span.begin as usize - MEGA)..])
+        //     .map_err(PersistenceError)?;
+        println!("span={:?}", span);
+        Ok(buffer)
+    }
+
+    fn read_excluding_arg_buf_only(
+        &self,
+        span: ArgBufferSpan,
+    ) -> Result<Vec<u8>, Error> {
+        let mut f = std::fs::File::open(self.path().as_path())
+            .map_err(PersistenceError)?;
+        let metadata = std::fs::metadata(self.path().as_path())
+            .map_err(PersistenceError)?;
+        let mut buffer = vec![0; metadata.len() as usize - span.len()];
+        let mut arg_buffer = vec![0; span.len()];
+        f.read(&mut buffer.as_mut_slice()[..span.begin as usize])
+            .map_err(PersistenceError)?;
+        f.read(arg_buffer.as_mut_slice())
+            .map_err(PersistenceError)?;
+        f.read(&mut buffer.as_mut_slice()[span.begin as usize..])
+            .map_err(PersistenceError)?;
+        Ok(buffer)
+    }
+
 }
 
 pub struct MemoryPath {
@@ -124,7 +164,8 @@ impl ModuleSnapshot {
     ) -> Result<Self, Error> {
         let module_snapshot_id: ModuleSnapshotId = ModuleSnapshotId::from(
             *blake3::hash(
-                memory_path.read_excluding(arg_buffer_span)?.as_slice(),
+                memory_path.read_excluding_all_but_state(arg_buffer_span)?.as_slice(),
+                // memory_path.read()?.as_slice(),
             )
             .as_bytes(),
         );

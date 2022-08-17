@@ -104,11 +104,11 @@ pub fn snapshot_hash_excludes_argbuf() -> Result<(), Error> {
     let mut world = World::new(PathBuf::from("/tmp/mmm"));
     let id = world.deploy(module_bytecode!("box"))?;
     let snapshot_id1 = world.persist()?;
-    let _value = world.query::<_, Option<i16>>(id, "get", ())?;
+    let _: Receipt<()> = world.transact(id, "noop", 0x22)?;
     let snapshot_id2 = world.persist()?;
-    assert_eq!(snapshot_id1, snapshot_id2);
-    world.transact::<i16, ()>(id, "set", 0x23)?;
+    let _: Receipt<()> = world.transact(id, "noop", 0x22)?;
     let snapshot_id3 = world.persist()?;
+    assert_eq!(snapshot_id2, snapshot_id3);
 
     println!("snapshot1 = {}", ByteArrayWrapper(snapshot_id1.as_bytes()));
     println!("snapshot2 = {}", ByteArrayWrapper(snapshot_id2.as_bytes()));
