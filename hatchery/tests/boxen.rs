@@ -101,7 +101,7 @@ pub fn world_snapshot_persist_restore() -> Result<(), Error> {
 #[test]
 pub fn snapshot_hash_excludes_argbuf() -> Result<(), Error> {
     use hatchery::ByteArrayWrapper;
-    let mut world = World::new(PathBuf::from("/tmp/mmm"));
+    let mut world = World::ephemeral()?;
     let id = world.deploy(module_bytecode!("box"))?;
 
     let snapshot_id1 = world.persist()?;

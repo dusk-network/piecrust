@@ -180,6 +180,10 @@ impl World {
         let heap_base = global_i32(&instance.exports, "__heap_base")?;
 
         let data_end = global_i32(&instance.exports, "__data_end")?;
+
+        let memory = &instance.exports.get_memory("memory")?;
+
+        println!("{}", format!("memory_beg={:?}", memory.data_ptr()));
         println!("{}", format!("arg_buf_ofs={:06x}", arg_buf_ofs));
         println!("{}", format!("arg_buf_end={:06x}", arg_buf_ofs + dallo::ARGBUF_LEN as i32));
         println!("{}", format!("data_end={:06x}", data_end));
