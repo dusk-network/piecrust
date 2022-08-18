@@ -265,7 +265,7 @@ impl Instance {
             .get_memory("memory")
             .expect("memory export is checked at module creation time");
 
-        println!("memory snapshot");
+        // println!("memory snapshot");
 
         let maybe_interesting = unsafe { mem.data_unchecked_mut() };
 
@@ -292,7 +292,7 @@ impl Instance {
                             print!("{}", format!("{:02x}", byte).red());
                             print!(" ");
                         } else if ofs + i >= heap_base {
-                            print!("{}", format!("{:02x} ", byte).green());
+                            print!("{}", format!("{:02x} ", byte).yellow());
                         } else {
                             print!("{:02x} ", byte)
                         }

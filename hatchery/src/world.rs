@@ -179,6 +179,12 @@ impl World {
 
         let heap_base = global_i32(&instance.exports, "__heap_base")?;
 
+        let data_end = global_i32(&instance.exports, "__data_end")?;
+        println!("{}", format!("arg_buf_ofs={:06x}", arg_buf_ofs));
+        println!("{}", format!("arg_buf_end={:06x}", arg_buf_ofs + dallo::ARGBUF_LEN as i32));
+        println!("{}", format!("data_end={:06x}", data_end));
+        println!("{}", format!("heap_base={:06x}", heap_base));
+
         // check buffer alignment
         // debug_assert_eq!(arg_buf_ofs % 8, 0);
 

@@ -80,7 +80,8 @@ pub trait ModuleSnapshotLike {
         //     .map_err(PersistenceError)?;
         // f.read(&mut buffer.as_mut_slice()[(span.begin as usize - MEGA)..])
         //     .map_err(PersistenceError)?;
-        println!("span={:?}", span);
+        // println!("span={:?}", span);
+        println!();
         Ok(buffer)
     }
 
@@ -98,7 +99,8 @@ pub trait ModuleSnapshotLike {
         //     .map_err(PersistenceError)?;
         // f.read(&mut buffer.as_mut_slice()[(span.begin as usize - MEGA)..])
         //     .map_err(PersistenceError)?;
-        println!("span={:?}", span);
+        // println!("span={:?}", span);
+        println!();
         Ok(buffer)
     }
 
@@ -118,6 +120,7 @@ pub trait ModuleSnapshotLike {
             .map_err(PersistenceError)?;
         f.read(&mut buffer.as_mut_slice()[span.begin as usize..])
             .map_err(PersistenceError)?;
+        println!();
         Ok(buffer)
     }
 

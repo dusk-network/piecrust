@@ -103,10 +103,13 @@ pub fn snapshot_hash_excludes_argbuf() -> Result<(), Error> {
     use hatchery::ByteArrayWrapper;
     let mut world = World::new(PathBuf::from("/tmp/mmm"));
     let id = world.deploy(module_bytecode!("box"))?;
+
     let snapshot_id1 = world.persist()?;
     let _: Receipt<()> = world.transact(id, "noop", 0x22)?;
+    let _: Receipt<()> = world.transact(id, "mem_snap", ())?;
     let snapshot_id2 = world.persist()?;
     let _: Receipt<()> = world.transact(id, "noop", 0x22)?;
+    let _: Receipt<()> = world.transact(id, "mem_snap", ())?;
     let snapshot_id3 = world.persist()?;
     assert_eq!(snapshot_id2, snapshot_id3);
 

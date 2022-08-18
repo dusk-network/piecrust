@@ -35,7 +35,7 @@ impl Boxen {
         }
     }
 
-    pub fn noop(&mut self, x: i16) {
+    pub fn noop(&mut self, _x: i16) {
     }
 
     pub fn get(&self) -> Option<i16> {
@@ -56,4 +56,10 @@ unsafe fn get(arg_len: u32) -> u32 {
 #[no_mangle]
 unsafe fn noop(arg_len: u32) -> u32 {
     dallo::wrap_transaction(arg_len, |to| STATE.noop(to))
+}
+
+#[no_mangle]
+unsafe fn mem_snap(arg_len: u32) -> u32 {
+    dallo::snap();
+    0
 }
