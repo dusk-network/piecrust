@@ -4,6 +4,7 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
+mod diff_data;
 mod module_snapshot;
 mod module_snapshot_bag;
 
@@ -21,7 +22,6 @@ use rkyv::{Archive, Deserialize, Serialize};
 pub const SNAPSHOT_ID_BYTES: usize = 32;
 /// Snapshot of the world encompassing states of all world's modules.
 #[derive(
-    Debug,
     PartialEq,
     Eq,
     Archive,
@@ -48,9 +48,22 @@ impl SnapshotId {
         }
     }
 }
+
 impl From<[u8; 32]> for SnapshotId {
     fn from(array: [u8; 32]) -> Self {
         SnapshotId(array)
+    }
+}
+
+impl core::fmt::Debug for SnapshotId {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        if f.alternate() {
+            write!(f, "0x")?
+        }
+        for byte in self.0 {
+            write!(f, "{:02x}", &byte)?
+        }
+        Ok(())
     }
 }
 
@@ -74,7 +87,11 @@ impl Snapshot {
         instance: &mut Instance,
         module_id: &ModuleId,
     ) -> Result<(), Error> {
-        let module_snapshot = ModuleSnapshot::new(memory_path)?;
+        let module_snapshot = ModuleSnapshot::new(
+            memory_path,
+            instance.arg_buffer_span(),
+            instance.heap_base(),
+        )?;
         let module_snapshot_index = instance
             .module_snapshot_bag_mut()
             .save_module_snapshot(&module_snapshot, memory_path)?;

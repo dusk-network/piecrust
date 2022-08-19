@@ -35,6 +35,8 @@ impl Boxen {
         }
     }
 
+    pub fn noop_query_with_arg(&mut self, _x: i16) {
+    }
     pub fn get(&self) -> Option<i16> {
         self.a.as_ref().map(|i| **i)
     }
@@ -48,4 +50,13 @@ unsafe fn set(arg_len: u32) -> u32 {
 #[no_mangle]
 unsafe fn get(arg_len: u32) -> u32 {
     dallo::wrap_transaction(arg_len, |_: ()| STATE.get())
+}
+#[no_mangle]
+unsafe fn noop_query_with_arg(arg_len: u32) -> u32 {
+    dallo::wrap_transaction(arg_len, |to| STATE.noop_query_with_arg(to))
+}
+#[no_mangle]
+unsafe fn mem_snap(_arg_len: u32) -> u32 {
+    dallo::snap();
+    0
 }

@@ -132,7 +132,6 @@ impl World {
     fn memory_path(&self, module_id: &ModuleId) -> MemoryPath {
         MemoryPath::new(self.storage_path().join(module_id_to_name(*module_id)))
     }
-
     fn get_instance(&self, module_id: &ModuleId) -> &Instance {
         let guard = self.0.lock();
         let w = unsafe { &mut *guard.get() };
@@ -141,6 +140,7 @@ impl World {
             .expect("valid module id")
             .inner()
     }
+
     pub fn deploy(&mut self, bytecode: &[u8]) -> Result<ModuleId, Error> {
         let id_bytes: [u8; MODULE_ID_BYTES] = blake3::hash(bytecode).into();
         let id = ModuleId::from(id_bytes);

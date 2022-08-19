@@ -27,6 +27,19 @@ use crate::snapshot::ModuleSnapshotBag;
 use crate::world::World;
 
 #[derive(Debug)]
+pub struct ArgBufferSpan {
+    pub begin: i32,
+    pub end: i32,
+}
+impl ArgBufferSpan {
+    pub fn new(begin: i32, end: i32) -> Self {
+        Self { begin, end }
+    }
+    pub fn len(&self) -> usize {
+        (self.end - self.begin) as usize
+    }
+}
+#[derive(Debug)]
 pub struct Instance {
     id: ModuleId,
     instance: wasmer::Instance,
@@ -187,6 +200,15 @@ impl Instance {
         })
     }
 
+    pub(crate) fn arg_buffer_span(&self) -> ArgBufferSpan {
+        ArgBufferSpan::new(
+            self.arg_buf_ofs,
+            self.arg_buf_ofs + dallo::ARGBUF_LEN as i32,
+        )
+    }
+    pub(crate) fn heap_base(&self) -> i32 {
+        self.heap_base
+    }
     fn read_from_arg_buffer<T>(&self, arg_len: u32) -> Result<T, Error>
     where
         T: Archive,
@@ -227,11 +249,9 @@ impl Instance {
     pub(crate) fn module_snapshot_bag(&self) -> &ModuleSnapshotBag {
         &self.module_snapshot_bag
     }
-
     pub(crate) fn module_snapshot_bag_mut(&mut self) -> &mut ModuleSnapshotBag {
         &mut self.module_snapshot_bag
     }
-
     pub(crate) fn world(&self) -> &World {
         &self.world
     }
