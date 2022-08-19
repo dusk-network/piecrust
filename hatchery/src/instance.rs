@@ -23,9 +23,22 @@ use wasmer_middlewares::metering::{
 
 use crate::error::*;
 use crate::memory::MemHandler;
-use crate::snapshot::SnapshotId;
+use crate::snapshot::ModuleSnapshotBag;
 use crate::world::World;
 
+#[derive(Debug)]
+pub struct ArgBufferSpan {
+    pub begin: i32,
+    pub end: i32,
+}
+impl ArgBufferSpan {
+    pub fn new(begin: i32, end: i32) -> Self {
+        Self { begin, end }
+    }
+    pub fn len(&self) -> usize {
+        (self.end - self.begin) as usize
+    }
+}
 #[derive(Debug)]
 pub struct Instance {
     id: ModuleId,
@@ -35,7 +48,7 @@ pub struct Instance {
     arg_buf_ofs: i32,
     heap_base: i32,
     self_id_ofs: i32,
-    snapshot_id: Option<SnapshotId>,
+    module_snapshot_bag: ModuleSnapshotBag,
 }
 
 impl Instance {
@@ -57,7 +70,7 @@ impl Instance {
             arg_buf_ofs,
             heap_base,
             self_id_ofs,
-            snapshot_id: None,
+            module_snapshot_bag: ModuleSnapshotBag::new(),
         }
     }
 
@@ -187,6 +200,15 @@ impl Instance {
         })
     }
 
+    pub(crate) fn arg_buffer_span(&self) -> ArgBufferSpan {
+        ArgBufferSpan::new(
+            self.arg_buf_ofs,
+            self.arg_buf_ofs + dallo::ARGBUF_LEN as i32,
+        )
+    }
+    pub(crate) fn heap_base(&self) -> i32 {
+        self.heap_base
+    }
     fn read_from_arg_buffer<T>(&self, arg_len: u32) -> Result<T, Error>
     where
         T: Archive,
@@ -224,11 +246,11 @@ impl Instance {
         self.id
     }
 
-    pub(crate) fn set_snapshot_id(&mut self, snapshot_id: SnapshotId) {
-        self.snapshot_id = Some(snapshot_id);
+    pub(crate) fn module_snapshot_bag(&self) -> &ModuleSnapshotBag {
+        &self.module_snapshot_bag
     }
-    pub fn snapshot_id(&self) -> Option<&SnapshotId> {
-        self.snapshot_id.as_ref()
+    pub(crate) fn module_snapshot_bag_mut(&mut self) -> &mut ModuleSnapshotBag {
+        &mut self.module_snapshot_bag
     }
     pub(crate) fn world(&self) -> &World {
         &self.world

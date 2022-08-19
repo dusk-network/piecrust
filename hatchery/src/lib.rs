@@ -13,6 +13,7 @@ mod storage_helpers;
 mod world;
 
 pub use error::Error;
+pub use snapshot::SnapshotId;
 pub use world::{Event, Receipt, World};
 
 #[macro_export]
