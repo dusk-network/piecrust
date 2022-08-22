@@ -118,10 +118,10 @@ impl World {
     pub fn restore(&self, snapshot_id: &SnapshotId) -> Result<(), Error> {
         let guard = self.0.lock();
         let w = unsafe { &mut *guard.get() };
-        let snapshot: &Snapshot =
-            w.snapshots.get(snapshot_id).ok_or_else(|| {
-                SnapshotError("snapshot id not found".into())
-            })?;
+        let snapshot: &Snapshot = w
+            .snapshots
+            .get(snapshot_id)
+            .ok_or_else(|| SnapshotError("snapshot id not found".into()))?;
         let get_memory_path =
             |module_id: ModuleId| self.memory_path(&module_id);
         let get_instance = |module_id: ModuleId| self.get_instance(&module_id);
