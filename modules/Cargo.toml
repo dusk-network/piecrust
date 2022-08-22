@@ -7,6 +7,7 @@ members = [
     "eventer",
     "everest",
     "fibonacci",
+    "host",
     "stack",
     "spender",
     "vector",

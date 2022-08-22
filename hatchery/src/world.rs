@@ -5,10 +5,12 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 mod event;
+mod native;
 mod stack;
 mod store;
 
 pub use event::{Event, Receipt};
+pub use native::NativeQuery;
 
 use std::cell::UnsafeCell;
 use std::collections::BTreeMap;
@@ -20,6 +22,7 @@ use std::sync::Arc;
 use dallo::{
     ModuleId, StandardBufSerializer, StandardDeserialize, MODULE_ID_BYTES,
 };
+use native::NativeQueries;
 use parking_lot::ReentrantMutex;
 use rkyv::{Archive, Serialize};
 use stack::CallStack;
@@ -41,6 +44,7 @@ const POINT_PASS_PERCENTAGE: u64 = 93;
 #[derive(Debug)]
 pub struct WorldInner {
     environments: BTreeMap<ModuleId, Env>,
+    native_queries: NativeQueries,
     storage_path: PathBuf,
     events: Vec<Event>,
     call_stack: CallStack,
@@ -72,6 +76,7 @@ impl World {
     {
         World(Arc::new(ReentrantMutex::new(UnsafeCell::new(WorldInner {
             environments: BTreeMap::new(),
+            native_queries: NativeQueries::new(),
             storage_path: path.into(),
             events: vec![],
             call_stack: CallStack::default(),
@@ -84,6 +89,7 @@ impl World {
         Ok(World(Arc::new(ReentrantMutex::new(UnsafeCell::new(
             WorldInner {
                 environments: BTreeMap::new(),
+                native_queries: NativeQueries::new(),
                 storage_path: tempdir()
                     .map_err(PersistenceError)?
                     .path()
@@ -149,6 +155,7 @@ impl World {
                 "snap" => Function::new_native_with_env(&store, env.clone(), host_snapshot),
 
                 "q" => Function::new_native_with_env(&store, env.clone(), host_query),
+                "nq" => Function::new_native_with_env(&store, env.clone(), host_native_query),
                 "t" => Function::new_native_with_env(&store, env.clone(), host_transact),
 
                 "height" => Function::new_native_with_env(&store, env.clone(), host_height),
@@ -191,6 +198,17 @@ impl World {
         w.insert(id, env);
 
         Ok(id)
+    }
+
+    /// Registers a [`NativeQuery`] with the given `name`.
+    pub fn register_native_query<Q>(&mut self, name: &'static str, query: Q)
+    where
+        Q: 'static + NativeQuery,
+    {
+        let guard = self.0.lock();
+        let w = unsafe { &mut *guard.get() };
+
+        w.native_queries.insert(name, query);
     }
 
     pub fn query<Arg, Ret>(
@@ -308,6 +326,18 @@ impl World {
         w.call_stack.pop();
 
         Ok(ret_ofs)
+    }
+
+    fn perform_native_query(
+        &self,
+        name: &str,
+        buf: &mut [u8],
+        len: u32,
+    ) -> Option<u32> {
+        let guard = self.0.lock();
+        let w = unsafe { &*guard.get() };
+
+        w.native_queries.call(name, buf, len)
     }
 
     fn perform_transaction(
@@ -440,22 +470,45 @@ fn host_query(
 
     let instance = env.inner();
     let mut mod_id = ModuleId::uninitialized();
-    // performance: use a dedicated buffer here?
-    let mut name = String::new();
 
-    instance.with_memory(|buf| {
+    let name = instance.with_memory(|buf| {
         mod_id.as_bytes_mut()[..].copy_from_slice(
             &buf[module_id_adr..][..core::mem::size_of::<ModuleId>()],
         );
-        let utf =
-            core::str::from_utf8(&buf[method_name_adr..][..method_name_len])
-                .expect("TODO, error out cleaner");
-        name.push_str(utf)
+        // performance: use a dedicated buffer here?
+        core::str::from_utf8(&buf[method_name_adr..][..method_name_len])
+            .expect("TODO, error out cleaner")
+            .to_owned()
     });
 
     instance
         .world()
         .perform_query(&name, instance.id(), mod_id, arg_len)
+        .expect("TODO: error handling")
+}
+
+fn host_native_query(
+    env: &Env,
+    name_adr: i32,
+    name_len: u32,
+    arg_len: u32,
+) -> u32 {
+    let name_adr = name_adr as usize;
+    let name_len = name_len as usize;
+
+    let instance = env.inner();
+
+    let name = instance.with_memory(|buf| {
+        // performance: use a dedicated buffer here?
+        core::str::from_utf8(&buf[name_adr..][..name_len])
+            .expect("TODO, error out cleaner")
+            .to_owned()
+    });
+
+    instance
+        .with_arg_buffer(|buf| {
+            instance.world().perform_native_query(&name, buf, arg_len)
+        })
         .expect("TODO: error handling")
 }
 
@@ -472,17 +525,15 @@ fn host_transact(
 
     let instance = env.inner();
     let mut mod_id = ModuleId::uninitialized();
-    // performance: use a dedicated buffer here?
-    let mut name = String::new();
 
-    instance.with_memory(|buf| {
+    let name = instance.with_memory(|buf| {
         mod_id.as_bytes_mut()[..].copy_from_slice(
             &buf[module_id_adr..][..core::mem::size_of::<ModuleId>()],
         );
-        let utf =
-            core::str::from_utf8(&buf[method_name_adr..][..method_name_len])
-                .expect("TODO, error out cleaner");
-        name.push_str(utf)
+        // performance: use a dedicated buffer here?
+        core::str::from_utf8(&buf[method_name_adr..][..method_name_len])
+            .expect("TODO, error out cleaner")
+            .to_owned()
     });
 
     instance
