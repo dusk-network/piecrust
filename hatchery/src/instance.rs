@@ -206,9 +206,11 @@ impl Instance {
             self.arg_buf_ofs + dallo::ARGBUF_LEN as i32,
         )
     }
+
     pub(crate) fn heap_base(&self) -> i32 {
         self.heap_base
     }
+
     fn read_from_arg_buffer<T>(&self, arg_len: u32) -> Result<T, Error>
     where
         T: Archive,

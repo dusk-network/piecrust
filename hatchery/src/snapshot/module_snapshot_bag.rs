@@ -61,7 +61,7 @@ impl ModuleSnapshotBag {
     ) -> Result<(), Error> {
         let is_valid = |index| index < self.ids.len();
         if !is_valid(module_snapshot_index) {
-            return Err(SnapshotError(String::from("invalid snapshot index")));
+            return Err(SnapshotError("invalid snapshot index".into()));
         }
         let is_top = |index| (index + 1) == self.ids.len();
         let from_id = |module_snapshot_id| {

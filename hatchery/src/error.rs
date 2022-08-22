@@ -8,6 +8,7 @@ use dallo::ModuleId;
 use rkyv::ser::serializers::{
     BufferSerializerError, CompositeSerializerError, FixedSizeScratchError,
 };
+use std::borrow::Cow;
 
 pub type Compo = CompositeSerializerError<
     BufferSerializerError,
@@ -27,7 +28,7 @@ pub enum Error {
     OutOfPoints(ModuleId),
     PersistenceError(std::io::Error),
     ValidationError,
-    SnapshotError(String),
+    SnapshotError(Cow<'static, str>),
 }
 
 impl From<wasmer::InstantiationError> for Error {

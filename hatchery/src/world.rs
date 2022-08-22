@@ -120,7 +120,7 @@ impl World {
         let w = unsafe { &mut *guard.get() };
         let snapshot: &Snapshot =
             w.snapshots.get(snapshot_id).ok_or_else(|| {
-                SnapshotError(String::from("snapshot id not found"))
+                SnapshotError("snapshot id not found".into())
             })?;
         let get_memory_path =
             |module_id: ModuleId| self.memory_path(&module_id);

@@ -65,9 +65,10 @@ pub trait ModuleSnapshotLike {
 
     /*
     Note - we need to also read heap as otherwise state is not recovered
-    here we skip first 1M and arg buffer,
-    we read from 1M to the beginning of arg buffer
-    and then from the heap to the end of memory, skipping its 4 bytes as they keep changing
+    We skip first 1M and arg buffer,
+    then we read from 1M to the beginning of the arg buffer
+    and then from the beginning of heap until the end of memory,
+    skipping the first 4 bytes of heap
      */
     fn read_state_and_heap_only(
         &self,
