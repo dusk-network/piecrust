@@ -47,6 +47,7 @@ mod ext {
             name_len: u32,
             arg_len: u32,
         ) -> u32;
+        pub(crate) fn nq(name: *const u8, name_len: u32, arg_len: u32) -> u32;
         pub(crate) fn t(
             mod_id: *const u8,
             name: *const u8,
@@ -74,6 +75,12 @@ fn extern_transaction(module_id: ModuleId, name: &str, arg_len: u32) -> u32 {
     let name_ptr = name.as_ptr();
     let name_len = name.as_bytes().len() as u32;
     unsafe { ext::t(mod_ptr, name_ptr, name_len, arg_len) }
+}
+
+fn extern_native_query(name: &str, arg_len: u32) -> u32 {
+    let name_ptr = name.as_ptr();
+    let name_len = name.bytes().len() as u32;
+    unsafe { ext::nq(name_ptr, name_len, arg_len) }
 }
 
 use crate::ModuleId;
@@ -140,6 +147,32 @@ pub fn query_raw(mod_id: ModuleId, raw: RawQuery) -> RawResult {
     let ret_len = extern_query(mod_id, name, arg_len);
 
     with_arg_buf(|buf| RawResult::new(&buf[..ret_len as usize]))
+}
+
+pub fn native_query<Arg, Ret>(name: &str, arg: Arg) -> Ret
+where
+    Arg: for<'a> Serialize<StandardBufSerializer<'a>>,
+    Ret: Archive,
+    Ret::Archived: StandardDeserialize<Ret>,
+{
+    let arg_len = with_arg_buf(|buf| {
+        let mut sbuf = [0u8; SCRATCH_BUF_BYTES];
+        let scratch = BufferScratch::new(&mut sbuf);
+        let ser = BufferSerializer::new(buf);
+        let mut composite =
+            CompositeSerializer::new(ser, scratch, rkyv::Infallible);
+
+        composite.serialize_value(&arg).expect("infallible");
+        composite.pos() as u32
+    });
+
+    let ret_len = extern_native_query(name, arg_len);
+
+    with_arg_buf(|buf| {
+        let slice = &buf[..ret_len as usize];
+        let ret = check_archived_root::<Ret>(slice).unwrap();
+        ret.deserialize(&mut Infallible).expect("Infallible")
+    })
 }
 
 /// Return the current height.

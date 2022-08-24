@@ -14,7 +14,9 @@ mod snap;
 pub use snap::snap;
 
 mod state;
-pub use state::{caller, emit, height, limit, query, query_raw, spent, State};
+pub use state::{
+    caller, emit, height, limit, native_query, query, query_raw, spent, State,
+};
 
 mod helpers;
 pub use helpers::*;

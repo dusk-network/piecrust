@@ -13,7 +13,7 @@ mod storage_helpers;
 mod world;
 
 pub use error::Error;
-pub use world::{Event, Receipt, World};
+pub use world::{Event, NativeQuery, Receipt, World};
 
 #[macro_export]
 macro_rules! module_bytecode {
