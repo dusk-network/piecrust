@@ -51,22 +51,6 @@ pub fn snapshot_persist_restore() -> Result<(), Error> {
 }
 
 #[test]
-pub fn snapshot_hash_excludes_argbuf() -> Result<(), Error> {
-    let mut world = World::ephemeral()?;
-    let id = world.deploy(module_bytecode!("box"))?;
-
-    let snapshot_id1 = world.persist()?;
-    let _: Receipt<()> = world.transact(id, "noop_query_with_arg", 0x22)?;
-    let snapshot_id2 = world.persist()?;
-    assert_ne!(snapshot_id1, snapshot_id2); // snapshot 1 has empty heap, not init-ed yet
-    let _: Receipt<()> = world.transact(id, "noop_query_with_arg", 0x22)?;
-    let snapshot_id3 = world.persist()?;
-    assert_eq!(snapshot_id2, snapshot_id3);
-
-    Ok(())
-}
-
-#[test]
 pub fn world_revert_reverts_module_snapshot_ids() -> Result<(), Error> {
     let mut world = World::ephemeral()?;
     let id = world.deploy(module_bytecode!("box"))?;

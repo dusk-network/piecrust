@@ -5,7 +5,6 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 use crate::error::Error;
-use crate::instance::ArgBufferSpan;
 use crate::snapshot::diff_data::DiffData;
 use crate::storage_helpers::ByteArrayWrapper;
 use crate::Error::PersistenceError;
@@ -14,7 +13,7 @@ use qbsdiff::Bspatch;
 use rand::Rng;
 use rkyv::{Archive, Deserialize, Serialize};
 use std::fs::OpenOptions;
-use std::io::{Read, Seek, SeekFrom, Write};
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
 const COMPRESSION_LEVEL: i32 = 11;
@@ -62,36 +61,6 @@ pub trait ModuleSnapshotLike {
         f.read(buffer.as_mut_slice()).map_err(PersistenceError)?;
         Ok(buffer)
     }
-
-    /*
-    Note - we need to also read heap as otherwise state is not recovered
-    We skip first 1M and arg buffer,
-    then we read from 1M to the beginning of the arg buffer
-    and then from the beginning of heap until the end of memory,
-    skipping the first 4 bytes of heap
-     */
-    fn read_state_and_heap_only(
-        &self,
-        span: ArgBufferSpan,
-        heap_base: i32,
-    ) -> Result<Vec<u8>, Error> {
-        const HEAP_BEGINNING_SKIP: i32 = 4; // todo - explain this, we need to skip first 4 bytes of the heap
-        let mut f = std::fs::File::open(self.path().as_path())
-            .map_err(PersistenceError)?;
-        let metadata = std::fs::metadata(self.path().as_path())
-            .map_err(PersistenceError)?;
-        const ONE_MB: usize = 1024 * 1024; // todo - explain this
-        f.seek(SeekFrom::Start(ONE_MB as u64))
-            .map_err(PersistenceError)?;
-        let mut buffer = vec![0; metadata.len() as usize - span.len() - ONE_MB];
-        f.read(&mut buffer.as_mut_slice()[..(span.begin as usize - ONE_MB)])
-            .map_err(PersistenceError)?;
-        f.seek(SeekFrom::Start((heap_base + HEAP_BEGINNING_SKIP) as u64))
-            .map_err(PersistenceError)?;
-        f.read(&mut buffer.as_mut_slice()[(span.begin as usize - ONE_MB)..])
-            .map_err(PersistenceError)?;
-        Ok(buffer)
-    }
 }
 
 pub struct MemoryPath {
@@ -129,18 +98,9 @@ pub struct ModuleSnapshot {
 }
 
 impl ModuleSnapshot {
-    pub(crate) fn new(
-        memory_path: &MemoryPath,
-        arg_buffer_span: ArgBufferSpan,
-        heap_base: i32,
-    ) -> Result<Self, Error> {
+    pub(crate) fn new(memory_path: &MemoryPath) -> Result<Self, Error> {
         let module_snapshot_id: ModuleSnapshotId = ModuleSnapshotId::from(
-            *blake3::hash(
-                memory_path
-                    .read_state_and_heap_only(arg_buffer_span, heap_base)?
-                    .as_slice(),
-            )
-            .as_bytes(),
+            *blake3::hash(memory_path.read()?.as_slice()).as_bytes(),
         );
         ModuleSnapshot::from_id(module_snapshot_id, memory_path)
     }
