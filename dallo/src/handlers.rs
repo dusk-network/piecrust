@@ -13,8 +13,28 @@ fn foo(_: core::alloc::Layout) -> ! {
 }
 
 #[panic_handler]
-fn panic(_: &PanicInfo) -> ! {
-    loop {}
+fn panic(panic_info: &PanicInfo) -> ! {
+    #[cfg(debug)]
+    {
+        extern "C" {
+            pub(crate) fn host_panic(len: u32);
+        }
+
+        use dallo::bufwriter::BufWriter;
+
+        if let Some(msg) = panic_info.message() {
+            let len = crate::state::with_debug_buf(|b| {
+                let mut w = BufWriter::new(b);
+                core::fmt::write(&mut w, *msg).unwrap();
+                w.ofs() as u32
+            });
+            unsafe { host_panic(len) }
+        } else {
+            unsafe { host_panic(0) }
+        }
+    }
+    let _ = panic_info;
+    unreachable!()
 }
 
 #[lang = "eh_personality"]

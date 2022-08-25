@@ -1,13 +1,14 @@
 [workspace]
 members = [
-    "self_snapshot",
     "box",
     "callcenter",
     "counter",
+    "debugger",
     "eventer",
     "everest",
     "fibonacci",
     "host",
+    "self_snapshot",
     "stack",
     "spender",
     "vector",

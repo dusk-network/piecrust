@@ -46,6 +46,7 @@ pub struct WorldInner {
     environments: BTreeMap<ModuleId, Env>,
     native_queries: NativeQueries,
     storage_path: PathBuf,
+    debug: Vec<String>,
     events: Vec<Event>,
     call_stack: CallStack,
     height: u64,
@@ -79,6 +80,7 @@ impl World {
             native_queries: NativeQueries::new(),
             storage_path: path.into(),
             events: vec![],
+            debug: vec![],
             call_stack: CallStack::default(),
             height: 0,
             limit: DEFAULT_POINT_LIMIT,
@@ -95,6 +97,7 @@ impl World {
                     .path()
                     .into(),
                 events: vec![],
+                debug: vec![],
                 call_stack: CallStack::default(),
                 height: 0,
                 limit: DEFAULT_POINT_LIMIT,
@@ -159,6 +162,8 @@ impl World {
                 "t" => Function::new_native_with_env(&store, env.clone(), host_transact),
 
                 "height" => Function::new_native_with_env(&store, env.clone(), host_height),
+                "host_debug" => Function::new_native_with_env(&store, env.clone(), host_debug),
+        "host_panic" => Function::new_native_with_env(&store, env.clone(), host_panic),
                 "emit" => Function::new_native_with_env(&store, env.clone(), host_emit),
                 "caller" => Function::new_native_with_env(&store, env.clone(), host_caller),
                 "limit" => Function::new_native_with_env(&store, env.clone(), host_limit),
@@ -234,8 +239,9 @@ impl World {
         let remaining = instance.remaining_points();
 
         let events = mem::take(&mut w.events);
+        let debug = mem::take(&mut w.debug);
 
-        Ok(Receipt::new(ret, events, w.limit - remaining))
+        Ok(Receipt::new(ret, events, debug, w.limit - remaining))
     }
 
     pub fn transact<Arg, Ret>(
@@ -261,8 +267,9 @@ impl World {
         let remaining = instance.remaining_points();
 
         let events = mem::take(&mut w.events);
+        let debug = mem::take(&mut w.debug);
 
-        Ok(Receipt::new(ret, events, w.limit - remaining))
+        Ok(Receipt::new(ret, events, debug, w.limit - remaining))
     }
 
     /// Set the height available to modules.
@@ -328,7 +335,7 @@ impl World {
         Ok(ret_ofs)
     }
 
-    fn perform_native_query(
+    fn native_query(
         &self,
         name: &str,
         buf: &mut [u8],
@@ -386,21 +393,30 @@ impl World {
         Ok(ret_len)
     }
 
-    fn perform_height(&self, instance: &Instance) -> Result<u32, Error> {
+    fn height(&self, instance: &Instance) -> Result<u32, Error> {
         let guard = self.0.lock();
         let w = unsafe { &*guard.get() };
 
         instance.write_to_arg_buffer(w.height)
     }
 
-    fn perform_emit(&self, module_id: ModuleId, data: Vec<u8>) {
+    fn emit(&self, module_id: ModuleId, data: Vec<u8>) {
         let guard = self.0.lock();
         let w = unsafe { &mut *guard.get() };
 
         w.events.push(Event::new(module_id, data));
     }
 
-    fn perform_limit(&self, instance: &Instance) -> Result<u32, Error> {
+    pub(crate) fn debug(&self, string: String) {
+        let guard = self.0.lock();
+        let w = unsafe { &mut *guard.get() };
+
+        println!("pushing string");
+
+        w.debug.push(string);
+    }
+
+    fn limit(&self, instance: &Instance) -> Result<u32, Error> {
         let guard = self.0.lock();
         let w = unsafe { &*guard.get() };
 
@@ -408,7 +424,7 @@ impl World {
         instance.write_to_arg_buffer(limit)
     }
 
-    fn perform_spent(&self, instance: &Instance) -> Result<u32, Error> {
+    fn spent(&self, instance: &Instance) -> Result<u32, Error> {
         let guard = self.0.lock();
         let w = unsafe { &*guard.get() };
 
@@ -418,7 +434,7 @@ impl World {
         instance.write_to_arg_buffer(limit - remaining)
     }
 
-    fn perform_caller(&self, instance: &Instance) -> Result<u32, Error> {
+    fn caller(&self, instance: &Instance) -> Result<u32, Error> {
         let guard = self.0.lock();
         let w = unsafe { &*guard.get() };
         let caller = w.call_stack.caller();
@@ -507,7 +523,7 @@ fn host_native_query(
 
     instance
         .with_arg_buffer(|buf| {
-            instance.world().perform_native_query(&name, buf, arg_len)
+            instance.world().native_query(&name, buf, arg_len)
         })
         .expect("TODO: error handling")
 }
@@ -546,7 +562,7 @@ fn host_height(env: &Env) -> u32 {
     let instance = env.inner();
     instance
         .world()
-        .perform_height(instance)
+        .height(instance)
         .expect("TODO: error handling")
 }
 
@@ -558,14 +574,14 @@ fn host_emit(env: &Env, arg_len: u32) {
 
     let data = instance.with_arg_buffer(|buf| buf[..arg_len].to_vec());
 
-    instance.world().perform_emit(module_id, data);
+    instance.world().emit(module_id, data);
 }
 
 fn host_spent(env: &Env) -> u32 {
     let instance = env.inner();
     instance
         .world()
-        .perform_spent(instance)
+        .spent(instance)
         .expect("TODO: error handling")
 }
 
@@ -573,7 +589,7 @@ fn host_limit(env: &Env) -> u32 {
     let instance = env.inner();
     instance
         .world()
-        .perform_limit(instance)
+        .limit(instance)
         .expect("TODO: error handling")
 }
 
@@ -581,6 +597,16 @@ fn host_caller(env: &Env) -> u32 {
     let instance = env.inner();
     instance
         .world()
-        .perform_caller(instance)
+        .caller(instance)
         .expect("TODO: error handling")
+}
+
+fn host_debug(env: &Env, ofs: i32, len: u32) {
+    let instance = env.inner();
+    instance.debug(ofs, len)
+}
+
+fn host_panic(env: &Env, ofs: i32, len: u32) {
+    let instance = env.inner();
+    instance.debug(ofs, len)
 }

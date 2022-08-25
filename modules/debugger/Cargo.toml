@@ -1,5 +1,5 @@
 [package]
-name = "counter"
+name = "debugger"
 version = "0.1.0"
 authors = [
     "Kristoffer Ström <kristoffer@dusk.network>",
@@ -9,7 +9,7 @@ edition = "2021"
 license = "MPL-2.0"
 
 [dependencies]
-dallo = { path = "../../dallo", features = ["debug"], default-features = false }
+dallo = { path = "../../dallo", default-features = false }
 
 [lib]
 crate-type = ["cdylib", "rlib"]
