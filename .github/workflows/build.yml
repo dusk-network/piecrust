@@ -39,7 +39,10 @@ jobs:
           profile: minimal
           toolchain: nightly
           override: true
-      - run: rustup component add rust-src
+      - name: Install WASM target
+        run: rustup target add wasm32-unknown-unknown
+      - name: Add `rust-src` component
+        run: rustup component add rust-src
       - name: Run `make test`
         run: make test
 
