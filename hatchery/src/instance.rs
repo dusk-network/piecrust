@@ -279,6 +279,18 @@ impl Instance {
             }
         }
     }
+
+    pub fn debug(&self, ofs: i32, len: u32) {
+        let string = self.with_memory(|m| {
+            String::from(
+                core::str::from_utf8(&m[ofs as usize..][..len as usize])
+                    .unwrap_or("INVALID UTF"),
+            )
+        });
+
+        println!("CONTRACT DEBUG: {}", &string);
+        self.world.debug(string)
+    }
 }
 
 fn map_call_err(instance: &Instance, err: Error) -> Error {

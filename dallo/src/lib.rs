@@ -4,7 +4,7 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-#![feature(alloc_error_handler, lang_items, const_mut_refs)]
+#![feature(alloc_error_handler, lang_items)]
 #![no_std]
 
 extern crate alloc;
@@ -26,6 +26,9 @@ pub use ops::*;
 
 mod types;
 pub use types::*;
+
+pub mod bufwriter;
+pub mod debug;
 
 /// How many bytes to use for scratch space when serializing
 pub const SCRATCH_BUF_BYTES: usize = 64;
