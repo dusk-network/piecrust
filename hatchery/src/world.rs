@@ -163,7 +163,7 @@ impl World {
 
                 "height" => Function::new_native_with_env(&store, env.clone(), host_height),
                 "host_debug" => Function::new_native_with_env(&store, env.clone(), host_debug),
-        "host_panic" => Function::new_native_with_env(&store, env.clone(), host_panic),
+                "host_panic" => Function::new_native_with_env(&store, env.clone(), host_panic),
                 "emit" => Function::new_native_with_env(&store, env.clone(), host_emit),
                 "caller" => Function::new_native_with_env(&store, env.clone(), host_caller),
                 "limit" => Function::new_native_with_env(&store, env.clone(), host_limit),
