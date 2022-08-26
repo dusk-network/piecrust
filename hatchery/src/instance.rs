@@ -6,14 +6,15 @@
 
 use colored::*;
 
+use bytecheck::CheckBytes;
 use dallo::{
-    ModuleId, StandardBufSerializer, StandardDeserialize, MODULE_ID_BYTES,
-    SCRATCH_BUF_BYTES,
+    ModuleId, StandardBufSerializer, MODULE_ID_BYTES, SCRATCH_BUF_BYTES,
 };
 use rkyv::{
     check_archived_root,
     ser::serializers::{BufferScratch, BufferSerializer, CompositeSerializer},
     ser::Serializer,
+    validation::validators::DefaultValidator,
     Archive, Deserialize, Infallible, Serialize,
 };
 use wasmer::NativeFunc;
@@ -69,7 +70,8 @@ impl Instance {
     where
         Arg: for<'a> Serialize<StandardBufSerializer<'a>>,
         Ret: Archive,
-        Ret::Archived: StandardDeserialize<Ret>,
+        Ret::Archived: Deserialize<Ret, Infallible>
+            + for<'a> CheckBytes<DefaultValidator<'a>>,
     {
         let ret_len = {
             let arg_len = self.write_to_arg_buffer(arg)?;
@@ -98,7 +100,8 @@ impl Instance {
     where
         Arg: for<'a> Serialize<StandardBufSerializer<'a>> + core::fmt::Debug,
         Ret: Archive,
-        Ret::Archived: StandardDeserialize<Ret>,
+        Ret::Archived: Deserialize<Ret, Infallible>
+            + for<'a> CheckBytes<DefaultValidator<'a>>,
     {
         let ret_len = {
             let arg_len = self.write_to_arg_buffer(arg)?;
@@ -190,7 +193,8 @@ impl Instance {
     fn read_from_arg_buffer<T>(&self, arg_len: u32) -> Result<T, Error>
     where
         T: Archive,
-        T::Archived: StandardDeserialize<T>,
+        T::Archived: Deserialize<T, Infallible>
+            + for<'a> CheckBytes<DefaultValidator<'a>>,
     {
         // TODO use bytecheck here
         self.with_arg_buffer(|abuf| {

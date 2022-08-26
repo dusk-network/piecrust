@@ -11,9 +11,9 @@ use rkyv::ser::serializers::{
     BufferScratch, BufferSerializer, CompositeSerializer,
 };
 use rkyv::ser::Serializer;
-use rkyv::{check_archived_root, Archive, Deserialize, Serialize};
+use rkyv::{archived_root, Archive, Deserialize, Infallible, Serialize};
 
-use crate::types::{StandardBufSerializer, StandardDeserialize};
+use crate::types::StandardBufSerializer;
 
 /// Wrap a query with its respective (de)serializers.
 ///
@@ -21,13 +21,13 @@ use crate::types::{StandardBufSerializer, StandardDeserialize};
 pub fn wrap_query<A, R, F>(arg_len: u32, f: F) -> u32
 where
     A: Archive,
-    A::Archived: StandardDeserialize<A>,
+    A::Archived: Deserialize<A, Infallible>,
     R: for<'a> Serialize<StandardBufSerializer<'a>>,
     F: Fn(A) -> R,
 {
     with_arg_buf(|buf| {
         let slice = &buf[..arg_len as usize];
-        let aa: &A::Archived = check_archived_root::<A>(slice).unwrap();
+        let aa: &A::Archived = unsafe { archived_root::<A>(slice) };
         let a: A = aa.deserialize(&mut rkyv::Infallible).unwrap();
         let ret = f(a);
 
@@ -47,13 +47,13 @@ where
 pub fn wrap_transaction<A, R, F>(arg_len: u32, mut f: F) -> u32
 where
     A: Archive,
-    A::Archived: StandardDeserialize<A>,
+    A::Archived: Deserialize<A, Infallible>,
     R: for<'a> Serialize<StandardBufSerializer<'a>>,
     F: FnMut(A) -> R,
 {
     with_arg_buf(|buf| {
         let slice = &buf[..arg_len as usize];
-        let aa: &A::Archived = check_archived_root::<A>(slice).unwrap();
+        let aa: &A::Archived = unsafe { archived_root::<A>(slice) };
         let a: A = aa.deserialize(&mut rkyv::Infallible).unwrap();
         let ret = f(a);
 

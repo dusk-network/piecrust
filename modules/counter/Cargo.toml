@@ -9,7 +9,7 @@ edition = "2021"
 license = "MPL-2.0"
 
 [dependencies]
-dallo = { path = "../../dallo", features = ["debug"], default-features = false }
+dallo = { path = "../../dallo", default-features = false }
 
 [lib]
 crate-type = ["cdylib", "rlib"]

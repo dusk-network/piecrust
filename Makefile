@@ -1,11 +1,11 @@
 all: test-modules
 
-COUNTER_MODULE_BYTE_SIZE_LIMIT = 4000
+COUNTER_MODULE_BYTE_SIZE_LIMIT = 1024
 
 help: ## Display this help screen
 	@grep -h -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-15s\033[0m %s\n", $$1, $$2}'
 
-test: release-modules test-modules assert-counter-module-small ## Run the modules' tests
+test: strip-modules test-modules assert-counter-module-small ## Run the modules' tests
 	@cargo test --manifest-path=./hatchery/Cargo.toml
 
 test-modules: ## Build the test modules
@@ -24,7 +24,16 @@ release-modules: ## Build the test modules in release mode
 		-Z build-std-features=panic_immediate_abort \
 		--target wasm32-unknown-unknown \
 
-assert-counter-module-small:
-	@test `wc -c ./modules/target/wasm32-unknown-unknown/release/counter.wasm | cut -f1 -d' '` -lt $(COUNTER_MODULE_BYTE_SIZE_LIMIT);
+RELEASE_MODULES = $(wildcard modules/target/wasm32-unknown-unknown/release/*.wasm)
+STRIPPED_MODULES = $(subst modules/target/wasm32-unknown-unknown/release/,, $(RELEASE_MODULES))
 
-.PHONY: all test-modules
+$(STRIPPED_MODULES):
+	mkdir -p modules/target/stripped;
+	wasm-tools strip -a ./modules/target/wasm32-unknown-unknown/release/$@ -o ./modules/target/stripped/$@
+
+strip-modules: $(STRIPPED_MODULES)
+
+assert-counter-module-small:
+	@test `wc -c ./modules/target/stripped/counter.wasm | cut -f1 -d' '` -lt $(COUNTER_MODULE_BYTE_SIZE_LIMIT);
+
+.PHONY: all test-modules $(STRIPPED_MODULES)
