@@ -17,19 +17,19 @@ pub static mut DEBUG_BUFFER: [u8; DEBUG_BUFFER_SIZE] = [0u8; DEBUG_BUFFER_SIZE];
 #[macro_export]
 macro_rules! debug {
 	($($tt:tt)*) => {
-            #[allow(unused)]
-            use core::fmt::Write as _;
+        #[allow(unused)]
+        use core::fmt::Write as _;
 
-            let buf = unsafe {&mut $crate::debug::DEBUG_BUFFER };
+        let buf = unsafe {&mut $crate::debug::DEBUG_BUFFER };
 
-            let len = {
-		let mut w = $crate::bufwriter::BufWriter::new(buf);
-		write!(&mut w, $($tt)*).unwrap();
-		w.ofs() as u32
-            };
-            let ptr = buf.as_ptr() as i32;
+        let len = {
+		    let mut w = $crate::bufwriter::BufWriter::new(buf);
+		    write!(&mut w, $($tt)*).unwrap();
+            w.ofs() as u32
+        };
+        let ptr = buf.as_ptr() as i32;
 
-            unsafe { $crate::debug::host_debug(ptr, len) }
+        unsafe { $crate::debug::host_debug(ptr, len) }
 	};
 
 }
