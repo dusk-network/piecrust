@@ -1,3 +1,9 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+//
+// Copyright (c) DUSK NETWORK. All rights reserved.
+
 use std::cell::{Ref, RefCell, RefMut};
 use std::collections::BTreeMap;
 use std::fs;
@@ -6,13 +12,14 @@ use std::io::{self, Write};
 use std::ops::{Deref, DerefMut};
 use std::path::{Path, PathBuf};
 
+use blake3::{Hash, Hasher};
 use memmap2::{MmapMut, MmapOptions};
 
 const PAGE_SIZE: usize = 65536;
+const ZERO_HASH: [u8; 32] = [0u8; 32];
 const ZEROED_PAGE: [u8; PAGE_SIZE] = [0u8; PAGE_SIZE];
 
 pub type ModuleId = [u8; 32];
-pub type Hash = [u8; 32];
 
 /// The memory and whether it is dirty, wrapped in a `RefCell` for interior
 /// mutability.
@@ -102,7 +109,7 @@ impl MemorySession {
         }
 
         // if the base directory doesn't exist, then there is no base
-        let base_hex = hex::encode(base);
+        let base_hex = hex::encode(base.as_bytes());
         let base = snapshot_dir(&dir, &base_hex).exists().then_some(base);
 
         Ok(Self {
@@ -163,8 +170,22 @@ impl MemorySession {
     /// Create a snapshot from the current state of the memories and rebase onto
     /// it, returning the snapshot ID - the root of the state.
     pub fn snap(&mut self) -> io::Result<Hash> {
-        let snap = self.root()?;
-        let snap_hex = hex::encode(snap);
+        let snap = self.root();
+
+        // if the snapshot is root is the same as the base - or genesis - return
+        // it immediately
+        if snap.as_bytes()
+            == self
+                .base
+                .as_ref()
+                .unwrap_or(&Hash::from(ZERO_HASH))
+                .as_bytes()
+        {
+            // TODO: fix the ugliness
+            return Ok(snap);
+        }
+
+        let snap_hex = hex::encode(snap.as_bytes());
 
         // create snapshot directory if it does not exist
         let snap_dir = snapshot_dir(&self.dir, &snap_hex);
@@ -173,7 +194,7 @@ impl MemorySession {
         // create a file indicating this snapshot has a base
         if let Some(base) = &self.base {
             let base_path = snapshot_base_path(&self.dir, &snap_hex);
-            fs::write(base_path, base)?;
+            fs::write(base_path, base.as_bytes())?;
         }
 
         // copy all dirty memories onto their respective files and mark them as
@@ -199,15 +220,64 @@ impl MemorySession {
 
     /// Return the root of the module tree.
     ///
+    /// The root of these memories is the previous root hashed with the root of
+    /// a merkle tree where the leaves are the hashes of each changed memory +
+    /// module ID. The memories are ordered in the tree by module ID.
+    ///
     /// # Panics
     /// When any memory is mutably borrowed.
-    pub fn root(&self) -> io::Result<Hash> {
-        // FIXME: it is (hopefully) obvious this is not how one computes the
-        //  state root
-        Ok(self.base.map_or([0u8; 32], |mut base| {
-            base[0] += 1;
-            base
-        }))
+    pub fn root(&self) -> Hash {
+        // !hash all the memories!
+        let mut hashes = self
+            .memories
+            .iter()
+            .filter_map(|(module_id, mem_cell)| {
+                // filter out all the clean memories
+                let mem_ref = mem_cell.0.borrow();
+                let (_, dirty) = mem_ref.deref();
+                dirty.then_some((module_id, mem_cell))
+            })
+            .map(|(module_id, mem_cell)| {
+                let mem = mem_cell.borrow();
+                let mut hasher = Hasher::new();
+
+                hasher.update(module_id);
+                hasher.update(mem.as_ref());
+
+                hasher.finalize()
+            })
+            .collect::<Vec<Hash>>();
+
+        // if the tree is empty, we are still on the previous snapshot - or in
+        // genesis.
+        if hashes.is_empty() {
+            return self.base.unwrap_or_else(|| Hash::from([0u8; 32]));
+        }
+
+        // compute the root of the tree by successively hashing each level
+        while hashes.len() > 1 {
+            hashes = hashes
+                .chunks(2)
+                .map(|hashes| {
+                    let mut hasher = Hasher::new();
+                    for hash in hashes {
+                        hasher.update(hash.as_bytes());
+                    }
+                    hasher.finalize()
+                })
+                .collect();
+        }
+
+        // hash the previous snapshot's root together with the merkle root
+        let mut hasher = Hasher::new();
+        hasher.update(
+            self.base
+                .unwrap_or_else(|| Hash::from([0u8; 32]))
+                .as_bytes(),
+        );
+        hasher.update(hashes[0].as_bytes());
+
+        hasher.finalize()
     }
 
     /// Return the path to the last snapshot of a module.
@@ -226,7 +296,7 @@ impl MemorySession {
             // If the module is not found in any snapshots in the path return
             // None.
             Some(mut base) => loop {
-                let base_hex = hex::encode(base);
+                let base_hex = hex::encode(base.as_bytes());
                 let snap_dir = snapshot_dir(&self.dir, &base_hex);
 
                 if snap_dir.exists() && snap_dir.is_dir() {
@@ -240,7 +310,9 @@ impl MemorySession {
                     let base_path = snapshot_base_path(&self.dir, &base_hex);
                     if base_path.exists() && base_path.is_file() {
                         let base_bytes = fs::read(base_path)?;
-                        base.copy_from_slice(&base_bytes);
+                        let base_bytes: [u8; 32] =
+                            base_bytes.try_into().unwrap();
+                        base = Hash::from(base_bytes);
                         continue;
                     }
 
