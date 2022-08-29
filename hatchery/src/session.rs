@@ -189,7 +189,9 @@ impl MemorySession {
 
         // create snapshot directory if it does not exist
         let snap_dir = snapshot_dir(&self.dir, &snap_hex);
-        fs::create_dir(snap_dir)?;
+        if !snap_dir.exists() {
+            fs::create_dir(snap_dir)?;
+        }
 
         // create a file indicating this snapshot has a base
         if let Some(base) = &self.base {
@@ -517,6 +519,10 @@ impl AsMut<[u8]> for Memory {
 #[cfg(test)]
 mod tests {
     use super::Memory;
+    use crate::session::MemorySession;
+    use blake3::Hash;
+    use rand::rngs::StdRng;
+    use rand::{RngCore, SeedableRng};
     use tempfile::NamedTempFile;
 
     #[test]
@@ -547,5 +553,54 @@ mod tests {
 
         assert_eq!(old_mem[4], 0, "old memory should be unchanged");
         assert_eq!(old_mem[13], 0, "old memory should be unchanged");
+    }
+
+    #[test]
+    fn snapping() {
+        let memories_dir =
+            tempfile::tempdir().expect("creating tmp dir should be fine");
+
+        let snap = Hash::from([0u8; 32]);
+        let mut session_1 = MemorySession::new(&memories_dir, snap)
+            .expect("session creation should work");
+
+        let module_1 = {
+            let mut bytes = [0u8; 32];
+            bytes[0] = 42;
+            bytes
+        };
+
+        let module_2 = {
+            let mut bytes = [0u8; 32];
+            bytes[1] = 42;
+            bytes
+        };
+
+        session_1.load(module_1).expect("loading should go ok");
+        session_1.load(module_2).expect("loading should go ok");
+
+        let mut mem_1 = session_1
+            .borrow_mut(&module_1)
+            .expect("borrowing should succeed");
+        let mut mem_2 = session_1
+            .borrow_mut(&module_2)
+            .expect("borrowing should succeed");
+
+        let mut rng = StdRng::seed_from_u64(1234);
+
+        rng.fill_bytes(&mut mem_1[..]);
+        rng.fill_bytes(&mut mem_2[..]);
+
+        drop(mem_1);
+        drop(mem_2);
+
+        let snap = session_1.snap().expect("snap id");
+        let root = session_1.root();
+        assert_eq!(snap, root);
+
+        let session_2 = MemorySession::new(&memories_dir, snap)
+            .expect("session creation should work");
+        let root = session_2.root();
+        assert_eq!(snap, root);
     }
 }

@@ -20,3 +20,7 @@ parking_lot = "0.12.1"
 tempfile = "3.2.0"
 memmap2 = "0.5"
 hex = "0.4"
+
+[dev-dependencies]
+tempfile = "3.3"
+rand = "0.8"
