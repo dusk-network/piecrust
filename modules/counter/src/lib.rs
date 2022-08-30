@@ -32,12 +32,6 @@ impl Counter {
         let value = self.value + 1;
         self.value = value;
     }
-
-    pub fn mogrify(&mut self, x: i64) -> i64 {
-        let old = self.read_value();
-        self.value -= x;
-        old
-    }
 }
 
 #[no_mangle]
@@ -48,9 +42,4 @@ unsafe fn read_value(arg_len: u32) -> u32 {
 #[no_mangle]
 unsafe fn increment(arg_len: u32) -> u32 {
     dallo::wrap_transaction(arg_len, |_: ()| STATE.increment())
-}
-
-#[no_mangle]
-unsafe fn mogrify(arg_len: u32) -> u32 {
-    dallo::wrap_transaction(arg_len, |by| STATE.mogrify(by))
 }

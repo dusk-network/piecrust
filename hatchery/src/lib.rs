@@ -18,10 +18,6 @@ pub use world::{Event, NativeQuery, Receipt, World};
 #[macro_export]
 macro_rules! module_bytecode {
     ($name:literal) => {
-        include_bytes!(concat!(
-            "../../modules/target/wasm32-unknown-unknown/release/",
-            $name,
-            ".wasm"
-        ))
+        include_bytes!(concat!("../../target/stripped/", $name, ".wasm"))
     };
 }

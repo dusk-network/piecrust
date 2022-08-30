@@ -4,8 +4,6 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-// #[cfg(feature = "debug")]
-
 extern "C" {
     pub fn host_debug(ofs: i32, len: u32);
 }

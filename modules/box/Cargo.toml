@@ -5,7 +5,6 @@ authors = [
     "Kristoffer Ström <kristoffer@dusk.network>",
 ]
 edition = "2021"
-
 license = "MPL-2.0"
 
 [dependencies]
