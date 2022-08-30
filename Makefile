@@ -12,7 +12,7 @@ $(MODULES):
 	  -Z build-std=core,alloc,panic_abort \
 	  -Z build-std-features=panic_immediate_abort \
 	  --target wasm32-unknown-unknown
-	wasm-tools strip -a target/wasm32-unknown-unknown/release/$@.wasm -o target/stripped/$@.wasm
+	wasm-tools strip -a modules/$@/target/wasm32-unknown-unknown/release/$@.wasm -o target/stripped/$@.wasm
 
 test: modules assert-counter-module-small ## Run the module tests
 	cargo test \

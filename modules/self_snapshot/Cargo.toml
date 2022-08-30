@@ -12,3 +12,5 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 dallo = { path = "../../dallo", default-features = false }
+
+[workspace]
