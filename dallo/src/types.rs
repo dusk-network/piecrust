@@ -78,6 +78,18 @@ impl From<[u8; 32]> for ModuleId {
     }
 }
 
+impl AsRef<[u8]> for ModuleId {
+    fn as_ref(&self) -> &[u8] {
+        &self.0
+    }
+}
+
+impl AsMut<[u8]> for ModuleId {
+    fn as_mut(&mut self) -> &mut [u8] {
+        &mut self.0
+    }
+}
+
 impl core::fmt::Debug for ModuleId {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         if f.alternate() {

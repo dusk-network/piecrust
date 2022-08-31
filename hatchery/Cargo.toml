@@ -9,11 +9,11 @@ license = "MPL-2.0"
 colored = "2.0.0"
 rkyv = { version = "0.7", features = ["validation"] }
 bytecheck = "0.6"
-wasmer = { git = "https://github.com/wasmerio/wasmer", branch = "master" }
-wasmer-vm = { git = "https://github.com/wasmerio/wasmer", branch = "master" }
-wasmer-types = { git = "https://github.com/wasmerio/wasmer", branch = "master" }
-wasmer-middlewares = { git = "https://github.com/wasmerio/wasmer", branch = "master" }
-wasmer-compiler-singlepass = { git = "https://github.com/wasmerio/wasmer", branch = "master" }
+wasmer = { git = "https://github.com/wasmerio/wasmer", rev = "dafdd94" }
+wasmer-vm = { git = "https://github.com/wasmerio/wasmer", rev = "dafdd94" }
+wasmer-types = { git = "https://github.com/wasmerio/wasmer", rev = "dafdd94" }
+wasmer-middlewares = { git = "https://github.com/wasmerio/wasmer", rev = "dafdd94" }
+wasmer-compiler-singlepass = { git = "https://github.com/wasmerio/wasmer", rev = "dafdd94" }
 dallo = { path = "../dallo" }
 blake3 = "1.3.1"
 parking_lot = "0.12.1"
@@ -24,3 +24,6 @@ hex = "0.4"
 [dev-dependencies]
 tempfile = "3.3"
 rand = "0.8"
+
+[features]
+test = []

@@ -3,6 +3,7 @@
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
+#![cfg_attr(feature = "test", feature(test, bigint_helper_methods))]
 
 // mod env;
 // mod error;

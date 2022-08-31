@@ -11,15 +11,17 @@ use std::fs::OpenOptions;
 use std::io::{self, Write};
 use std::ops::{Deref, DerefMut};
 use std::path::{Path, PathBuf};
+use std::ptr::NonNull;
 
 use blake3::{Hash, Hasher};
+use dallo::ModuleId;
 use memmap2::{MmapMut, MmapOptions};
+use wasmer_types::{MemoryType, Pages, WASM_PAGE_SIZE};
+use wasmer_vm::{LinearMemory, MemoryError, MemoryStyle, VMMemoryDefinition};
 
 const PAGE_SIZE: usize = 65536;
 const ZERO_HASH: [u8; 32] = [0u8; 32];
 const ZEROED_PAGE: [u8; PAGE_SIZE] = [0u8; PAGE_SIZE];
-
-pub type ModuleId = [u8; 32];
 
 /// The memory and whether it is dirty, wrapped in a `RefCell` for interior
 /// mutability.
@@ -243,7 +245,7 @@ impl MemorySession {
                 let mem = mem_cell.borrow();
                 let mut hasher = Hasher::new();
 
-                hasher.update(module_id);
+                hasher.update(module_id.as_ref());
                 hasher.update(mem.as_ref());
 
                 hasher.finalize()
@@ -446,47 +448,36 @@ impl Memory {
     }
 }
 
-mod wasmer_impl {
-    use super::{Memory, MmapPtr};
+impl LinearMemory for Memory {
+    fn ty(&self) -> MemoryType {
+        MemoryType::new(1, None, true)
+    }
 
-    use std::ptr::NonNull;
+    fn size(&self) -> Pages {
+        Pages((self.mmap.len() / WASM_PAGE_SIZE) as u32)
+    }
 
-    use wasmer_types::{MemoryType, Pages, WASM_PAGE_SIZE};
-    use wasmer_vm::{
-        LinearMemory, MemoryError, MemoryStyle, VMMemoryDefinition,
-    };
-
-    impl LinearMemory for Memory {
-        fn ty(&self) -> MemoryType {
-            MemoryType::new(1, None, true)
+    fn style(&self) -> MemoryStyle {
+        MemoryStyle::Dynamic {
+            offset_guard_size: 0,
         }
+    }
 
-        fn size(&self) -> Pages {
-            Pages((self.mmap.len() / WASM_PAGE_SIZE) as u32)
-        }
+    fn grow(&mut self, delta: Pages) -> Result<Pages, MemoryError> {
+        self.grow(delta.0 as usize)
+            .map(|_| Pages((self.mmap.len() / WASM_PAGE_SIZE) as u32))
+            .map_err(|err| MemoryError::Generic(format!("{}", err)))
+    }
 
-        fn style(&self) -> MemoryStyle {
-            MemoryStyle::Dynamic {
-                offset_guard_size: 0,
-            }
-        }
+    fn vmmemory(&self) -> NonNull<VMMemoryDefinition> {
+        let ptr = &self.ptr as *const MmapPtr;
+        let ptr = ptr as *mut VMMemoryDefinition;
+        NonNull::new(ptr).unwrap()
+    }
 
-        fn grow(&mut self, delta: Pages) -> Result<Pages, MemoryError> {
-            self.grow(delta.0 as usize)
-                .map(|_| Pages((self.mmap.len() / WASM_PAGE_SIZE) as u32))
-                .map_err(|err| MemoryError::Generic(format!("{}", err)))
-        }
-
-        fn vmmemory(&self) -> NonNull<VMMemoryDefinition> {
-            let ptr = &self.ptr as *const MmapPtr;
-            let ptr = ptr as *mut VMMemoryDefinition;
-            NonNull::new(ptr).unwrap()
-        }
-
-        fn try_clone(&self) -> Option<Box<dyn LinearMemory + 'static>> {
-            // TODO this could actually be implemented
-            None
-        }
+    fn try_clone(&self) -> Option<Box<dyn LinearMemory + 'static>> {
+        // TODO this could actually be implemented
+        None
     }
 }
 
@@ -521,6 +512,7 @@ mod tests {
     use super::Memory;
     use crate::session::MemorySession;
     use blake3::Hash;
+    use dallo::ModuleId;
     use rand::rngs::StdRng;
     use rand::{RngCore, SeedableRng};
     use tempfile::NamedTempFile;
@@ -567,13 +559,13 @@ mod tests {
         let module_1 = {
             let mut bytes = [0u8; 32];
             bytes[0] = 42;
-            bytes
+            ModuleId::from(bytes)
         };
 
         let module_2 = {
             let mut bytes = [0u8; 32];
             bytes[1] = 42;
-            bytes
+            ModuleId::from(bytes)
         };
 
         session_1.load(module_1).expect("loading should go ok");
@@ -602,5 +594,76 @@ mod tests {
             .expect("session creation should work");
         let root = session_2.root();
         assert_eq!(snap, root);
+    }
+
+    #[cfg(feature = "test")]
+    mod bench {
+        extern crate test;
+
+        use crate::session::MemorySession;
+
+        use blake3::Hash;
+        use dallo::ModuleId;
+        use rand::rngs::StdRng;
+        use rand::{RngCore, SeedableRng};
+        use tempfile::TempDir;
+
+        use test::{black_box, Bencher};
+
+        // the return needs to include TempDir, since if it drops it will remove
+        // the directory with all its contents
+        fn session(mem_num: usize) -> (MemorySession, TempDir) {
+            let session_dir =
+                tempfile::tempdir().expect("creating tmp dir should be fine");
+
+            let snap = Hash::from([0u8; 32]);
+            let mut session = MemorySession::new(&session_dir, snap)
+                .expect("session creation should work");
+
+            let mut rng = StdRng::seed_from_u64(42);
+
+            let mut module_id = ModuleId::from([0u8; 32]);
+            for _ in 0..mem_num {
+                // this just adds one to the module ID
+                module_id.as_mut().iter_mut().fold(
+                    (1, true),
+                    |(rhs, carry), b| {
+                        let (new_b, carry) = b.carrying_add(rhs, carry);
+                        *b = new_b;
+                        (0, carry)
+                    },
+                );
+
+                session.load(module_id).expect("loading should go ok");
+                let mut mem = session.borrow_mut(&module_id).unwrap();
+                rng.fill_bytes(&mut mem);
+            }
+
+            (session, session_dir)
+        }
+
+        #[bench]
+        fn root_with_2_dirty_memories(bencher: &mut Bencher) {
+            let (session, _dir) = session(2);
+            bencher.iter(|| session.root())
+        }
+
+        #[bench]
+        fn root_with_10_dirty_memories(bencher: &mut Bencher) {
+            let (session, _dir) = session(10);
+            bencher.iter(|| session.root())
+        }
+
+        #[bench]
+        fn root_with_100_dirty_memories(bencher: &mut Bencher) {
+            let (session, _dir) = session(100);
+            bencher.iter(|| session.root())
+        }
+
+        #[bench]
+        fn root_with_1000_dirty_memories(bencher: &mut Bencher) {
+            let (session, _dir) = session(1000);
+            bencher.iter(|| session.root())
+        }
     }
 }
