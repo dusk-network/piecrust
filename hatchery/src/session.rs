@@ -100,7 +100,7 @@ pub struct MemorySession {
 
 impl MemorySession {
     /// Creates a new memory store at the specified `path` and the given `base`
-    /// snapshot ID.
+    /// commit ID.
     ///
     /// If the directory doesn't exists it will be created.
     pub fn new<P: AsRef<Path>>(dir: P, base: Hash) -> io::Result<Self> {
@@ -113,7 +113,7 @@ impl MemorySession {
 
         // if the base directory doesn't exist, then there is no base
         let base_hex = hex::encode(&base);
-        let base = snapshot_dir(&dir, &base_hex).exists().then_some(base);
+        let base = commit_dir(&dir, &base_hex).exists().then_some(base);
 
         Ok(Self {
             memories: BTreeMap::new(),
@@ -125,7 +125,7 @@ impl MemorySession {
     /// Borrow a memory for the given `module_id`, if it has already been
     /// [`load`]ed.
     ///
-    /// If a memory with the same module ID exists at the base snapshot that
+    /// If a memory with the same module ID exists at the base commit that
     /// memory will be loaded copy-on-write, otherwise a new memory will be
     /// created.
     ///
@@ -155,12 +155,12 @@ impl MemorySession {
 
     /// Loads a memory onto the store.
     ///
-    /// If a memory with the same module ID exists following the base snapshot
+    /// If a memory with the same module ID exists following the base commit
     /// path, that memory will be loaded copy-on-write, otherwise a new memory
     /// will be created.
     pub fn load(&mut self, module_id: ModuleId) -> io::Result<()> {
         if self.memories.get(&module_id).is_none() {
-            let mem = match self.last_module_snap(&module_id)? {
+            let mem = match self.last_module_commit(&module_id)? {
                 Some(path) => Memory::new(path)?,
                 None => Memory::ephemeral()?,
             };
@@ -170,33 +170,34 @@ impl MemorySession {
         Ok(())
     }
 
-    /// Create a snapshot from the current state of the memories and rebase onto
-    /// it, returning the snapshot ID - the root of the state.
-    pub fn snap(&mut self) -> io::Result<Hash> {
-        let snap = self.root();
+    /// Create a commit from the current state of the memories and rebase onto
+    /// it, returning the commit ID - the root of the state.
+    pub fn commit(&mut self) -> io::Result<Hash> {
+        let commit = self.root();
 
-        // if the snapshot is root is the same as the base - or genesis - return
+        // if the commit is root is the same as the base - or genesis - return
         // it immediately
-        if &snap == self.base.as_ref().unwrap_or(&Hash::ZERO) {
-            return Ok(snap);
+        if &commit == self.base.as_ref().unwrap_or(&Hash::ZERO) {
+            return Ok(commit);
         }
 
-        let snap_hex = hex::encode(&snap);
+        let commit_hex = hex::encode(&commit);
 
-        // create snapshot directory if it does not exist
-        let snap_dir = snapshot_dir(&self.dir, &snap_hex);
-        if !snap_dir.exists() {
-            fs::create_dir(snap_dir)?;
+        // create commit directory if it does not exist
+        let commit_dir = commit_dir(&self.dir, &commit_hex);
+        if !commit_dir.exists() {
+            fs::create_dir(commit_dir)?;
         }
 
-        // create a file indicating this snapshot has a base
+        // create a file indicating this commit has a base
         if let Some(base) = &self.base {
-            let base_path = snapshot_base_path(&self.dir, &snap_hex);
-            fs::write(base_path, base)?;
+            let base_path = commit_base_path(&self.dir, &commit_hex);
+            let base_hex = hex::encode(base);
+            fs::write(base_path, base_hex)?;
         }
 
         // copy all dirty memories onto their respective files and mark them as
-        // clean
+        // clean, while writing the changed modules into a
         for (module_id, mem) in &mut self.memories {
             let mut mem_ref = mem.0.borrow_mut();
             let (mem, dirty) = mem_ref.deref_mut();
@@ -204,16 +205,16 @@ impl MemorySession {
             if *dirty {
                 let module_id_hex = hex::encode(module_id);
                 let module_path =
-                    module_path(&self.dir, &snap_hex, &module_id_hex);
+                    module_path(&self.dir, &commit_hex, &module_id_hex);
 
                 mem.copy_to(module_path)?;
                 *dirty = false;
             }
         }
 
-        self.base = Some(snap);
+        self.base = Some(commit);
 
-        Ok(snap)
+        Ok(commit)
     }
 
     /// Return the root of the module tree.
@@ -226,7 +227,7 @@ impl MemorySession {
     /// When any memory is mutably borrowed.
     pub fn root(&self) -> Hash {
         // !hash all the memories!
-        let mut hashes = self
+        let mut leaves = self
             .memories
             .iter()
             .filter_map(|(module_id, mem_cell)| {
@@ -246,15 +247,15 @@ impl MemorySession {
             })
             .collect::<Vec<Hash>>();
 
-        // if the tree is empty, we are still on the previous snapshot - or in
+        // if the tree is empty, we are still on the previous commit - or in
         // genesis.
-        if hashes.is_empty() {
+        if leaves.is_empty() {
             return self.base.unwrap_or(Hash::ZERO);
         }
 
         // compute the root of the tree by successively hashing each level
-        while hashes.len() > 1 {
-            hashes = hashes
+        while leaves.len() > 1 {
+            leaves = leaves
                 .chunks(2)
                 .map(|hashes| {
                     let mut hasher = Hasher::new();
@@ -266,35 +267,35 @@ impl MemorySession {
                 .collect();
         }
 
-        // hash the previous snapshot's root together with the merkle root
+        // hash the previous commit's root together with the merkle root
         let mut hasher = Hasher::new();
 
         hasher.update(self.base.unwrap_or(Hash::ZERO));
-        hasher.update(hashes[0]);
+        hasher.update(leaves[0]);
 
         hasher.finalize()
     }
 
-    /// Return the path to the last snapshot of a module.
+    /// Return the path to the last commit of a module.
     ///
-    /// If there has never been a snapshot of the module in the snapshot path,
+    /// If there has never been a commit of the module in the commit path,
     /// `None` will be returned.
-    fn last_module_snap(
+    fn last_module_commit(
         &self,
         module_id: &ModuleId,
     ) -> io::Result<Option<PathBuf>> {
         let module_hex = hex::encode(module_id);
 
         match &self.base {
-            // If there is a base snapshot for the running store, drill down
-            // through the snapshots until we find one with the given module ID.
-            // If the module is not found in any snapshots in the path return
+            // If there is a base commit for the running store, drill down
+            // through the commits until we find one with the given module ID.
+            // If the module is not found in any commits in the path return
             // None.
             Some(mut base) => loop {
                 let base_hex = hex::encode(base);
-                let snap_dir = snapshot_dir(&self.dir, &base_hex);
+                let commit_dir = commit_dir(&self.dir, &base_hex);
 
-                if snap_dir.exists() && snap_dir.is_dir() {
+                if commit_dir.exists() && commit_dir.is_dir() {
                     let module_path =
                         module_path(&self.dir, &base_hex, &module_hex);
 
@@ -302,9 +303,11 @@ impl MemorySession {
                         return Ok(Some(module_path));
                     }
 
-                    let base_path = snapshot_base_path(&self.dir, &base_hex);
+                    let base_path = commit_base_path(&self.dir, &base_hex);
                     if base_path.exists() && base_path.is_file() {
-                        let base_bytes = fs::read(base_path)?;
+                        let base_hex = fs::read(base_path)?;
+                        let base_bytes = hex::decode(base_hex)
+                            .expect("base should be valid hex");
                         let base_bytes: [u8; 32] =
                             base_bytes.try_into().unwrap();
                         base = Hash::from(base_bytes);
@@ -319,20 +322,24 @@ impl MemorySession {
     }
 }
 
-fn snapshot_dir<P: AsRef<Path>>(dir: P, snap_hex: &str) -> PathBuf {
-    dir.as_ref().join(snap_hex)
+fn commit_dir<P: AsRef<Path>>(dir: P, commit_hex: &str) -> PathBuf {
+    dir.as_ref().join(commit_hex)
 }
 
-fn snapshot_base_path<P: AsRef<Path>>(dir: P, snap_hex: &str) -> PathBuf {
-    snapshot_dir(dir, snap_hex).join("base")
+fn commit_base_path<P: AsRef<Path>>(dir: P, commit_hex: &str) -> PathBuf {
+    commit_dir(dir, commit_hex).join("base")
+}
+
+fn commit_dirty_path<P: AsRef<Path>>(dir: P, commit_hex: &str) -> PathBuf {
+    commit_dir(dir, commit_hex).join("dirty")
 }
 
 fn module_path<P: AsRef<Path>>(
     dir: P,
-    snap_hex: &str,
+    commit_hex: &str,
     module_id_hex: &str,
 ) -> PathBuf {
-    snapshot_dir(dir, snap_hex).join(module_id_hex)
+    commit_dir(dir, commit_hex).join(module_id_hex)
 }
 
 /// A copy-on-write or anonymous mmap that is a WASM linear memory.
@@ -541,7 +548,7 @@ mod tests {
     }
 
     #[test]
-    fn snapping() {
+    fn commiting() {
         let memories_dir =
             tempfile::tempdir().expect("creating tmp dir should be fine");
 
@@ -578,14 +585,14 @@ mod tests {
         drop(mem_1);
         drop(mem_2);
 
-        let snap = session_1.snap().expect("snap id");
+        let commit = session_1.commit().expect("commit id");
         let root = session_1.root();
-        assert_eq!(snap, root);
+        assert_eq!(commit, root);
 
-        let session_2 = MemorySession::new(&memories_dir, snap)
+        let session_2 = MemorySession::new(&memories_dir, commit)
             .expect("session creation should work");
         let root = session_2.root();
-        assert_eq!(snap, root);
+        assert_eq!(commit, root);
     }
 
     #[cfg(feature = "test")]
