@@ -13,5 +13,3 @@ dallo = { path = "../../dallo", default-features = false }
 
 [lib]
 crate-type = ["cdylib", "rlib"]
-
-[workspace]
