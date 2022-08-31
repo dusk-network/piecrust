@@ -9,7 +9,7 @@ members = [
     "fibonacci",
     "host",
     "self_snapshot",
-    "stack",
     "spender",
+    "stack",
     "vector",
 ]

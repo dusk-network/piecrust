@@ -9,7 +9,6 @@ use rkyv::{
         AllocSerializer, BufferScratch, BufferSerializer, CompositeSerializer,
     },
     ser::Serializer,
-    validation::validators::DefaultValidator,
     Archive, Deserialize, Infallible, Serialize,
 };
 
@@ -21,16 +20,6 @@ pub type StandardBufSerializer<'a> = CompositeSerializer<
     BufferSerializer<&'a mut [u8]>,
     BufferScratch<&'a mut [u8; SCRATCH_BUF_BYTES]>,
 >;
-
-pub trait StandardDeserialize<T>:
-    Deserialize<T, Infallible> + for<'a> CheckBytes<DefaultValidator<'a>>
-{
-}
-
-impl<T, U> StandardDeserialize<T> for U where
-    U: Deserialize<T, Infallible> + for<'a> CheckBytes<DefaultValidator<'a>>
-{
-}
 
 pub const MODULE_ID_BYTES: usize = 32;
 

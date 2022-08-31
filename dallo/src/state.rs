@@ -5,7 +5,7 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 use rkyv::{
-    check_archived_root,
+    archived_root,
     ser::serializers::{BufferScratch, BufferSerializer, CompositeSerializer},
     ser::Serializer,
     Archive, Deserialize, Infallible, Serialize,
@@ -13,7 +13,7 @@ use rkyv::{
 
 use crate::{
     RawQuery, RawResult, RawTransaction, StandardBufSerializer,
-    StandardDeserialize, SCRATCH_BUF_BYTES,
+    SCRATCH_BUF_BYTES,
 };
 
 mod arg_buf {
@@ -114,7 +114,7 @@ pub fn query<Arg, Ret>(mod_id: ModuleId, name: &str, arg: Arg) -> Ret
 where
     Arg: for<'a> Serialize<StandardBufSerializer<'a>>,
     Ret: Archive,
-    Ret::Archived: StandardDeserialize<Ret>,
+    Ret::Archived: Deserialize<Ret, Infallible>,
 {
     let arg_len = with_arg_buf(|buf| {
         let mut sbuf = [0u8; SCRATCH_BUF_BYTES];
@@ -131,7 +131,7 @@ where
 
     with_arg_buf(|buf| {
         let slice = &buf[..ret_len as usize];
-        let ret = check_archived_root::<Ret>(slice).unwrap();
+        let ret = unsafe { archived_root::<Ret>(slice) };
         ret.deserialize(&mut Infallible).expect("Infallible")
     })
 }
@@ -153,7 +153,7 @@ pub fn native_query<Arg, Ret>(name: &str, arg: Arg) -> Ret
 where
     Arg: for<'a> Serialize<StandardBufSerializer<'a>>,
     Ret: Archive,
-    Ret::Archived: StandardDeserialize<Ret>,
+    Ret::Archived: Deserialize<Ret, Infallible>,
 {
     let arg_len = with_arg_buf(|buf| {
         let mut sbuf = [0u8; SCRATCH_BUF_BYTES];
@@ -170,7 +170,7 @@ where
 
     with_arg_buf(|buf| {
         let slice = &buf[..ret_len as usize];
-        let ret = check_archived_root::<Ret>(slice).unwrap();
+        let ret = unsafe { archived_root::<Ret>(slice) };
         ret.deserialize(&mut Infallible).expect("Infallible")
     })
 }
@@ -180,7 +180,7 @@ pub fn height() -> u64 {
     with_arg_buf(|buf| {
         let ret_len = unsafe { ext::height() };
 
-        let ret = check_archived_root::<u64>(&buf[..ret_len as usize]).unwrap();
+        let ret = unsafe { archived_root::<u64>(&buf[..ret_len as usize]) };
         ret.deserialize(&mut Infallible).expect("Infallible")
     })
 }
@@ -192,7 +192,7 @@ pub fn caller() -> ModuleId {
     with_arg_buf(|buf| {
         let ret_len = unsafe { ext::caller() };
         let ret =
-            check_archived_root::<ModuleId>(&buf[..ret_len as usize]).unwrap();
+            unsafe { archived_root::<ModuleId>(&buf[..ret_len as usize]) };
         ret.deserialize(&mut Infallible).expect("Infallible")
     })
 }
@@ -219,8 +219,7 @@ where
 pub fn limit() -> u64 {
     with_arg_buf(|buf| {
         let ret_len = unsafe { ext::limit() };
-
-        let ret = check_archived_root::<u64>(&buf[..ret_len as usize]).unwrap();
+        let ret = unsafe { archived_root::<u64>(&buf[..ret_len as usize]) };
         ret.deserialize(&mut Infallible).expect("Infallible")
     })
 }
@@ -228,8 +227,7 @@ pub fn limit() -> u64 {
 pub fn spent() -> u64 {
     with_arg_buf(|buf| {
         let ret_len = unsafe { ext::spent() };
-
-        let ret = check_archived_root::<u64>(&buf[..ret_len as usize]).unwrap();
+        let ret = unsafe { archived_root::<u64>(&buf[..ret_len as usize]) };
         ret.deserialize(&mut Infallible).expect("Infallible")
     })
 }
@@ -261,7 +259,7 @@ impl<S> State<S> {
     where
         Arg: for<'a> Serialize<StandardBufSerializer<'a>>,
         Ret: Archive,
-        Ret::Archived: StandardDeserialize<Ret>,
+        Ret::Archived: Deserialize<Ret, Infallible>,
     {
         let arg_len = with_arg_buf(|buf| {
             let mut sbuf = [0u8; SCRATCH_BUF_BYTES];
@@ -278,8 +276,7 @@ impl<S> State<S> {
 
         with_arg_buf(|buf| {
             let slice = &buf[..ret_len as usize];
-            let ret = check_archived_root::<Ret>(slice)
-                .expect("invalid return value");
+            let ret = unsafe { archived_root::<Ret>(slice) };
             ret.deserialize(&mut Infallible).expect("Infallible")
         })
     }

@@ -19,12 +19,14 @@ use std::ops::{Deref, DerefMut};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use dallo::{
-    ModuleId, StandardBufSerializer, StandardDeserialize, MODULE_ID_BYTES,
-};
+use bytecheck::CheckBytes;
+use dallo::{ModuleId, StandardBufSerializer, MODULE_ID_BYTES};
 use native::NativeQueries;
 use parking_lot::ReentrantMutex;
-use rkyv::{Archive, Serialize};
+use rkyv::{
+    validation::validators::DefaultValidator, Archive, Deserialize, Infallible,
+    Serialize,
+};
 use stack::CallStack;
 use store::new_store;
 use tempfile::tempdir;
@@ -225,7 +227,8 @@ impl World {
     where
         Arg: for<'a> Serialize<StandardBufSerializer<'a>>,
         Ret: Archive,
-        Ret::Archived: StandardDeserialize<Ret>,
+        Ret::Archived: Deserialize<Ret, Infallible>
+            + for<'a> CheckBytes<DefaultValidator<'a>>,
     {
         let guard = self.0.lock();
         let w = unsafe { &mut *guard.get() };
@@ -253,7 +256,8 @@ impl World {
     where
         Arg: for<'a> Serialize<StandardBufSerializer<'a>> + core::fmt::Debug,
         Ret: Archive,
-        Ret::Archived: StandardDeserialize<Ret>,
+        Ret::Archived: Deserialize<Ret, Infallible>
+            + for<'a> CheckBytes<DefaultValidator<'a>>,
     {
         let w = self.0.lock();
         let w = unsafe { &mut *w.get() };

@@ -37,19 +37,3 @@ pub fn counter_increment() -> Result<(), Error> {
 
     Ok(())
 }
-
-#[test]
-pub fn counter_mogrify() -> Result<(), Error> {
-    let mut world = World::ephemeral()?;
-
-    let id = world.deploy(module_bytecode!("counter"))?;
-
-    let value = world.transact::<i64, i64>(id, "mogrify", 32)?;
-
-    assert_eq!(*value, 0xfc);
-
-    let value: Receipt<i64> = world.query(id, "read_value", ())?;
-    assert_eq!(*value, 0xfc - 32);
-
-    Ok(())
-}
