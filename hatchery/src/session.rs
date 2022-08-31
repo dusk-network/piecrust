@@ -4,6 +4,8 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
+use crate::hash::{Hash, Hasher};
+
 use std::cell::{Ref, RefCell, RefMut};
 use std::collections::BTreeMap;
 use std::fs;
@@ -13,7 +15,6 @@ use std::ops::{Deref, DerefMut};
 use std::path::{Path, PathBuf};
 use std::ptr::NonNull;
 
-use blake3::{Hash, Hasher};
 use dallo::ModuleId;
 use memmap2::{MmapMut, MmapOptions};
 use wasmer_types::{MemoryType, Pages, WASM_PAGE_SIZE};
@@ -111,7 +112,7 @@ impl MemorySession {
         }
 
         // if the base directory doesn't exist, then there is no base
-        let base_hex = hex::encode(base.as_bytes());
+        let base_hex = hex::encode(&base);
         let base = snapshot_dir(&dir, &base_hex).exists().then_some(base);
 
         Ok(Self {
@@ -176,18 +177,11 @@ impl MemorySession {
 
         // if the snapshot is root is the same as the base - or genesis - return
         // it immediately
-        if snap.as_bytes()
-            == self
-                .base
-                .as_ref()
-                .unwrap_or(&Hash::from(ZERO_HASH))
-                .as_bytes()
-        {
-            // TODO: fix the ugliness
+        if &snap == self.base.as_ref().unwrap_or(&Hash::ZERO) {
             return Ok(snap);
         }
 
-        let snap_hex = hex::encode(snap.as_bytes());
+        let snap_hex = hex::encode(&snap);
 
         // create snapshot directory if it does not exist
         let snap_dir = snapshot_dir(&self.dir, &snap_hex);
@@ -198,7 +192,7 @@ impl MemorySession {
         // create a file indicating this snapshot has a base
         if let Some(base) = &self.base {
             let base_path = snapshot_base_path(&self.dir, &snap_hex);
-            fs::write(base_path, base.as_bytes())?;
+            fs::write(base_path, base)?;
         }
 
         // copy all dirty memories onto their respective files and mark them as
@@ -255,7 +249,7 @@ impl MemorySession {
         // if the tree is empty, we are still on the previous snapshot - or in
         // genesis.
         if hashes.is_empty() {
-            return self.base.unwrap_or_else(|| Hash::from([0u8; 32]));
+            return self.base.unwrap_or(Hash::ZERO);
         }
 
         // compute the root of the tree by successively hashing each level
@@ -265,7 +259,7 @@ impl MemorySession {
                 .map(|hashes| {
                     let mut hasher = Hasher::new();
                     for hash in hashes {
-                        hasher.update(hash.as_bytes());
+                        hasher.update(hash);
                     }
                     hasher.finalize()
                 })
@@ -274,12 +268,9 @@ impl MemorySession {
 
         // hash the previous snapshot's root together with the merkle root
         let mut hasher = Hasher::new();
-        hasher.update(
-            self.base
-                .unwrap_or_else(|| Hash::from([0u8; 32]))
-                .as_bytes(),
-        );
-        hasher.update(hashes[0].as_bytes());
+
+        hasher.update(self.base.unwrap_or(Hash::ZERO));
+        hasher.update(hashes[0]);
 
         hasher.finalize()
     }
@@ -300,7 +291,7 @@ impl MemorySession {
             // If the module is not found in any snapshots in the path return
             // None.
             Some(mut base) => loop {
-                let base_hex = hex::encode(base.as_bytes());
+                let base_hex = hex::encode(base);
                 let snap_dir = snapshot_dir(&self.dir, &base_hex);
 
                 if snap_dir.exists() && snap_dir.is_dir() {
@@ -510,8 +501,10 @@ impl AsMut<[u8]> for Memory {
 #[cfg(test)]
 mod tests {
     use super::Memory;
+
+    use crate::hash::Hash;
     use crate::session::MemorySession;
-    use blake3::Hash;
+
     use dallo::ModuleId;
     use rand::rngs::StdRng;
     use rand::{RngCore, SeedableRng};
@@ -552,8 +545,7 @@ mod tests {
         let memories_dir =
             tempfile::tempdir().expect("creating tmp dir should be fine");
 
-        let snap = Hash::from([0u8; 32]);
-        let mut session_1 = MemorySession::new(&memories_dir, snap)
+        let mut session_1 = MemorySession::new(&memories_dir, Hash::ZERO)
             .expect("session creation should work");
 
         let module_1 = {
@@ -600,15 +592,15 @@ mod tests {
     mod bench {
         extern crate test;
 
+        use crate::hash::Hash;
         use crate::session::MemorySession;
 
-        use blake3::Hash;
         use dallo::ModuleId;
         use rand::rngs::StdRng;
         use rand::{RngCore, SeedableRng};
         use tempfile::TempDir;
 
-        use test::{black_box, Bencher};
+        use test::Bencher;
 
         // the return needs to include TempDir, since if it drops it will remove
         // the directory with all its contents
@@ -616,8 +608,7 @@ mod tests {
             let session_dir =
                 tempfile::tempdir().expect("creating tmp dir should be fine");
 
-            let snap = Hash::from([0u8; 32]);
-            let mut session = MemorySession::new(&session_dir, snap)
+            let mut session = MemorySession::new(&session_dir, Hash::ZERO)
                 .expect("session creation should work");
 
             let mut rng = StdRng::seed_from_u64(42);

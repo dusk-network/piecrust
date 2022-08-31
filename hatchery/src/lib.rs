@@ -7,6 +7,7 @@
 
 // mod env;
 // mod error;
+mod hash;
 // mod instance;
 // mod memory;
 mod session;
