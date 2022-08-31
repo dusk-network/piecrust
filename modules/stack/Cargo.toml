@@ -15,5 +15,3 @@ ranno = { git = "https://github.com/dusk-network/ranno", tag = "v0.0.0-hatchery"
 
 [lib]
 crate-type = ["cdylib", "rlib"]
-
-[workspace]

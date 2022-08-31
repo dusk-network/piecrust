@@ -1,0 +1,15 @@
+[workspace]
+members = [
+    "box",
+    "callcenter",
+    "counter",
+    "debugger",
+    "eventer",
+    "everest",
+    "fibonacci",
+    "host",
+    "self_snapshot",
+    "spender",
+    "stack",
+    "vector",
+]
