@@ -24,76 +24,9 @@ const PAGE_SIZE: usize = 65536;
 const ZERO_HASH: [u8; 32] = [0u8; 32];
 const ZEROED_PAGE: [u8; PAGE_SIZE] = [0u8; PAGE_SIZE];
 
-/// The memory and whether it is dirty, wrapped in a `RefCell` for interior
-/// mutability.
-#[derive(Debug)]
-struct MemRefCell(RefCell<(Memory, bool)>);
-
-impl MemRefCell {
-    fn new(mem: Memory, dirty: bool) -> Self {
-        Self(RefCell::new((mem, dirty)))
-    }
-
-    fn borrow(&self) -> MemRef {
-        MemRef(self.0.borrow())
-    }
-
-    fn borrow_mut(&self) -> MemRefMut {
-        MemRefMut(self.0.borrow_mut())
-    }
-}
-
-/// A reference to a memory.
-#[derive(Debug)]
-pub struct MemRef<'a>(Ref<'a, (Memory, bool)>);
-
-impl<'a> MemRef<'a> {
-    /// Returns true if the memory is 'dirty' - meaning it has been modified
-    /// from the original.
-    pub fn dirty(&self) -> bool {
-        self.0.deref().1
-    }
-}
-
-impl<'a> Deref for MemRef<'a> {
-    type Target = Memory;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0.deref().0
-    }
-}
-
-/// A mutable reference to a memory.
-#[derive(Debug)]
-pub struct MemRefMut<'a>(RefMut<'a, (Memory, bool)>);
-
-impl<'a> MemRefMut<'a> {
-    /// Returns true if the memory is 'dirty' - meaning it has been modified
-    /// from the original.
-    pub fn dirty(&self) -> bool {
-        self.0.deref().1
-    }
-}
-
-impl<'a> Deref for MemRefMut<'a> {
-    type Target = Memory;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0.deref().0
-    }
-}
-
-impl<'a> DerefMut for MemRefMut<'a> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        let (mem, dirty) = self.0.deref_mut();
-        *dirty = true;
-        mem
-    }
-}
-
 #[derive(Debug)]
 pub struct MemorySession {
-    memories: BTreeMap<ModuleId, MemRefCell>,
+    staged: BTreeMap<ModuleId, Memory>,
     dir: PathBuf,
     base: Option<Hash>,
 }
@@ -116,58 +49,38 @@ impl MemorySession {
         let base = commit_dir(&dir, &base_hex).exists().then_some(base);
 
         Ok(Self {
-            memories: BTreeMap::new(),
+            staged: BTreeMap::new(),
             dir,
             base,
         })
     }
 
-    /// Borrow a memory for the given `module_id`, if it has already been
-    /// [`load`]ed.
+    /// Place a memory in the staging area.
     ///
-    /// If a memory with the same module ID exists at the base commit that
-    /// memory will be loaded copy-on-write, otherwise a new memory will be
-    /// created.
-    ///
-    /// # Panics
-    /// When the memory with given `module_id` is already borrowed mutably using
-    /// [`borrow_mut`].
-    ///
-    /// [`load`]: MemorySession::load
-    /// [`borrow_mut`]: MemorySession::borrow_mut
-    pub fn borrow(&self, module_id: &ModuleId) -> Option<MemRef> {
-        self.memories.get(module_id).map(|m| m.borrow())
+    /// If a memory was already present with the same module ID, the old one
+    /// will be returned.
+    pub fn stage(
+        &mut self,
+        module_id: ModuleId,
+        mem: Memory,
+    ) -> Option<Memory> {
+        self.staged.insert(module_id, mem)
     }
 
-    /// Get a mutable memory for the given `module_id`, if it has already been
-    /// [`load`]ed.
-    ///
-    /// # Panics
-    /// When the memory with given `module_id` is already borrowed using either
-    /// [`borrow`] or [`borrow_mut`].
-    ///
-    /// [`load`]: MemorySession::load
-    /// [`borrow`]: MemorySession::borrow
-    /// [`borrow_mut`]: MemorySession::borrow_mut
-    pub fn borrow_mut(&self, module_id: &ModuleId) -> Option<MemRefMut> {
-        self.memories.get(module_id).map(|m| m.borrow_mut())
-    }
-
-    /// Loads a memory onto the store.
+    /// Loads a new memory.
     ///
     /// If a memory with the same module ID exists following the base commit
     /// path, that memory will be loaded copy-on-write, otherwise a new memory
     /// will be created.
-    pub fn load(&mut self, module_id: ModuleId) -> io::Result<()> {
-        if self.memories.get(&module_id).is_none() {
-            let mem = match self.last_module_commit(&module_id)? {
-                Some(path) => Memory::new(path)?,
-                None => Memory::ephemeral()?,
-            };
-            self.memories.insert(module_id, MemRefCell::new(mem, false));
-        }
-
-        Ok(())
+    ///
+    /// It is possible to request multiple memories with the same module ID -
+    /// they will all mmap the same file if said file already exists, otherwise
+    /// they will be in memory.
+    pub fn load(&self, module_id: &ModuleId) -> io::Result<Memory> {
+        Ok(match self.last_module_commit(module_id)? {
+            Some(path) => Memory::new(path)?,
+            None => Memory::ephemeral()?,
+        })
     }
 
     /// Create a commit from the current state of the memories and rebase onto
@@ -201,23 +114,17 @@ impl MemorySession {
 
         // copy all dirty memories onto their respective files and mark them as
         // clean, while writing the changed module ids into a dirty file
-        for (module_id, mem) in &mut self.memories {
-            let mut mem_ref = mem.0.borrow_mut();
-            let (mem, dirty) = mem_ref.deref_mut();
+        for (module_id, mem) in &mut self.staged {
+            let module_id_hex = hex::encode(module_id);
 
-            if *dirty {
-                let module_id_hex = hex::encode(module_id);
+            dirty_file.write_fmt(format_args!("{}\n", module_id_hex))?;
 
-                dirty_file.write_fmt(format_args!("{}\n", module_id_hex))?;
-
-                let module_path =
-                    module_path(&self.dir, &commit_hex, &module_id_hex);
-                mem.copy_to(module_path)?;
-
-                *dirty = false;
-            }
+            let module_path =
+                module_path(&self.dir, &commit_hex, &module_id_hex);
+            mem.copy_to(module_path)?;
         }
 
+        self.staged.clear();
         self.base = Some(commit);
 
         Ok(commit)
@@ -234,16 +141,9 @@ impl MemorySession {
     pub fn root(&self) -> Hash {
         // !hash all the memories!
         let mut leaves = self
-            .memories
+            .staged
             .iter()
-            .filter_map(|(module_id, mem_cell)| {
-                // filter out all the clean memories
-                let mem_ref = mem_cell.0.borrow();
-                let (_, dirty) = mem_ref.deref();
-                dirty.then_some((module_id, mem_cell))
-            })
-            .map(|(module_id, mem_cell)| {
-                let mem = mem_cell.borrow();
+            .map(|(module_id, mem)| {
                 let mut hasher = Hasher::new();
 
                 hasher.update(module_id.as_ref());
@@ -514,6 +414,8 @@ impl AsMut<[u8]> for Memory {
 #[cfg(test)]
 mod tests {
     use super::Memory;
+    use std::fs::OpenOptions;
+    use std::io::Write;
 
     use crate::hash::Hash;
     use crate::session::MemorySession;
@@ -573,23 +475,18 @@ mod tests {
             ModuleId::from(bytes)
         };
 
-        session_1.load(module_1).expect("loading should go ok");
-        session_1.load(module_2).expect("loading should go ok");
-
-        let mut mem_1 = session_1
-            .borrow_mut(&module_1)
-            .expect("borrowing should succeed");
-        let mut mem_2 = session_1
-            .borrow_mut(&module_2)
-            .expect("borrowing should succeed");
+        let mut mem_1 =
+            session_1.load(&module_1).expect("loading should go ok");
+        let mut mem_2 =
+            session_1.load(&module_2).expect("loading should go ok");
 
         let mut rng = StdRng::seed_from_u64(1234);
 
         rng.fill_bytes(&mut mem_1[..]);
         rng.fill_bytes(&mut mem_2[..]);
 
-        drop(mem_1);
-        drop(mem_2);
+        assert!(matches!(session_1.stage(module_1, mem_1), None));
+        assert!(matches!(session_1.stage(module_2, mem_2), None));
 
         let commit = session_1.commit().expect("commit id");
         let root = session_1.root();
@@ -638,9 +535,11 @@ mod tests {
                     },
                 );
 
-                session.load(module_id).expect("loading should go ok");
-                let mut mem = session.borrow_mut(&module_id).unwrap();
+                let mut mem =
+                    session.load(&module_id).expect("loading should go ok");
                 rng.fill_bytes(&mut mem);
+
+                session.stage(module_id, mem);
             }
 
             (session, session_dir)
