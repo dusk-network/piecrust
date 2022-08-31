@@ -7,10 +7,10 @@
 use crate::hash::{Hash, Hasher};
 
 use std::cell::{Ref, RefCell, RefMut};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
-use std::fs::OpenOptions;
-use std::io::{self, Write};
+use std::fs::{File, OpenOptions};
+use std::io::{self, LineWriter, Write};
 use std::ops::{Deref, DerefMut};
 use std::path::{Path, PathBuf};
 use std::ptr::NonNull;
@@ -196,18 +196,24 @@ impl MemorySession {
             fs::write(base_path, base_hex)?;
         }
 
+        let dirty_path = commit_dirty_path(&self.dir, &commit_hex);
+        let mut dirty_file = File::create(dirty_path)?;
+
         // copy all dirty memories onto their respective files and mark them as
-        // clean, while writing the changed modules into a
+        // clean, while writing the changed module ids into a dirty file
         for (module_id, mem) in &mut self.memories {
             let mut mem_ref = mem.0.borrow_mut();
             let (mem, dirty) = mem_ref.deref_mut();
 
             if *dirty {
                 let module_id_hex = hex::encode(module_id);
+
+                dirty_file.write_fmt(format_args!("{}\n", module_id_hex))?;
+
                 let module_path =
                     module_path(&self.dir, &commit_hex, &module_id_hex);
-
                 mem.copy_to(module_path)?;
+
                 *dirty = false;
             }
         }
