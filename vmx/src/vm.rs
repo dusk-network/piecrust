@@ -30,8 +30,9 @@ impl VM {
     }
 
     pub fn deploy(&mut self, bytecode: &[u8]) -> Result<ModuleId, Error> {
+        let store = wasmer::Store::default();
         let id = ModuleId(self.modules.len());
-        let module = WrappedModule::new(bytecode)?;
+        let module = WrappedModule::new(&store, bytecode)?;
         self.modules.insert(id, module);
         Ok(id)
     }
