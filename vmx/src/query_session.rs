@@ -10,12 +10,12 @@ use crate::types::{Error, StandardBufSerializer};
 use crate::vm::{ModuleId, VM};
 
 pub struct QuerySession<'a> {
-    vm: &'a mut VM,
+    vm: &'a VM,
     instances: BTreeMap<ModuleId, WrappedInstance>,
 }
 
 impl<'a> QuerySession<'a> {
-    pub fn new(vm: &'a mut VM) -> Self {
+    pub fn new(vm: &'a VM) -> Self {
         QuerySession {
             vm,
             instances: BTreeMap::new(),

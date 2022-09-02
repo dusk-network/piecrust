@@ -31,12 +31,12 @@ impl VM {
         Ok(id)
     }
 
-    pub fn module(&mut self, id: ModuleId) -> &mut WrappedModule {
-        self.modules.get_mut(&id).expect("Invalid ModuleId")
+    pub fn module(&self, id: ModuleId) -> &WrappedModule {
+        self.modules.get(&id).expect("Invalid ModuleId")
     }
 
     pub fn query<Arg, Ret>(
-        &mut self,
+        &self,
         id: ModuleId,
         method_name: &str,
         arg: Arg,

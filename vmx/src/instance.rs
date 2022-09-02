@@ -23,7 +23,7 @@ pub struct WrappedInstance {
 }
 
 impl WrappedInstance {
-    pub fn new(module: &mut WrappedModule) -> Result<Self, Error> {
+    pub fn new(module: &WrappedModule) -> Result<Self, Error> {
         let versioned = module.store().clone();
 
         println!("wrappedinstance new");
@@ -117,7 +117,6 @@ impl WrappedInstance {
             + for<'b> CheckBytes<DefaultValidator<'b>>,
     {
         let arg_len = self.write_to_arg_buffer(arg)?;
-
         let ret_len = self.store.inner_mut(|store| {
             let fun: TypedFunction<u32, u32> = self
                 .instance
