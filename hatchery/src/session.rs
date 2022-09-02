@@ -6,11 +6,9 @@
 
 use crate::hash::{Hash, Hasher};
 
-use std::cell::{Ref, RefCell, RefMut};
 use std::collections::{BTreeMap, BTreeSet};
-use std::fs;
-use std::fs::{File, OpenOptions};
-use std::io::{self, LineWriter, Write};
+use std::fs::{self, File, OpenOptions};
+use std::io::{self, BufRead, BufReader, Write};
 use std::ops::{Deref, DerefMut};
 use std::path::{Path, PathBuf};
 use std::ptr::NonNull;
@@ -130,14 +128,38 @@ impl MemorySession {
         Ok(commit)
     }
 
+    /// Squash all previous commits into the current one.
+    ///
+    /// The amount of data used by memories will increase with the amount of
+    /// commits made. This deletes all previous commits, collapsing them all
+    /// into the current one.
+    ///
+    /// It will error if the working tree is dirty, meaning [`stage`] was used.
+    ///
+    /// [`stage`]: MemorySession::stage
+    pub fn squash(&mut self) -> io::Result<()> {
+        if !self.staged.is_empty() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "session is dirty",
+            ));
+        }
+
+        // If there is no base there is nothing to do, otherwise one traverses
+        // until the
+        if let Some(mut base) = &self.base {}
+
+        // TODO drill down through the directories finding the latest version of
+        //  all modules
+
+        Ok(())
+    }
+
     /// Return the root of the module tree.
     ///
     /// The root of these memories is the previous root hashed with the root of
     /// a merkle tree where the leaves are the hashes of each changed memory +
     /// module ID. The memories are ordered in the tree by module ID.
-    ///
-    /// # Panics
-    /// When any memory is mutably borrowed.
     pub fn root(&self) -> Hash {
         // !hash all the memories!
         let mut leaves = self
@@ -226,6 +248,91 @@ impl MemorySession {
             None => Ok(None),
         }
     }
+}
+
+struct Commit {
+    dirty: BTreeSet<ModuleId>,
+
+    hash: Hash,
+    base_hash: Option<Hash>,
+}
+
+impl Commit {
+    fn new<P: AsRef<Path>>(
+        dir: P,
+        commit_hash: Hash,
+    ) -> io::Result<Option<Self>> {
+        let commit_hex = hex::encode(commit_hash);
+        let commit_dir = commit_dir(dir, &commit_hex);
+
+        let commit = match commit_dir.exists() && commit_dir.is_dir() {
+            true => {
+                read_dirty()
+                None
+            },
+            false => None,
+        };
+
+        Ok(commit)
+    }
+
+    fn drill_down<P: AsRef<Path>>(&self, dir: P) -> io::Result<Option<Self>> {
+        todo!()
+    }
+}
+
+fn create_dirty<P, I>(path: P, dirty: I) -> io::Result<()>
+where
+    P: AsRef<Path>,
+    I: Iterator<Item = ModuleId>,
+{
+    let mut file = File::create(path)?;
+
+    for module_id in dirty {
+        let id_hex = hex::encode(module_id);
+        file.write_fmt(format_args!("{}\n", id_hex))?;
+    }
+
+    Ok(())
+}
+
+fn read_dirty<P: AsRef<Path>>(path: P) -> io::Result<BTreeSet<ModuleId>> {
+    let mut dirty = BTreeSet::new();
+
+    let file = File::open(path)?;
+    let reader = BufReader::new(file);
+
+    for line in reader.lines() {
+        let line = line?;
+
+        let id_hex = hex::decode(line).expect("dirty modules should be hex");
+        let id_bytes: [u8; 32] =
+            id_hex.try_into().expect("ID should be 32 bytes");
+
+        dirty.insert(ModuleId::from(id_bytes));
+    }
+
+    Ok(dirty)
+}
+
+fn create_base<P: AsRef<Path>>(
+    path: P,
+    base: &Hash,
+) -> io::Result<()> {
+    let base_hex = hex::encode(base);
+    fs::write(path, base_hex)?;
+
+    Ok(())
+}
+
+fn read_base<P: AsRef<Path>>(
+    path: P,
+) -> io::Result<Hash> {
+    let base_hex = fs::read(path)?;
+    let base_bytes =
+        hex::decode(base_hex).expect("base should be valid hex");
+    let base_bytes: [u8; 32] = base_bytes.try_into().unwrap();
+    Ok(Hash::from(base_bytes))
 }
 
 fn commit_dir<P: AsRef<Path>>(dir: P, commit_hex: &str) -> PathBuf {
