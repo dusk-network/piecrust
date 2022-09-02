@@ -14,19 +14,13 @@ impl VersionedStore {
     where
         F: FnOnce(&wasmer::Store) -> R,
     {
-        println!("inner");
-        let r = f(&self.0.read().active);
-        println!("inner fin");
-        r
+        f(&self.0.read().active)
     }
 
     pub fn inner_mut<R, F>(&self, f: F) -> R
     where
         F: FnOnce(&mut wasmer::Store) -> R,
     {
-        println!("inner_mut");
-        let r = f(&mut self.0.write().active);
-        println!("inner_mut fin");
-        r
+        f(&mut self.0.write().active)
     }
 }
