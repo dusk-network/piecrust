@@ -1,3 +1,9 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+//
+// Copyright (c) DUSK NETWORK. All rights reserved.
+
 use parking_lot::RwLock;
 use std::sync::Arc;
 
@@ -14,19 +20,13 @@ impl VersionedStore {
     where
         F: FnOnce(&wasmer::Store) -> R,
     {
-        println!("inner");
-        let r = f(&self.0.read().active);
-        println!("inner fin");
-        r
+        f(&self.0.read().active)
     }
 
     pub fn inner_mut<R, F>(&self, f: F) -> R
     where
         F: FnOnce(&mut wasmer::Store) -> R,
     {
-        println!("inner_mut");
-        let r = f(&mut self.0.write().active);
-        println!("inner_mut fin");
-        r
+        f(&mut self.0.write().active)
     }
 }

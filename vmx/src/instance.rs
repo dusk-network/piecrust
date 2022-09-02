@@ -1,3 +1,9 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+//
+// Copyright (c) DUSK NETWORK. All rights reserved.
+
 use bytecheck::CheckBytes;
 use rkyv::{
     check_archived_root,
@@ -23,25 +29,23 @@ pub struct WrappedInstance {
 }
 
 impl WrappedInstance {
-    pub fn new(module: &WrappedModule) -> Result<Self, Error> {
-        let versioned = module.store().clone();
+    pub fn new(wrap: &WrappedModule) -> Result<Self, Error> {
+        let versioned = VersionedStore::default();
+        let imports = imports! {};
+        let module_bytes = wrap.as_bytes();
 
-        println!("wrappedinstance new");
-        module.store().inner_mut(|store| {
-            let instance =
-                wasmer::Instance::new(store, module.inner(), &imports! {})?;
+        versioned.inner_mut(|store| {
+            let module =
+                unsafe { wasmer::Module::deserialize(store, module_bytes)? };
 
-            if let wasmer::Value::I32(ofs) =
-                instance.exports.get_global("A")?.get(store)
-            {
-                println!("arg buf ofs {:?}", ofs);
-                Ok(WrappedInstance {
+            let instance = wasmer::Instance::new(store, &module, &imports)?;
+            match instance.exports.get_global("A")?.get(store) {
+                wasmer::Value::I32(ofs) => Ok(WrappedInstance {
                     store: versioned.clone(),
                     instance,
                     arg_buf_ofs: ofs as usize,
-                })
-            } else {
-                todo!("error handling")
+                }),
+                _ => todo!(),
             }
         })
     }

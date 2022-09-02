@@ -1,3 +1,9 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+//
+// Copyright (c) DUSK NETWORK. All rights reserved.
+
 use std::collections::BTreeMap;
 
 use bytecheck::CheckBytes;
@@ -13,15 +19,14 @@ use crate::types::{Error, StandardBufSerializer};
 #[derive(Clone, Copy, PartialOrd, Ord, PartialEq, Eq)]
 pub struct ModuleId(usize);
 
+#[derive(Default)]
 pub struct VM {
     modules: BTreeMap<ModuleId, WrappedModule>,
 }
 
 impl VM {
     pub fn new() -> Self {
-        VM {
-            modules: BTreeMap::new(),
-        }
+        Default::default()
     }
 
     pub fn deploy(&mut self, bytecode: &[u8]) -> Result<ModuleId, Error> {
