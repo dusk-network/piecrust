@@ -9,7 +9,7 @@ use crate::types::Error;
 
 pub struct WrappedModule {
     serialized: Vec<u8>,
-    store: VersionedStore,
+    // store: VersionedStore,
 }
 
 impl WrappedModule {
@@ -20,21 +20,13 @@ impl WrappedModule {
             let serialized = module.serialize()?;
 
             Ok(WrappedModule {
-                store: versioned.clone(),
+                // store: versioned.clone(),
                 serialized,
             })
         })
     }
 
-    pub fn store(&self) -> &VersionedStore {
-        &self.store
-    }
-
-    pub fn module(&self) -> Result<wasmer::Module, Error> {
-        self.store
-            .inner(|store| unsafe {
-                wasmer::Module::deserialize(store, &self.serialized)
-            })
-            .map_err(Into::into)
+    pub fn as_bytes(&self) -> &[u8] {
+        &self.serialized
     }
 }

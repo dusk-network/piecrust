@@ -19,15 +19,14 @@ use crate::types::{Error, StandardBufSerializer};
 #[derive(Clone, Copy, PartialOrd, Ord, PartialEq, Eq)]
 pub struct ModuleId(usize);
 
+#[derive(Default)]
 pub struct VM {
     modules: BTreeMap<ModuleId, WrappedModule>,
 }
 
 impl VM {
     pub fn new() -> Self {
-        VM {
-            modules: BTreeMap::new(),
-        }
+        Default::default()
     }
 
     pub fn deploy(&mut self, bytecode: &[u8]) -> Result<ModuleId, Error> {

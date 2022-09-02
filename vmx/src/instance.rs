@@ -30,21 +30,21 @@ pub struct WrappedInstance {
 
 impl WrappedInstance {
     pub fn new(wrap: &WrappedModule) -> Result<Self, Error> {
-        let versioned = wrap.store().clone();
-
+        let versioned = VersionedStore::default();
         let imports = imports! {};
-        let module = wrap.module()?;
+        let module_bytes = wrap.as_bytes();
 
-        wrap.store().inner_mut(|store| {
+        versioned.inner_mut(|store| {
+            let module =
+                unsafe { wasmer::Module::deserialize(store, module_bytes)? };
+
             let instance = wasmer::Instance::new(store, &module, &imports)?;
             match instance.exports.get_global("A")?.get(store) {
-                wasmer::Value::I32(ofs) => {
-                    return Ok(WrappedInstance {
-                        store: versioned.clone(),
-                        instance,
-                        arg_buf_ofs: ofs as usize,
-                    });
-                }
+                wasmer::Value::I32(ofs) => Ok(WrappedInstance {
+                    store: versioned.clone(),
+                    instance,
+                    arg_buf_ofs: ofs as usize,
+                }),
                 _ => todo!(),
             }
         })
