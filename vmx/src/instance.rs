@@ -126,4 +126,26 @@ impl WrappedInstance {
 
         self.read_from_arg_buffer(ret_len)
     }
+
+    pub fn transact<Arg, Ret>(
+        &mut self,
+        method_name: &str,
+        arg: Arg,
+    ) -> Result<Ret, Error>
+    where
+        Arg: for<'b> Serialize<StandardBufSerializer<'b>>,
+        Ret: Archive,
+        Ret::Archived: Deserialize<Ret, Infallible>
+            + for<'b> CheckBytes<DefaultValidator<'b>>,
+    {
+        let arg_len = self.write_to_arg_buffer(arg)?;
+
+        let fun: TypedFunction<u32, u32> = self
+            .instance
+            .exports
+            .get_typed_function(&self.store, method_name)?;
+        let ret_len = fun.call(&mut self.store, arg_len)?;
+
+        self.read_from_arg_buffer(ret_len)
+    }
 }

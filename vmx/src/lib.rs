@@ -8,7 +8,7 @@
 mod bytecode_macro;
 mod instance;
 mod module;
-mod query_session;
+mod session;
 mod types;
 mod vm;
 
