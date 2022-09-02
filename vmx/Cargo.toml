@@ -1,0 +1,14 @@
+[package]
+name = "vmx"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+wasmer = { git = "https://github.com/wasmerio/wasmer", rev = "dafdd94" }
+wasmer-vm = { git = "https://github.com/wasmerio/wasmer", rev = "dafdd94" }
+wasmer-types = { git = "https://github.com/wasmerio/wasmer", rev = "dafdd94" }
+bytecheck = "0.6"
+rkyv = { version = "0.7", features = ["validation"] }
+
+dallo = { path = "../dallo" }
+parking_lot = "0.12.1"
