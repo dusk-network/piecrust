@@ -19,35 +19,32 @@ use wasmer::{imports, TypedFunction};
 use dallo::SCRATCH_BUF_BYTES;
 
 use crate::module::WrappedModule;
-use crate::store::VersionedStore;
 use crate::types::{Error, StandardBufSerializer};
 
 pub struct WrappedInstance {
     instance: wasmer::Instance,
     arg_buf_ofs: usize,
-    store: VersionedStore,
+    store: wasmer::Store,
 }
 
 impl WrappedInstance {
     pub fn new(wrap: &WrappedModule) -> Result<Self, Error> {
-        let versioned = VersionedStore::default();
         let imports = imports! {};
         let module_bytes = wrap.as_bytes();
 
-        versioned.inner_mut(|store| {
-            let module =
-                unsafe { wasmer::Module::deserialize(store, module_bytes)? };
+        let mut store = wasmer::Store::default();
+        let module =
+            unsafe { wasmer::Module::deserialize(&store, module_bytes)? };
 
-            let instance = wasmer::Instance::new(store, &module, &imports)?;
-            match instance.exports.get_global("A")?.get(store) {
-                wasmer::Value::I32(ofs) => Ok(WrappedInstance {
-                    store: versioned.clone(),
-                    instance,
-                    arg_buf_ofs: ofs as usize,
-                }),
-                _ => todo!(),
-            }
-        })
+        let instance = wasmer::Instance::new(&mut store, &module, &imports)?;
+        match instance.exports.get_global("A")?.get(&mut store) {
+            wasmer::Value::I32(ofs) => Ok(WrappedInstance {
+                store,
+                instance,
+                arg_buf_ofs: ofs as usize,
+            }),
+            _ => todo!(),
+        }
     }
 
     fn read_from_arg_buffer<T>(&self, arg_len: u32) -> Result<T, Error>
@@ -69,14 +66,13 @@ impl WrappedInstance {
     where
         F: FnOnce(&mut [u8]) -> R,
     {
-        self.store.inner_mut(|store| {
-            let mem = self.instance.exports.get_memory("memory").expect(
+        let mem =
+            self.instance.exports.get_memory("memory").expect(
                 "memory export should be checked at module creation time",
             );
-            let view = mem.view(store);
-            let memory_bytes = unsafe { view.data_unchecked_mut() };
-            f(memory_bytes)
-        })
+        let view = mem.view(&self.store);
+        let memory_bytes = unsafe { view.data_unchecked_mut() };
+        f(memory_bytes)
     }
 
     fn with_arg_buffer<F, R>(&self, f: F) -> R
@@ -121,13 +117,34 @@ impl WrappedInstance {
             + for<'b> CheckBytes<DefaultValidator<'b>>,
     {
         let arg_len = self.write_to_arg_buffer(arg)?;
-        let ret_len = self.store.inner_mut(|store| {
-            let fun: TypedFunction<u32, u32> = self
-                .instance
-                .exports
-                .get_typed_function(store, method_name)?;
-            Ok::<u32, Error>(fun.call(store, arg_len)?)
-        })?;
+
+        let fun: TypedFunction<u32, u32> = self
+            .instance
+            .exports
+            .get_typed_function(&self.store, method_name)?;
+        let ret_len = fun.call(&mut self.store, arg_len)?;
+
+        self.read_from_arg_buffer(ret_len)
+    }
+
+    pub fn transact<Arg, Ret>(
+        &mut self,
+        method_name: &str,
+        arg: Arg,
+    ) -> Result<Ret, Error>
+    where
+        Arg: for<'b> Serialize<StandardBufSerializer<'b>>,
+        Ret: Archive,
+        Ret::Archived: Deserialize<Ret, Infallible>
+            + for<'b> CheckBytes<DefaultValidator<'b>>,
+    {
+        let arg_len = self.write_to_arg_buffer(arg)?;
+
+        let fun: TypedFunction<u32, u32> = self
+            .instance
+            .exports
+            .get_typed_function(&self.store, method_name)?;
+        let ret_len = fun.call(&mut self.store, arg_len)?;
 
         self.read_from_arg_buffer(ret_len)
     }

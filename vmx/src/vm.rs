@@ -13,7 +13,7 @@ use rkyv::{
 };
 
 use crate::module::WrappedModule;
-use crate::query_session::QuerySession;
+use crate::session::{Session, SessionMut};
 use crate::types::{Error, StandardBufSerializer};
 
 #[derive(Clone, Copy, PartialOrd, Ord, PartialEq, Eq)]
@@ -30,8 +30,9 @@ impl VM {
     }
 
     pub fn deploy(&mut self, bytecode: &[u8]) -> Result<ModuleId, Error> {
+        let store = wasmer::Store::default();
         let id = ModuleId(self.modules.len());
-        let module = WrappedModule::new(bytecode)?;
+        let module = WrappedModule::new(&store, bytecode)?;
         self.modules.insert(id, module);
         Ok(id)
     }
@@ -52,8 +53,16 @@ impl VM {
         Ret::Archived: Deserialize<Ret, Infallible>
             + for<'b> CheckBytes<DefaultValidator<'b>>,
     {
-        let mut session = QuerySession::new(self);
+        let mut session = Session::new(self);
         session.query(id, method_name, arg)
+    }
+
+    pub fn session(&self) -> Session {
+        Session::new(self)
+    }
+
+    pub fn session_mut(&mut self) -> SessionMut {
+        SessionMut::new(self)
     }
 }
 
@@ -62,11 +71,44 @@ mod tests {
     use super::*;
 
     #[test]
-    fn it_works() -> Result<(), Error> {
+    fn counter_read() -> Result<(), Error> {
         let mut vm = VM::new();
         let id = vm.deploy(module_bytecode!("counter"))?;
 
         assert_eq!(vm.query::<(), i64>(id, "read_value", ())?, 0xfc);
+
+        Ok(())
+    }
+
+    #[test]
+    fn counter_read_write() -> Result<(), Error> {
+        let mut vm = VM::new();
+        let id = vm.deploy(module_bytecode!("counter"))?;
+
+        {
+            let mut session = vm.session_mut();
+
+            assert_eq!(session.query::<(), i64>(id, "read_value", ())?, 0xfc);
+
+            session.transact::<(), ()>(id, "increment", ())?;
+
+            assert_eq!(session.query::<(), i64>(id, "read_value", ())?, 0xfd);
+        }
+
+        // mutable session dropped without commiting.
+        // old counter value still accessible.
+
+        assert_eq!(vm.query::<(), i64>(id, "read_value", ())?, 0xfc);
+
+        let mut other_session = vm.session_mut();
+
+        other_session.transact::<(), ()>(id, "increment", ())?;
+
+        let commit_id = other_session.commit();
+
+        // session committed, new value accessible
+
+        assert_eq!(vm.query::<(), i64>(id, "read_value", ())?, 0xfd);
 
         Ok(())
     }
