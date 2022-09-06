@@ -11,4 +11,4 @@ edition = "2018"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-dallo = { path = "../../dallo", default-features = false }
+uplink = { path = "../../uplink", default-features = false }

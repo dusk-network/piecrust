@@ -20,7 +20,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use bytecheck::CheckBytes;
-use dallo::{ModuleId, StandardBufSerializer, MODULE_ID_BYTES};
+use uplink::{ModuleId, StandardBufSerializer, MODULE_ID_BYTES};
 use native::NativeQueries;
 use parking_lot::ReentrantMutex;
 use rkyv::{
@@ -154,9 +154,6 @@ impl World {
 
         let imports = imports! {
             "env" => {
-                "alloc" => Function::new_native_with_env(&store, env.clone(), host_alloc),
-                "dealloc" => Function::new_native_with_env(&store, env.clone(), host_dealloc),
-
                 "snap" => Function::new_native_with_env(&store, env.clone(), host_snapshot),
 
                 "q" => Function::new_native_with_env(&store, env.clone(), host_query),
@@ -459,17 +456,6 @@ fn global_i32(exports: &Exports, name: &str) -> Result<i32, Error> {
     } else {
         Err(Error::MissingModuleExport)
     }
-}
-
-fn host_alloc(env: &Env, amount: i32, align: i32) -> i32 {
-    env.inner_mut()
-        .alloc(amount as usize, align as usize)
-        .try_into()
-        .expect("i32 overflow")
-}
-
-fn host_dealloc(env: &Env, addr: i32) {
-    env.inner_mut().dealloc(addr as usize)
 }
 
 // Debug helper to take a snapshot of the memory of the running process.

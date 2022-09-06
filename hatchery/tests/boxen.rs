@@ -4,7 +4,7 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use dallo::ModuleId;
+use uplink::ModuleId;
 use hatchery::{module_bytecode, Error, Receipt, World};
 use std::path::PathBuf;
 

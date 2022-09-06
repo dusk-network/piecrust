@@ -8,15 +8,12 @@
 #![no_std]
 #![no_main]
 
-#[global_allocator]
-static ALLOCATOR: dallo::HostAlloc = dallo::HostAlloc;
-
 #[derive(Default)]
 pub struct Counter {
     value: i64,
 }
 
-use dallo::{ModuleId, State};
+use uplink::{ModuleId, State};
 
 #[no_mangle]
 static SELF_ID: ModuleId = ModuleId::uninitialized();
@@ -36,10 +33,10 @@ impl Counter {
 
 #[no_mangle]
 unsafe fn read_value(arg_len: u32) -> u32 {
-    dallo::wrap_query(arg_len, |_: ()| STATE.read_value())
+    uplink::wrap_query(arg_len, |_: ()| STATE.read_value())
 }
 
 #[no_mangle]
 unsafe fn increment(arg_len: u32) -> u32 {
-    dallo::wrap_transaction(arg_len, |_: ()| STATE.increment())
+    uplink::wrap_transaction(arg_len, |_: ()| STATE.increment())
 }

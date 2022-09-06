@@ -4,7 +4,7 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use dallo::ModuleId;
+use uplink::ModuleId;
 use std::ops::Deref;
 
 /// The receipt of a query or transaction, containing the return and the events

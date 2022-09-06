@@ -11,8 +11,9 @@ pub struct WrappedModule {
 }
 
 impl WrappedModule {
-    pub fn new(store: &wasmer::Store, bytecode: &[u8]) -> Result<Self, Error> {
-        let module = wasmer::Module::new(store, bytecode)?;
+    pub fn new(bytecode: &[u8]) -> Result<Self, Error> {
+        let module =
+            wasmer::Module::new(&mut wasmer::Store::default(), bytecode)?;
         let serialized = module.serialize()?;
 
         Ok(WrappedModule { serialized })

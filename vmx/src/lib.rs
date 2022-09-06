@@ -6,10 +6,14 @@
 
 #[macro_use]
 mod bytecode_macro;
+mod imports;
 mod instance;
+mod linear;
+mod memory_handler;
 mod module;
 mod session;
 mod types;
 mod vm;
 
+pub use types::Error;
 pub use vm::VM;

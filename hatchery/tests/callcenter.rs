@@ -4,7 +4,7 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use dallo::{RawQuery, RawResult, RawTransaction};
+use uplink::{RawQuery, RawResult, RawTransaction};
 use hatchery::{module_bytecode, Error, Receipt, World};
 
 #[test]

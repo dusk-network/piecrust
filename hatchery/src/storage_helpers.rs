@@ -5,7 +5,7 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 use crate::snapshot::SnapshotId;
-use dallo::ModuleId;
+use uplink::ModuleId;
 
 pub fn combine_module_snapshot_names(
     module_name: impl AsRef<str>,

@@ -4,7 +4,7 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use dallo::ModuleId;
+use uplink::ModuleId;
 
 #[derive(Debug)]
 struct CallData {

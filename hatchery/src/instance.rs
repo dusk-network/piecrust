@@ -7,7 +7,7 @@
 use colored::*;
 
 use bytecheck::CheckBytes;
-use dallo::{
+use uplink::{
     ModuleId, StandardBufSerializer, MODULE_ID_BYTES, SCRATCH_BUF_BYTES,
 };
 use rkyv::{
@@ -62,26 +62,32 @@ impl Instance {
         }
     }
 
-    pub(crate) fn query<Arg, Ret>(
-        &self,
-        name: &str,
-        arg: Arg,
-    ) -> Result<Ret, Error>
-    where
-        Arg: for<'a> Serialize<StandardBufSerializer<'a>>,
-        Ret: Archive,
-        Ret::Archived: Deserialize<Ret, Infallible>
-            + for<'a> CheckBytes<DefaultValidator<'a>>,
-    {
-        let ret_len = {
-            let arg_len = self.write_to_arg_buffer(arg)?;
-            self.perform_query(name, arg_len)
-                .map_err(|e| map_call_err(self, e))?
-        };
-
-        self.read_from_arg_buffer(ret_len)
+    pub(crate) copy_argument(&mut self, arg: &[u8]) {
+	self.with_arg_buffer(|buf| {
+	    buf[..arg.len()].copy_from_slice(arg)
+	})
     }
 
+    // pub(crate) fn query<Arg, Ret>(
+    //     &self,
+    //     name: &str,
+    //     arg: Arg,
+    // ) -> Result<Ret, Error>
+    // where
+    //     Arg: for<'a> Serialize<StandardBufSerializer<'a>>,
+    //     Ret: Archive,
+    //     Ret::Archived: Deserialize<Ret, Infallible>
+    //         + for<'a> CheckBytes<DefaultValidator<'a>>,
+    // {
+    //     let ret_len = {
+    //         let arg_len = self.write_to_arg_buffer(arg)?;
+    //         self.perform_query(name, arg_len)
+    //             .map_err(|e| map_call_err(self, e))?
+    //     };
+
+    //     self.read_from_arg_buffer(ret_len)
+    // }
+    
     pub(crate) fn perform_query(
         &self,
         name: &str,
@@ -211,18 +217,12 @@ impl Instance {
     {
         self.with_memory_mut(|memory_bytes| {
             let a = self.arg_buf_ofs as usize;
-            let b = dallo::ARGBUF_LEN;
+            let b = uplink::ARGBUF_LEN;
             let begin = &mut memory_bytes[a..];
             let trimmed = &mut begin[..b];
             f(trimmed)
         })
     }
-
-    pub(crate) fn alloc(&mut self, amount: usize, align: usize) -> usize {
-        self.mem_handler.alloc(amount, align)
-    }
-
-    pub(crate) fn dealloc(&mut self, _addr: usize) {}
 
     pub fn id(&self) -> ModuleId {
         self.id
@@ -265,7 +265,7 @@ impl Instance {
                         }
 
                         let buf_start = self.arg_buf_ofs as usize;
-                        let buf_end = buf_start + dallo::ARGBUF_LEN as usize;
+                        let buf_end = buf_start + uplink::ARGBUF_LEN as usize;
                         let heap_base = self.heap_base as usize;
 
                         if ofs + i >= buf_start && ofs + i < buf_end {

@@ -4,6 +4,7 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
+use bytecheck::CheckBytes;
 use rkyv::{
     ser::serializers::{
         AllocSerializer, BufferScratch, BufferSerializer, CompositeSerializer,
@@ -11,8 +12,6 @@ use rkyv::{
     ser::Serializer,
     Archive, Deserialize, Infallible, Serialize,
 };
-
-use bytecheck::CheckBytes;
 
 use crate::SCRATCH_BUF_BYTES;
 
@@ -28,6 +27,7 @@ pub const MODULE_ID_BYTES: usize = 32;
     Eq,
     Archive,
     Serialize,
+    CheckBytes,
     Deserialize,
     PartialOrd,
     Ord,
@@ -35,17 +35,13 @@ pub const MODULE_ID_BYTES: usize = 32;
     Clone,
     Copy,
 )]
-#[archive_attr(derive(CheckBytes))]
+#[archive(as = "Self")]
 #[repr(C)]
 pub struct ModuleId([u8; MODULE_ID_BYTES]);
 
 impl ModuleId {
     pub const fn uninitialized() -> Self {
         ModuleId([0u8; MODULE_ID_BYTES])
-    }
-
-    pub(crate) fn as_ptr(&self) -> *const u8 {
-        self.0.as_ptr()
     }
 
     pub fn as_bytes(&self) -> &[u8] {
@@ -176,6 +172,20 @@ impl RawResult {
         let archived = unsafe { rkyv::archived_root::<D>(&self.data[..]) };
         archived.deserialize(&mut Infallible).expect("Infallible")
     }
+}
+
+#[derive(Archive, Serialize, Deserialize, CheckBytes, Debug)]
+#[archive(as = "Self")]
+pub struct QueryHeader {
+    pub callee: ModuleId,
+    pub name_len: u32,
+}
+
+#[derive(Archive, Serialize, Deserialize, CheckBytes, Debug)]
+#[archive(as = "Self")]
+pub struct TransactionHeader {
+    pub callee: ModuleId,
+    pub name_len: u32,
 }
 
 #[cfg(test)]

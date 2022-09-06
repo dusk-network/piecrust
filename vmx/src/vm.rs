@@ -5,40 +5,75 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 use std::collections::BTreeMap;
+use std::sync::Arc;
 
 use bytecheck::CheckBytes;
+use parking_lot::RwLock;
 use rkyv::{
     validation::validators::DefaultValidator, Archive, Deserialize, Infallible,
     Serialize,
 };
 
+use uplink::ModuleId;
+
 use crate::module::WrappedModule;
-use crate::session::{Session, SessionMut};
+use crate::session::Session;
 use crate::types::{Error, StandardBufSerializer};
 
-#[derive(Clone, Copy, PartialOrd, Ord, PartialEq, Eq)]
-pub struct ModuleId(usize);
-
 #[derive(Default)]
-pub struct VM {
+struct VMInner {
     modules: BTreeMap<ModuleId, WrappedModule>,
+}
+
+#[derive(Clone)]
+pub struct VM {
+    inner: Arc<RwLock<VMInner>>,
 }
 
 impl VM {
     pub fn new() -> Self {
-        Default::default()
+        VM {
+            inner: Arc::new(RwLock::new(VMInner::default())),
+        }
     }
 
     pub fn deploy(&mut self, bytecode: &[u8]) -> Result<ModuleId, Error> {
-        let store = wasmer::Store::default();
-        let id = ModuleId(self.modules.len());
-        let module = WrappedModule::new(&store, bytecode)?;
-        self.modules.insert(id, module);
+        // This should be the only place that we need a write lock.
+        let mut guard = self.inner.write();
+        let hash = blake3::hash(bytecode);
+        let id = ModuleId::from(<[u8; 32]>::from(hash));
+
+        println!("deployed module {:?}", id);
+
+        let module = WrappedModule::new(bytecode)?;
+        guard.modules.insert(id, module);
         Ok(id)
     }
 
-    pub fn module(&self, id: ModuleId) -> &WrappedModule {
-        self.modules.get(&id).expect("Invalid ModuleId")
+    pub fn with_memory<F, R>(&self, _id: ModuleId, _closure: F) -> R
+    where
+        F: FnOnce(&[u8]) -> R,
+    {
+        todo!()
+    }
+
+    pub fn with_argbuf<F, R>(&self, _id: ModuleId, _closure: F) -> R
+    where
+        F: FnOnce(&mut [u8]) -> R,
+    {
+        todo!()
+    }
+
+    pub fn with_module<F, R>(&self, id: ModuleId, closure: F) -> R
+    where
+        F: FnOnce(&WrappedModule) -> R,
+    {
+        println!("with module {:?}", id);
+
+        let guard = self.inner.read();
+        let wrapped = guard.modules.get(&id).expect("invalid module");
+
+        closure(wrapped)
     }
 
     pub fn query<Arg, Ret>(
@@ -53,63 +88,12 @@ impl VM {
         Ret::Archived: Deserialize<Ret, Infallible>
             + for<'b> CheckBytes<DefaultValidator<'b>>,
     {
-        let mut session = Session::new(self);
+        println!("query on vm");
+        let mut session = Session::new(self.clone());
         session.query(id, method_name, arg)
     }
 
-    pub fn session(&self) -> Session {
-        Session::new(self)
-    }
-
-    pub fn session_mut(&mut self) -> SessionMut {
-        SessionMut::new(self)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn counter_read() -> Result<(), Error> {
-        let mut vm = VM::new();
-        let id = vm.deploy(module_bytecode!("counter"))?;
-
-        assert_eq!(vm.query::<(), i64>(id, "read_value", ())?, 0xfc);
-
-        Ok(())
-    }
-
-    #[test]
-    fn counter_read_write() -> Result<(), Error> {
-        let mut vm = VM::new();
-        let id = vm.deploy(module_bytecode!("counter"))?;
-
-        {
-            let mut session = vm.session_mut();
-
-            assert_eq!(session.query::<(), i64>(id, "read_value", ())?, 0xfc);
-
-            session.transact::<(), ()>(id, "increment", ())?;
-
-            assert_eq!(session.query::<(), i64>(id, "read_value", ())?, 0xfd);
-        }
-
-        // mutable session dropped without commiting.
-        // old counter value still accessible.
-
-        assert_eq!(vm.query::<(), i64>(id, "read_value", ())?, 0xfc);
-
-        let mut other_session = vm.session_mut();
-
-        other_session.transact::<(), ()>(id, "increment", ())?;
-
-        let commit_id = other_session.commit();
-
-        // session committed, new value accessible
-
-        assert_eq!(vm.query::<(), i64>(id, "read_value", ())?, 0xfd);
-
-        Ok(())
+    pub fn session(&mut self) -> Session {
+        Session::new(self.clone())
     }
 }

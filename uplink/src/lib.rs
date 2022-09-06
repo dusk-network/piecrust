@@ -38,7 +38,3 @@ pub const ARGBUF_LEN: usize = 64 * 1024;
 
 #[cfg(not(feature = "std"))]
 mod handlers;
-#[cfg(not(feature = "std"))]
-mod host_allocator;
-#[cfg(not(feature = "std"))]
-pub use host_allocator::HostAlloc;

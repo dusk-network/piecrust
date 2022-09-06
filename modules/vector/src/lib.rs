@@ -6,14 +6,11 @@
 
 #![no_std]
 #![no_main]
+
 extern crate alloc;
 
-use dallo::{HostAlloc, ModuleId, State};
-
-#[global_allocator]
-static ALLOCATOR: HostAlloc = HostAlloc;
-
 use alloc::vec::Vec;
+use uplink::{ModuleId, State};
 
 pub struct Vector {
     a: Vec<i16>,
@@ -36,10 +33,10 @@ impl Vector {
 
 #[no_mangle]
 unsafe fn push(arg_len: u32) -> u32 {
-    dallo::wrap_transaction(arg_len, |arg| STATE.push(arg))
+    uplink::wrap_transaction(arg_len, |arg| STATE.push(arg))
 }
 
 #[no_mangle]
 unsafe fn pop(arg_len: u32) -> u32 {
-    dallo::wrap_transaction(arg_len, |_arg: ()| STATE.pop())
+    uplink::wrap_transaction(arg_len, |_arg: ()| STATE.pop())
 }

@@ -8,13 +8,10 @@
 #![no_std]
 #![no_main]
 
-use dallo::{
-    wrap_query, wrap_transaction, HostAlloc, ModuleId, RawQuery, RawResult,
+use uplink::{
+    wrap_query, wrap_transaction, ModuleId, RawQuery, RawResult,
     RawTransaction, State,
 };
-
-#[global_allocator]
-static ALLOCATOR: HostAlloc = HostAlloc;
 
 #[derive(Default)]
 pub struct Callcenter;
@@ -26,11 +23,10 @@ static mut STATE: State<Callcenter> = State::new(Callcenter);
 
 impl Callcenter {
     pub fn query_counter(&self, counter_id: ModuleId) -> i64 {
-        dallo::query(counter_id, "read_value", ())
+        uplink::query(counter_id, "read_value", ())
     }
 
     pub fn increment_counter(self: &mut State<Self>, counter_id: ModuleId) {
-        dallo::emit(counter_id);
         self.transact(counter_id, "increment", ())
     }
 
@@ -39,7 +35,7 @@ impl Callcenter {
         module_id: ModuleId,
         raw: RawQuery,
     ) -> RawResult {
-        dallo::query_raw(module_id, raw)
+        uplink::query_raw(module_id, raw)
     }
 
     pub fn query_passthrough(&mut self, raw: RawQuery) -> RawQuery {
@@ -55,15 +51,15 @@ impl Callcenter {
     }
 
     pub fn calling_self(&self, id: ModuleId) -> bool {
-        dallo::self_id() == id
+        uplink::self_id() == id
     }
 
     pub fn call_self(&self) -> bool {
-        let self_id = dallo::self_id();
-        let caller = dallo::caller();
+        let self_id = uplink::self_id();
+        let caller = uplink::caller();
 
         match caller.is_uninitialized() {
-            true => dallo::query(self_id, "call_self", ()),
+            true => uplink::query(self_id, "call_self", ()),
             false => caller == self_id,
         }
     }
