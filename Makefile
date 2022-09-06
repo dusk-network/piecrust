@@ -26,4 +26,4 @@ test: modules assert-counter-module-small ## Run the tests
 COUNTER_MODULE_BYTE_SIZE_LIMIT = 512
 
 assert-counter-module-small: modules
-	@test `wc -c modules/target/stripped/counter.wasm | cut -f1 -d' '` -lt $(COUNTER_MODULE_BYTE_SIZE_LIMIT);
+	@test `wc -c modules/target/stripped/counter.wasm | sed 's/ .*//g'` -lt $(COUNTER_MODULE_BYTE_SIZE_LIMIT);
