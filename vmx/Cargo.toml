@@ -12,3 +12,7 @@ rkyv = { version = "0.7", features = ["validation"] }
 
 dallo = { path = "../dallo" }
 parking_lot = "0.12.1"
+
+[dev-dependencies]
+tempfile = "3.3"
+blake3 = "1.3"
