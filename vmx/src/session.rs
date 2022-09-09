@@ -5,6 +5,7 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 use bytecheck::CheckBytes;
+use dallo::ModuleId;
 use rkyv::{
     validation::validators::DefaultValidator, Archive, Deserialize, Infallible,
     Serialize,
@@ -12,8 +13,8 @@ use rkyv::{
 use std::collections::BTreeMap;
 
 use crate::instance::WrappedInstance;
-use crate::types::{Error, StandardBufSerializer};
-use crate::vm::{ModuleId, VM};
+use crate::types::{Error, Event, StandardBufSerializer};
+use crate::vm::VM;
 
 pub struct Session<'a> {
     vm: &'a VM,
@@ -21,7 +22,7 @@ pub struct Session<'a> {
 }
 
 impl<'a> Session<'a> {
-    pub fn new(vm: &'a VM) -> Self {
+    pub(crate) fn new(vm: &'a VM) -> Self {
         Session {
             vm,
             instances: BTreeMap::new(),
@@ -61,17 +62,31 @@ impl<'a> Session<'a> {
         let i = self.get_instance(id)?;
         i.query(method_name, arg)
     }
+
+    pub fn spent(&self) -> u64 {
+        todo!()
+    }
+
+    pub fn set_limit(&mut self, limit: u64) {
+        todo!()
+    }
+
+    pub fn debug(&self) -> &[String] {
+        todo!()
+    }
+
+    pub fn set_height(&mut self, h: u64) {
+        todo!()
+    }
 }
 
-type CommitId = usize;
-
 pub struct SessionMut<'a> {
-    vm: &'a mut VM,
+    vm: &'a VM,
     instances: BTreeMap<ModuleId, WrappedInstance>,
 }
 
 impl<'a> SessionMut<'a> {
-    pub fn new(vm: &'a mut VM) -> Self {
+    pub(crate) fn new(vm: &'a VM) -> Self {
         SessionMut {
             vm,
             instances: BTreeMap::new(),
@@ -128,7 +143,27 @@ impl<'a> SessionMut<'a> {
         i.transact(method_name, arg)
     }
 
-    pub fn commit(self) -> CommitId {
+    pub fn deploy(&mut self, bytecode: &[u8]) -> Result<ModuleId, Error> {
+        todo!()
+    }
+
+    pub fn spent(&self) -> u64 {
+        todo!()
+    }
+
+    pub fn set_limit(&mut self, limit: u64) {
+        todo!()
+    }
+
+    pub fn debug(&self) -> &[String] {
+        todo!()
+    }
+
+    pub fn events(&self) -> &[Event] {
+        todo!()
+    }
+
+    pub fn set_height(&mut self, h: u64) {
         todo!()
     }
 }

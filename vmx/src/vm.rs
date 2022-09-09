@@ -4,9 +4,15 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
+mod native;
+pub use native::NativeQuery;
+
 use std::collections::BTreeMap;
+use std::path::Path;
 
 use bytecheck::CheckBytes;
+use dallo::ModuleId;
+use native::NativeQueries;
 use rkyv::{
     validation::validators::DefaultValidator, Archive, Deserialize, Infallible,
     Serialize,
@@ -16,12 +22,13 @@ use crate::module::WrappedModule;
 use crate::session::{Session, SessionMut};
 use crate::types::{Error, StandardBufSerializer};
 
-#[derive(Clone, Copy, PartialOrd, Ord, PartialEq, Eq)]
-pub struct ModuleId(usize);
+#[derive(Debug, Clone, Copy, PartialOrd, Ord, PartialEq, Eq)]
+pub struct CommitId(usize);
 
 #[derive(Default)]
 pub struct VM {
     modules: BTreeMap<ModuleId, WrappedModule>,
+    hosted_queries: NativeQueries,
 }
 
 impl VM {
@@ -29,15 +36,27 @@ impl VM {
         Default::default()
     }
 
-    pub fn deploy(&mut self, bytecode: &[u8]) -> Result<ModuleId, Error> {
-        let store = wasmer::Store::default();
-        let id = ModuleId(self.modules.len());
-        let module = WrappedModule::new(&store, bytecode)?;
-        self.modules.insert(id, module);
-        Ok(id)
+    pub fn load<P: AsRef<Path>>(dir: P) -> Result<Self, Error> {
+        todo!()
     }
 
-    pub fn module(&self, id: ModuleId) -> &WrappedModule {
+    /// Registers a [`NativeQuery`] with the given `name`.
+    pub fn add_native_query<Q>(&mut self, name: &'static str, query: Q)
+    where
+        Q: 'static + NativeQuery,
+    {
+        self.hosted_queries.insert(name, query);
+    }
+
+    // pub fn deploy(&mut self, bytecode: &[u8]) -> Result<ModuleId, Error> {
+    //     let store = wasmer::Store::default();
+    //     let id = ModuleId(self.modules.len());
+    //     let module = WrappedModule::new(&store, bytecode)?;
+    //     self.modules.insert(id, module);
+    //     Ok(id)
+    // }
+
+    pub(crate) fn module(&self, id: ModuleId) -> &WrappedModule {
         self.modules.get(&id).expect("Invalid ModuleId")
     }
 
@@ -57,11 +76,18 @@ impl VM {
         session.query(id, method_name, arg)
     }
 
-    pub fn session(&self) -> Session {
-        Session::new(self)
+    pub fn session(&self, commit: Option<CommitId>) -> Result<Session, Error> {
+        Ok(Session::new(self))
     }
 
-    pub fn session_mut(&mut self) -> SessionMut {
-        SessionMut::new(self)
+    pub fn session_mut(
+        &self,
+        commit: Option<CommitId>,
+    ) -> Result<SessionMut, Error> {
+        Ok(SessionMut::new(self))
+    }
+
+    pub fn commit(&self, session: SessionMut) -> Result<CommitId, Error> {
+        todo!()
     }
 }

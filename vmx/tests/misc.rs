@@ -9,9 +9,9 @@ use vmx::{module_bytecode, Error, VM};
 #[test]
 fn nstack_push_pop() -> Result<(), Error> {
     let vm = VM::new();
-    let mut session = vm.session_mut(None);
+    let mut session = vm.session_mut(None)?;
 
-    let module_id = session.deploy(module_bytecode!("stack"));
+    let module_id = session.deploy(module_bytecode!("stack"))?;
 
     let val = 42;
 
@@ -20,7 +20,7 @@ fn nstack_push_pop() -> Result<(), Error> {
     let len = session.query::<_, i32>(module_id, "len", ())?;
     assert_eq!(len, 1);
 
-    let popped = session.transact(module_id, "pop", ())?;
+    let popped = session.transact::<_, Option<i32>>(module_id, "pop", ())?;
     let len = session.query::<_, i32>(module_id, "len", ())?;
 
     assert_eq!(len, 0);
@@ -32,9 +32,9 @@ fn nstack_push_pop() -> Result<(), Error> {
 #[test]
 fn nstack_multi_push_pop() -> Result<(), Error> {
     let vm = VM::new();
-    let mut session = vm.session_mut(None);
+    let mut session = vm.session_mut(None)?;
 
-    let module_id = session.deploy(module_bytecode!("stack"));
+    let module_id = session.deploy(module_bytecode!("stack"))?;
 
     const N: i32 = 1_000;
 
@@ -63,7 +63,7 @@ fn nstack_multi_push_pop() -> Result<(), Error> {
 #[test]
 fn fibonacci() -> Result<(), Error> {
     let vm = VM::new();
-    let mut session = vm.session_mut(None);
+    let mut session = vm.session_mut(None)?;
 
     let module_id = session.deploy(module_bytecode!("fibonacci"))?;
 
@@ -79,7 +79,7 @@ fn fibonacci() -> Result<(), Error> {
 #[test]
 fn vector_push_pop() -> Result<(), Error> {
     let vm = VM::new();
-    let mut session = vm.session_mut(None);
+    let mut session = vm.session_mut(None)?;
 
     let module_id = session.deploy(module_bytecode!("vector"))?;
 

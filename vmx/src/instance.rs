@@ -56,7 +56,8 @@ impl WrappedInstance {
         // TODO use bytecheck here
         self.with_arg_buffer(|abuf| {
             let slice = &abuf[..arg_len as usize];
-            let ta: &T::Archived = check_archived_root::<T>(slice)?;
+            let ta: &T::Archived = check_archived_root::<T>(slice)
+                .map_err(|_| Error::RkyvCheck)?;
             let t = ta.deserialize(&mut Infallible).expect("Infallible");
             Ok(t)
         })

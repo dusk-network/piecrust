@@ -12,4 +12,6 @@ mod session;
 mod types;
 mod vm;
 
-pub use vm::VM;
+pub use session::{Session, SessionMut};
+pub use types::{Error, Event};
+pub use vm::{CommitId, NativeQuery, VM};

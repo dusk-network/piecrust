@@ -9,7 +9,7 @@ use vmx::{module_bytecode, Error, VM};
 #[test]
 pub fn points_get_used() -> Result<(), Error> {
     let vm = VM::new();
-    let mut session = vm.session_mut(None);
+    let mut session = vm.session_mut(None)?;
 
     let counter_id = session.deploy(module_bytecode!("counter"))?;
 
@@ -25,7 +25,7 @@ pub fn points_get_used() -> Result<(), Error> {
 #[test]
 pub fn fails_with_out_of_points() -> Result<(), Error> {
     let vm = VM::new();
-    let mut session = vm.session_mut(None);
+    let mut session = vm.session_mut(None)?;
 
     session.set_limit(0);
     let counter_id = session.deploy(module_bytecode!("counter"))?;

@@ -13,8 +13,8 @@ use vmx::{module_bytecode, CommitId, Error, VM};
 fn box_set_get() -> Result<(), Error> {
     let vm = VM::new();
 
-    let mut session = vm.session_mut(None);
-    let box_id = session.deploy(module_bytecode!("box"));
+    let mut session = vm.session_mut(None)?;
+    let box_id = session.deploy(module_bytecode!("box"))?;
 
     let value = session.query::<(), Option<i16>>(box_id, "get", ())?;
     assert_eq!(value, None);
@@ -34,17 +34,17 @@ fn box_set_store_restore_get() -> Result<(), Error> {
     let (module_id, commit_id) = {
         let mut vm = VM::load(&storage_path)?;
 
-        let mut session = vm.session_mut(None);
+        let mut session = vm.session_mut(None)?;
         let module_id = session.deploy(module_bytecode!("box"))?;
 
-        session.transact::<i16, ()>()(module_id, "set", 0x23)?;
+        session.transact::<i16, ()>(module_id, "set", 0x23)?;
         let commit_id = vm.commit(session)?;
 
         (module_id, commit_id)
     };
 
     let vm = VM::load(storage_path)?;
-    let session = vm.session(Some(commit_id))?;
+    let mut session = vm.session(Some(commit_id))?;
 
     let value = session.query::<_, Option<i16>>(module_id, "get", ())?;
     assert_eq!(value, Some(0x23));
@@ -56,23 +56,28 @@ fn box_set_store_restore_get() -> Result<(), Error> {
 fn box_set_get_concurrent() -> Result<(), Error> {
     let storage_path = tempdir().expect("tmpdir should succeed");
 
-    let mut vm = VM::load(&storage_path)?;
+    let vm = VM::load(&storage_path)?;
 
     let (module_id, commit_id) = {
-        let mut session = vm.session_mut(None);
+        let mut session = vm.session_mut(None)?;
         let module_id = session.deploy(module_bytecode!("box"))?;
 
-        session.transact::<i16, ()>()(module_id, "set", 0x23)?;
+        session.transact::<i16, ()>(module_id, "set", 0x23)?;
         let commit_id = vm.commit(session)?;
 
         (module_id, commit_id)
     };
 
+    // This is a hack to bypass lifetimes just for testing purposes.
+    let vm = Box::leak(Box::new(vm)) as *mut VM;
+
     const N_THREAD: usize = 8;
     let mut handles = Vec::with_capacity(N_THREAD);
     for _ in 0..N_THREAD {
-        handles.push(thread::spawn(|| {
-            let session = vm.session(Some(commit_id));
+        let vm = unsafe { &*vm };
+        let mut session = vm.session(Some(commit_id))?;
+
+        handles.push(thread::spawn(move || {
             session.query::<_, Option<i16>>(module_id, "get", ())
         }));
     }
@@ -80,8 +85,10 @@ fn box_set_get_concurrent() -> Result<(), Error> {
     for handle in handles.drain(..) {
         let value =
             handle.join().expect("joining the thread should succeed")?;
-        assert_eq!(value, 0x23);
+        assert_eq!(value, Some(0x23));
     }
+
+    unsafe { Box::from_raw(vm) };
 
     Ok(())
 }

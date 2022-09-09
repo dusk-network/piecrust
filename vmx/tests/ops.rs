@@ -11,7 +11,7 @@ use vmx::{module_bytecode, Error, VM};
 fn debug() -> Result<(), Error> {
     let vm = VM::new();
 
-    let session = vm.session(None);
+    let mut session = vm.session_mut(None)?;
 
     let module_id = session.deploy(module_bytecode!("debugger"))?;
     session.query(module_id, "debug", String::from("Hello, World"))?;
@@ -27,7 +27,7 @@ fn debug() -> Result<(), Error> {
 #[test]
 fn height() -> Result<(), Error> {
     let vm = VM::new();
-    let mut session = vm.session_mut(None);
+    let mut session = vm.session_mut(None)?;
 
     let module_id = session.deploy(module_bytecode!("everest"))?;
 
@@ -61,12 +61,12 @@ fn hash_num(num: i32) -> [u8; 32] {
 fn host_hash() -> Result<(), Error> {
     let vm = {
         let mut vm = VM::new();
-        vm.add_host_query("hash", hash);
+        vm.add_native_query("hash", hash);
         vm
     };
 
-    let session = vm.session_mut(None);
-    let module_id = session.deploy(module_bytecode!("host"));
+    let mut session = vm.session_mut(None)?;
+    let module_id = session.deploy(module_bytecode!("host"))?;
 
     let h = session.query::<i32, [u8; 32]>(module_id, "hash", 42)?;
     assert_eq!(hash_num(42), h);
@@ -78,20 +78,20 @@ fn host_hash() -> Result<(), Error> {
 fn events() -> Result<(), Error> {
     let vm = VM::new();
 
-    let mut session = vm.session_mut(None);
-    let module_id = session.deploy(module_bytecode!("eventer"));
+    let mut session = vm.session_mut(None)?;
+    let module_id = session.deploy(module_bytecode!("eventer"))?;
 
     const EVENT_NUM: usize = 5;
 
     session.transact(module_id, "emit_events", EVENT_NUM)?;
 
     let events = session.events();
-    assert_eq!(events.len() as u32, EVENT_NUM);
+    assert_eq!(events.len(), EVENT_NUM);
 
     for i in 0..EVENT_NUM {
         let index = i as usize;
         assert_eq!(events[index].module_id(), &module_id);
-        assert_eq!(events[index].data(), i.lo_le_bytes());
+        assert_eq!(events[index].data(), (i as u32).to_le_bytes());
     }
 
     Ok(())
@@ -101,9 +101,9 @@ fn events() -> Result<(), Error> {
 fn call_center_read_counter() -> Result<(), Error> {
     let vm = VM::new();
 
-    let mut session = vm.session_mut(None);
+    let mut session = vm.session_mut(None)?;
 
-    let counter_id = session.deploy(module_bytecode!("counter"));
+    let counter_id = session.deploy(module_bytecode!("counter"))?;
     let center_id = session.deploy(module_bytecode!("callcenter"))?;
 
     // read value directly from counter contract, and then through the call
@@ -125,9 +125,9 @@ fn call_center_read_counter() -> Result<(), Error> {
 fn call_center_counter_direct() -> Result<(), Error> {
     let vm = VM::new();
 
-    let mut session = vm.session_mut(None);
+    let mut session = vm.session_mut(None)?;
 
-    let counter_id = session.deploy(module_bytecode!("counter"));
+    let counter_id = session.deploy(module_bytecode!("counter"))?;
     let center_id = session.deploy(module_bytecode!("callcenter"))?;
 
     // read value directly from counter contract, and then through the call
@@ -165,9 +165,9 @@ fn call_center_counter_direct() -> Result<(), Error> {
 fn call_center_counter_delegated() -> Result<(), Error> {
     let vm = VM::new();
 
-    let mut session = vm.session_mut(None);
+    let mut session = vm.session_mut(None)?;
 
-    let counter_id = session.deploy(module_bytecode!("counter"));
+    let counter_id = session.deploy(module_bytecode!("counter"))?;
     let center_id = session.deploy(module_bytecode!("callcenter"))?;
 
     let rq = RawQuery::new("read_value", ());
@@ -207,11 +207,12 @@ fn call_center_counter_delegated() -> Result<(), Error> {
 #[test]
 fn call_center_calls_self() -> Result<(), Error> {
     let vm = VM::new();
-    let mut session = vm.session_mut(None);
+    let mut session = vm.session_mut(None)?;
 
     let module_id = session.deploy(module_bytecode!("callcenter"))?;
 
-    let calling_self = session.query(module_id, "calling_self", module_id)?;
+    let calling_self =
+        session.query::<_, bool>(module_id, "calling_self", module_id)?;
     assert!(calling_self);
 
     Ok(())
@@ -220,11 +221,11 @@ fn call_center_calls_self() -> Result<(), Error> {
 #[test]
 fn call_center_caller() -> Result<(), Error> {
     let vm = VM::new();
-    let mut session = vm.session_mut(None);
+    let mut session = vm.session_mut(None)?;
 
     let module_id = session.deploy(module_bytecode!("callcenter"))?;
 
-    let value = session.query(module_id, "call_self", ())?;
+    let value = session.query::<_, bool>(module_id, "call_self", ())?;
     assert!(value);
 
     Ok(())
@@ -233,7 +234,7 @@ fn call_center_caller() -> Result<(), Error> {
 #[test]
 pub fn limit_and_spent() -> Result<(), Error> {
     let vm = VM::new();
-    let mut session = vm.session_mut(None);
+    let mut session = vm.session_mut(None)?;
 
     const LIMIT: u64 = 10000;
 
