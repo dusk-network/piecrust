@@ -28,7 +28,7 @@ pub struct Session {
 }
 
 pub struct SessionTunables {
-    // memory: Linear,
+    //memory: Linear,
 }
 
 impl SessionTunables {
@@ -69,15 +69,18 @@ impl Tunables for SessionTunables {
             wasmer_vm::VMMemoryDefinition,
         >,
     ) -> Result<wasmer_vm::VMMemory, wasmer_vm::MemoryError> {
-        let memory = Linear::new();
+        let mut memory = Linear::new();
         // now, it's important to update vm_definition_location with the memory
         // information!
         let mut ptr = vm_definition_location;
         let md = ptr.as_mut();
-        let unsafecell = memory.memory_definition.as_ref().unwrap();
-        let def = unsafecell.get().as_ref().unwrap();
-        md.base = def.base;
-        md.current_length = def.current_length;
+
+        let def = memory.memory_definition.as_mut().unwrap();
+
+        // let def = &mut *unsafecell.get();
+
+        *md = *def;
+
         Ok(memory.into())
     }
 

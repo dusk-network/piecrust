@@ -4,24 +4,27 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use std::cell::UnsafeCell;
 use std::ptr::NonNull;
+use std::sync::Arc;
+
+use parking_lot::RwLock;
+
+use wasmer::{MemoryType, Pages, TypedFunction};
+use wasmer_vm::{
+    LinearMemory, MemoryError, MemoryStyle, VMMemory, VMMemoryDefinition,
+};
 
 pub const MEMORY_PAGES: usize = 18;
 const WASM_PAGE_SIZE: usize = 64 * 1024;
 //const MEMORY_BYTES: usize = MEMORY_PAGES * WASM_PAGE_SIZE;
 
-use wasmer::{MemoryType, Pages};
-use wasmer_vm::{
-    LinearMemory, MaybeInstanceOwned, MemoryError, MemoryStyle, VMMemory,
-    VMMemoryDefinition,
-};
-
 #[derive(Debug)]
 pub struct Linear {
     mem: Vec<u8>,
-    pub memory_definition: Option<UnsafeCell<VMMemoryDefinition>>,
+    pub memory_definition: Option<VMMemoryDefinition>,
 }
+
+// pub struct Linear(Arc<RwLock<LinearInner>>);
 
 unsafe impl Send for Linear {}
 unsafe impl Sync for Linear {}
@@ -47,10 +50,10 @@ impl Linear {
             mem: memory,
             memory_definition: None,
         };
-        ret.memory_definition = Some(UnsafeCell::new(VMMemoryDefinition {
+        ret.memory_definition = Some(VMMemoryDefinition {
             base: ret.mem.as_ptr() as _,
             current_length: sz,
-        }));
+        });
         ret
     }
 }
@@ -84,15 +87,8 @@ impl LinearMemory for Linear {
 
     fn vmmemory(&self) -> NonNull<VMMemoryDefinition> {
         unsafe {
-            NonNull::new(
-                self.memory_definition
-                    .as_ref()
-                    .unwrap()
-                    .get()
-                    .as_mut()
-                    .unwrap() as _,
-            )
-            .unwrap()
+            NonNull::new(self.memory_definition.clone().as_mut().unwrap())
+                .unwrap()
         }
     }
 
@@ -144,5 +140,33 @@ mod test {
 
         let x = unsafe { view.data_unchecked_mut() }[0];
         assert_eq!(x, 0);
+    }
+
+    #[test]
+    fn micro_test() {
+        use wasmer::{imports, wat2wasm, Instance, Memory, Module, Store};
+        use wasmer_compiler_singlepass::Singlepass;
+
+        use crate::session::SessionTunables;
+
+        let wasm_bytes = module_bytecode!("micro");
+
+        let compiler = Singlepass::default();
+
+        let tunables = SessionTunables::new();
+        let mut store = Store::new_with_tunables(compiler, tunables);
+        //let mut store = Store::new(compiler);
+        let module = Module::new(&store, wasm_bytes).unwrap();
+        let import_object = imports! {};
+        let instance =
+            Instance::new(&mut store, &module, &import_object).unwrap();
+
+        let fun: TypedFunction<u32, u32> = instance
+            .exports
+            .get_typed_function(&store, "change")
+            .unwrap();
+
+        assert_eq!(fun.call(&mut store, 43).unwrap(), 42);
+        assert_eq!(fun.call(&mut store, 44).unwrap(), 43);
     }
 }
