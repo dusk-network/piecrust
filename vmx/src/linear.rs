@@ -9,31 +9,27 @@ use std::sync::Arc;
 
 use parking_lot::RwLock;
 
-use wasmer::{MemoryType, Pages, TypedFunction};
+use wasmer::{MemoryType, Pages};
 use wasmer_vm::{
     LinearMemory, MemoryError, MemoryStyle, VMMemory, VMMemoryDefinition,
 };
 
+use crate::module::VolatileMem;
+
 pub const MEMORY_PAGES: usize = 18;
 const WASM_PAGE_SIZE: usize = 64 * 1024;
-//const MEMORY_BYTES: usize = MEMORY_PAGES * WASM_PAGE_SIZE;
 
 #[derive(Debug)]
-pub struct Linear {
+struct LinearInner {
     mem: Vec<u8>,
+    // Workaround for not overwriting memory on initialization,
+    volatile: Vec<VolatileMem>,
+    vol_buffer: Vec<u8>,
     pub memory_definition: Option<VMMemoryDefinition>,
 }
 
-// pub struct Linear(Arc<RwLock<LinearInner>>);
-
-unsafe impl Send for Linear {}
-unsafe impl Sync for Linear {}
-
-// impl Clone for Linear {
-//     fn clone(&self) -> Self {
-//         todo!("what")
-//     }
-// }
+#[derive(Debug, Clone)]
+pub struct Linear(Arc<RwLock<LinearInner>>);
 
 impl Into<VMMemory> for Linear {
     fn into(self) -> VMMemory {
@@ -42,19 +38,79 @@ impl Into<VMMemory> for Linear {
 }
 
 impl Linear {
-    pub fn new() -> Self {
+    pub fn new(volatile: Vec<VolatileMem>) -> Self {
+        println!("LINEAR MEMORY CREATED ----------------------------");
+
         let sz = 18 * WASM_PAGE_SIZE;
         let mut memory = Vec::new();
         memory.resize(sz, 0);
-        let mut ret = Linear {
+        let ret = Linear(Arc::new(RwLock::new(LinearInner {
             mem: memory,
             memory_definition: None,
-        };
-        ret.memory_definition = Some(VMMemoryDefinition {
-            base: ret.mem.as_ptr() as _,
-            current_length: sz,
-        });
+            vol_buffer: vec![],
+            volatile,
+        })));
+
+        {
+            let mut guard = ret.0.write();
+
+            let LinearInner {
+                ref mem,
+                ref mut memory_definition,
+                ..
+            } = *guard;
+
+            *memory_definition = Some(VMMemoryDefinition {
+                base: mem.as_ptr() as _,
+                current_length: sz,
+            });
+        }
         ret
+    }
+
+    pub fn definition(&self) -> VMMemoryDefinition {
+        self.0.read().memory_definition.unwrap()
+    }
+
+    pub fn definition_ptr(&self) -> NonNull<VMMemoryDefinition> {
+        let r = &mut self.0.write().memory_definition.unwrap();
+        NonNull::new(r).unwrap()
+    }
+
+    pub(crate) fn save_volatile(&self) {
+        let mut guard = self.0.write();
+        let inner = &mut *guard;
+
+        println!("SAVING VOLATILE");
+
+        inner.vol_buffer.truncate(0);
+        for reg in &inner.volatile {
+            let slice = &inner.mem[reg.offset..][..reg.length];
+
+            println!("slice saved: {:?}", slice);
+
+            inner.vol_buffer.extend_from_slice(slice);
+        }
+    }
+
+    pub(crate) fn restore_volatile(&self) {
+        println!("RESTORING VOLATILE");
+
+        let mut guard = self.0.write();
+        let inner = &mut *guard;
+
+        println!("{:?}", inner.vol_buffer);
+
+        let mut buf_ofs = 0;
+
+        println!("reg_buffer {:?}", inner.vol_buffer);
+
+        for reg in &inner.volatile {
+            println!("restoring {:?}", reg);
+            inner.mem[reg.offset..][..reg.length]
+                .copy_from_slice(&inner.vol_buffer[buf_ofs..reg.length]);
+            buf_ofs += reg.length;
+        }
     }
 }
 
@@ -86,10 +142,7 @@ impl LinearMemory for Linear {
     }
 
     fn vmmemory(&self) -> NonNull<VMMemoryDefinition> {
-        unsafe {
-            NonNull::new(self.memory_definition.clone().as_mut().unwrap())
-                .unwrap()
-        }
+        self.definition_ptr()
     }
 
     fn try_clone(&self) -> Option<Box<dyn LinearMemory + 'static>> {
@@ -101,13 +154,14 @@ impl LinearMemory for Linear {
 mod test {
     use super::*;
 
+    use crate::instance::InstanceTunables;
+    use wasmer::{
+        imports, wat2wasm, Instance, Memory, Module, Store, TypedFunction,
+    };
+    use wasmer_compiler_singlepass::Singlepass;
+
     #[test]
     fn instanciate_test() {
-        use wasmer::{imports, wat2wasm, Instance, Memory, Module, Store};
-        use wasmer_compiler_singlepass::Singlepass;
-
-        use crate::session::SessionTunables;
-
         let wasm_bytes = wat2wasm(
             br#"(module
             (memory (;0;) 18)
@@ -119,7 +173,7 @@ mod test {
         .unwrap();
         let compiler = Singlepass::default();
 
-        let tunables = SessionTunables::new();
+        let tunables = InstanceTunables::new(Linear::new(vec![]));
         let mut store = Store::new_with_tunables(compiler, tunables);
         //let mut store = Store::new(compiler);
         let module = Module::new(&store, wasm_bytes).unwrap();
@@ -144,16 +198,11 @@ mod test {
 
     #[test]
     fn micro_test() {
-        use wasmer::{imports, wat2wasm, Instance, Memory, Module, Store};
-        use wasmer_compiler_singlepass::Singlepass;
-
-        use crate::session::SessionTunables;
-
         let wasm_bytes = module_bytecode!("micro");
 
         let compiler = Singlepass::default();
 
-        let tunables = SessionTunables::new();
+        let tunables = InstanceTunables::new(Linear::new(vec![]));
         let mut store = Store::new_with_tunables(compiler, tunables);
         //let mut store = Store::new(compiler);
         let module = Module::new(&store, wasm_bytes).unwrap();

@@ -7,6 +7,7 @@
 use std::ops::{Deref, DerefMut};
 
 use bytecheck::CheckBytes;
+use colored::*;
 use rkyv::{
     check_archived_root,
     ser::{
@@ -17,9 +18,12 @@ use rkyv::{
     Archive, Deserialize, Infallible, Serialize,
 };
 use uplink::{ModuleId, SCRATCH_BUF_BYTES};
-use wasmer::TypedFunction;
+use wasmer::{Store, Tunables, TypedFunction};
+use wasmer_compiler_singlepass::Singlepass;
+use wasmer_vm::VMMemory;
 
 use crate::imports::DefaultImports;
+use crate::linear::{Linear, MEMORY_PAGES};
 use crate::module::WrappedModule;
 use crate::session::Session;
 use crate::types::{Error, StandardBufSerializer};
@@ -27,6 +31,7 @@ use crate::types::{Error, StandardBufSerializer};
 pub struct WrappedInstance {
     instance: wasmer::Instance,
     arg_buf_ofs: usize,
+    heap_base: usize,
     store: wasmer::Store,
 }
 
@@ -57,12 +62,20 @@ impl Env {
 
 impl WrappedInstance {
     pub fn new(
-        mut store: wasmer::Store,
+        memory: Linear,
+        // mut store: wasmer::Store,
         session: Session,
         id: ModuleId,
         wrap: &WrappedModule,
     ) -> Result<Self, Error> {
         println!("in wrapped instance new");
+
+        let mut store = Store::new_with_tunables(
+            Singlepass::default(),
+            InstanceTunables::new(memory.clone()),
+        );
+
+        println!("store created");
 
         let env = Env {
             self_id: id,
@@ -81,14 +94,28 @@ impl WrappedInstance {
 
         println!("post instance creation");
 
-        match instance.exports.get_global("A")?.get(&mut store) {
-            wasmer::Value::I32(ofs) => Ok(WrappedInstance {
-                store,
-                instance,
-                arg_buf_ofs: ofs as usize,
-            }),
-            _ => todo!(),
-        }
+        let arg_buf_ofs =
+            match instance.exports.get_global("A")?.get(&mut store) {
+                wasmer::Value::I32(i) => i as usize,
+                _ => todo!("Missing `A` Argbuf export"),
+            };
+
+        let heap_base =
+            match instance.exports.get_global("__heap_base")?.get(&mut store) {
+                wasmer::Value::I32(i) => i as usize,
+                _ => todo!("Missing heap base"),
+            };
+
+        let wrapped = WrappedInstance {
+            store,
+            instance,
+            arg_buf_ofs,
+            heap_base,
+        };
+
+        wrapped.snap();
+
+        Ok(wrapped)
     }
 
     pub(crate) fn copy_argument(&mut self, arg: &[u8]) {
@@ -182,25 +209,136 @@ impl WrappedInstance {
         Ok(fun.call(&mut self.store, arg_len)?)
     }
 
-    pub fn transact<Arg, Ret>(
+    pub fn transact(
         &mut self,
         method_name: &str,
-        arg: Arg,
-    ) -> Result<Ret, Error>
-    where
-        Arg: for<'b> Serialize<StandardBufSerializer<'b>>,
-        Ret: Archive,
-        Ret::Archived: Deserialize<Ret, Infallible>
-            + for<'b> CheckBytes<DefaultValidator<'b>>,
-    {
-        let arg_len = self.write_to_arg_buffer(arg)?;
-
+        arg_len: u32,
+    ) -> Result<u32, Error> {
         let fun: TypedFunction<u32, u32> = self
             .instance
             .exports
             .get_typed_function(&self.store, method_name)?;
-        let ret_len = fun.call(&mut self.store, arg_len)?;
 
-        self.read_from_arg_buffer(ret_len)
+        Ok(fun.call(&mut self.store, arg_len)?)
+    }
+
+    pub fn snap(&self) {
+        let mem = self
+            .instance
+            .exports
+            .get_memory("memory")
+            .expect("memory export is checked at module creation time");
+
+        println!("memory snapshot");
+
+        let view = mem.view(&self.store);
+        let maybe_interesting = unsafe { view.data_unchecked_mut() };
+
+        const CSZ: usize = 128;
+        const RSZ: usize = 16;
+
+        for (chunk_nr, chunk) in maybe_interesting.chunks(CSZ).enumerate() {
+            if chunk[..] != [0; CSZ][..] {
+                for (row_nr, row) in chunk.chunks(RSZ).enumerate() {
+                    let ofs = chunk_nr * CSZ + row_nr * RSZ;
+
+                    print!("{:08x}:", ofs);
+
+                    for (i, byte) in row.iter().enumerate() {
+                        if i % 4 == 0 {
+                            print!(" ");
+                        }
+
+                        let buf_start = self.arg_buf_ofs as usize;
+                        let buf_end = buf_start + uplink::ARGBUF_LEN as usize;
+                        let heap_base = self.heap_base as usize;
+
+                        if ofs + i >= buf_start && ofs + i < buf_end {
+                            print!("{}", format!("{:02x}", byte).red());
+                            print!(" ");
+                        } else if ofs + i >= heap_base {
+                            print!("{}", format!("{:02x} ", byte).green());
+                        } else {
+                            print!("{:02x} ", byte)
+                        }
+                    }
+
+                    println!();
+                }
+            }
+        }
+    }
+}
+
+pub struct InstanceTunables {
+    memory: Linear,
+}
+
+impl InstanceTunables {
+    pub fn new(memory: Linear) -> Self {
+        InstanceTunables { memory }
+    }
+}
+
+impl Tunables for InstanceTunables {
+    fn memory_style(
+        &self,
+        _memory: &wasmer::MemoryType,
+    ) -> wasmer_vm::MemoryStyle {
+        wasmer_vm::MemoryStyle::Static {
+            bound: wasmer::Pages::from(MEMORY_PAGES as u32),
+            offset_guard_size: 0,
+        }
+    }
+
+    fn table_style(&self, _table: &wasmer::TableType) -> wasmer_vm::TableStyle {
+        wasmer_vm::TableStyle::CallerChecksSignature
+    }
+
+    fn create_host_memory(
+        &self,
+        _ty: &wasmer::MemoryType,
+        _style: &wasmer_vm::MemoryStyle,
+    ) -> Result<wasmer_vm::VMMemory, wasmer_vm::MemoryError> {
+        Ok(VMMemory::from_custom(self.memory.clone()))
+    }
+
+    unsafe fn create_vm_memory(
+        &self,
+        _ty: &wasmer::MemoryType,
+        _style: &wasmer_vm::MemoryStyle,
+        vm_definition_location: std::ptr::NonNull<
+            wasmer_vm::VMMemoryDefinition,
+        >,
+    ) -> Result<wasmer_vm::VMMemory, wasmer_vm::MemoryError> {
+        // now, it's important to update vm_definition_location with the memory
+        // information!
+        let mut ptr = vm_definition_location;
+        let md = ptr.as_mut();
+
+        let mem = self.memory.clone();
+
+        *md = mem.definition();
+
+        Ok(mem.into())
+    }
+
+    /// Create a table owned by the host given a [`TableType`] and a
+    /// [`TableStyle`].
+    fn create_host_table(
+        &self,
+        ty: &wasmer::TableType,
+        style: &wasmer_vm::TableStyle,
+    ) -> Result<wasmer_vm::VMTable, String> {
+        wasmer_vm::VMTable::new(ty, style)
+    }
+
+    unsafe fn create_vm_table(
+        &self,
+        ty: &wasmer::TableType,
+        style: &wasmer_vm::TableStyle,
+        vm_definition_location: std::ptr::NonNull<wasmer_vm::VMTableDefinition>,
+    ) -> Result<wasmer_vm::VMTable, String> {
+        wasmer_vm::VMTable::from_definition(ty, style, vm_definition_location)
     }
 }

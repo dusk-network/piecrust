@@ -9,14 +9,10 @@ use rkyv::{
     validation::validators::DefaultValidator, Archive, Deserialize, Infallible,
     Serialize,
 };
-use wasmer::{Store, Tunables};
-use wasmer_compiler_singlepass::Singlepass;
-use wasmer_vm::VMMemory;
 
 use uplink::ModuleId;
 
 use crate::instance::WrappedInstance;
-use crate::linear::{Linear, MEMORY_PAGES};
 use crate::memory_handler::MemoryHandler;
 use crate::types::{Error, StandardBufSerializer};
 use crate::vm::VM;
@@ -27,88 +23,11 @@ pub struct Session {
     memory_handler: MemoryHandler,
 }
 
-pub struct SessionTunables {
-    //memory: Linear,
-}
-
-impl SessionTunables {
-    pub fn new() -> Self {
-        SessionTunables {}
-    }
-}
-
-impl Tunables for SessionTunables {
-    fn memory_style(
-        &self,
-        _memory: &wasmer::MemoryType,
-    ) -> wasmer_vm::MemoryStyle {
-        wasmer_vm::MemoryStyle::Static {
-            bound: wasmer::Pages::from(MEMORY_PAGES as u32),
-            offset_guard_size: 0,
-        }
-    }
-
-    fn table_style(&self, _table: &wasmer::TableType) -> wasmer_vm::TableStyle {
-        wasmer_vm::TableStyle::CallerChecksSignature
-    }
-
-    fn create_host_memory(
-        &self,
-        _ty: &wasmer::MemoryType,
-        _style: &wasmer_vm::MemoryStyle,
-    ) -> Result<wasmer_vm::VMMemory, wasmer_vm::MemoryError> {
-        let memory = Linear::new();
-        Ok(VMMemory::from_custom(memory))
-    }
-
-    unsafe fn create_vm_memory(
-        &self,
-        _ty: &wasmer::MemoryType,
-        _style: &wasmer_vm::MemoryStyle,
-        vm_definition_location: std::ptr::NonNull<
-            wasmer_vm::VMMemoryDefinition,
-        >,
-    ) -> Result<wasmer_vm::VMMemory, wasmer_vm::MemoryError> {
-        let mut memory = Linear::new();
-        // now, it's important to update vm_definition_location with the memory
-        // information!
-        let mut ptr = vm_definition_location;
-        let md = ptr.as_mut();
-
-        let def = memory.memory_definition.as_mut().unwrap();
-
-        // let def = &mut *unsafecell.get();
-
-        *md = *def;
-
-        Ok(memory.into())
-    }
-
-    /// Create a table owned by the host given a [`TableType`] and a
-    /// [`TableStyle`].
-    fn create_host_table(
-        &self,
-        ty: &wasmer::TableType,
-        style: &wasmer_vm::TableStyle,
-    ) -> Result<wasmer_vm::VMTable, String> {
-        wasmer_vm::VMTable::new(ty, style)
-    }
-
-    unsafe fn create_vm_table(
-        &self,
-        ty: &wasmer::TableType,
-        style: &wasmer_vm::TableStyle,
-        vm_definition_location: std::ptr::NonNull<wasmer_vm::VMTableDefinition>,
-    ) -> Result<wasmer_vm::VMTable, String> {
-        wasmer_vm::VMTable::from_definition(ty, style, vm_definition_location)
-    }
-}
-
 impl Session {
     pub fn new(vm: VM) -> Self {
         Session {
+            memory_handler: MemoryHandler::new(vm.clone()),
             vm,
-            memory_handler: MemoryHandler::new(),
         }
     }
 
@@ -146,9 +65,19 @@ impl Session {
         Ret::Archived: Deserialize<Ret, Infallible>
             + for<'b> CheckBytes<DefaultValidator<'b>>,
     {
-        println!("in session transact");
+        println!("transact in session");
         let mut instance = self.instance(id);
-        instance.transact(method_name, arg)
+
+        println!("instance created");
+
+        let arg_len = instance.write_to_arg_buffer(arg)?;
+        let ret_len = instance.transact(method_name, arg_len)?;
+
+        println!("post transaction");
+
+        instance.snap();
+
+        instance.read_from_arg_buffer(ret_len)
     }
 
     pub fn commit(&self) -> VM {
@@ -158,23 +87,26 @@ impl Session {
     pub(crate) fn instance(&self, mod_id: ModuleId) -> WrappedInstance {
         println!("request instance");
 
-        self.vm.with_module(mod_id, |serialized_module| {
+        self.vm.with_module(mod_id, |module| {
             println!("with module");
 
             let memory = self.memory_handler.get_memory(mod_id);
 
             println!("memory aquired");
 
-            let store = Store::new_with_tunables(
-                Singlepass::default(),
-                SessionTunables { // memory 
-		},
-            );
+            memory.save_volatile();
 
-            println!("store created");
+            let wrapped = WrappedInstance::new(
+                memory.clone(),
+                self.clone(),
+                mod_id,
+                module,
+            )
+            .expect("todo, error handling");
 
-            WrappedInstance::new(store, self.clone(), mod_id, serialized_module)
-                .expect("todo")
+            memory.restore_volatile();
+
+            wrapped
         })
     }
 }

@@ -54,8 +54,11 @@ fn q(fenv: FunctionEnvMut<Env>, arg_len: u32) -> u32 {
                 == core::mem::size_of::<<QueryHeader as Archive>::Archived>()
         );
 
-        let query_arg_len =
-            arg_len as usize - header_size - header.name_len as usize;
+        println!("arg_len {:?}", arg_len);
+        println!("header_size {:?}", header_size);
+        println!("header.name_len {:?}", header.name_len);
+
+        let query_arg_len = arg_len as usize - header.name_len as usize;
 
         let arg = &argbuf[header_size..][..query_arg_len];
         let name = core::str::from_utf8(

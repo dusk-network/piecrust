@@ -12,37 +12,45 @@ use parking_lot::RwLock;
 use uplink::ModuleId;
 
 use crate::linear::Linear;
+use crate::vm::VM;
 
 #[derive(Clone)]
 pub struct MemoryHandler {
     memories: Arc<RwLock<BTreeMap<ModuleId, Linear>>>,
+    #[allow(unused)]
+    vm: VM,
 }
 
 impl MemoryHandler {
-    pub fn new() -> Self {
+    pub fn new(vm: VM) -> Self {
         MemoryHandler {
             memories: Arc::new(RwLock::new(BTreeMap::new())),
+            vm,
         }
     }
 
     pub fn get_memory(&self, mod_id: ModuleId) -> Linear {
+        println!("get memory for {:?}", mod_id);
+
         {
             let rg = self.memories.read();
             if let Some(mem) = rg.get(&mod_id) {
-                println!("clone");
-                todo!()
-                //return mem.clone();
+                println!("GOT REUSED MEMORY");
+                return mem.clone();
             }
         }
 
-        // TODO actually get it from the store
-        let mem = Linear::new();
-        println!("write");
+        println!("CREATING MEMORY");
 
-        // todo
-        // self.memories.write().insert(mod_id, mem.clone());
+        self.vm.with_module(mod_id, |module| {
+            let mem = Linear::new(module.volatile().clone());
+            println!("write");
 
-        println!("return from new");
-        mem
+            // todo
+            self.memories.write().insert(mod_id, mem.clone());
+
+            println!("return from new");
+            mem
+        })
     }
 }

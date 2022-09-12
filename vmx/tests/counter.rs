@@ -1,7 +1,7 @@
 use vmx::{module_bytecode, Error, VM};
 
 #[test]
-fn counter_read() -> Result<(), Error> {
+fn counter_read_simple() -> Result<(), Error> {
     let mut vm = VM::new();
     let id = vm.deploy(module_bytecode!("counter"))?;
 
@@ -11,7 +11,27 @@ fn counter_read() -> Result<(), Error> {
 }
 
 #[test]
-fn counter_read_write() -> Result<(), Error> {
+fn counter_read_write_simple() -> Result<(), Error> {
+    let mut vm = VM::new();
+    let id = vm.deploy(module_bytecode!("counter"))?;
+
+    let mut session = vm.session();
+
+    assert_eq!(session.query::<(), i64>(id, "read_value", ())?, 0xfc);
+
+    println!("read first");
+
+    session.transact::<(), ()>(id, "increment", ())?;
+
+    println!("incremented");
+
+    assert_eq!(session.query::<(), i64>(id, "read_value", ())?, 0xfd);
+
+    Ok(())
+}
+
+#[test]
+fn counter_read_write_session() -> Result<(), Error> {
     let mut vm = VM::new();
     let id = vm.deploy(module_bytecode!("counter"))?;
 
