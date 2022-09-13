@@ -4,15 +4,15 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-mod native;
-pub use native::NativeQuery;
+mod host;
+pub use host::HostQuery;
 
 use std::collections::BTreeMap;
 use std::path::Path;
 
 use bytecheck::CheckBytes;
 use dallo::ModuleId;
-use native::NativeQueries;
+use host::HostQueries;
 use rkyv::{
     validation::validators::DefaultValidator, Archive, Deserialize, Infallible,
     Serialize,
@@ -28,7 +28,7 @@ pub struct CommitId(usize);
 #[derive(Default)]
 pub struct VM {
     modules: BTreeMap<ModuleId, WrappedModule>,
-    hosted_queries: NativeQueries,
+    hosted_queries: HostQueries,
 }
 
 impl VM {
@@ -43,7 +43,7 @@ impl VM {
     /// Registers a [`NativeQuery`] with the given `name`.
     pub fn add_native_query<Q>(&mut self, name: &'static str, query: Q)
     where
-        Q: 'static + NativeQuery,
+        Q: 'static + HostQuery,
     {
         self.hosted_queries.insert(name, query);
     }

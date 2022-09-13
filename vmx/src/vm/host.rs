@@ -8,26 +8,26 @@ use std::collections::BTreeMap;
 use std::fmt::{self, Debug, Formatter};
 
 #[derive(Default)]
-pub struct NativeQueries {
-    map: BTreeMap<&'static str, Box<dyn NativeQuery>>,
+pub struct HostQueries {
+    map: BTreeMap<&'static str, Box<dyn HostQuery>>,
 }
 
-impl Debug for NativeQueries {
+impl Debug for HostQueries {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         f.debug_list().entries(self.map.keys()).finish()
     }
 }
 
-impl NativeQueries {
+impl HostQueries {
     pub fn new() -> Self {
-        NativeQueries {
+        HostQueries {
             map: BTreeMap::new(),
         }
     }
 
     pub fn insert<Q>(&mut self, name: &'static str, query: Q)
     where
-        Q: 'static + NativeQuery,
+        Q: 'static + HostQuery,
     {
         self.map.insert(name, Box::new(query));
     }
@@ -43,5 +43,5 @@ impl NativeQueries {
 /// together with its length are passed as arguments to the function, and should
 /// be processed first. Once this is done, the implementor should emplace the
 /// return of the query in the same buffer, and return its length.
-pub trait NativeQuery: Fn(&mut [u8], u32) -> u32 + Send + Sync {}
-impl<F> NativeQuery for F where F: Fn(&mut [u8], u32) -> u32 + Send + Sync {}
+pub trait HostQuery: Fn(&mut [u8], u32) -> u32 + Send + Sync {}
+impl<F> HostQuery for F where F: Fn(&mut [u8], u32) -> u32 + Send + Sync {}
