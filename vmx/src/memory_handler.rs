@@ -30,26 +30,16 @@ impl MemoryHandler {
     }
 
     pub fn get_memory(&self, mod_id: ModuleId) -> Linear {
-        println!("get memory for {:?}", mod_id);
-
         {
             let rg = self.memories.read();
             if let Some(mem) = rg.get(&mod_id) {
-                println!("GOT REUSED MEMORY");
                 return mem.clone();
             }
         }
 
-        println!("CREATING MEMORY");
-
         self.vm.with_module(mod_id, |module| {
             let mem = Linear::new(module.volatile().clone());
-            println!("write");
-
-            // todo
             self.memories.write().insert(mod_id, mem.clone());
-
-            println!("return from new");
             mem
         })
     }

@@ -68,14 +68,10 @@ impl WrappedInstance {
         id: ModuleId,
         wrap: &WrappedModule,
     ) -> Result<Self, Error> {
-        println!("in wrapped instance new");
-
         let mut store = Store::new_with_tunables(
             Singlepass::default(),
             InstanceTunables::new(memory.clone()),
         );
-
-        println!("store created");
 
         let env = Env {
             self_id: id,
@@ -88,11 +84,7 @@ impl WrappedInstance {
         let module =
             unsafe { wasmer::Module::deserialize(&store, module_bytes)? };
 
-        println!("pre instance creation");
-
         let instance = wasmer::Instance::new(&mut store, &module, &imports)?;
-
-        println!("post instance creation");
 
         let arg_buf_ofs =
             match instance.exports.get_global("A")?.get(&mut store) {
@@ -112,8 +104,6 @@ impl WrappedInstance {
             arg_buf_ofs,
             heap_base,
         };
-
-        wrapped.snap();
 
         Ok(wrapped)
     }
@@ -201,6 +191,7 @@ impl WrappedInstance {
         method_name: &str,
         arg_len: u32,
     ) -> Result<u32, Error> {
+        println!("calling query {:?}", method_name);
         let fun: TypedFunction<u32, u32> = self
             .instance
             .exports
@@ -228,8 +219,6 @@ impl WrappedInstance {
             .exports
             .get_memory("memory")
             .expect("memory export is checked at module creation time");
-
-        println!("memory snapshot");
 
         let view = mem.view(&self.store);
         let maybe_interesting = unsafe { view.data_unchecked_mut() };

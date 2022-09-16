@@ -25,6 +25,7 @@ struct LinearInner {
     // Workaround for not overwriting memory on initialization,
     volatile: Vec<VolatileMem>,
     vol_buffer: Vec<u8>,
+    fresh: bool,
     pub memory_definition: Option<VMMemoryDefinition>,
 }
 
@@ -39,8 +40,6 @@ impl Into<VMMemory> for Linear {
 
 impl Linear {
     pub fn new(volatile: Vec<VolatileMem>) -> Self {
-        println!("LINEAR MEMORY CREATED ----------------------------");
-
         let sz = 18 * WASM_PAGE_SIZE;
         let mut memory = Vec::new();
         memory.resize(sz, 0);
@@ -48,6 +47,7 @@ impl Linear {
             mem: memory,
             memory_definition: None,
             vol_buffer: vec![],
+            fresh: true,
             volatile,
         })));
 
@@ -77,40 +77,45 @@ impl Linear {
         NonNull::new(r).unwrap()
     }
 
+    // workaround, to be deprecatedd
     pub(crate) fn save_volatile(&self) {
         let mut guard = self.0.write();
         let inner = &mut *guard;
 
-        println!("SAVING VOLATILE");
-
         inner.vol_buffer.truncate(0);
         for reg in &inner.volatile {
             let slice = &inner.mem[reg.offset..][..reg.length];
-
-            println!("slice saved: {:?}", slice);
-
             inner.vol_buffer.extend_from_slice(slice);
         }
     }
 
+    // workaround, to be deprecated
     pub(crate) fn restore_volatile(&self) {
-        println!("RESTORING VOLATILE");
+        let mut guard = self.0.write();
+        let inner = &mut *guard;
+        let mut buf_ofs = 0;
 
+        for reg in &inner.volatile {
+            inner.mem[reg.offset..][..reg.length]
+                .copy_from_slice(&inner.vol_buffer[buf_ofs..][..reg.length]);
+            buf_ofs += reg.length;
+        }
+    }
+
+    // workaround, to be deprecated
+    pub fn fresh(&self) -> bool {
+        let guard = self.0.read();
+        let inner = &*guard;
+
+        inner.fresh
+    }
+
+    // workaround, to be deprecated
+    pub fn set_fresh(&self, to: bool) {
         let mut guard = self.0.write();
         let inner = &mut *guard;
 
-        println!("{:?}", inner.vol_buffer);
-
-        let mut buf_ofs = 0;
-
-        println!("reg_buffer {:?}", inner.vol_buffer);
-
-        for reg in &inner.volatile {
-            println!("restoring {:?}", reg);
-            inner.mem[reg.offset..][..reg.length]
-                .copy_from_slice(&inner.vol_buffer[buf_ofs..reg.length]);
-            buf_ofs += reg.length;
-        }
+        inner.fresh = to
     }
 }
 

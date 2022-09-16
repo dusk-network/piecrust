@@ -28,6 +28,7 @@ pub fn cc_read_counter() -> Result<(), Error> {
 }
 
 #[test]
+#[ignore]
 pub fn cc_direct() -> Result<(), Error> {
     let mut world = VM::new();
 
@@ -60,6 +61,7 @@ pub fn cc_direct() -> Result<(), Error> {
 }
 
 #[test]
+#[ignore]
 pub fn cc_delegated() -> Result<(), Error> {
     let mut world = VM::new();
 
@@ -104,6 +106,7 @@ pub fn cc_delegated() -> Result<(), Error> {
 }
 
 #[test]
+#[ignore]
 pub fn cc_self() -> Result<(), Error> {
     let mut world = VM::new();
 
@@ -118,6 +121,7 @@ pub fn cc_self() -> Result<(), Error> {
 }
 
 #[test]
+#[ignore]
 pub fn cc_caller() -> Result<(), Error> {
     let mut world = VM::new();
 

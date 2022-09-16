@@ -43,8 +43,6 @@ impl VM {
         let hash = blake3::hash(bytecode);
         let id = ModuleId::from(<[u8; 32]>::from(hash));
 
-        println!("deployed module {:?}", id);
-
         let module = WrappedModule::new(bytecode)?;
         guard.modules.insert(id, module);
         Ok(id)
@@ -68,8 +66,6 @@ impl VM {
     where
         F: FnOnce(&WrappedModule) -> R,
     {
-        println!("with module {:?}", id);
-
         let guard = self.inner.read();
         let wrapped = guard.modules.get(&id).expect("invalid module");
 
@@ -88,7 +84,6 @@ impl VM {
         Ret::Archived: Deserialize<Ret, Infallible>
             + for<'b> CheckBytes<DefaultValidator<'b>>,
     {
-        println!("query on vm");
         let mut session = Session::new(self.clone());
         session.query(id, method_name, arg)
     }

@@ -19,11 +19,7 @@ fn counter_read_write_simple() -> Result<(), Error> {
 
     assert_eq!(session.query::<(), i64>(id, "read_value", ())?, 0xfc);
 
-    println!("read first");
-
     session.transact::<(), ()>(id, "increment", ())?;
-
-    println!("incremented");
 
     assert_eq!(session.query::<(), i64>(id, "read_value", ())?, 0xfd);
 

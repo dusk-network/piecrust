@@ -43,13 +43,11 @@ impl Session {
         Ret::Archived: Deserialize<Ret, Infallible>
             + for<'b> CheckBytes<DefaultValidator<'b>>,
     {
-        println!("query in session");
         let mut instance = self.instance(id);
-
-        println!("instance created");
 
         let arg_len = instance.write_to_arg_buffer(arg)?;
         let ret_len = instance.query(method_name, arg_len)?;
+
         instance.read_from_arg_buffer(ret_len)
     }
 
@@ -65,17 +63,10 @@ impl Session {
         Ret::Archived: Deserialize<Ret, Infallible>
             + for<'b> CheckBytes<DefaultValidator<'b>>,
     {
-        println!("transact in session");
         let mut instance = self.instance(id);
-
-        println!("instance created");
 
         let arg_len = instance.write_to_arg_buffer(arg)?;
         let ret_len = instance.transact(method_name, arg_len)?;
-
-        println!("post transaction");
-
-        instance.snap();
 
         instance.read_from_arg_buffer(ret_len)
     }
@@ -85,16 +76,13 @@ impl Session {
     }
 
     pub(crate) fn instance(&self, mod_id: ModuleId) -> WrappedInstance {
-        println!("request instance");
-
         self.vm.with_module(mod_id, |module| {
-            println!("with module");
-
             let memory = self.memory_handler.get_memory(mod_id);
 
-            println!("memory aquired");
-
-            memory.save_volatile();
+            let fresh = memory.fresh();
+            if !fresh {
+                memory.save_volatile();
+            }
 
             let wrapped = WrappedInstance::new(
                 memory.clone(),
@@ -104,7 +92,11 @@ impl Session {
             )
             .expect("todo, error handling");
 
-            memory.restore_volatile();
+            if !fresh {
+                memory.restore_volatile();
+            } else {
+                memory.set_fresh(false);
+            }
 
             wrapped
         })

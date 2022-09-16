@@ -7,8 +7,20 @@
 use crate::types::Error;
 use wasmparser::{DataKind, Operator, Parser, Payload};
 
+use std::fmt;
+
+impl fmt::Debug for VolatileMem {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "VolatileMem {{ offset: {:x}, length: {} }}",
+            self.offset, self.length
+        )
+    }
+}
+
 // Workaround to save/restore re-initialized data
-#[derive(Debug, Clone, Copy)]
+#[derive(Clone, Copy)]
 pub struct VolatileMem {
     pub offset: usize,
     pub length: usize,
@@ -37,14 +49,10 @@ impl WrappedModule {
                                 offset_expr_reader.read_operator().expect("op");
 
                             if let Operator::I32Const { value } = op {
-                                let vol = VolatileMem {
+                                volatile.push(VolatileMem {
                                     offset: value as usize,
                                     length,
-                                };
-
-                                println!("volatile {:?}", vol);
-
-                                volatile.push(vol);
+                                });
                             }
                         }
                     }

@@ -40,6 +40,10 @@ fn q(fenv: FunctionEnvMut<Env>, arg_len: u32) -> u32 {
     let instance = env.self_instance();
 
     instance.with_arg_buffer(|argbuf| {
+        let string = String::from_utf8_lossy(&argbuf[..arg_len as usize]);
+
+        println!("OLL ASS UTF {:?}", string);
+
         let header_archived = check_archived_value::<QueryHeader>(argbuf, 0)
             .expect("all possible bytes valid");
         let header: QueryHeader = header_archived
@@ -54,13 +58,10 @@ fn q(fenv: FunctionEnvMut<Env>, arg_len: u32) -> u32 {
                 == core::mem::size_of::<<QueryHeader as Archive>::Archived>()
         );
 
-        println!("arg_len {:?}", arg_len);
-        println!("header_size {:?}", header_size);
-        println!("header.name_len {:?}", header.name_len);
-
         let query_arg_len = arg_len as usize - header.name_len as usize;
 
         let arg = &argbuf[header_size..][..query_arg_len];
+
         let name = core::str::from_utf8(
             &argbuf[(header_size + query_arg_len)..]
                 [..header.name_len as usize],
