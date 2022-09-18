@@ -140,9 +140,8 @@ impl RawTransaction {
         RawTransaction { arg_len, data }
     }
 
-    pub fn name(&self) -> &str {
-        core::str::from_utf8(&self.data[self.arg_len as usize..])
-            .expect("always created from a valid &str")
+    pub fn name_bytes(&self) -> &[u8] {
+        &self.data[self.arg_len as usize..]
     }
 
     pub fn arg_bytes(&self) -> &[u8] {
@@ -172,20 +171,6 @@ impl RawResult {
         let archived = unsafe { rkyv::archived_root::<D>(&self.data[..]) };
         archived.deserialize(&mut Infallible).expect("Infallible")
     }
-}
-
-#[derive(Archive, Serialize, Deserialize, CheckBytes, Debug)]
-#[archive(as = "Self")]
-pub struct QueryHeader {
-    pub callee: ModuleId,
-    pub name_len: u32,
-}
-
-#[derive(Archive, Serialize, Deserialize, CheckBytes, Debug)]
-#[archive(as = "Self")]
-pub struct TransactionHeader {
-    pub callee: ModuleId,
-    pub name_len: u32,
 }
 
 #[cfg(test)]

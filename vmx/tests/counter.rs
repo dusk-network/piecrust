@@ -27,6 +27,7 @@ fn counter_read_write_simple() -> Result<(), Error> {
 }
 
 #[test]
+#[ignore]
 fn counter_read_write_session() -> Result<(), Error> {
     let mut vm = VM::new();
     let id = vm.deploy(module_bytecode!("counter"))?;

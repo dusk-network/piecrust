@@ -31,6 +31,7 @@ use crate::types::{Error, StandardBufSerializer};
 pub struct WrappedInstance {
     instance: wasmer::Instance,
     arg_buf_ofs: usize,
+    #[allow(unused)]
     heap_base: usize,
     store: wasmer::Store,
 }
@@ -108,8 +109,14 @@ impl WrappedInstance {
         Ok(wrapped)
     }
 
-    pub(crate) fn copy_argument(&mut self, arg: &[u8]) {
+    // Write argument into instance
+    pub(crate) fn write_argument(&mut self, arg: &[u8]) {
         self.with_arg_buffer(|buf| buf[..arg.len()].copy_from_slice(arg))
+    }
+
+    // Read argument from instance
+    pub(crate) fn read_argument(&mut self, arg: &mut [u8]) {
+        self.with_arg_buffer(|buf| arg.copy_from_slice(&buf[..arg.len()]))
     }
 
     pub(crate) fn read_from_arg_buffer<T>(
@@ -143,7 +150,7 @@ impl WrappedInstance {
         f(memory_bytes)
     }
 
-    fn with_memory_mut<F, R>(&self, f: F) -> R
+    pub(crate) fn with_memory_mut<F, R>(&self, f: F) -> R
     where
         F: FnOnce(&mut [u8]) -> R,
     {
@@ -192,12 +199,15 @@ impl WrappedInstance {
         arg_len: u32,
     ) -> Result<u32, Error> {
         println!("calling query {:?}", method_name);
+
         let fun: TypedFunction<u32, u32> = self
             .instance
             .exports
             .get_typed_function(&self.store, method_name)?;
 
-        Ok(fun.call(&mut self.store, arg_len)?)
+        let res = fun.call(&mut self.store, arg_len)?;
+
+        Ok(res)
     }
 
     pub fn transact(
@@ -213,6 +223,7 @@ impl WrappedInstance {
         Ok(fun.call(&mut self.store, arg_len)?)
     }
 
+    #[allow(unused)]
     pub fn snap(&self) {
         let mem = self
             .instance
@@ -256,6 +267,10 @@ impl WrappedInstance {
                 }
             }
         }
+    }
+
+    pub fn arg_buffer_offset(&self) -> usize {
+        self.arg_buf_ofs
     }
 }
 

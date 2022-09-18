@@ -23,7 +23,9 @@ static mut STATE: State<Callcenter> = State::new(Callcenter);
 
 impl Callcenter {
     pub fn query_counter(&self, counter_id: ModuleId) -> i64 {
-        uplink::query(counter_id, "read_value", ())
+        let result = uplink::query(counter_id, "read_value", ());
+        uplink::debug!("Quiring counter, got {}", result);
+        result
     }
 
     pub fn increment_counter(self: &mut State<Self>, counter_id: ModuleId) {
@@ -39,6 +41,7 @@ impl Callcenter {
     }
 
     pub fn query_passthrough(&mut self, raw: RawQuery) -> RawQuery {
+        uplink::debug!("q passthrough {:?}", raw);
         raw
     }
 

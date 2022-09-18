@@ -4,10 +4,9 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use rkyv::{check_archived_value, Archive, Deserialize, Infallible};
 use wasmer::{imports, Function, FunctionEnv, FunctionEnvMut};
 
-use uplink::QueryHeader;
+use uplink::{ModuleId, ARGBUF_LEN};
 
 use crate::instance::Env;
 
@@ -34,49 +33,97 @@ fn caller(_env: FunctionEnvMut<Env>) -> u32 {
     0
 }
 
-fn q(fenv: FunctionEnvMut<Env>, arg_len: u32) -> u32 {
+fn q(
+    fenv: FunctionEnvMut<Env>,
+    mod_id_ofs: i32,
+    name_ofs: i32,
+    name_len: u32,
+    arg_len: u32,
+) -> u32 {
     let env = fenv.data();
 
     let instance = env.self_instance();
+    let argbuf_ofs = instance.arg_buffer_offset();
 
-    instance.with_arg_buffer(|argbuf| {
-        let string = String::from_utf8_lossy(&argbuf[..arg_len as usize]);
+    instance.with_memory_mut(|memory| {
+        let (ret_len, mut callee) = {
+            let name = core::str::from_utf8(
+                &memory[name_ofs as usize..][..name_len as usize],
+            )
+            .expect("TODO error handling");
 
-        println!("OLL ASS UTF {:?}", string);
+            let arg_buf = &memory[argbuf_ofs..][..ARGBUF_LEN];
 
-        let header_archived = check_archived_value::<QueryHeader>(argbuf, 0)
-            .expect("all possible bytes valid");
-        let header: QueryHeader = header_archived
-            .deserialize(&mut Infallible)
-            .expect("infallible");
+            let mut mod_id = ModuleId::uninitialized();
+            mod_id.as_bytes_mut().copy_from_slice(
+                &memory[mod_id_ofs as usize..]
+                    [..std::mem::size_of::<ModuleId>()],
+            );
 
-        println!("got header {:?}", header);
+            let mut callee = env.instance(mod_id);
 
-        let header_size = core::mem::size_of::<QueryHeader>();
-        debug_assert!(
-            core::mem::size_of::<QueryHeader>()
-                == core::mem::size_of::<<QueryHeader as Archive>::Archived>()
-        );
+            let arg = &arg_buf[..arg_len as usize];
 
-        let query_arg_len = arg_len as usize - header.name_len as usize;
+            callee.write_argument(arg);
+            let ret_len =
+                callee.query(name, arg.len() as u32).expect("invalid query");
+            (ret_len, callee)
+        };
 
-        let arg = &argbuf[header_size..][..query_arg_len];
+        // copy back result
+        println!("ret len {:?}", ret_len);
 
-        let name = core::str::from_utf8(
-            &argbuf[(header_size + query_arg_len)..]
-                [..header.name_len as usize],
-        )
-        .expect("TODO error handling");
+        callee.read_argument(&mut memory[argbuf_ofs..][..ret_len as usize]);
 
-        let mut callee = env.instance(header.callee);
-
-        callee.copy_argument(arg);
-        callee.query(name, arg.len() as u32).expect("invalid query")
+        ret_len
     })
 }
 
-fn t(_fenv: FunctionEnvMut<Env>, _arg_len: u32) -> u32 {
-    todo!()
+fn t(
+    fenv: FunctionEnvMut<Env>,
+    mod_id_ofs: i32,
+    name_ofs: i32,
+    name_len: u32,
+    arg_len: u32,
+) -> u32 {
+    let env = fenv.data();
+
+    let instance = env.self_instance();
+    let argbuf_ofs = instance.arg_buffer_offset();
+
+    instance.with_memory_mut(|memory| {
+        let (ret_len, mut callee) = {
+            let name = core::str::from_utf8(
+                &memory[name_ofs as usize..][..name_len as usize],
+            )
+            .expect("TODO error handling");
+
+            let arg_buf = &memory[argbuf_ofs..][..ARGBUF_LEN];
+
+            let mut mod_id = ModuleId::uninitialized();
+            mod_id.as_bytes_mut().copy_from_slice(
+                &memory[mod_id_ofs as usize..]
+                    [..std::mem::size_of::<ModuleId>()],
+            );
+
+            let mut callee = env.instance(mod_id);
+
+            let arg = &arg_buf[..arg_len as usize];
+
+            callee.write_argument(arg);
+            let ret_len = callee
+                .transact(name, arg.len() as u32)
+                .expect("invalid transaction");
+            (ret_len, callee)
+        };
+
+        // copy back result
+        println!("ret len {:?}", ret_len);
+
+        callee.read_argument(&mut memory[argbuf_ofs..][..ret_len as usize]);
+
+        ret_len
+    })
 }
 
 fn host_debug(fenv: FunctionEnvMut<Env>, msg_ofs: i32, msg_len: u32) {

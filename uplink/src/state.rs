@@ -12,8 +12,8 @@ use rkyv::{
 };
 
 use crate::{
-    QueryHeader, RawQuery, RawResult, RawTransaction, StandardBufSerializer,
-    TransactionHeader, SCRATCH_BUF_BYTES,
+    RawQuery, RawResult, RawTransaction, StandardBufSerializer,
+    SCRATCH_BUF_BYTES,
 };
 
 mod arg_buf {
@@ -41,10 +41,20 @@ pub(crate) use arg_buf::with_arg_buf;
 
 mod ext {
     extern "C" {
-        pub(crate) fn q(arg_len: u32) -> u32;
+        pub(crate) fn q(
+            mod_id_ofs: *const u8,
+            name: *const u8,
+            name_len: u32,
+            arg_len: u32,
+        ) -> u32;
         #[allow(unused)]
         pub(crate) fn nq(name: *const u8, name_len: u32, arg_len: u32) -> u32;
-        pub(crate) fn t(arg_len: u32) -> u32;
+        pub(crate) fn t(
+            mod_id_ofs: *const u8,
+            name: *const u8,
+            name_len: u32,
+            arg_len: u32,
+        ) -> u32;
 
         pub(crate) fn height() -> u32;
         pub(crate) fn caller() -> u32;
@@ -93,21 +103,20 @@ where
         let ser = BufferSerializer::new(buf);
         let mut composite =
             CompositeSerializer::new(ser, scratch, rkyv::Infallible);
-
-        let header = QueryHeader {
-            callee: mod_id,
-            name_len: name.as_bytes().len() as u32,
-        };
-
-        crate::debug!("header {:?}", header);
-
-        composite.serialize_value(&header).expect("infallible");
         composite.serialize_value(&arg).expect("infallible");
-
         composite.pos() as u32
     });
 
-    let ret_len = unsafe { ext::q(arg_len) };
+    let name_slice = name.as_bytes();
+
+    let ret_len = unsafe {
+        ext::q(
+            &mod_id.as_bytes()[0],
+            &name_slice[0],
+            name_slice.len() as u32,
+            arg_len,
+        )
+    };
 
     with_arg_buf(|buf| {
         let slice = &buf[..ret_len as usize];
@@ -218,7 +227,7 @@ pub fn spent() -> u64 {
 impl<S> State<S> {
     pub fn transact_raw(
         &self,
-        _mod_id: ModuleId,
+        mod_id: ModuleId,
         raw: RawTransaction,
     ) -> RawResult {
         with_arg_buf(|buf| {
@@ -226,14 +235,15 @@ impl<S> State<S> {
             buf[..bytes.len()].copy_from_slice(bytes);
         });
 
-        todo!()
+        let name = raw.name_bytes();
+        let arg_len = raw.arg_bytes().len() as u32;
 
-        // let name = raw.name();
-        // let arg_len = raw.arg_bytes().len() as u32;
-        // // ERROR?
-        // let ret_len = unsafe { ext::t() };
+        // ERROR?
+        let ret_len = unsafe {
+            ext::t(&mod_id.as_bytes()[0], &name[0], name.len() as u32, arg_len)
+        };
 
-        // with_arg_buf(|buf| RawResult::new(&buf[..ret_len as usize]))
+        with_arg_buf(|buf| RawResult::new(&buf[..ret_len as usize]))
     }
 
     pub fn transact<Arg, Ret>(
@@ -253,19 +263,21 @@ impl<S> State<S> {
             let ser = BufferSerializer::new(buf);
             let mut composite =
                 CompositeSerializer::new(ser, scratch, rkyv::Infallible);
-
             composite.serialize_value(&arg).expect("infallible");
 
-            let header = TransactionHeader {
-                callee: mod_id,
-                name_len: name.as_bytes().len() as u32,
-            };
-
-            composite.serialize_value(&header).expect("infallible");
             composite.pos() as u32
         });
 
-        let ret_len = unsafe { ext::t(arg_len) };
+        let name_slice = name.as_bytes();
+
+        let ret_len = unsafe {
+            ext::t(
+                &mod_id.as_bytes()[0],
+                &name_slice[0],
+                name_slice.len() as u32,
+                arg_len,
+            )
+        };
 
         with_arg_buf(|buf| {
             let slice = &buf[..ret_len as usize];

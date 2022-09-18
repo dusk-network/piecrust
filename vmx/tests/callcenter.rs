@@ -28,7 +28,6 @@ pub fn cc_read_counter() -> Result<(), Error> {
 }
 
 #[test]
-#[ignore]
 pub fn cc_direct() -> Result<(), Error> {
     let mut world = VM::new();
 
@@ -62,6 +61,25 @@ pub fn cc_direct() -> Result<(), Error> {
 
 #[test]
 #[ignore]
+pub fn cc_passthrough() -> Result<(), Error> {
+    let mut world = VM::new();
+
+    let center_id = world.deploy(module_bytecode!("callcenter"))?;
+
+    let rq = RawQuery::new("read_value", ());
+
+    println!("rq {:?}", rq);
+
+    let res: RawQuery =
+        world.query(center_id, "query_passthrough", rq.clone())?;
+
+    assert_eq!(rq, res);
+
+    Ok(())
+}
+
+#[test]
+#[ignore]
 pub fn cc_delegated() -> Result<(), Error> {
     let mut world = VM::new();
 
@@ -69,11 +87,6 @@ pub fn cc_delegated() -> Result<(), Error> {
     let center_id = world.deploy(module_bytecode!("callcenter"))?;
 
     let rq = RawQuery::new("read_value", ());
-
-    let res: RawQuery =
-        world.query(center_id, "query_passthrough", rq.clone())?;
-
-    assert_eq!(rq, res);
 
     // read value through callcenter
     let res = world.query::<_, RawResult>(

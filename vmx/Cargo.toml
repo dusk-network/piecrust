@@ -11,7 +11,7 @@ wasmer-vm = { git = "https://github.com/wasmerio/wasmer", rev = "dafdd94" }
 wasmer-types = { git = "https://github.com/wasmerio/wasmer", rev = "dafdd94" }
 wasmer-compiler-singlepass = { git = "https://github.com/wasmerio/wasmer", rev = "dafdd94" }
 bytecheck = "0.6"
-rkyv = { version = "0.7", features = ["validation"] }
+rkyv = { version = "0.7", features = ["size_32", "validation"] }
 parking_lot = "0.12.1"
 blake3 = "1.3.1"
 colored = "2.0.0"
