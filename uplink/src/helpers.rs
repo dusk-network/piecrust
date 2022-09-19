@@ -25,23 +25,13 @@ where
     R: for<'a> Serialize<StandardBufSerializer<'a>>,
     F: Fn(A) -> R,
 {
-    crate::debug!("wrap query");
     with_arg_buf(|buf| {
         let slice = &buf[..arg_len as usize];
 
-        crate::debug!("slice {:?}", slice);
-
         let aa: &A::Archived = unsafe { archived_root::<A>(slice) };
-
-        crate::debug!("sköka");
-
         let a: A = aa.deserialize(&mut rkyv::Infallible).unwrap();
 
-        crate::debug!("popp");
-
         let ret = f(a);
-
-        crate::debug!("gorka");
 
         let mut sbuf = [0u8; SCRATCH_BUF_BYTES];
         let scratch = BufferScratch::new(&mut sbuf);
