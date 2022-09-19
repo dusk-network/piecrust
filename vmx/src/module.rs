@@ -36,33 +36,28 @@ impl WrappedModule {
         let mut volatile = vec![];
 
         for payload in Parser::new(0).parse_all(bytecode) {
-            match payload? {
-                Payload::DataSection(datas) => {
-                    for data in datas {
-                        let data = data?;
-                        if let DataKind::Active { offset_expr, .. } = data.kind
-                        {
-                            let length = data.data.len();
-                            let mut offset_expr_reader =
-                                offset_expr.get_binary_reader();
-                            let op =
-                                offset_expr_reader.read_operator().expect("op");
+            if let Payload::DataSection(datas) = payload? {
+                for data in datas {
+                    let data = data?;
+                    if let DataKind::Active { offset_expr, .. } = data.kind {
+                        let length = data.data.len();
+                        let mut offset_expr_reader =
+                            offset_expr.get_binary_reader();
+                        let op =
+                            offset_expr_reader.read_operator().expect("op");
 
-                            if let Operator::I32Const { value } = op {
-                                volatile.push(VolatileMem {
-                                    offset: value as usize,
-                                    length,
-                                });
-                            }
+                        if let Operator::I32Const { value } = op {
+                            volatile.push(VolatileMem {
+                                offset: value as usize,
+                                length,
+                            });
                         }
                     }
                 }
-                _ => (),
             }
         }
 
-        let module =
-            wasmer::Module::new(&mut wasmer::Store::default(), bytecode)?;
+        let module = wasmer::Module::new(&wasmer::Store::default(), bytecode)?;
         let serialized = module.serialize()?;
 
         Ok(WrappedModule {

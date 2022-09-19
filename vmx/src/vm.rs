@@ -30,11 +30,17 @@ pub struct VM {
     inner: Arc<RwLock<VMInner>>,
 }
 
-impl VM {
-    pub fn new() -> Self {
+impl Default for VM {
+    fn default() -> VM {
         VM {
             inner: Arc::new(RwLock::new(VMInner::default())),
         }
+    }
+}
+
+impl VM {
+    pub fn new() -> Self {
+        Default::default()
     }
 
     pub fn deploy(&mut self, bytecode: &[u8]) -> Result<ModuleId, Error> {

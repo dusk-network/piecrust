@@ -71,12 +71,12 @@ impl WrappedInstance {
     ) -> Result<Self, Error> {
         let mut store = Store::new_with_tunables(
             Singlepass::default(),
-            InstanceTunables::new(memory.clone()),
+            InstanceTunables::new(memory),
         );
 
         let env = Env {
             self_id: id,
-            session: session.clone(),
+            session,
         };
 
         let imports = DefaultImports::default(&mut store, env);

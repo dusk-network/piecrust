@@ -32,9 +32,9 @@ struct LinearInner {
 #[derive(Debug, Clone)]
 pub struct Linear(Arc<RwLock<LinearInner>>);
 
-impl Into<VMMemory> for Linear {
-    fn into(self) -> VMMemory {
-        VMMemory(Box::new(self))
+impl From<Linear> for VMMemory {
+    fn from(lin: Linear) -> VMMemory {
+        VMMemory(Box::new(lin))
     }
 }
 
