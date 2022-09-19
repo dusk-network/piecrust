@@ -4,16 +4,17 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-#[macro_use]
-mod bytecode_macro;
-mod imports;
-mod instance;
-mod linear;
-mod memory_handler;
-mod module;
-mod session;
-mod types;
-mod vm;
+#![no_std]
+#![no_main]
 
-pub use types::Error;
-pub use vm::VM;
+#[allow(unused)]
+use uplink;
+
+static mut A: u32 = 42;
+
+#[no_mangle]
+unsafe fn change(to: u32) -> u32 {
+    let r = A;
+    A = to;
+    r
+}

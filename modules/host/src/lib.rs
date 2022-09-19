@@ -9,9 +9,7 @@
 
 extern crate alloc;
 
-use dallo::{HostAlloc, ModuleId, State};
-#[global_allocator]
-static ALLOCATOR: HostAlloc = HostAlloc;
+use uplink::{ModuleId, State};
 
 pub struct Hoster;
 
@@ -22,11 +20,11 @@ static mut STATE: State<Hoster> = State::new(Hoster);
 
 impl Hoster {
     pub fn hash(&self, num: i32) -> [u8; 32] {
-        dallo::native_query("hash", num)
+        uplink::native_query("hash", num)
     }
 }
 
 #[no_mangle]
 unsafe fn hash(arg_len: u32) -> u32 {
-    dallo::wrap_query(arg_len, |num| STATE.hash(num))
+    uplink::wrap_query(arg_len, |num| STATE.hash(num))
 }

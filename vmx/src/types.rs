@@ -4,10 +4,10 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use dallo::SCRATCH_BUF_BYTES;
 use rkyv::ser::serializers::{
     BufferScratch, BufferSerializer, CompositeSerializer,
 };
+use uplink::SCRATCH_BUF_BYTES;
 
 pub type StandardBufSerializer<'a> = CompositeSerializer<
     BufferSerializer<&'a mut [u8]>,

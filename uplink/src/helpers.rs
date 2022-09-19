@@ -27,8 +27,10 @@ where
 {
     with_arg_buf(|buf| {
         let slice = &buf[..arg_len as usize];
+
         let aa: &A::Archived = unsafe { archived_root::<A>(slice) };
         let a: A = aa.deserialize(&mut rkyv::Infallible).unwrap();
+
         let ret = f(a);
 
         let mut sbuf = [0u8; SCRATCH_BUF_BYTES];

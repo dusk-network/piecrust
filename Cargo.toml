@@ -1,6 +1,6 @@
 [workspace]
 members = [
-    "dallo",
+    "uplink",
     "vmx",    
 ]
 

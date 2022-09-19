@@ -9,41 +9,26 @@ use rkyv::{
     validation::validators::DefaultValidator, Archive, Deserialize, Infallible,
     Serialize,
 };
-use std::collections::BTreeMap;
+
+use uplink::ModuleId;
 
 use crate::instance::WrappedInstance;
+use crate::memory_handler::MemoryHandler;
 use crate::types::{Error, StandardBufSerializer};
-use crate::vm::{ModuleId, VM};
+use crate::vm::VM;
 
-pub struct Session<'a> {
-    vm: &'a VM,
-    instances: BTreeMap<ModuleId, WrappedInstance>,
+#[derive(Clone)]
+pub struct Session {
+    vm: VM,
+    memory_handler: MemoryHandler,
 }
 
-impl<'a> Session<'a> {
-    pub fn new(vm: &'a VM) -> Self {
+impl Session {
+    pub fn new(vm: VM) -> Self {
         Session {
+            memory_handler: MemoryHandler::new(vm.clone()),
             vm,
-            instances: BTreeMap::new(),
         }
-    }
-
-    fn initialize_module(&mut self, id: ModuleId) -> Result<(), Error> {
-        if self.instances.get(&id).is_some() {
-            return Ok(());
-        }
-        let module = self.vm.module(id);
-        let wrapped = WrappedInstance::new(module)?;
-        self.instances.insert(id, wrapped);
-        Ok(())
-    }
-
-    fn get_instance(
-        &mut self,
-        id: ModuleId,
-    ) -> Result<&mut WrappedInstance, Error> {
-        self.initialize_module(id)?;
-        Ok(self.instances.get_mut(&id).expect("initialized above"))
     }
 
     pub fn query<Arg, Ret>(
@@ -58,58 +43,12 @@ impl<'a> Session<'a> {
         Ret::Archived: Deserialize<Ret, Infallible>
             + for<'b> CheckBytes<DefaultValidator<'b>>,
     {
-        let i = self.get_instance(id)?;
-        i.query(method_name, arg)
-    }
-}
+        let mut instance = self.instance(id);
 
-type CommitId = usize;
+        let arg_len = instance.write_to_arg_buffer(arg)?;
+        let ret_len = instance.query(method_name, arg_len)?;
 
-pub struct SessionMut<'a> {
-    vm: &'a mut VM,
-    instances: BTreeMap<ModuleId, WrappedInstance>,
-}
-
-impl<'a> SessionMut<'a> {
-    pub fn new(vm: &'a mut VM) -> Self {
-        SessionMut {
-            vm,
-            instances: BTreeMap::new(),
-        }
-    }
-
-    fn initialize_module(&mut self, id: ModuleId) -> Result<(), Error> {
-        if self.instances.get(&id).is_some() {
-            return Ok(());
-        }
-        let module = self.vm.module(id);
-        let wrapped = WrappedInstance::new(module)?;
-        self.instances.insert(id, wrapped);
-        Ok(())
-    }
-
-    fn get_instance(
-        &mut self,
-        id: ModuleId,
-    ) -> Result<&mut WrappedInstance, Error> {
-        self.initialize_module(id)?;
-        Ok(self.instances.get_mut(&id).expect("initialized above"))
-    }
-
-    pub fn query<Arg, Ret>(
-        &mut self,
-        id: ModuleId,
-        method_name: &str,
-        arg: Arg,
-    ) -> Result<Ret, Error>
-    where
-        Arg: for<'b> Serialize<StandardBufSerializer<'b>>,
-        Ret: Archive,
-        Ret::Archived: Deserialize<Ret, Infallible>
-            + for<'b> CheckBytes<DefaultValidator<'b>>,
-    {
-        let mut session = Session::new(self.vm);
-        session.query(id, method_name, arg)
+        instance.read_from_arg_buffer(ret_len)
     }
 
     pub fn transact<Arg, Ret>(
@@ -124,11 +63,42 @@ impl<'a> SessionMut<'a> {
         Ret::Archived: Deserialize<Ret, Infallible>
             + for<'b> CheckBytes<DefaultValidator<'b>>,
     {
-        let i = self.get_instance(id)?;
-        i.transact(method_name, arg)
+        let mut instance = self.instance(id);
+
+        let arg_len = instance.write_to_arg_buffer(arg)?;
+        let ret_len = instance.transact(method_name, arg_len)?;
+
+        instance.read_from_arg_buffer(ret_len)
     }
 
-    pub fn commit(self) -> CommitId {
+    pub fn commit(&self) -> VM {
         todo!()
+    }
+
+    pub(crate) fn instance(&self, mod_id: ModuleId) -> WrappedInstance {
+        self.vm.with_module(mod_id, |module| {
+            let memory = self.memory_handler.get_memory(mod_id);
+
+            let fresh = memory.fresh();
+            if !fresh {
+                memory.save_volatile();
+            }
+
+            let wrapped = WrappedInstance::new(
+                memory.clone(),
+                self.clone(),
+                mod_id,
+                module,
+            )
+            .expect("todo, error handling");
+
+            if !fresh {
+                memory.restore_volatile();
+            } else {
+                memory.set_fresh(false);
+            }
+
+            wrapped
+        })
     }
 }

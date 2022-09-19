@@ -42,14 +42,15 @@ pub(crate) use arg_buf::with_arg_buf;
 mod ext {
     extern "C" {
         pub(crate) fn q(
-            mod_id: *const u8,
+            mod_id_ofs: *const u8,
             name: *const u8,
             name_len: u32,
             arg_len: u32,
         ) -> u32;
+        #[allow(unused)]
         pub(crate) fn nq(name: *const u8, name_len: u32, arg_len: u32) -> u32;
         pub(crate) fn t(
-            mod_id: *const u8,
+            mod_id_ofs: *const u8,
             name: *const u8,
             name_len: u32,
             arg_len: u32,
@@ -61,26 +62,6 @@ mod ext {
         pub(crate) fn limit() -> u32;
         pub(crate) fn spent() -> u32;
     }
-}
-
-fn extern_query(module_id: ModuleId, name: &str, arg_len: u32) -> u32 {
-    let mod_ptr = module_id.as_ptr();
-    let name_ptr = name.as_ptr();
-    let name_len = name.as_bytes().len() as u32;
-    unsafe { ext::q(mod_ptr, name_ptr, name_len, arg_len) }
-}
-
-fn extern_transaction(module_id: ModuleId, name: &str, arg_len: u32) -> u32 {
-    let mod_ptr = module_id.as_ptr();
-    let name_ptr = name.as_ptr();
-    let name_len = name.as_bytes().len() as u32;
-    unsafe { ext::t(mod_ptr, name_ptr, name_len, arg_len) }
-}
-
-fn extern_native_query(name: &str, arg_len: u32) -> u32 {
-    let name_ptr = name.as_ptr();
-    let name_len = name.bytes().len() as u32;
-    unsafe { ext::nq(name_ptr, name_len, arg_len) }
 }
 
 use crate::ModuleId;
@@ -122,12 +103,20 @@ where
         let ser = BufferSerializer::new(buf);
         let mut composite =
             CompositeSerializer::new(ser, scratch, rkyv::Infallible);
-
         composite.serialize_value(&arg).expect("infallible");
         composite.pos() as u32
     });
 
-    let ret_len = extern_query(mod_id, name, arg_len);
+    let name_slice = name.as_bytes();
+
+    let ret_len = unsafe {
+        ext::q(
+            &mod_id.as_bytes()[0],
+            &name_slice[0],
+            name_slice.len() as u32,
+            arg_len,
+        )
+    };
 
     with_arg_buf(|buf| {
         let slice = &buf[..ret_len as usize];
@@ -136,26 +125,28 @@ where
     })
 }
 
-pub fn query_raw(mod_id: ModuleId, raw: RawQuery) -> RawResult {
-    with_arg_buf(|buf| {
-        let bytes = raw.arg_bytes();
-        buf[..bytes.len()].copy_from_slice(bytes);
-    });
+pub fn query_raw(_mod_id: ModuleId, _raw: RawQuery) -> RawResult {
+    todo!()
 
-    let name = raw.name();
-    let arg_len = raw.arg_bytes().len() as u32;
-    let ret_len = extern_query(mod_id, name, arg_len);
+    // with_arg_buf(|buf| {
+    //     let bytes = raw.arg_bytes();
+    //     buf[..bytes.len()].copy_from_slice(bytes);
+    // });
 
-    with_arg_buf(|buf| RawResult::new(&buf[..ret_len as usize]))
+    // let name = raw.name();
+    // let arg_len = raw.arg_bytes().len() as u32;
+    // let ret_len = unsafe { ext::q() };
+
+    // with_arg_buf(|buf| RawResult::new(&buf[..ret_len as usize]))
 }
 
-pub fn native_query<Arg, Ret>(name: &str, arg: Arg) -> Ret
+pub fn native_query<Arg, Ret>(_name: &str, arg: Arg) -> Ret
 where
     Arg: for<'a> Serialize<StandardBufSerializer<'a>>,
     Ret: Archive,
     Ret::Archived: Deserialize<Ret, Infallible>,
 {
-    let arg_len = with_arg_buf(|buf| {
+    let _arg_len = with_arg_buf(|buf| {
         let mut sbuf = [0u8; SCRATCH_BUF_BYTES];
         let scratch = BufferScratch::new(&mut sbuf);
         let ser = BufferSerializer::new(buf);
@@ -166,13 +157,14 @@ where
         composite.pos() as u32
     });
 
-    let ret_len = extern_native_query(name, arg_len);
+    // let _ret_len: u32 = todo!();
 
-    with_arg_buf(|buf| {
-        let slice = &buf[..ret_len as usize];
-        let ret = unsafe { archived_root::<Ret>(slice) };
-        ret.deserialize(&mut Infallible).expect("Infallible")
-    })
+    // with_arg_buf(|buf| {
+    //     let slice = &buf[..ret_len as usize];
+    //     let ret = unsafe { archived_root::<Ret>(slice) };
+    //     ret.deserialize(&mut Infallible).expect("Infallible")
+    // })
+    todo!()
 }
 
 /// Return the current height.
@@ -243,9 +235,13 @@ impl<S> State<S> {
             buf[..bytes.len()].copy_from_slice(bytes);
         });
 
-        let name = raw.name();
+        let name = raw.name_bytes();
         let arg_len = raw.arg_bytes().len() as u32;
-        let ret_len = extern_query(mod_id, name, arg_len);
+
+        // ERROR?
+        let ret_len = unsafe {
+            ext::t(&mod_id.as_bytes()[0], &name[0], name.len() as u32, arg_len)
+        };
 
         with_arg_buf(|buf| RawResult::new(&buf[..ret_len as usize]))
     }
@@ -267,12 +263,21 @@ impl<S> State<S> {
             let ser = BufferSerializer::new(buf);
             let mut composite =
                 CompositeSerializer::new(ser, scratch, rkyv::Infallible);
+            composite.serialize_value(&arg).expect("infallible");
 
-            composite.serialize_value(&arg).unwrap();
             composite.pos() as u32
         });
 
-        let ret_len = extern_transaction(mod_id, name, arg_len);
+        let name_slice = name.as_bytes();
+
+        let ret_len = unsafe {
+            ext::t(
+                &mod_id.as_bytes()[0],
+                &name_slice[0],
+                name_slice.len() as u32,
+                arg_len,
+            )
+        };
 
         with_arg_buf(|buf| {
             let slice = &buf[..ret_len as usize];

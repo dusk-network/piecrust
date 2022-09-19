@@ -9,7 +9,7 @@ edition = "2021"
 license = "MPL-2.0"
 
 [dependencies]
-dallo = { path = "../../dallo", default-features = false }
+uplink = { path = "../../uplink", default-features = false }
 nstack = { git = "https://github.com/dusk-network/nstack", tag = "v0.0.0-hatchery" }
 ranno = { git = "https://github.com/dusk-network/ranno", tag = "v0.0.0-hatchery", default-features = false, features = ["alloc"] }
 

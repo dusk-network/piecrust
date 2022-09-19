@@ -10,13 +10,10 @@
 
 extern crate alloc;
 
-#[global_allocator]
-static ALLOCATOR: dallo::HostAlloc = dallo::HostAlloc;
-
 #[derive(Default)]
 pub struct Debug;
 
-use dallo::{ModuleId, State};
+use uplink::{ModuleId, State};
 
 #[no_mangle]
 static SELF_ID: ModuleId = ModuleId::uninitialized();
@@ -25,7 +22,7 @@ static mut STATE: State<Debug> = State::new(Debug);
 
 impl Debug {
     pub fn debug(&self, string: alloc::string::String) {
-        dallo::debug!("What a string! {}", string);
+        uplink::debug!("What a string! {}", string);
     }
 
     pub fn panic(&self) {
@@ -35,5 +32,5 @@ impl Debug {
 
 #[no_mangle]
 unsafe fn debug(arg_len: u32) -> u32 {
-    dallo::wrap_query(arg_len, |s: alloc::string::String| STATE.debug(s))
+    uplink::wrap_query(arg_len, |s: alloc::string::String| STATE.debug(s))
 }

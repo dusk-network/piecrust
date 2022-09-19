@@ -11,9 +11,7 @@ extern crate alloc;
 
 use alloc::boxed::Box;
 
-use dallo::{HostAlloc, ModuleId, State};
-#[global_allocator]
-static ALLOCATOR: HostAlloc = HostAlloc;
+use uplink::{ModuleId, State};
 
 // One Box, many `Boxen`
 pub struct Boxen {
@@ -42,10 +40,10 @@ impl Boxen {
 
 #[no_mangle]
 unsafe fn set(arg_len: u32) -> u32 {
-    dallo::wrap_transaction(arg_len, |to| STATE.set(to))
+    uplink::wrap_transaction(arg_len, |to| STATE.set(to))
 }
 
 #[no_mangle]
 unsafe fn get(arg_len: u32) -> u32 {
-    dallo::wrap_transaction(arg_len, |_: ()| STATE.get())
+    uplink::wrap_transaction(arg_len, |_: ()| STATE.get())
 }
