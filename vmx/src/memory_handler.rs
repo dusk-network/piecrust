@@ -11,7 +11,8 @@ use parking_lot::RwLock;
 
 use uplink::ModuleId;
 
-use crate::linear::Linear;
+use crate::error::Error;
+use crate::linear::{Linear, MEMORY_PAGES, WASM_PAGE_SIZE};
 use crate::vm::VM;
 
 #[derive(Clone)]
@@ -29,18 +30,27 @@ impl MemoryHandler {
         }
     }
 
-    pub fn get_memory(&self, mod_id: ModuleId) -> Linear {
+    pub fn get_memory(&self, mod_id: ModuleId) -> Result<Linear, Error> {
         {
             let rg = self.memories.read();
             if let Some(mem) = rg.get(&mod_id) {
-                return mem.clone();
+                return Ok(mem.clone());
             }
         }
 
         self.vm.with_module(mod_id, |module| {
-            let mem = Linear::new(module.volatile().clone());
-            self.memories.write().insert(mod_id, mem.clone());
-            mem
+            let (path, fresh) = self.vm.module_memory_path(&mod_id);
+            let result = Linear::new(
+                Some(path),
+                MEMORY_PAGES * WASM_PAGE_SIZE,
+                MEMORY_PAGES * WASM_PAGE_SIZE,
+                fresh,
+                module.volatile().clone(),
+            );
+            result.map(|mem| {
+                self.memories.write().insert(mod_id, mem.clone());
+                mem
+            })
         })
     }
 }

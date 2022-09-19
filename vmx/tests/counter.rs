@@ -8,7 +8,7 @@ use vmx::{module_bytecode, Error, VM};
 
 #[test]
 fn counter_read_simple() -> Result<(), Error> {
-    let mut vm = VM::new();
+    let mut vm = VM::ephemeral()?;
     let id = vm.deploy(module_bytecode!("counter"))?;
 
     assert_eq!(vm.query::<(), i64>(id, "read_value", ())?, 0xfc);
@@ -18,7 +18,7 @@ fn counter_read_simple() -> Result<(), Error> {
 
 #[test]
 fn counter_read_write_simple() -> Result<(), Error> {
-    let mut vm = VM::new();
+    let mut vm = VM::ephemeral()?;
     let id = vm.deploy(module_bytecode!("counter"))?;
 
     let mut session = vm.session();
@@ -33,9 +33,8 @@ fn counter_read_write_simple() -> Result<(), Error> {
 }
 
 #[test]
-#[ignore]
 fn counter_read_write_session() -> Result<(), Error> {
-    let mut vm = VM::new();
+    let mut vm = VM::ephemeral()?;
     let id = vm.deploy(module_bytecode!("counter"))?;
 
     {
@@ -48,7 +47,7 @@ fn counter_read_write_session() -> Result<(), Error> {
         assert_eq!(session.query::<(), i64>(id, "read_value", ())?, 0xfd);
     }
 
-    // mutable session dropped without commiting.
+    // mutable session dropped without committing.
     // old counter value still accessible.
 
     assert_eq!(vm.query::<(), i64>(id, "read_value", ())?, 0xfc);
@@ -57,7 +56,7 @@ fn counter_read_write_session() -> Result<(), Error> {
 
     other_session.transact::<(), ()>(id, "increment", ())?;
 
-    let _commit_id = other_session.commit();
+    let _commit_id = other_session.commit(&id)?;
 
     // session committed, new value accessible
 
