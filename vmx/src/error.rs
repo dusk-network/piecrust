@@ -18,7 +18,7 @@ pub type Compo = CompositeSerializerError<
 
 #[derive(Debug)]
 pub enum Error {
-    InstantiationError(wasmer::InstantiationError),
+    InstantiationError(Box<wasmer::InstantiationError>),
     CompileError(Box<wasmer::CompileError>),
     ExportError(Box<wasmer::ExportError>),
     RuntimeError(wasmer::RuntimeError),
@@ -36,7 +36,7 @@ pub enum Error {
 
 impl From<wasmer::InstantiationError> for Error {
     fn from(e: wasmer::InstantiationError) -> Self {
-        Error::InstantiationError(e)
+        Error::InstantiationError(Box::from(e))
     }
 }
 
