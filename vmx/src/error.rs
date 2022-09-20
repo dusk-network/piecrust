@@ -18,13 +18,13 @@ pub type Compo = CompositeSerializerError<
 
 #[derive(Debug)]
 pub enum Error {
-    InstantiationError(wasmer::InstantiationError),
-    CompileError(wasmer::CompileError),
-    ExportError(wasmer::ExportError),
-    RuntimeError(wasmer::RuntimeError),
-    SerializeError(wasmer::SerializeError),
-    DeserializeError(wasmer::DeserializeError),
-    ParsingError(wasmparser::BinaryReaderError),
+    InstantiationError(Box<wasmer::InstantiationError>),
+    CompileError(Box<wasmer::CompileError>),
+    ExportError(Box<wasmer::ExportError>),
+    RuntimeError(Box<wasmer::RuntimeError>),
+    SerializeError(Box<wasmer::SerializeError>),
+    DeserializeError(Box<wasmer::DeserializeError>),
+    ParsingError(Box<wasmparser::BinaryReaderError>),
     // Trap(wasmer_vm::Trap),
     CompositeSerializerError(Box<Compo>),
     PersistenceError(Box<std::io::Error>),
@@ -36,37 +36,37 @@ pub enum Error {
 
 impl From<wasmer::InstantiationError> for Error {
     fn from(e: wasmer::InstantiationError) -> Self {
-        Error::InstantiationError(e)
+        Error::InstantiationError(Box::from(e))
     }
 }
 
 impl From<wasmer::CompileError> for Error {
     fn from(e: wasmer::CompileError) -> Self {
-        Error::CompileError(e)
+        Error::CompileError(Box::from(e))
     }
 }
 
 impl From<wasmer::ExportError> for Error {
     fn from(e: wasmer::ExportError) -> Self {
-        Error::ExportError(e)
+        Error::ExportError(Box::from(e))
     }
 }
 
 impl From<wasmer::RuntimeError> for Error {
     fn from(e: wasmer::RuntimeError) -> Self {
-        Error::RuntimeError(e)
+        Error::RuntimeError(Box::from(e))
     }
 }
 
 impl From<wasmer::SerializeError> for Error {
     fn from(e: wasmer::SerializeError) -> Self {
-        Error::SerializeError(e)
+        Error::SerializeError(Box::from(e))
     }
 }
 
 impl From<wasmer::DeserializeError> for Error {
     fn from(e: wasmer::DeserializeError) -> Self {
-        Error::DeserializeError(e)
+        Error::DeserializeError(Box::from(e))
     }
 }
 

@@ -37,10 +37,10 @@ impl WrappedModule {
 
         for payload in Parser::new(0).parse_all(bytecode) {
             if let Payload::DataSection(datas) =
-                payload.map_err(ParsingError)?
+                payload.map_err(|e| ParsingError(Box::from(e)))?
             {
                 for data in datas {
-                    let data = data.map_err(ParsingError)?;
+                    let data = data.map_err(|e| ParsingError(Box::from(e)))?;
                     if let DataKind::Active { offset_expr, .. } = data.kind {
                         let length = data.data.len();
                         let mut offset_expr_reader =
