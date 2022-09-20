@@ -68,7 +68,7 @@ impl VMInner {
         Ok(Self {
             modules: BTreeMap::default(),
             base_memory_path: tempdir()
-                .map_err(PersistenceError)?
+                .map_err(|e| PersistenceError(Box::from(e)))?
                 .path()
                 .into(),
             commit_ids: BTreeMap::default(),

@@ -71,7 +71,8 @@ impl Linear {
         let file_opt = match path {
             Some(file_path) => {
                 if let Some(p) = file_path.as_ref().parent() {
-                    std::fs::create_dir_all(p).map_err(MemorySetupError)?;
+                    std::fs::create_dir_all(p)
+                        .map_err(|e| MemorySetupError(Box::from(e)))?;
                 }
                 let file_path_exists = file_path.as_ref().exists();
                 let file = OpenOptions::new()
@@ -79,10 +80,10 @@ impl Linear {
                     .write(true)
                     .create(!file_path_exists)
                     .open(file_path)
-                    .map_err(MemorySetupError)?;
+                    .map_err(|e| MemorySetupError(Box::from(e)))?;
                 if !file_path_exists {
                     file.set_len(accessible_size as u64)
-                        .map_err(MemorySetupError)?;
+                        .map_err(|e| MemorySetupError(Box::from(e)))?;
                 };
                 ptr = unsafe {
                     libc::mmap(
@@ -111,7 +112,9 @@ impl Linear {
             }
         };
         if ptr as isize == -1_isize {
-            return Err(MemorySetupError(io::Error::last_os_error()));
+            return Err(MemorySetupError(
+                Box::from(io::Error::last_os_error()),
+            ));
         }
 
         {
@@ -154,7 +157,8 @@ impl Linear {
         if let Some(file) = &self.0.read().file_opt {
             if start > 0 {
                 let new_len = (start + len) as u64;
-                file.set_len(new_len).map_err(MemorySetupError)?;
+                file.set_len(new_len)
+                    .map_err(|e| MemorySetupError(Box::from(e)))?;
             }
         }
         // Commit the accessible size.
@@ -297,7 +301,7 @@ mod test {
         let tunables = InstanceTunables::new(Linear::new(
             Some(
                 tempdir()
-                    .map_err(MemorySetupError)?
+                    .map_err(|e| MemorySetupError(Box::from(e)))?
                     .path()
                     .join("instantiate_test"),
             ),
@@ -337,7 +341,7 @@ mod test {
         let tunables = InstanceTunables::new(Linear::new(
             Some(
                 tempdir()
-                    .map_err(MemorySetupError)?
+                    .map_err(|e| MemorySetupError(Box::from(e)))?
                     .path()
                     .join("micro_test"),
             ),

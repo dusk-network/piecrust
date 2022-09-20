@@ -26,10 +26,10 @@ pub enum Error {
     DeserializeError(wasmer::DeserializeError),
     ParsingError(wasmparser::BinaryReaderError),
     // Trap(wasmer_vm::Trap),
-    CompositeSerializerError(Compo),
-    PersistenceError(std::io::Error),
-    CommitError(std::io::Error),
-    MemorySetupError(std::io::Error),
+    CompositeSerializerError(Box<Compo>),
+    PersistenceError(Box<std::io::Error>),
+    CommitError(Box<std::io::Error>),
+    MemorySetupError(Box<std::io::Error>),
     RegionError(Box<region::Error>),
     ValidationError,
 }
@@ -72,7 +72,7 @@ impl From<wasmer::DeserializeError> for Error {
 
 impl From<Compo> for Error {
     fn from(e: Compo) -> Self {
-        Error::CompositeSerializerError(e)
+        Error::CompositeSerializerError(Box::from(e))
     }
 }
 
