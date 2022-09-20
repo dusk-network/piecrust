@@ -111,7 +111,7 @@ impl Session {
         let (source_path, _) = self.vm.module_memory_path(id);
         let target_path = self.vm.commit(id, &commit_id);
         std::fs::copy(source_path.as_ref(), target_path.as_ref())
-            .map_err(|e| CommitError(Box::from(e)))?;
+            .map_err(CommitError)?;
         Ok(commit_id)
     }
 
