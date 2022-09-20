@@ -9,7 +9,7 @@ use vmx::{module_bytecode, Error, VM};
 
 #[test]
 pub fn cc_read_counter() -> Result<(), Error> {
-    let mut world = VM::new();
+    let mut world = VM::ephemeral()?;
 
     let counter_id = world.deploy(module_bytecode!("counter"))?;
 
@@ -29,7 +29,7 @@ pub fn cc_read_counter() -> Result<(), Error> {
 
 #[test]
 pub fn cc_direct() -> Result<(), Error> {
-    let mut world = VM::new();
+    let mut world = VM::ephemeral()?;
 
     let counter_id = world.deploy(module_bytecode!("counter"))?;
 
@@ -62,7 +62,7 @@ pub fn cc_direct() -> Result<(), Error> {
 #[test]
 #[ignore]
 pub fn cc_passthrough() -> Result<(), Error> {
-    let mut world = VM::new();
+    let mut world = VM::ephemeral()?;
 
     let center_id = world.deploy(module_bytecode!("callcenter"))?;
 
@@ -81,7 +81,7 @@ pub fn cc_passthrough() -> Result<(), Error> {
 #[test]
 #[ignore]
 pub fn cc_delegated() -> Result<(), Error> {
-    let mut world = VM::new();
+    let mut world = VM::ephemeral()?;
 
     let counter_id = world.deploy(module_bytecode!("counter"))?;
     let center_id = world.deploy(module_bytecode!("callcenter"))?;
@@ -121,7 +121,7 @@ pub fn cc_delegated() -> Result<(), Error> {
 #[test]
 #[ignore]
 pub fn cc_self() -> Result<(), Error> {
-    let mut world = VM::new();
+    let mut world = VM::ephemeral()?;
 
     let center_id = world.deploy(module_bytecode!("callcenter"))?;
 
@@ -136,7 +136,7 @@ pub fn cc_self() -> Result<(), Error> {
 #[test]
 #[ignore]
 pub fn cc_caller() -> Result<(), Error> {
-    let mut world = VM::new();
+    let mut world = VM::ephemeral()?;
 
     let center_id = world.deploy(module_bytecode!("callcenter"))?;
 

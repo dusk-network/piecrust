@@ -26,7 +26,8 @@ use crate::imports::DefaultImports;
 use crate::linear::{Linear, MEMORY_PAGES};
 use crate::module::WrappedModule;
 use crate::session::Session;
-use crate::types::{Error, StandardBufSerializer};
+use crate::types::StandardBufSerializer;
+use crate::Error;
 
 pub struct WrappedInstance {
     instance: wasmer::Instance,
@@ -64,7 +65,6 @@ impl Env {
 impl WrappedInstance {
     pub fn new(
         memory: Linear,
-        // mut store: wasmer::Store,
         session: Session,
         id: ModuleId,
         wrap: &WrappedModule,

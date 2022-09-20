@@ -4,7 +4,7 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use crate::types::Error;
+use crate::error::Error::{self, ParsingError};
 use wasmparser::{DataKind, Operator, Parser, Payload};
 
 use std::fmt;
@@ -36,9 +36,11 @@ impl WrappedModule {
         let mut volatile = vec![];
 
         for payload in Parser::new(0).parse_all(bytecode) {
-            if let Payload::DataSection(datas) = payload? {
+            if let Payload::DataSection(datas) =
+                payload.map_err(|e| ParsingError(Box::from(e)))?
+            {
                 for data in datas {
-                    let data = data?;
+                    let data = data.map_err(|e| ParsingError(Box::from(e)))?;
                     if let DataKind::Active { offset_expr, .. } = data.kind {
                         let length = data.data.len();
                         let mut offset_expr_reader =

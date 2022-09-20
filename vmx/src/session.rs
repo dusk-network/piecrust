@@ -5,6 +5,7 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 use bytecheck::CheckBytes;
+use rand::prelude::*;
 use rkyv::{
     validation::validators::DefaultValidator, Archive, Deserialize, Infallible,
     Serialize,
@@ -14,8 +15,42 @@ use uplink::ModuleId;
 
 use crate::instance::WrappedInstance;
 use crate::memory_handler::MemoryHandler;
-use crate::types::{Error, StandardBufSerializer};
+use crate::types::MemoryFreshness::*;
+use crate::types::StandardBufSerializer;
 use crate::vm::VM;
+use crate::Error::{self, CommitError};
+
+pub const COMMIT_ID_BYTES: usize = 4;
+
+#[derive(Clone, Copy, PartialOrd, Ord, PartialEq, Eq)]
+pub struct CommitId([u8; COMMIT_ID_BYTES]);
+
+impl CommitId {
+    pub fn new() -> CommitId {
+        CommitId(thread_rng().gen::<[u8; COMMIT_ID_BYTES]>())
+    }
+    pub fn as_bytes(&self) -> &[u8] {
+        &self.0[..]
+    }
+}
+
+impl Default for CommitId {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl core::fmt::Debug for CommitId {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        if f.alternate() {
+            write!(f, "0x")?
+        }
+        for byte in self.0 {
+            write!(f, "{:02x}", &byte)?
+        }
+        Ok(())
+    }
+}
 
 #[derive(Clone)]
 pub struct Session {
@@ -71,16 +106,24 @@ impl Session {
         instance.read_from_arg_buffer(ret_len)
     }
 
-    pub fn commit(&self) -> VM {
-        todo!()
+    pub fn commit(&mut self, id: &ModuleId) -> Result<CommitId, Error> {
+        let commit_id = CommitId::new();
+        let (source_path, _) = self.vm.module_memory_path(id);
+        let target_path = self.vm.commit(id, &commit_id);
+        std::fs::copy(source_path.as_ref(), target_path.as_ref())
+            .map_err(CommitError)?;
+        Ok(commit_id)
     }
 
     pub(crate) fn instance(&self, mod_id: ModuleId) -> WrappedInstance {
         self.vm.with_module(mod_id, |module| {
-            let memory = self.memory_handler.get_memory(mod_id);
+            let memory = self
+                .memory_handler
+                .get_memory(mod_id)
+                .expect("memory available");
 
-            let fresh = memory.fresh();
-            if !fresh {
+            let freshness = memory.freshness();
+            if freshness == NotFresh {
                 memory.save_volatile();
             }
 
@@ -92,10 +135,10 @@ impl Session {
             )
             .expect("todo, error handling");
 
-            if !fresh {
+            if freshness == NotFresh {
                 memory.restore_volatile();
             } else {
-                memory.set_fresh(false);
+                memory.set_freshness(NotFresh);
             }
 
             wrapped

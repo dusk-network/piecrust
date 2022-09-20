@@ -14,4 +14,8 @@ pub type StandardBufSerializer<'a> = CompositeSerializer<
     BufferScratch<&'a mut [u8; SCRATCH_BUF_BYTES]>,
 >;
 
-pub type Error = Box<dyn std::error::Error>;
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum MemoryFreshness {
+    Fresh,
+    NotFresh,
+}
