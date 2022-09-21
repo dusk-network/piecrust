@@ -161,10 +161,13 @@ impl Linear {
         let guard = self.0.read();
         let vm_def_ptr = guard.memory_definition.as_ref().unwrap(); //.base as *const u8;
         let ptr = vm_def_ptr.base;
-        unsafe {
+        println!("make_accessible start={} len={}", start, len);
+        let r = unsafe {
             region::protect(ptr.add(start), len, region::Protection::READ_WRITE)
         }
-        .map_err(RegionError)?;
+        .map_err(RegionError);
+        println!("make_accessible r={:?}", r);
+        r?;
         Ok(())
     }
 
@@ -254,11 +257,30 @@ impl LinearMemory for Linear {
     }
 
     fn grow(&mut self, delta: Pages) -> Result<Pages, MemoryError> {
-        println!("grow was called with {:?}", delta);
-        Err(MemoryError::CouldNotGrow {
-            current: Pages::from(100u32),
-            attempted_delta: delta,
-        })
+        println!("grow begin delta={:?}", delta);
+        let size = Pages::from(self.definition().current_length as u32/65536 as u32);
+
+        if delta.0 == 0 {
+            return Ok(size);
+        }
+
+        let new_pages = size + delta;
+        let delta_bytes = delta.bytes().0;
+        let prev_bytes = size.bytes().0;
+
+        self.make_accessible(prev_bytes, delta_bytes)
+            .map_err(|_e| MemoryError::Region("todo error to string conv".to_string()))?;
+
+        // update memory definition
+        unsafe {
+            let mut md_ptr = self.definition_ptr();
+            let md = md_ptr.as_mut();
+            md.current_length = new_pages.bytes().0;
+            // md.base = self.alloc.as_mut_ptr() as _;
+        }
+        println!("grow successful - new pages={:?}", new_pages);
+
+        Ok(new_pages)
     }
 
     fn vmmemory(&self) -> NonNull<VMMemoryDefinition> {
@@ -321,7 +343,10 @@ mod test {
             .collect();
         assert_eq!(memories.len(), 1);
         let first_memory = memories.pop().unwrap();
-        assert_eq!(first_memory.ty(&store).maximum.unwrap(), Pages(MEMORY_PAGES as u32));
+        assert_eq!(
+            first_memory.ty(&store).maximum.unwrap(),
+            Pages(MEMORY_PAGES as u32)
+        );
         let view = first_memory.view(&store);
 
         let x = unsafe { view.data_unchecked_mut() }[0];

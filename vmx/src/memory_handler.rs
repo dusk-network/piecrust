@@ -43,7 +43,7 @@ impl MemoryHandler {
             let result = Linear::new(
                 Some(path),
                 MEMORY_PAGES * WASM_PAGE_SIZE,
-                MEMORY_PAGES * WASM_PAGE_SIZE,
+                (MEMORY_PAGES+100) * WASM_PAGE_SIZE,
                 fresh,
                 module.volatile().clone(),
             );
