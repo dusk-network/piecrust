@@ -10,12 +10,12 @@ modules: ## Build WASM modules
 	  -Z build-std=core,alloc,panic_abort \
 	  -Z build-std-features=panic_immediate_abort \
 	  --target wasm32-unknown-unknown
-	@mkdir -p modules/target/stripped
-	@find modules/target/wasm32-unknown-unknown/release -maxdepth 1 -name "*.wasm" \
+	@mkdir -p target/stripped
+	@find target/wasm32-unknown-unknown/release -maxdepth 1 -name "*.wasm" \
 	 | xargs -I % basename % \
 	 | xargs -I % wasm-tools strip -a \
-	 	          modules/target/wasm32-unknown-unknown/release/% \
-	 	          -o modules/target/stripped/%
+	 	          target/wasm32-unknown-unknown/release/% \
+	 	          -o target/stripped/%
 
 test: modules assert-counter-module-small ## Run the tests
 	cargo test \
@@ -27,4 +27,4 @@ test: modules assert-counter-module-small ## Run the tests
 COUNTER_MODULE_BYTE_SIZE_LIMIT = 512
 
 assert-counter-module-small: modules
-	@test `wc -c modules/target/stripped/counter.wasm | sed 's/^[^0-9]*\([0-9]*\).*/\1/'` -lt $(COUNTER_MODULE_BYTE_SIZE_LIMIT);
+	@test `wc -c target/stripped/counter.wasm | sed 's/^[^0-9]*\([0-9]*\).*/\1/'` -lt $(COUNTER_MODULE_BYTE_SIZE_LIMIT);
