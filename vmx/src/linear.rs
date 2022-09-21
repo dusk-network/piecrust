@@ -24,7 +24,7 @@ use crate::module::VolatileMem;
 use crate::types::MemoryFreshness;
 use crate::Error::{MemorySetupError, RegionError};
 
-pub const MEMORY_PAGES: usize = 18;
+pub const MEMORY_PAGES: usize = 19;
 pub const WASM_PAGE_SIZE: usize = 64 * 1024;
 
 #[derive(Debug)]
@@ -254,6 +254,7 @@ impl LinearMemory for Linear {
     }
 
     fn grow(&mut self, delta: Pages) -> Result<Pages, MemoryError> {
+        println!("grow was called with {:?}", delta);
         Err(MemoryError::CouldNotGrow {
             current: Pages::from(100u32),
             attempted_delta: delta,
@@ -320,7 +321,7 @@ mod test {
             .collect();
         assert_eq!(memories.len(), 1);
         let first_memory = memories.pop().unwrap();
-        assert_eq!(first_memory.ty(&store).maximum.unwrap(), Pages(18));
+        assert_eq!(first_memory.ty(&store).maximum.unwrap(), Pages(MEMORY_PAGES as u32));
         let view = first_memory.view(&store);
 
         let x = unsafe { view.data_unchecked_mut() }[0];
