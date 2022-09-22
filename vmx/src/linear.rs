@@ -25,8 +25,8 @@ use crate::types::MemoryFreshness;
 use crate::Error::{MemorySetupError, RegionError};
 
 pub const MEMORY_PAGES: usize = 19;
-pub const MAX_MEMORY_PAGES: usize = 2000;
 pub const WASM_PAGE_SIZE: usize = 64 * 1024;
+pub const MAX_MEMORY_PAGES: usize = (u32::MAX / WASM_PAGE_SIZE as u32) as usize;
 pub const WASM_PAGE_LOG2: u32 = 16;
 
 #[derive(Debug)]
