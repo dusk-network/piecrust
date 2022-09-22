@@ -38,7 +38,7 @@ extern "C" fn eh_personality() {}
 static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 
 #[alloc_error_handler]
-#[allow(clippy::empty_loop)]
-fn foo(_: core::alloc::Layout) -> ! {
-    loop {}
+fn foo(layout: core::alloc::Layout) -> ! {
+    crate::debug!("ALLOC ERROR {:?}", layout);
+    panic!("OOM");
 }

@@ -24,8 +24,10 @@ use crate::module::VolatileMem;
 use crate::types::MemoryFreshness;
 use crate::Error::{MemorySetupError, RegionError};
 
-pub const MEMORY_PAGES: usize = 18;
+pub const MEMORY_PAGES: usize = 19;
 pub const WASM_PAGE_SIZE: usize = 64 * 1024;
+pub const MAX_MEMORY_PAGES: usize = (u32::MAX / WASM_PAGE_SIZE as u32) as usize;
+pub const WASM_PAGE_LOG2: u32 = 16;
 
 #[derive(Debug)]
 struct LinearInner {
@@ -254,10 +256,31 @@ impl LinearMemory for Linear {
     }
 
     fn grow(&mut self, delta: Pages) -> Result<Pages, MemoryError> {
-        Err(MemoryError::CouldNotGrow {
-            current: Pages::from(100u32),
-            attempted_delta: delta,
-        })
+        println!("grow begin delta={:?}", delta);
+        let prev_pages = Pages::from(
+            self.definition().current_length as u32 >> WASM_PAGE_LOG2,
+        );
+
+        if delta.0 == 0 {
+            return Ok(prev_pages);
+        }
+
+        let new_pages = prev_pages + delta;
+        let delta_bytes = delta.bytes().0;
+        let prev_bytes = prev_pages.bytes().0;
+
+        self.make_accessible(prev_bytes, delta_bytes)
+            .map_err(|_e| {
+                MemoryError::Region("todo error to string conv".to_string())
+            })?;
+
+        unsafe {
+            let mut md_ptr = self.definition_ptr();
+            let md = md_ptr.as_mut();
+            md.current_length = new_pages.bytes().0;
+        }
+
+        Ok(prev_pages)
     }
 
     fn vmmemory(&self) -> NonNull<VMMemoryDefinition> {
@@ -320,7 +343,10 @@ mod test {
             .collect();
         assert_eq!(memories.len(), 1);
         let first_memory = memories.pop().unwrap();
-        assert_eq!(first_memory.ty(&store).maximum.unwrap(), Pages(18));
+        assert_eq!(
+            first_memory.ty(&store).maximum.unwrap(),
+            Pages(MEMORY_PAGES as u32)
+        );
         let view = first_memory.view(&store);
 
         let x = unsafe { view.data_unchecked_mut() }[0];

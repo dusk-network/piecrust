@@ -12,7 +12,7 @@ use parking_lot::RwLock;
 use uplink::ModuleId;
 
 use crate::error::Error;
-use crate::linear::{Linear, MEMORY_PAGES, WASM_PAGE_SIZE};
+use crate::linear::{Linear, MAX_MEMORY_PAGES, MEMORY_PAGES, WASM_PAGE_SIZE};
 use crate::vm::VM;
 
 #[derive(Clone)]
@@ -43,7 +43,7 @@ impl MemoryHandler {
             let result = Linear::new(
                 Some(path),
                 MEMORY_PAGES * WASM_PAGE_SIZE,
-                MEMORY_PAGES * WASM_PAGE_SIZE,
+                MAX_MEMORY_PAGES * WASM_PAGE_SIZE,
                 fresh,
                 module.volatile().clone(),
             );
