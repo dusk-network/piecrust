@@ -19,6 +19,8 @@ use wasmer_vm::{
     LinearMemory, MemoryError, MemoryStyle, VMMemory, VMMemoryDefinition,
 };
 
+use uplink::ModuleId;
+
 use crate::error::Error;
 use crate::module::VolatileMem;
 use crate::types::MemoryFreshness;
@@ -181,6 +183,19 @@ impl Linear {
     pub fn definition_ptr(&self) -> NonNull<VMMemoryDefinition> {
         let r = &mut self.0.write().memory_definition;
         NonNull::new(r).unwrap()
+    }
+
+    pub fn write_self_id(&self, ofs: usize, id: ModuleId) {
+        let guard = self.0.write();
+
+        let bytes = id.as_bytes();
+        let base = guard.memory_definition.base;
+
+        let slice = unsafe {
+            std::slice::from_raw_parts_mut(base.add(ofs), bytes.len())
+        };
+
+        slice.copy_from_slice(bytes);
     }
 
     // workaround, to be deprecatedd

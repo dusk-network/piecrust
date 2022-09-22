@@ -159,20 +159,6 @@ impl VM {
         Ok(id)
     }
 
-    pub fn with_memory<F, R>(&self, _id: ModuleId, _closure: F) -> R
-    where
-        F: FnOnce(&[u8]) -> R,
-    {
-        todo!()
-    }
-
-    pub fn with_argbuf<F, R>(&self, _id: ModuleId, _closure: F) -> R
-    where
-        F: FnOnce(&mut [u8]) -> R,
-    {
-        todo!()
-    }
-
     pub fn with_module<F, R>(&self, id: ModuleId, closure: F) -> R
     where
         F: FnOnce(&WrappedModule) -> R,

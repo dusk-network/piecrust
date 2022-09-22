@@ -57,6 +57,10 @@ impl Callcenter {
         uplink::self_id() == id
     }
 
+    pub fn self_id(&self) -> ModuleId {
+        uplink::self_id()
+    }
+
     pub fn call_self(&self) -> bool {
         let self_id = uplink::self_id();
         let caller = uplink::caller();
@@ -86,6 +90,11 @@ unsafe fn calling_self(arg_len: u32) -> u32 {
 #[no_mangle]
 unsafe fn call_self(arg_len: u32) -> u32 {
     wrap_query(arg_len, |_: ()| STATE.call_self())
+}
+
+#[no_mangle]
+unsafe fn self_id(arg_len: u32) -> u32 {
+    wrap_query(arg_len, |_: ()| STATE.self_id())
 }
 
 #[no_mangle]

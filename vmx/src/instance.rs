@@ -71,7 +71,7 @@ impl WrappedInstance {
     ) -> Result<Self, Error> {
         let mut store = Store::new_with_tunables(
             Singlepass::default(),
-            InstanceTunables::new(memory),
+            InstanceTunables::new(memory.clone()),
         );
 
         let env = Env {
@@ -98,6 +98,16 @@ impl WrappedInstance {
                 wasmer::Value::I32(i) => i as usize,
                 _ => todo!("Missing heap base"),
             };
+
+        let self_id_ofs =
+            match instance.exports.get_global("SELF_ID")?.get(&mut store) {
+                wasmer::Value::I32(i) => i as usize,
+                _ => todo!("Missing `SELF_ID` export"),
+            };
+
+        // write self id into memory.
+
+        memory.write_self_id(self_id_ofs, id);
 
         let wrapped = WrappedInstance {
             store,

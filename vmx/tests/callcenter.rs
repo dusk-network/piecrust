@@ -4,7 +4,7 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use uplink::{RawQuery, RawResult, RawTransaction};
+use uplink::{ModuleId, RawQuery, RawResult, RawTransaction};
 use vmx::{module_bytecode, Error, VM};
 
 #[test]
@@ -125,7 +125,6 @@ pub fn cc_delegated_write() -> Result<(), Error> {
 }
 
 #[test]
-#[ignore]
 pub fn cc_self() -> Result<(), Error> {
     let mut world = VM::ephemeral()?;
 
@@ -148,6 +147,18 @@ pub fn cc_caller() -> Result<(), Error> {
 
     let value: bool = world.query(center_id, "call_self", ())?;
     assert!(value);
+
+    Ok(())
+}
+
+#[test]
+pub fn cc_self_id() -> Result<(), Error> {
+    let mut world = VM::ephemeral()?;
+
+    let center_id = world.deploy(module_bytecode!("callcenter"))?;
+
+    let value: ModuleId = world.query(center_id, "self_id", ())?;
+    assert_eq!(value, center_id);
 
     Ok(())
 }
