@@ -25,7 +25,9 @@ use crate::types::MemoryFreshness;
 use crate::Error::{MemorySetupError, RegionError};
 
 pub const MEMORY_PAGES: usize = 19;
+pub const MAX_MEMORY_PAGES: usize = 2000;
 pub const WASM_PAGE_SIZE: usize = 64 * 1024;
+pub const WASM_PAGE_LOG2: u32 = 16;
 
 #[derive(Debug)]
 struct LinearInner {
@@ -161,13 +163,10 @@ impl Linear {
         let guard = self.0.read();
         let vm_def_ptr = guard.memory_definition.as_ref().unwrap(); //.base as *const u8;
         let ptr = vm_def_ptr.base;
-        println!("make_accessible start={} len={}", start, len);
-        let r = unsafe {
+        unsafe {
             region::protect(ptr.add(start), len, region::Protection::READ_WRITE)
         }
-        .map_err(RegionError);
-        println!("make_accessible r={:?}", r);
-        r?;
+        .map_err(RegionError)?;
         Ok(())
     }
 
@@ -258,29 +257,30 @@ impl LinearMemory for Linear {
 
     fn grow(&mut self, delta: Pages) -> Result<Pages, MemoryError> {
         println!("grow begin delta={:?}", delta);
-        let size = Pages::from(self.definition().current_length as u32/65536 as u32);
+        let prev_pages = Pages::from(
+            self.definition().current_length as u32 >> WASM_PAGE_LOG2,
+        );
 
         if delta.0 == 0 {
-            return Ok(size);
+            return Ok(prev_pages);
         }
 
-        let new_pages = size + delta;
+        let new_pages = prev_pages + delta;
         let delta_bytes = delta.bytes().0;
-        let prev_bytes = size.bytes().0;
+        let prev_bytes = prev_pages.bytes().0;
 
         self.make_accessible(prev_bytes, delta_bytes)
-            .map_err(|_e| MemoryError::Region("todo error to string conv".to_string()))?;
+            .map_err(|_e| {
+                MemoryError::Region("todo error to string conv".to_string())
+            })?;
 
-        // update memory definition
         unsafe {
             let mut md_ptr = self.definition_ptr();
             let md = md_ptr.as_mut();
             md.current_length = new_pages.bytes().0;
-            // md.base = self.alloc.as_mut_ptr() as _;
         }
-        println!("grow successful - new pages={:?}", new_pages);
 
-        Ok(new_pages)
+        Ok(prev_pages)
     }
 
     fn vmmemory(&self) -> NonNull<VMMemoryDefinition> {

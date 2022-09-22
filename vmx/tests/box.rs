@@ -23,7 +23,7 @@ pub fn box_set_get() -> Result<(), Error> {
     println!("no problem until here 2");
     session.transact::<i16, ()>(id, "set", 0x11)?;
     println!("no problem until here 3");
-    session.commit(&id);
+    session.commit(&id)?;
 
     let value = session.query::<_, Option<i16>>(id, "get", ())?;
 
