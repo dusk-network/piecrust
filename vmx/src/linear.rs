@@ -36,7 +36,7 @@ struct LinearInner {
     volatile: Vec<VolatileMem>,
     vol_buffer: Vec<u8>,
     fresh: MemoryFreshness,
-    pub memory_definition: Option<VMMemoryDefinition>,
+    pub memory_definition: VMMemoryDefinition,
 }
 
 #[derive(Debug, Clone)]
@@ -63,7 +63,11 @@ impl Linear {
     {
         let mut ret = Linear(Arc::new(RwLock::new(LinearInner {
             file_opt: None,
-            memory_definition: None,
+            memory_definition: VMMemoryDefinition {
+                // temporary dummy value
+                base: &mut 0u8 as _,
+                current_length: 0,
+            },
             vol_buffer: vec![],
             fresh,
             volatile,
@@ -124,10 +128,10 @@ impl Linear {
                 ..
             } = *guard;
 
-            *memory_definition = Some(VMMemoryDefinition {
+            *memory_definition = VMMemoryDefinition {
                 base: ptr as _,
                 current_length: accessible_size,
-            });
+            };
 
             guard.file_opt = file_opt;
         }
@@ -161,7 +165,7 @@ impl Linear {
         }
         // Commit the accessible size.
         let guard = self.0.read();
-        let vm_def_ptr = guard.memory_definition.as_ref().unwrap(); //.base as *const u8;
+        let vm_def_ptr = guard.memory_definition;
         let ptr = vm_def_ptr.base;
         unsafe {
             region::protect(ptr.add(start), len, region::Protection::READ_WRITE)
@@ -171,11 +175,11 @@ impl Linear {
     }
 
     pub fn definition(&self) -> VMMemoryDefinition {
-        self.0.read().memory_definition.unwrap()
+        self.0.read().memory_definition
     }
 
     pub fn definition_ptr(&self) -> NonNull<VMMemoryDefinition> {
-        let r = &mut self.0.write().memory_definition.unwrap();
+        let r = &mut self.0.write().memory_definition;
         NonNull::new(r).unwrap()
     }
 
@@ -184,7 +188,7 @@ impl Linear {
         let base: *mut u8;
         {
             let imm_guard = self.0.read();
-            base = imm_guard.memory_definition.unwrap().base;
+            base = imm_guard.memory_definition.base;
         }
         let mut guard = self.0.write();
         let inner = &mut *guard;
@@ -203,7 +207,7 @@ impl Linear {
         let base: *mut u8;
         {
             let imm_guard = self.0.read();
-            base = imm_guard.memory_definition.unwrap().base;
+            base = imm_guard.memory_definition.base;
         }
         let mut guard = self.0.write();
         let inner = &mut *guard;
@@ -256,7 +260,6 @@ impl LinearMemory for Linear {
     }
 
     fn grow(&mut self, delta: Pages) -> Result<Pages, MemoryError> {
-        println!("grow begin delta={:?}", delta);
         let prev_pages = Pages::from(
             self.definition().current_length as u32 >> WASM_PAGE_LOG2,
         );

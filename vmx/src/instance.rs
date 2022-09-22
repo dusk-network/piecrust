@@ -198,8 +198,6 @@ impl WrappedInstance {
         method_name: &str,
         arg_len: u32,
     ) -> Result<u32, Error> {
-        println!("calling query {:?}", method_name);
-
         let fun: TypedFunction<u32, u32> = self
             .instance
             .exports

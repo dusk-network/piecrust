@@ -36,6 +36,7 @@ impl Callcenter {
         module_id: ModuleId,
         raw: RawQuery,
     ) -> RawResult {
+        uplink::debug!("raw query {:?} at {:?}", raw, module_id);
         uplink::query_raw(module_id, raw)
     }
 

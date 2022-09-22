@@ -53,7 +53,6 @@ fn q(
             .expect("TODO error handling");
 
             let arg_buf = &memory[argbuf_ofs..][..ARGBUF_LEN];
-
             let mut mod_id = ModuleId::uninitialized();
             mod_id.as_bytes_mut().copy_from_slice(
                 &memory[mod_id_ofs as usize..]
@@ -71,10 +70,7 @@ fn q(
         };
 
         // copy back result
-        println!("ret len {:?}", ret_len);
-
         callee.read_argument(&mut memory[argbuf_ofs..][..ret_len as usize]);
-
         ret_len
     })
 }
@@ -118,10 +114,7 @@ fn t(
         };
 
         // copy back result
-        println!("ret len {:?}", ret_len);
-
         callee.read_argument(&mut memory[argbuf_ofs..][..ret_len as usize]);
-
         ret_len
     })
 }
