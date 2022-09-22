@@ -24,9 +24,9 @@ use crate::module::VolatileMem;
 use crate::types::MemoryFreshness;
 use crate::Error::{MemorySetupError, RegionError};
 
-pub const MEMORY_PAGES: usize = 19;
+pub const MEMORY_PAGES: usize = 4;
 pub const WASM_PAGE_SIZE: usize = 64 * 1024;
-pub const MAX_MEMORY_PAGES: usize = (u32::MAX / WASM_PAGE_SIZE as u32) as usize;
+pub const MAX_MEMORY_BYTES: usize = u32::MAX as usize;
 pub const WASM_PAGE_LOG2: u32 = 16;
 
 #[derive(Debug)]
@@ -308,10 +308,10 @@ mod test {
     fn instantiate_test() -> Result<(), Error> {
         let wasm_bytes = wat2wasm(
             br#"(module
-            (memory (;0;) 18)
-            (global (;0;) (mut i32) i32.const 1048576)
+            (memory (;0;) 1)
+            (global (;0;) (mut i32) i32.const 65536)
             (export "memory" (memory 0))
-            (data (;0;) (i32.const 1048576) "*\00\00\00")
+            (data (;0;) (i32.const 65536) "*\00\00\00")
           )"#,
         )
         .unwrap();
@@ -325,7 +325,7 @@ mod test {
                     .join("instantiate_test"),
             ),
             MEMORY_PAGES * WASM_PAGE_SIZE,
-            MEMORY_PAGES * WASM_PAGE_SIZE,
+            MAX_MEMORY_BYTES,
             Fresh,
             vec![],
         )?);
@@ -368,7 +368,7 @@ mod test {
                     .join("micro_test"),
             ),
             MEMORY_PAGES * WASM_PAGE_SIZE,
-            MEMORY_PAGES * WASM_PAGE_SIZE,
+            MAX_MEMORY_BYTES,
             Fresh,
             vec![],
         )?);
