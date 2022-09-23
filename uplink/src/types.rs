@@ -103,8 +103,12 @@ impl RawQuery {
         RawQuery { arg_len, data }
     }
 
+    pub fn name_bytes(&self) -> &[u8] {
+        &self.data[self.arg_len as usize..]
+    }
+
     pub fn name(&self) -> &str {
-        core::str::from_utf8(&self.data[self.arg_len as usize..])
+        core::str::from_utf8(self.name_bytes())
             .expect("always created from a valid &str")
     }
 
@@ -138,6 +142,11 @@ impl RawTransaction {
         data.extend_from_slice(name.as_bytes());
 
         RawTransaction { arg_len, data }
+    }
+
+    pub fn name(&self) -> &str {
+        core::str::from_utf8(self.name_bytes())
+            .expect("always created from a valid &str")
     }
 
     pub fn name_bytes(&self) -> &[u8] {

@@ -125,19 +125,24 @@ where
     })
 }
 
-pub fn query_raw(_mod_id: ModuleId, _raw: RawQuery) -> RawResult {
-    todo!()
+pub fn query_raw(mod_id: ModuleId, raw: RawQuery) -> RawResult {
+    with_arg_buf(|buf| {
+        let bytes = raw.arg_bytes();
+        buf[..bytes.len()].copy_from_slice(bytes);
+    });
 
-    // with_arg_buf(|buf| {
-    //     let bytes = raw.arg_bytes();
-    //     buf[..bytes.len()].copy_from_slice(bytes);
-    // });
+    let name = raw.name_bytes();
+    let arg_len = raw.arg_bytes().len() as u32;
 
-    // let name = raw.name();
-    // let arg_len = raw.arg_bytes().len() as u32;
-    // let ret_len = unsafe { ext::q() };
+    let ret_len = unsafe {
+        crate::debug!("Corv");
 
-    // with_arg_buf(|buf| RawResult::new(&buf[..ret_len as usize]))
+        ext::q(&mod_id.as_bytes()[0], &name[0], name.len() as u32, arg_len)
+    };
+
+    crate::debug!("D");
+
+    with_arg_buf(|buf| RawResult::new(&buf[..ret_len as usize]))
 }
 
 pub fn native_query<Arg, Ret>(_name: &str, arg: Arg) -> Ret

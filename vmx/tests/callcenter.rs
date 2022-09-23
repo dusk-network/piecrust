@@ -4,7 +4,7 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use uplink::{RawQuery, RawResult, RawTransaction};
+use uplink::{ModuleId, RawQuery, RawResult, RawTransaction};
 use vmx::{module_bytecode, Error, VM};
 
 #[test]
@@ -60,15 +60,12 @@ pub fn cc_direct() -> Result<(), Error> {
 }
 
 #[test]
-#[ignore]
 pub fn cc_passthrough() -> Result<(), Error> {
     let mut world = VM::ephemeral()?;
 
     let center_id = world.deploy(module_bytecode!("callcenter"))?;
 
     let rq = RawQuery::new("read_value", ());
-
-    println!("rq {:?}", rq);
 
     let res: RawQuery =
         world.query(center_id, "query_passthrough", rq.clone())?;
@@ -79,8 +76,7 @@ pub fn cc_passthrough() -> Result<(), Error> {
 }
 
 #[test]
-#[ignore]
-pub fn cc_delegated() -> Result<(), Error> {
+pub fn cc_delegated_read() -> Result<(), Error> {
     let mut world = VM::ephemeral()?;
 
     let counter_id = world.deploy(module_bytecode!("counter"))?;
@@ -98,6 +94,16 @@ pub fn cc_delegated() -> Result<(), Error> {
     let value: i64 = res.cast();
 
     assert_eq!(value, 0xfc);
+
+    Ok(())
+}
+
+#[test]
+pub fn cc_delegated_write() -> Result<(), Error> {
+    let mut world = VM::ephemeral()?;
+
+    let counter_id = world.deploy(module_bytecode!("counter"))?;
+    let center_id = world.deploy(module_bytecode!("callcenter"))?;
 
     // increment through delegated transaction
 
@@ -119,7 +125,6 @@ pub fn cc_delegated() -> Result<(), Error> {
 }
 
 #[test]
-#[ignore]
 pub fn cc_self() -> Result<(), Error> {
     let mut world = VM::ephemeral()?;
 
@@ -142,6 +147,18 @@ pub fn cc_caller() -> Result<(), Error> {
 
     let value: bool = world.query(center_id, "call_self", ())?;
     assert!(value);
+
+    Ok(())
+}
+
+#[test]
+pub fn cc_self_id() -> Result<(), Error> {
+    let mut world = VM::ephemeral()?;
+
+    let center_id = world.deploy(module_bytecode!("callcenter"))?;
+
+    let value: ModuleId = world.query(center_id, "self_id", ())?;
+    assert_eq!(value, center_id);
 
     Ok(())
 }

@@ -36,6 +36,7 @@ impl Callcenter {
         module_id: ModuleId,
         raw: RawQuery,
     ) -> RawResult {
+        uplink::debug!("raw query {:?} at {:?}", raw, module_id);
         uplink::query_raw(module_id, raw)
     }
 
@@ -54,6 +55,10 @@ impl Callcenter {
 
     pub fn calling_self(&self, id: ModuleId) -> bool {
         uplink::self_id() == id
+    }
+
+    pub fn self_id(&self) -> ModuleId {
+        uplink::self_id()
     }
 
     pub fn call_self(&self) -> bool {
@@ -85,6 +90,11 @@ unsafe fn calling_self(arg_len: u32) -> u32 {
 #[no_mangle]
 unsafe fn call_self(arg_len: u32) -> u32 {
     wrap_query(arg_len, |_: ()| STATE.call_self())
+}
+
+#[no_mangle]
+unsafe fn self_id(arg_len: u32) -> u32 {
+    wrap_query(arg_len, |_: ()| STATE.self_id())
 }
 
 #[no_mangle]
