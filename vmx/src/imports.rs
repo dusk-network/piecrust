@@ -29,18 +29,25 @@ impl DefaultImports {
     }
 }
 
-fn caller(_env: FunctionEnvMut<Env>) -> u32 {
-    0
+fn caller(env: FunctionEnvMut<Env>) {
+    let env = env.data();
+
+    let mod_id = env.nth_from_top(1);
+
+    env.self_instance().with_arg_buffer(|arg| {
+        arg[..std::mem::size_of::<ModuleId>()]
+            .copy_from_slice(mod_id.as_bytes())
+    })
 }
 
 fn q(
-    fenv: FunctionEnvMut<Env>,
+    mut fenv: FunctionEnvMut<Env>,
     mod_id_ofs: i32,
     name_ofs: i32,
     name_len: u32,
     arg_len: u32,
 ) -> u32 {
-    let env = fenv.data();
+    let env = fenv.data_mut();
 
     let instance = env.self_instance();
     let argbuf_ofs = instance.arg_buffer_offset();
@@ -60,14 +67,17 @@ fn q(
             );
 
             let mut callee = env.instance(mod_id);
-
             let arg = &arg_buf[..arg_len as usize];
+
+            env.push_callstack(mod_id);
 
             callee.write_argument(arg);
             let ret_len =
                 callee.query(name, arg.len() as u32).expect("invalid query");
             (ret_len, callee)
         };
+
+        env.pop_callstack();
 
         // copy back result
         callee.read_argument(&mut memory[argbuf_ofs..][..ret_len as usize]);
@@ -76,13 +86,13 @@ fn q(
 }
 
 fn t(
-    fenv: FunctionEnvMut<Env>,
+    mut fenv: FunctionEnvMut<Env>,
     mod_id_ofs: i32,
     name_ofs: i32,
     name_len: u32,
     arg_len: u32,
 ) -> u32 {
-    let env = fenv.data();
+    let env = fenv.data_mut();
 
     let instance = env.self_instance();
     let argbuf_ofs = instance.arg_buffer_offset();
@@ -106,12 +116,16 @@ fn t(
 
             let arg = &arg_buf[..arg_len as usize];
 
+            env.push_callstack(mod_id);
+
             callee.write_argument(arg);
             let ret_len = callee
                 .transact(name, arg.len() as u32)
                 .expect("invalid transaction");
             (ret_len, callee)
         };
+
+        env.pop_callstack();
 
         // copy back result
         callee.read_argument(&mut memory[argbuf_ofs..][..ret_len as usize]);
