@@ -8,7 +8,7 @@ use rkyv::{
     archived_root,
     ser::serializers::{BufferScratch, BufferSerializer, CompositeSerializer},
     ser::Serializer,
-    Archive, Deserialize, Infallible, Serialize,
+    Archive, Archived, Deserialize, Infallible, Serialize,
 };
 
 use crate::{
@@ -56,11 +56,11 @@ mod ext {
             arg_len: u32,
         ) -> u32;
 
-        pub(crate) fn height() -> u32;
-        pub(crate) fn caller() -> u32;
+        pub(crate) fn height();
+        pub(crate) fn caller();
         pub(crate) fn emit(arg_len: u32);
-        pub(crate) fn limit() -> u32;
-        pub(crate) fn spent() -> u32;
+        pub(crate) fn limit();
+        pub(crate) fn spent();
     }
 }
 
@@ -174,10 +174,11 @@ where
 
 /// Return the current height.
 pub fn height() -> u64 {
+    unsafe { ext::height() };
     with_arg_buf(|buf| {
-        let ret_len = unsafe { ext::height() };
-
-        let ret = unsafe { archived_root::<u64>(&buf[..ret_len as usize]) };
+        let ret = unsafe {
+            archived_root::<u64>(&buf[..core::mem::size_of::<Archived<u64>>()])
+        };
         ret.deserialize(&mut Infallible).expect("Infallible")
     })
 }
@@ -186,10 +187,13 @@ pub fn height() -> u64 {
 /// uninitialized if there is no caller - meaning this is the first module
 /// to be called.
 pub fn caller() -> ModuleId {
+    unsafe { ext::caller() };
     with_arg_buf(|buf| {
-        let ret_len = unsafe { ext::caller() };
-        let ret =
-            unsafe { archived_root::<ModuleId>(&buf[..ret_len as usize]) };
+        let ret = unsafe {
+            archived_root::<ModuleId>(
+                &buf[..core::mem::size_of::<Archived<ModuleId>>()],
+            )
+        };
         ret.deserialize(&mut Infallible).expect("Infallible")
     })
 }
@@ -214,17 +218,21 @@ where
 }
 
 pub fn limit() -> u64 {
+    unsafe { ext::limit() };
     with_arg_buf(|buf| {
-        let ret_len = unsafe { ext::limit() };
-        let ret = unsafe { archived_root::<u64>(&buf[..ret_len as usize]) };
+        let ret = unsafe {
+            archived_root::<u64>(&buf[..core::mem::size_of::<Archived<u64>>()])
+        };
         ret.deserialize(&mut Infallible).expect("Infallible")
     })
 }
 
 pub fn spent() -> u64 {
+    unsafe { ext::spent() };
     with_arg_buf(|buf| {
-        let ret_len = unsafe { ext::spent() };
-        let ret = unsafe { archived_root::<u64>(&buf[..ret_len as usize]) };
+        let ret = unsafe {
+            archived_root::<u64>(&buf[..core::mem::size_of::<Archived<u64>>()])
+        };
         ret.deserialize(&mut Infallible).expect("Infallible")
     })
 }

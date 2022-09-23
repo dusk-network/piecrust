@@ -139,7 +139,6 @@ pub fn cc_self() -> Result<(), Error> {
 }
 
 #[test]
-#[ignore]
 pub fn cc_caller() -> Result<(), Error> {
     let mut world = VM::ephemeral()?;
 
@@ -152,12 +151,24 @@ pub fn cc_caller() -> Result<(), Error> {
 }
 
 #[test]
+pub fn cc_caller_uninit() -> Result<(), Error> {
+    let mut world = VM::ephemeral()?;
+
+    let center_id = world.deploy(module_bytecode!("callcenter"))?;
+
+    let caller: ModuleId = world.query(center_id, "return_caller", ())?;
+    assert_eq!(caller, ModuleId::uninitialized());
+
+    Ok(())
+}
+
+#[test]
 pub fn cc_self_id() -> Result<(), Error> {
     let mut world = VM::ephemeral()?;
 
     let center_id = world.deploy(module_bytecode!("callcenter"))?;
 
-    let value: ModuleId = world.query(center_id, "self_id", ())?;
+    let value: ModuleId = world.query(center_id, "return_self_id", ())?;
     assert_eq!(value, center_id);
 
     Ok(())

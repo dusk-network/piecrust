@@ -4,7 +4,10 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
+use std::sync::Arc;
+
 use bytecheck::CheckBytes;
+use parking_lot::RwLock;
 use rand::prelude::*;
 use rkyv::{
     validation::validators::DefaultValidator, Archive, Deserialize, Infallible,
@@ -56,6 +59,7 @@ impl core::fmt::Debug for CommitId {
 pub struct Session {
     vm: VM,
     memory_handler: MemoryHandler,
+    callstack: Arc<RwLock<Vec<ModuleId>>>,
 }
 
 impl Session {
@@ -63,6 +67,7 @@ impl Session {
         Session {
             memory_handler: MemoryHandler::new(vm.clone()),
             vm,
+            callstack: Arc::new(RwLock::new(vec![])),
         }
     }
 
@@ -143,5 +148,26 @@ impl Session {
 
             wrapped
         })
+    }
+
+    pub fn nth_from_top(&self, n: usize) -> ModuleId {
+        let stack = self.callstack.read();
+        let len = stack.len();
+
+        if len > n + 1 {
+            stack[len - (n + 1)]
+        } else {
+            ModuleId::uninitialized()
+        }
+    }
+
+    pub(crate) fn push_callstack(&mut self, id: ModuleId) {
+        let mut s = self.callstack.write();
+        s.push(id);
+    }
+
+    pub(crate) fn pop_callstack(&mut self) {
+        let mut s = self.callstack.write();
+        s.pop();
     }
 }

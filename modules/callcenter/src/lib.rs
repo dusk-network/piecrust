@@ -57,8 +57,12 @@ impl Callcenter {
         uplink::self_id() == id
     }
 
-    pub fn self_id(&self) -> ModuleId {
+    pub fn return_self_id(&self) -> ModuleId {
         uplink::self_id()
+    }
+
+    pub fn return_caller(&self) -> ModuleId {
+        uplink::caller()
     }
 
     pub fn call_self(&self) -> bool {
@@ -93,8 +97,13 @@ unsafe fn call_self(arg_len: u32) -> u32 {
 }
 
 #[no_mangle]
-unsafe fn self_id(arg_len: u32) -> u32 {
-    wrap_query(arg_len, |_: ()| STATE.self_id())
+unsafe fn return_self_id(arg_len: u32) -> u32 {
+    wrap_query(arg_len, |_: ()| STATE.return_self_id())
+}
+
+#[no_mangle]
+unsafe fn return_caller(arg_len: u32) -> u32 {
+    wrap_query(arg_len, |_: ()| STATE.return_caller())
 }
 
 #[no_mangle]
@@ -111,7 +120,7 @@ unsafe fn query_passthrough(arg_len: u32) -> u32 {
 
 #[no_mangle]
 unsafe fn delegate_transaction(arg_len: u32) -> u32 {
-    wrap_query(arg_len, |(mod_id, rt): (ModuleId, RawTransaction)| {
+    wrap_transaction(arg_len, |(mod_id, rt): (ModuleId, RawTransaction)| {
         STATE.delegate_transaction(mod_id, rt)
     })
 }
