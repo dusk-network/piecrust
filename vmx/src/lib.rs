@@ -19,3 +19,7 @@ mod vm;
 
 pub use error::Error;
 pub use vm::VM;
+
+// re-exports
+
+pub use uplink::{RawQuery, RawTransaction};
