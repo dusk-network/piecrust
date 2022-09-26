@@ -239,10 +239,14 @@ pub fn spent() -> u64 {
 
 impl<S> State<S> {
     pub fn transact_raw(
-        &self,
+        &mut self,
         mod_id: ModuleId,
         raw: RawTransaction,
     ) -> RawResult {
+        // Neccesary to avoid ruling out potential memory changes from recursive
+        // calls
+        core::hint::black_box(self);
+
         with_arg_buf(|buf| {
             let bytes = raw.arg_bytes();
             buf[..bytes.len()].copy_from_slice(bytes);
@@ -270,6 +274,10 @@ impl<S> State<S> {
         Ret: Archive,
         Ret::Archived: Deserialize<Ret, Infallible>,
     {
+        // Neccesary to avoid ruling out potential memory changes from recursive
+        // calls
+        core::hint::black_box(self);
+
         let arg_len = with_arg_buf(|buf| {
             let mut sbuf = [0u8; SCRATCH_BUF_BYTES];
             let scratch = BufferScratch::new(&mut sbuf);
