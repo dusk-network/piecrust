@@ -7,7 +7,7 @@
 #![no_std]
 #![feature(core_intrinsics, lang_items, arbitrary_self_types)]
 
-use uplink::{ModuleId, State};
+use uplink::{ModuleId, RawTransaction, State};
 
 #[no_mangle]
 static SELF_ID: ModuleId = ModuleId::uninitialized();
@@ -26,6 +26,11 @@ impl SelfSnapshot {
 
     pub fn set_crossover(&mut self, to: i32) -> i32 {
         let old_val = self.crossover;
+        uplink::debug!(
+            "setting crossover from {:?} to {:?}",
+            self.crossover,
+            to
+        );
         self.crossover = to;
         old_val
     }
@@ -34,14 +39,21 @@ impl SelfSnapshot {
     pub fn self_call_test_a(self: &mut State<Self>, update: i32) -> i32 {
         let old_value = self.crossover;
         let callee = uplink::self_id();
-        let _old: i32 = self.transact(callee, "set_crossover", update);
+        self.transact::<_, i32>(callee, "set_crossover", update);
+
         assert_eq!(self.crossover, update);
         old_value
     }
 
     // updates crossover and returns the old value
-    pub fn self_call_test_b(&mut self) -> i32 {
-        self.set_crossover(self.crossover * 2);
+    pub fn self_call_test_b(
+        self: &mut State<Self>,
+        target: ModuleId,
+        raw_transaction: RawTransaction,
+    ) -> i32 {
+        let co = self.crossover;
+        self.set_crossover(co * 2);
+        self.transact_raw(target, raw_transaction);
         self.crossover
     }
 
@@ -78,5 +90,7 @@ unsafe fn self_call_test_a(arg_len: u32) -> u32 {
 
 #[no_mangle]
 unsafe fn self_call_test_b(arg_len: u32) -> u32 {
-    uplink::wrap_transaction(arg_len, |_: ()| STATE.self_call_test_b())
+    uplink::wrap_transaction(arg_len, |(target, transaction)| {
+        STATE.self_call_test_b(target, transaction)
+    })
 }
