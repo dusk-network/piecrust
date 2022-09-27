@@ -47,7 +47,6 @@ mod ext {
             name_len: u32,
             arg_len: u32,
         ) -> u32;
-        #[allow(unused)]
         pub(crate) fn nq(name: *const u8, name_len: u32, arg_len: u32) -> u32;
         pub(crate) fn t(
             mod_id_ofs: *const u8,
@@ -89,6 +88,34 @@ impl<S> DerefMut for State<S> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.inner
     }
+}
+
+pub fn host_query<Arg, Ret>(name: &str, arg: Arg) -> Ret
+where
+    Arg: for<'a> Serialize<StandardBufSerializer<'a>>,
+    Ret: Archive,
+    Ret::Archived: Deserialize<Ret, Infallible>,
+{
+    let arg_len = with_arg_buf(|buf| {
+        let mut sbuf = [0u8; SCRATCH_BUF_BYTES];
+        let scratch = BufferScratch::new(&mut sbuf);
+        let ser = BufferSerializer::new(buf);
+        let mut composite =
+            CompositeSerializer::new(ser, scratch, rkyv::Infallible);
+        composite.serialize_value(&arg).expect("infallible");
+        composite.pos() as u32
+    });
+
+    let name_ptr = name.as_bytes().as_ptr() as *const u8;
+    let name_len = name.as_bytes().len() as u32;
+
+    let ret_len = unsafe { ext::nq(name_ptr, name_len, arg_len) };
+
+    with_arg_buf(|buf| {
+        let slice = &buf[..ret_len as usize];
+        let ret = unsafe { archived_root::<Ret>(slice) };
+        ret.deserialize(&mut Infallible).expect("Infallible")
+    })
 }
 
 pub fn query<Arg, Ret>(mod_id: ModuleId, name: &str, arg: Arg) -> Ret
@@ -143,33 +170,6 @@ pub fn query_raw(mod_id: ModuleId, raw: RawQuery) -> RawResult {
     crate::debug!("D");
 
     with_arg_buf(|buf| RawResult::new(&buf[..ret_len as usize]))
-}
-
-pub fn native_query<Arg, Ret>(_name: &str, arg: Arg) -> Ret
-where
-    Arg: for<'a> Serialize<StandardBufSerializer<'a>>,
-    Ret: Archive,
-    Ret::Archived: Deserialize<Ret, Infallible>,
-{
-    let _arg_len = with_arg_buf(|buf| {
-        let mut sbuf = [0u8; SCRATCH_BUF_BYTES];
-        let scratch = BufferScratch::new(&mut sbuf);
-        let ser = BufferSerializer::new(buf);
-        let mut composite =
-            CompositeSerializer::new(ser, scratch, rkyv::Infallible);
-
-        composite.serialize_value(&arg).expect("infallible");
-        composite.pos() as u32
-    });
-
-    // let _ret_len: u32 = todo!();
-
-    // with_arg_buf(|buf| {
-    //     let slice = &buf[..ret_len as usize];
-    //     let ret = unsafe { archived_root::<Ret>(slice) };
-    //     ret.deserialize(&mut Infallible).expect("Infallible")
-    // })
-    todo!()
 }
 
 /// Return the current height.
