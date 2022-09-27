@@ -20,7 +20,7 @@ static mut STATE: State<Hoster> = State::new(Hoster);
 
 impl Hoster {
     pub fn hash(&self, num: i32) -> [u8; 32] {
-        uplink::native_query("hash", num)
+        uplink::host_query("hash", num)
     }
 }
 

@@ -4,6 +4,9 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
+mod host;
+pub use host::HostQuery;
+
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -23,6 +26,7 @@ use crate::session::{CommitId, Session};
 use crate::types::MemoryFreshness::*;
 use crate::types::{MemoryFreshness, StandardBufSerializer};
 use crate::util::{commit_id_to_name, module_id_to_name};
+use crate::vm::host::HostQueries;
 use crate::Error::{self, PersistenceError};
 
 #[derive(Debug)]
@@ -48,6 +52,7 @@ impl AsRef<Path> for MemoryPath {
 #[derive(Default)]
 struct VMInner {
     modules: BTreeMap<ModuleId, WrappedModule>,
+    host_queries: HostQueries,
     base_memory_path: PathBuf,
     commit_ids: BTreeMap<ModuleId, CommitId>,
 }
@@ -59,6 +64,7 @@ impl VMInner {
     {
         Self {
             modules: BTreeMap::default(),
+            host_queries: HostQueries::default(),
             base_memory_path: path.into(),
             commit_ids: BTreeMap::default(),
         }
@@ -71,6 +77,7 @@ impl VMInner {
                 .map_err(PersistenceError)?
                 .path()
                 .into(),
+            host_queries: HostQueries::default(),
             commit_ids: BTreeMap::default(),
         })
     }
@@ -95,6 +102,15 @@ impl VM {
         Ok(VM {
             inner: Arc::new(RwLock::new(VMInner::ephemeral()?)),
         })
+    }
+
+    /// Registers a [`HostQuery`] with the given `name`.
+    pub fn register_host_query<Q>(&mut self, name: &'static str, query: Q)
+    where
+        Q: 'static + HostQuery,
+    {
+        let mut guard = self.inner.write();
+        guard.host_queries.insert(name, query);
     }
 
     pub fn module_memory_path(
@@ -183,6 +199,16 @@ impl VM {
     {
         let mut session = Session::new(self.clone());
         session.query(id, method_name, arg)
+    }
+
+    pub(crate) fn host_query(
+        &self,
+        name: &str,
+        buf: &mut [u8],
+        arg_len: u32,
+    ) -> Option<u32> {
+        let guard = self.inner.read();
+        guard.host_queries.call(name, buf, arg_len)
     }
 
     pub fn session(&mut self) -> Session {
