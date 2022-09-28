@@ -10,6 +10,7 @@
 extern crate alloc;
 
 use uplink::{ModuleId, State};
+use alloc::vec::Vec;
 
 pub struct Hoster;
 
@@ -19,8 +20,8 @@ static SELF_ID: ModuleId = ModuleId::uninitialized();
 static mut STATE: State<Hoster> = State::new(Hoster);
 
 impl Hoster {
-    pub fn hash(&self, num: i32) -> [u8; 32] {
-        uplink::host_query("hash", num)
+    pub fn hash(&self, bytes: Vec<u8>) -> [u8; 32] {
+        uplink::host_query("hash", bytes)
     }
 }
 
