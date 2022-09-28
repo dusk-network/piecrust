@@ -4,12 +4,9 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-mod host;
-
-pub use host::HostQuery;
 use std::borrow::Cow;
-
 use std::collections::BTreeMap;
+use std::fmt::{self, Debug, Formatter};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -28,7 +25,6 @@ use crate::session::{CommitId, Session};
 use crate::types::MemoryFreshness::*;
 use crate::types::{MemoryFreshness, StandardBufSerializer};
 use crate::util::{commit_id_to_name, module_id_to_name};
-use crate::vm::host::HostQueries;
 use crate::Error::{self, PersistenceError};
 
 #[derive(Debug)]
@@ -218,3 +214,37 @@ impl VM {
         Session::new(self.clone())
     }
 }
+
+#[derive(Default)]
+pub struct HostQueries {
+    map: BTreeMap<Cow<'static, str>, Box<dyn HostQuery>>,
+}
+
+impl Debug for HostQueries {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.debug_list().entries(self.map.keys()).finish()
+    }
+}
+
+impl HostQueries {
+    pub fn insert<Q, S>(&mut self, name: S, query: Q)
+    where
+        Q: 'static + HostQuery,
+        S: Into<Cow<'static, str>>,
+    {
+        self.map.insert(name.into(), Box::new(query));
+    }
+
+    pub fn call(&self, name: &str, buf: &mut [u8], len: u32) -> Option<u32> {
+        self.map.get(name).map(|host_query| host_query(buf, len))
+    }
+}
+
+/// A query executable on the host.
+///
+/// The buffer containing the argument the module used to call the query
+/// together with its length are passed as arguments to the function, and should
+/// be processed first. Once this is done, the implementor should emplace the
+/// return of the query in the same buffer, and return its length.
+pub trait HostQuery: Send + Sync + Fn(&mut [u8], u32) -> u32 {}
+impl<F> HostQuery for F where F: Send + Sync + Fn(&mut [u8], u32) -> u32 {}
