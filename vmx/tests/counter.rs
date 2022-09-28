@@ -56,7 +56,7 @@ fn counter_read_write_session() -> Result<(), Error> {
 
     other_session.transact::<(), ()>(id, "increment", ())?;
 
-    let _commit_id = vm.commit(&id)?;
+    let _commit_id = other_session.commit(&id)?;
 
     // session committed, new value accessible
 
@@ -77,7 +77,7 @@ fn counter_commit_restore() -> Result<(), Error> {
 
     session_1.transact::<(), ()>(id, "increment", ())?;
 
-    let commit_1 = vm.commit(&id)?;
+    let commit_1 = session_1.commit(&id)?;
 
     // commit 2
     let mut session_2 = vm.session();
@@ -87,21 +87,25 @@ fn counter_commit_restore() -> Result<(), Error> {
     session_2.transact::<(), ()>(id, "increment", ())?;
     session_2.transact::<(), ()>(id, "increment", ())?;
 
-    let commit_2 = vm.commit(&id)?;
+    let commit_2 = session_2.commit(&id)?;
 
     assert_eq!(session_2.query::<(), i64>(id, "read_value", ())?, 0xfe);
 
     // restore commit 1
 
-    vm.restore(&id, &commit_1)?;
+    let mut session_3 = vm.session();
 
-    assert_eq!(session_1.query::<(), i64>(id, "read_value", ())?, 0xfd);
+    session_3.restore(&id, &commit_1)?;
+
+    assert_eq!(session_3.query::<(), i64>(id, "read_value", ())?, 0xfd);
 
     // restore commit 2
 
-    vm.restore(&id, &commit_2)?;
+    let mut session_4 = vm.session();
 
-    assert_eq!(session_1.query::<(), i64>(id, "read_value", ())?, 0xfe);
+    session_4.restore(&id, &commit_2)?;
+
+    assert_eq!(session_4.query::<(), i64>(id, "read_value", ())?, 0xfe);
 
     Ok(())
 }

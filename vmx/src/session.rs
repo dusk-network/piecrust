@@ -21,7 +21,7 @@ use crate::memory_handler::MemoryHandler;
 use crate::types::MemoryFreshness::*;
 use crate::types::StandardBufSerializer;
 use crate::vm::VM;
-use crate::Error;
+use crate::Error::{self, CommitError};
 
 pub const COMMIT_ID_BYTES: usize = 4;
 
@@ -176,5 +176,28 @@ impl Session {
     pub(crate) fn pop_callstack(&mut self) {
         let mut s = self.callstack.write();
         s.pop();
+    }
+
+    pub fn commit(&mut self, module_id: &ModuleId) -> Result<CommitId, Error> {
+        let commit_id = CommitId::new();
+        let (source_path, _) = self.vm.memory_path(module_id);
+        let target_path = self.vm.path_to_commit(module_id, &commit_id);
+        std::fs::copy(source_path.as_ref(), target_path.as_ref())
+            .map_err(CommitError)?;
+        self.vm.set_current_commit(module_id, &commit_id);
+        Ok(commit_id)
+    }
+
+    pub fn restore(
+        &mut self,
+        module_id: &ModuleId,
+        commit_id: &CommitId,
+    ) -> Result<(), Error> {
+        let source_path = self.vm.path_to_commit(module_id, commit_id);
+        let (target_path, _) = self.vm.memory_path(module_id);
+        std::fs::copy(source_path.as_ref(), target_path.as_ref())
+            .map_err(CommitError)?;
+        self.vm.set_current_commit(module_id, commit_id);
+        Ok(())
     }
 }

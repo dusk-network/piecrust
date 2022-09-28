@@ -25,7 +25,7 @@ use crate::session::{CommitId, Session};
 use crate::types::MemoryFreshness::*;
 use crate::types::{MemoryFreshness, StandardBufSerializer};
 use crate::util::{commit_id_to_name, module_id_to_name};
-use crate::Error::{self, CommitError, PersistenceError};
+use crate::Error::{self, PersistenceError};
 
 #[derive(Debug)]
 pub struct MemoryPath {
@@ -136,7 +136,7 @@ impl VM {
         commit.map(|commit_id| self.path_to_commit(module_id, commit_id))
     }
 
-    fn path_to_commit(
+    pub fn path_to_commit(
         &self,
         module_id: &ModuleId,
         commit_id: &CommitId,
@@ -150,17 +150,7 @@ impl VM {
         MemoryPath::new(path)
     }
 
-    pub fn commit(&mut self, module_id: &ModuleId) -> Result<CommitId, Error> {
-        let commit_id = CommitId::new();
-        let (source_path, _) = self.memory_path(module_id);
-        let target_path = self.path_to_commit(module_id, &commit_id);
-        std::fs::copy(source_path.as_ref(), target_path.as_ref())
-            .map_err(CommitError)?;
-        self.set_current_commit(module_id, &commit_id);
-        Ok(commit_id)
-    }
-
-    fn set_current_commit(
+    pub fn set_current_commit(
         &mut self,
         module_id: &ModuleId,
         commit_id: &CommitId,
@@ -169,19 +159,6 @@ impl VM {
             .write()
             .current_commit_ids
             .insert(*module_id, *commit_id);
-    }
-
-    pub fn restore(
-        &mut self,
-        module_id: &ModuleId,
-        commit_id: &CommitId,
-    ) -> Result<(), Error> {
-        let source_path = self.path_to_commit(module_id, commit_id);
-        let (target_path, _) = self.memory_path(module_id);
-        std::fs::copy(source_path.as_ref(), target_path.as_ref())
-            .map_err(CommitError)?;
-        self.set_current_commit(module_id, commit_id);
-        Ok(())
     }
 
     pub fn deploy(&mut self, bytecode: &[u8]) -> Result<ModuleId, Error> {
