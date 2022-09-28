@@ -150,6 +150,15 @@ impl Session {
         })
     }
 
+    pub(crate) fn host_query(
+        &self,
+        name: &str,
+        buf: &mut [u8],
+        arg_len: u32,
+    ) -> Option<u32> {
+        self.vm.host_query(name, buf, arg_len)
+    }
+
     pub fn nth_from_top(&self, n: usize) -> ModuleId {
         let stack = self.callstack.read();
         let len = stack.len();

@@ -18,7 +18,7 @@ mod util;
 mod vm;
 
 pub use error::Error;
-pub use vm::VM;
+pub use vm::{HostQuery, VM};
 
 // re-exports
 
