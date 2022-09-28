@@ -18,7 +18,7 @@ modules: ## Build WASM modules
 	 	          -o target/stripped/%
 
 test: modules assert-counter-module-small ## Run the tests
-	cargo test \
+	@cargo test \
 	  --manifest-path=./vmx/Cargo.toml \
 	  --color=always
 
