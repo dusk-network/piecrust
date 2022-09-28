@@ -150,10 +150,7 @@ impl VM {
         MemoryPath::new(path)
     }
 
-    pub fn commit(
-        &mut self,
-        module_id: &ModuleId,
-    ) -> Result<CommitId, Error> {
+    pub fn commit(&mut self, module_id: &ModuleId) -> Result<CommitId, Error> {
         let commit_id = CommitId::new();
         let (source_path, _) = self.memory_path(module_id);
         let target_path = self.path_to_commit(module_id, &commit_id);
