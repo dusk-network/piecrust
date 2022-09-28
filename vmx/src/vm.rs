@@ -5,7 +5,9 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 mod host;
+
 pub use host::HostQuery;
+use std::borrow::Cow;
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -105,9 +107,10 @@ impl VM {
     }
 
     /// Registers a [`HostQuery`] with the given `name`.
-    pub fn register_host_query<Q>(&mut self, name: &'static str, query: Q)
+    pub fn register_host_query<Q, S>(&mut self, name: S, query: Q)
     where
         Q: 'static + HostQuery,
+        S: Into<Cow<'static, str>>,
     {
         let mut guard = self.inner.write();
         guard.host_queries.insert(name, query);

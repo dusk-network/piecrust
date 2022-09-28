@@ -4,12 +4,13 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
+use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::fmt::{self, Debug, Formatter};
 
 #[derive(Default)]
 pub struct HostQueries {
-    map: BTreeMap<&'static str, Box<dyn HostQuery>>,
+    map: BTreeMap<Cow<'static, str>, Box<dyn HostQuery>>,
 }
 
 impl Debug for HostQueries {
@@ -19,11 +20,12 @@ impl Debug for HostQueries {
 }
 
 impl HostQueries {
-    pub fn insert<Q>(&mut self, name: &'static str, query: Q)
+    pub fn insert<Q, S>(&mut self, name: S, query: Q)
     where
         Q: 'static + HostQuery,
+        S: Into<Cow<'static, str>>,
     {
-        self.map.insert(name, Box::new(query));
+        self.map.insert(name.into(), Box::new(query));
     }
 
     pub fn call(&self, name: &str, buf: &mut [u8], len: u32) -> Option<u32> {
