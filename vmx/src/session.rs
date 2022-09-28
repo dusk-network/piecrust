@@ -21,7 +21,7 @@ use crate::memory_handler::MemoryHandler;
 use crate::types::MemoryFreshness::*;
 use crate::types::StandardBufSerializer;
 use crate::vm::VM;
-use crate::Error::{self, CommitError};
+use crate::Error;
 
 pub const COMMIT_ID_BYTES: usize = 4;
 
@@ -111,15 +111,6 @@ impl Session {
         instance.read_from_arg_buffer(ret_len)
     }
 
-    pub fn commit(&mut self, id: &ModuleId) -> Result<CommitId, Error> {
-        let commit_id = CommitId::new();
-        let (source_path, _) = self.vm.module_memory_path(id);
-        let target_path = self.vm.commit(id, &commit_id);
-        std::fs::copy(source_path.as_ref(), target_path.as_ref())
-            .map_err(CommitError)?;
-        Ok(commit_id)
-    }
-
     pub(crate) fn instance(&self, mod_id: ModuleId) -> WrappedInstance {
         self.vm.with_module(mod_id, |module| {
             let memory = self
@@ -146,6 +137,13 @@ impl Session {
                 memory.set_freshness(NotFresh);
             }
 
+            // if current commit exists, use it as memory image
+            if let Some(commit_path) = self.vm.path_to_current_commit(&mod_id) {
+                let (target_path, _) = self.vm.memory_path(&mod_id);
+                std::fs::copy(commit_path.as_ref(), target_path.as_ref())
+                    .expect("commit and memory paths exist");
+                memory.set_freshness(NotFresh)
+            }
             wrapped
         })
     }

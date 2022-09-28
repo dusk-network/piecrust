@@ -25,7 +25,7 @@ use crate::session::{CommitId, Session};
 use crate::types::MemoryFreshness::*;
 use crate::types::{MemoryFreshness, StandardBufSerializer};
 use crate::util::{commit_id_to_name, module_id_to_name};
-use crate::Error::{self, PersistenceError};
+use crate::Error::{self, CommitError, PersistenceError};
 
 #[derive(Debug)]
 pub struct MemoryPath {
@@ -52,7 +52,7 @@ struct VMInner {
     modules: BTreeMap<ModuleId, WrappedModule>,
     host_queries: HostQueries,
     base_memory_path: PathBuf,
-    commit_ids: BTreeMap<ModuleId, CommitId>,
+    current_commit_ids: BTreeMap<ModuleId, CommitId>,
 }
 
 impl VMInner {
@@ -64,7 +64,7 @@ impl VMInner {
             modules: BTreeMap::default(),
             host_queries: HostQueries::default(),
             base_memory_path: path.into(),
-            commit_ids: BTreeMap::default(),
+            current_commit_ids: BTreeMap::default(),
         }
     }
 
@@ -76,7 +76,7 @@ impl VMInner {
                 .path()
                 .into(),
             host_queries: HostQueries::default(),
-            commit_ids: BTreeMap::default(),
+            current_commit_ids: BTreeMap::default(),
         })
     }
 }
@@ -112,43 +112,39 @@ impl VM {
         guard.host_queries.insert(name, query);
     }
 
-    pub fn module_memory_path(
+    pub fn memory_path(
         &self,
         module_id: &ModuleId,
     ) -> (MemoryPath, MemoryFreshness) {
-        match self.memory_path_for_commit(module_id) {
-            Some(path) => (path, NotFresh),
-            None => {
-                let path = MemoryPath::new(
-                    self.inner
-                        .read()
-                        .base_memory_path
-                        .join(module_id_to_name(*module_id)),
-                );
-                (path, Fresh)
-            }
-        }
+        (
+            MemoryPath::new(
+                self.inner
+                    .read()
+                    .base_memory_path
+                    .join(module_id_to_name(*module_id)),
+            ),
+            Fresh,
+        )
     }
 
-    fn memory_path_for_commit(
+    pub fn path_to_current_commit(
         &self,
         module_id: &ModuleId,
     ) -> Option<MemoryPath> {
         let guard = self.inner.read();
-        let commit = guard.commit_ids.get(module_id);
-        commit.map(|commit_id| {
-            self.do_memory_path_for_commit(module_id, commit_id)
-        })
+        let commit = guard.current_commit_ids.get(module_id);
+        commit.map(|commit_id| self.path_to_commit(module_id, commit_id))
     }
 
-    fn do_memory_path_for_commit(
+    fn path_to_commit(
         &self,
         module_id: &ModuleId,
         commit_id: &CommitId,
     ) -> MemoryPath {
+        const SEPARATOR: char = '_';
         let commit_id_name = &*commit_id_to_name(*commit_id);
         let mut name = module_id_to_name(*module_id);
-        name.push('_');
+        name.push(SEPARATOR);
         name.push_str(commit_id_name);
         let path = self.inner.read().base_memory_path.join(name);
         MemoryPath::new(path)
@@ -157,10 +153,38 @@ impl VM {
     pub fn commit(
         &mut self,
         module_id: &ModuleId,
+    ) -> Result<CommitId, Error> {
+        let commit_id = CommitId::new();
+        let (source_path, _) = self.memory_path(module_id);
+        let target_path = self.path_to_commit(module_id, &commit_id);
+        std::fs::copy(source_path.as_ref(), target_path.as_ref())
+            .map_err(CommitError)?;
+        self.set_current_commit(module_id, &commit_id);
+        Ok(commit_id)
+    }
+
+    fn set_current_commit(
+        &mut self,
+        module_id: &ModuleId,
         commit_id: &CommitId,
-    ) -> MemoryPath {
-        self.inner.write().commit_ids.insert(*module_id, *commit_id);
-        self.do_memory_path_for_commit(module_id, commit_id)
+    ) {
+        self.inner
+            .write()
+            .current_commit_ids
+            .insert(*module_id, *commit_id);
+    }
+
+    pub fn restore(
+        &mut self,
+        module_id: &ModuleId,
+        commit_id: &CommitId,
+    ) -> Result<(), Error> {
+        let source_path = self.path_to_commit(module_id, commit_id);
+        let (target_path, _) = self.memory_path(module_id);
+        std::fs::copy(source_path.as_ref(), target_path.as_ref())
+            .map_err(CommitError)?;
+        self.set_current_commit(module_id, commit_id);
+        Ok(())
     }
 
     pub fn deploy(&mut self, bytecode: &[u8]) -> Result<ModuleId, Error> {

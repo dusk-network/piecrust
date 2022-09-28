@@ -39,7 +39,7 @@ impl MemoryHandler {
         }
 
         self.vm.with_module(mod_id, |module| {
-            let (path, fresh) = self.vm.module_memory_path(&mod_id);
+            let (path, fresh) = self.vm.memory_path(&mod_id);
             let result = Linear::new(
                 Some(path),
                 MEMORY_PAGES * WASM_PAGE_SIZE,
