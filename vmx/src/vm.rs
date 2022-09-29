@@ -196,7 +196,7 @@ impl VM {
         Ret::Archived: Deserialize<Ret, Infallible>
             + for<'b> CheckBytes<DefaultValidator<'b>>,
     {
-        let mut session = Session::new(self.clone());
+        let session = Session::new(self.clone());
         session.query(id, method_name, arg)
     }
 

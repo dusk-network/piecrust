@@ -7,6 +7,7 @@
 #[macro_use]
 mod bytecode_macro;
 mod error;
+mod event;
 mod imports;
 mod instance;
 mod linear;
