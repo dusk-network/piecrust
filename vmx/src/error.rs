@@ -9,6 +9,7 @@
 use rkyv::ser::serializers::{
     BufferSerializerError, CompositeSerializerError, FixedSizeScratchError,
 };
+use std::borrow::Cow;
 
 pub type Compo = CompositeSerializerError<
     BufferSerializerError,
@@ -29,7 +30,8 @@ pub enum Error {
     CompositeSerializerError(Box<Compo>),
     PersistenceError(std::io::Error),
     CommitError(std::io::Error),
-    RestoreError(String),
+    RestoreError(std::io::Error),
+    SessionError(String),
     MemorySetupError(std::io::Error),
     RegionError(region::Error),
     ValidationError,

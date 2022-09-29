@@ -8,11 +8,11 @@ use std::sync::Arc;
 
 use bytecheck::CheckBytes;
 use parking_lot::RwLock;
-use rand::prelude::*;
 use rkyv::{
     validation::validators::DefaultValidator, Archive, Deserialize, Infallible,
     Serialize,
 };
+use std::collections::BTreeMap;
 
 use uplink::ModuleId;
 
@@ -21,45 +21,19 @@ use crate::memory_handler::MemoryHandler;
 use crate::types::MemoryFreshness::*;
 use crate::types::StandardBufSerializer;
 use crate::vm::VM;
-use crate::Error::{self, CommitError};
+use crate::Error::{self, CommitError, RestoreError, SessionError};
+use crate::commit::{SessionCommits, SessionCommitId, SessionCommit, ModuleCommitId};
+use crate::vm::MemoryPath;
+use crate::util::{commit_id_to_name, module_id_to_name};
 
-pub const COMMIT_ID_BYTES: usize = 4;
-
-#[derive(Clone, Copy, PartialOrd, Ord, PartialEq, Eq)]
-pub struct CommitId([u8; COMMIT_ID_BYTES]);
-
-impl CommitId {
-    pub fn new() -> CommitId {
-        CommitId(thread_rng().gen::<[u8; COMMIT_ID_BYTES]>())
-    }
-    pub fn as_bytes(&self) -> &[u8] {
-        &self.0[..]
-    }
-}
-
-impl Default for CommitId {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl core::fmt::Debug for CommitId {
-    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        if f.alternate() {
-            write!(f, "0x")?
-        }
-        for byte in self.0 {
-            write!(f, "{:02x}", &byte)?
-        }
-        Ok(())
-    }
-}
 
 #[derive(Clone)]
 pub struct Session {
     vm: VM,
     memory_handler: MemoryHandler,
     callstack: Arc<RwLock<Vec<ModuleId>>>,
+    current_commit_ids: BTreeMap<ModuleId, ModuleCommitId>,
+    commits: SessionCommits,
 }
 
 impl Session {
@@ -68,6 +42,8 @@ impl Session {
             memory_handler: MemoryHandler::new(vm.clone()),
             vm,
             callstack: Arc::new(RwLock::new(vec![])),
+            current_commit_ids: BTreeMap::default(),
+            commits: SessionCommits::new(),
         }
     }
 
@@ -138,7 +114,7 @@ impl Session {
             }
 
             // if current commit exists, use it as memory image
-            if let Some(commit_path) = self.vm.path_to_current_commit(&mod_id) {
+            if let Some(commit_path) = self.path_to_current_commit(&mod_id) {
                 let (target_path, _) = self.vm.memory_path(&mod_id);
                 std::fs::copy(commit_path.as_ref(), target_path.as_ref())
                     .expect("commit and memory paths exist");
@@ -178,26 +154,55 @@ impl Session {
         s.pop();
     }
 
-    pub fn commit(&mut self, module_id: &ModuleId) -> Result<CommitId, Error> {
-        let commit_id = CommitId::new();
-        let (source_path, _) = self.vm.memory_path(module_id);
-        let target_path = self.vm.path_to_commit(module_id, &commit_id);
-        std::fs::copy(source_path.as_ref(), target_path.as_ref())
-            .map_err(CommitError)?;
-        self.vm.set_current_commit(module_id, &commit_id);
-        Ok(commit_id)
+    pub fn commit(&mut self) -> Result<SessionCommitId, Error> {
+        let mut session_commit = SessionCommit::new();
+        let guard = self.callstack.read();
+        for module_id in guard.iter() {
+            let module_commit_id = ModuleCommitId::new();
+            let (source_path, _) = self.vm.memory_path(module_id);
+            let target_path = self.vm.path_to_commit(module_id, &module_commit_id);
+            std::fs::copy(source_path.as_ref(), target_path.as_ref())
+                .map_err(CommitError)?;
+            self.set_current_commit(module_id, &module_commit_id);
+            session_commit.add(module_id, &module_commit_id);
+        }
+        self.commits.add(session_commit);
+        Ok(session_commit.commit_id())
     }
 
     pub fn restore(
         &mut self,
-        module_id: &ModuleId,
-        commit_id: &CommitId,
+        session_commit_id: &SessionCommitId
     ) -> Result<(), Error> {
-        let source_path = self.vm.path_to_commit(module_id, commit_id);
-        let (target_path, _) = self.vm.memory_path(module_id);
-        std::fs::copy(source_path.as_ref(), target_path.as_ref())
-            .map_err(CommitError)?;
-        self.vm.set_current_commit(module_id, commit_id);
-        Ok(())
+        match self.commits.get(&session_commit_id) {
+            Some(session_commit) => {
+                for (module_id, module_commit_id) in session_commit.ids().iter() {
+                    let source_path = self.vm.path_to_commit(module_id, module_commit_id);
+                    let (target_path, _) = self.vm.memory_path(module_id);
+                    std::fs::copy(source_path.as_ref(), target_path.as_ref())
+                        .map_err(RestoreError)?;
+                    self.set_current_commit(module_id, module_commit_id);
+                }
+                Ok(())
+            },
+            None => Err(SessionError("unknown session commit id".to_string())),
+        }
+    }
+
+    pub fn path_to_current_commit(
+        &self,
+        module_id: &ModuleId,
+    ) -> Option<MemoryPath> {
+        let commit = self.current_commit_ids.get(module_id);
+        commit.map(|commit_id| self.vm.path_to_commit(module_id, commit_id))
+    }
+
+    pub fn set_current_commit(
+        &mut self,
+        module_id: &ModuleId,
+        module_commit_id: &ModuleCommitId,
+    ) {
+        self.current_commit_ids
+            .insert(*module_id, *module_commit_id);
     }
 }
