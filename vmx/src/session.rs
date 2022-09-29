@@ -32,7 +32,7 @@ pub struct Session {
     vm: VM,
     memory_handler: MemoryHandler,
     callstack: Arc<RwLock<Vec<ModuleId>>>,
-    current_commit_ids: BTreeMap<ModuleId, ModuleCommitId>,
+    current_commit_id: Option<SessionCommitId>,
     commits: SessionCommits,
 }
 
@@ -42,7 +42,7 @@ impl Session {
             memory_handler: MemoryHandler::new(vm.clone()),
             vm,
             callstack: Arc::new(RwLock::new(vec![])),
-            current_commit_ids: BTreeMap::default(),
+            current_commit_id: None,
             commits: SessionCommits::new(),
         }
     }
@@ -156,18 +156,21 @@ impl Session {
 
     pub fn commit(&mut self) -> Result<SessionCommitId, Error> {
         let mut session_commit = SessionCommit::new();
-        let guard = self.callstack.read();
-        for module_id in guard.iter() {
-            let module_commit_id = ModuleCommitId::new();
-            let (source_path, _) = self.vm.memory_path(module_id);
-            let target_path = self.vm.path_to_commit(module_id, &module_commit_id);
-            std::fs::copy(source_path.as_ref(), target_path.as_ref())
-                .map_err(CommitError)?;
-            self.set_current_commit(module_id, &module_commit_id);
-            session_commit.add(module_id, &module_commit_id);
+        let session_commit_id = session_commit.commit_id();
+        {
+            let guard = self.callstack.read();
+            for module_id in guard.iter() {
+                let module_commit_id = ModuleCommitId::new();
+                let (source_path, _) = self.vm.memory_path(module_id);
+                let target_path = self.vm.path_to_commit(module_id, &module_commit_id);
+                std::fs::copy(source_path.as_ref(), target_path.as_ref())
+                    .map_err(CommitError)?;
+                session_commit.add(module_id, &module_commit_id);
+            }
         }
+        self.set_current_commit(&session_commit.commit_id());
         self.commits.add(session_commit);
-        Ok(session_commit.commit_id())
+        Ok(session_commit_id)
     }
 
     pub fn restore(
@@ -181,28 +184,34 @@ impl Session {
                     let (target_path, _) = self.vm.memory_path(module_id);
                     std::fs::copy(source_path.as_ref(), target_path.as_ref())
                         .map_err(RestoreError)?;
-                    self.set_current_commit(module_id, module_commit_id);
                 }
+                self.set_current_commit(session_commit_id);
                 Ok(())
             },
             None => Err(SessionError("unknown session commit id".to_string())),
         }
     }
 
+    // todo: refactor this method
     pub fn path_to_current_commit(
         &self,
         module_id: &ModuleId,
     ) -> Option<MemoryPath> {
-        let commit = self.current_commit_ids.get(module_id);
-        commit.map(|commit_id| self.vm.path_to_commit(module_id, commit_id))
+        if self.current_commit_id.is_none(){
+            return None;
+        }
+        if let Some(session_commit_id) = self.current_commit_id {
+            if let Some(session_commit) = self.commits.get(&session_commit_id) {
+                return session_commit.get(module_id).map(|module_commit_id|self.vm.path_to_commit(module_id, module_commit_id));
+            }
+        }
+        None
     }
 
     pub fn set_current_commit(
         &mut self,
-        module_id: &ModuleId,
-        module_commit_id: &ModuleCommitId,
+        session_commit_id: &SessionCommitId,
     ) {
-        self.current_commit_ids
-            .insert(*module_id, *module_commit_id);
+        self.current_commit_id = Some(*session_commit_id);
     }
 }

@@ -102,6 +102,10 @@ impl SessionCommit {
     pub fn ids(&self) -> &BTreeMap<ModuleId, ModuleCommitId> {
         &self.ids
     }
+
+    pub fn get(&self, module_id: &ModuleId) -> Option<&ModuleCommitId>{
+        self.ids.get(module_id)
+    }
 }
 
 #[derive(Clone, PartialOrd, Ord, PartialEq, Eq)]
