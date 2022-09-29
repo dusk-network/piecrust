@@ -17,6 +17,7 @@ use rkyv::{
 use uplink::ModuleId;
 
 use crate::commit::{CommitId, ModuleCommitId, SessionCommit};
+use crate::event::Event;
 use crate::instance::WrappedInstance;
 use crate::memory_handler::MemoryHandler;
 use crate::memory_path::MemoryPath;
@@ -30,6 +31,8 @@ pub struct Session {
     vm: VM,
     memory_handler: MemoryHandler,
     callstack: Arc<RwLock<Vec<ModuleId>>>,
+    debug: Arc<RwLock<Vec<String>>>,
+    events: Arc<RwLock<Vec<Event>>>,
 }
 
 impl Session {
@@ -38,11 +41,13 @@ impl Session {
             memory_handler: MemoryHandler::new(vm.clone()),
             vm,
             callstack: Arc::new(RwLock::new(vec![])),
+            debug: Arc::new(RwLock::new(vec![])),
+            events: Arc::new(RwLock::new(vec![])),
         }
     }
 
     pub fn query<Arg, Ret>(
-        &mut self,
+        &self,
         id: ModuleId,
         method_name: &str,
         arg: Arg,
@@ -135,12 +140,12 @@ impl Session {
         }
     }
 
-    pub(crate) fn push_callstack(&mut self, id: ModuleId) {
+    pub(crate) fn push_callstack(&self, id: ModuleId) {
         let mut s = self.callstack.write();
         s.push(id);
     }
 
-    pub(crate) fn pop_callstack(&mut self) {
+    pub(crate) fn pop_callstack(&self) {
         let mut s = self.callstack.write();
         s.pop();
     }
@@ -181,5 +186,24 @@ impl Session {
     ) -> Option<MemoryPath> {
         let path = self.vm.path_to_module_last_commit(module_id);
         Some(path).filter(|p| p.as_ref().exists())
+    }
+
+    pub(crate) fn register_debug<M: Into<String>>(&self, msg: M) {
+        self.debug.write().push(msg.into());
+    }
+
+    pub fn take_events(&self) -> Vec<Event> {
+        core::mem::take(&mut *self.events.write())
+    }
+
+    pub fn with_debug<C, R>(&self, c: C) -> R
+    where
+        C: FnOnce(&[String]) -> R,
+    {
+        c(&self.debug.read())
+    }
+
+    pub fn set_meta<V>(&self, _name: &str, _value: V) {
+        todo!()
     }
 }

@@ -8,6 +8,7 @@
 mod bytecode_macro;
 mod commit;
 mod error;
+mod event;
 mod imports;
 mod instance;
 mod linear;

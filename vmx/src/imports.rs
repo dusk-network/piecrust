@@ -162,9 +162,11 @@ fn host_debug(fenv: FunctionEnvMut<Env>, msg_ofs: i32, msg_len: u32) {
 
     env.self_instance().with_memory(|mem| {
         let slice = &mem[msg_ofs as usize..][..msg_len as usize];
-        println!(
-            "MODULE DEBUG {:?}",
-            std::str::from_utf8(slice).expect("Invalid debug string")
-        )
+
+        let msg = std::str::from_utf8(slice).expect("Invalid debug string");
+
+        env.register_debug(msg);
+
+        println!("MODULE DEBUG {:?}", msg)
     })
 }
