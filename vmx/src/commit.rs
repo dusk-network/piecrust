@@ -136,3 +136,9 @@ impl SessionCommits {
         self.0.get(session_commit_id)
     }
 }
+
+impl Default for SessionCommits {
+    fn default() -> Self {
+        Self::new()
+    }
+}

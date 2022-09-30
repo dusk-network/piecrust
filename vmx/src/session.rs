@@ -31,7 +31,6 @@ pub struct Session {
     memory_handler: MemoryHandler,
     callstack: Arc<RwLock<Vec<ModuleId>>>,
     current_commit_id: Option<SessionCommitId>,
-    commits: SessionCommits,
 }
 
 impl Session {
@@ -41,7 +40,6 @@ impl Session {
             vm,
             callstack: Arc::new(RwLock::new(vec![])),
             current_commit_id: None,
-            commits: SessionCommits::new(),
         }
     }
 
@@ -166,7 +164,7 @@ impl Session {
             session_commit.add(module_id, &module_commit_id);
         }
         self.set_current_commit(&session_commit.commit_id());
-        self.commits.add(session_commit);
+        self.vm.add_session_commit(session_commit);
         Ok(session_commit_id)
     }
 
@@ -174,7 +172,7 @@ impl Session {
         &mut self,
         session_commit_id: &SessionCommitId
     ) -> Result<(), Error> {
-        match self.commits.get_session_commit(&session_commit_id) {
+        match self.vm.get_session_commit(&session_commit_id) {
             Some(session_commit) => {
                 for (module_id, module_commit_id) in session_commit.ids().iter() {
                     let source_path = self.vm.path_to_commit(module_id, module_commit_id);
@@ -198,7 +196,7 @@ impl Session {
             return None;
         }
         if let Some(session_commit_id) = self.current_commit_id {
-            if let Some(session_commit) = self.commits.get_session_commit(&session_commit_id) {
+            if let Some(session_commit) = self.vm.get_session_commit(&session_commit_id) {
                 return session_commit.get(module_id).map(|module_commit_id|self.vm.path_to_commit(module_id, module_commit_id));
             }
         }

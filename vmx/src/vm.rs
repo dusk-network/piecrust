@@ -26,7 +26,7 @@ use crate::types::MemoryFreshness::*;
 use crate::types::{MemoryFreshness, StandardBufSerializer};
 use crate::util::{commit_id_to_name, module_id_to_name};
 use crate::Error::{self, PersistenceError};
-use crate::commit::ModuleCommitId;
+use crate::commit::{SessionCommits, SessionCommitId, SessionCommit, ModuleCommitId};
 
 #[derive(Debug)]
 pub struct MemoryPath {
@@ -53,6 +53,7 @@ struct VMInner {
     modules: BTreeMap<ModuleId, WrappedModule>,
     host_queries: HostQueries,
     base_memory_path: PathBuf,
+    commits: SessionCommits,
 }
 
 impl VMInner {
@@ -64,6 +65,7 @@ impl VMInner {
             modules: BTreeMap::default(),
             host_queries: HostQueries::default(),
             base_memory_path: path.into(),
+            commits: SessionCommits::new(),
         }
     }
 
@@ -75,6 +77,7 @@ impl VMInner {
                 .path()
                 .into(),
             host_queries: HostQueries::default(),
+            commits: SessionCommits::new(),
         })
     }
 }
@@ -86,8 +89,8 @@ pub struct VM {
 
 impl VM {
     pub fn new<P: AsRef<Path>>(path: P) -> Self
-    where
-        P: Into<PathBuf>,
+        where
+            P: Into<PathBuf>,
     {
         VM {
             inner: Arc::new(RwLock::new(VMInner::new(path))),
@@ -102,9 +105,9 @@ impl VM {
 
     /// Registers a [`HostQuery`] with the given `name`.
     pub fn register_host_query<Q, S>(&mut self, name: S, query: Q)
-    where
-        Q: 'static + HostQuery,
-        S: Into<Cow<'static, str>>,
+        where
+            Q: 'static + HostQuery,
+            S: Into<Cow<'static, str>>,
     {
         let mut guard = self.inner.write();
         guard.host_queries.insert(name, query);
@@ -151,8 +154,8 @@ impl VM {
     }
 
     pub fn with_module<F, R>(&self, id: ModuleId, closure: F) -> R
-    where
-        F: FnOnce(&WrappedModule) -> R,
+        where
+            F: FnOnce(&WrappedModule) -> R,
     {
         let guard = self.inner.read();
         let wrapped = guard.modules.get(&id).expect("invalid module");
@@ -166,10 +169,10 @@ impl VM {
         method_name: &str,
         arg: Arg,
     ) -> Result<Ret, Error>
-    where
-        Arg: for<'b> Serialize<StandardBufSerializer<'b>>,
-        Ret: Archive,
-        Ret::Archived: Deserialize<Ret, Infallible>
+        where
+            Arg: for<'b> Serialize<StandardBufSerializer<'b>>,
+            Ret: Archive,
+            Ret::Archived: Deserialize<Ret, Infallible>
             + for<'b> CheckBytes<DefaultValidator<'b>>,
     {
         let mut session = Session::new(self.clone());
@@ -188,6 +191,15 @@ impl VM {
 
     pub fn session(&mut self) -> Session {
         Session::new(self.clone())
+    }
+
+    pub fn add_session_commit(&mut self, session_commit: SessionCommit) {
+        &mut self.inner.write().commits.add(session_commit);
+    }
+
+    // todo: remove clone
+    pub fn get_session_commit(&self, session_commit_id: &SessionCommitId) -> Option<SessionCommit> {
+        self.inner.read().commits.get_session_commit(session_commit_id).map(|sc|sc.clone())
     }
 }
 
