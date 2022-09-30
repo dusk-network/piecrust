@@ -198,25 +198,6 @@ pub fn caller() -> ModuleId {
     })
 }
 
-/// Emits an event with the given data.
-pub fn emit<D>(data: D)
-where
-    for<'a> D: Serialize<StandardBufSerializer<'a>>,
-{
-    with_arg_buf(|buf| {
-        let mut sbuf = [0u8; SCRATCH_BUF_BYTES];
-        let scratch = BufferScratch::new(&mut sbuf);
-        let ser = BufferSerializer::new(buf);
-        let mut composite =
-            CompositeSerializer::new(ser, scratch, rkyv::Infallible);
-
-        composite.serialize_value(&data).unwrap();
-        let arg_len = composite.pos() as u32;
-
-        unsafe { ext::emit(arg_len) }
-    });
-}
-
 pub fn limit() -> u64 {
     unsafe { ext::limit() };
     with_arg_buf(|buf| {
@@ -238,6 +219,25 @@ pub fn spent() -> u64 {
 }
 
 impl<S> State<S> {
+    /// Emits an event with the given data.
+    pub fn emit<D>(&mut self, data: D)
+    where
+        for<'a> D: Serialize<StandardBufSerializer<'a>>,
+    {
+        with_arg_buf(|buf| {
+            let mut sbuf = [0u8; SCRATCH_BUF_BYTES];
+            let scratch = BufferScratch::new(&mut sbuf);
+            let ser = BufferSerializer::new(buf);
+            let mut composite =
+                CompositeSerializer::new(ser, scratch, rkyv::Infallible);
+
+            composite.serialize_value(&data).unwrap();
+            let arg_len = composite.pos() as u32;
+
+            unsafe { ext::emit(arg_len) }
+        });
+    }
+
     pub fn transact_raw(
         &mut self,
         mod_id: ModuleId,
