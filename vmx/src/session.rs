@@ -59,7 +59,9 @@ impl Session {
         Ret::Archived: Deserialize<Ret, Infallible>
             + for<'b> CheckBytes<DefaultValidator<'b>>,
     {
+        println!("query 1");
         let mut instance = self.instance(id);
+        println!("query 2");
 
         let arg_len = instance.write_to_arg_buffer(arg)?;
         let ret_len = instance.query(method_name, arg_len)?;
@@ -114,12 +116,15 @@ impl Session {
             }
 
             // if current commit exists, use it as memory image
+            println!("instance 1");
             if let Some(commit_path) = self.path_to_current_commit(&mod_id) {
+                println!("instance 1a");
                 let (target_path, _) = self.vm.memory_path(&mod_id);
                 std::fs::copy(commit_path.as_ref(), target_path.as_ref())
                     .expect("commit and memory paths exist");
                 memory.set_freshness(NotFresh)
             }
+            println!("instance 2");
             wrapped
         })
     }
@@ -157,18 +162,18 @@ impl Session {
     pub fn commit(&mut self) -> Result<SessionCommitId, Error> {
         let mut session_commit = SessionCommit::new();
         let session_commit_id = session_commit.commit_id();
-        {
-            let guard = self.callstack.read();
-            for module_id in guard.iter() {
-                let module_commit_id = ModuleCommitId::new();
-                let (source_path, _) = self.vm.memory_path(module_id);
-                let target_path = self.vm.path_to_commit(module_id, &module_commit_id);
-                std::fs::copy(source_path.as_ref(), target_path.as_ref())
-                    .map_err(CommitError)?;
-                session_commit.add(module_id, &module_commit_id);
-            }
+        let module_ids: Vec<ModuleId> = self.memory_handler.get_module_ids();
+        for module_id in module_ids.iter() {
+            let module_commit_id = ModuleCommitId::new();
+            let (source_path, _) = self.vm.memory_path(module_id);
+            let target_path = self.vm.path_to_commit(module_id, &module_commit_id);
+            std::fs::copy(source_path.as_ref(), target_path.as_ref())
+                .map_err(CommitError)?;
+            session_commit.add(module_id, &module_commit_id);
         }
+        println!("c11 id={:?}", session_commit.commit_id());
         self.set_current_commit(&session_commit.commit_id());
+        println!("c22");
         self.commits.add(session_commit);
         Ok(session_commit_id)
     }
@@ -177,7 +182,7 @@ impl Session {
         &mut self,
         session_commit_id: &SessionCommitId
     ) -> Result<(), Error> {
-        match self.commits.get(&session_commit_id) {
+        match self.commits.get_session_commit(&session_commit_id) {
             Some(session_commit) => {
                 for (module_id, module_commit_id) in session_commit.ids().iter() {
                     let source_path = self.vm.path_to_commit(module_id, module_commit_id);
@@ -200,8 +205,11 @@ impl Session {
         if self.current_commit_id.is_none(){
             return None;
         }
+        println!("path_to_current_commit 1");
         if let Some(session_commit_id) = self.current_commit_id {
-            if let Some(session_commit) = self.commits.get(&session_commit_id) {
+            println!("path_to_current_commit 2");
+            println!("path_to_current_commit 3 {:?} {:?}", module_id, session_commit_id);
+            if let Some(session_commit) = self.commits.get_session_commit(&session_commit_id) {
                 return session_commit.get(module_id).map(|module_commit_id|self.vm.path_to_commit(module_id, module_commit_id));
             }
         }

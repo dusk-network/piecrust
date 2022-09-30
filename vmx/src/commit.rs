@@ -60,7 +60,7 @@ impl core::fmt::Debug for ModuleCommitId {
 pub struct SessionCommitId([u8; COMMIT_ID_BYTES]);
 
 impl SessionCommitId {
-    pub fn default() -> Self {
+    pub fn uninitialized() -> Self {
         SessionCommitId([0; COMMIT_ID_BYTES])
     }
 
@@ -76,6 +76,18 @@ impl SessionCommitId {
     }
 }
 
+impl core::fmt::Debug for SessionCommitId {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        if f.alternate() {
+            write!(f, "0x")?
+        }
+        for byte in self.0 {
+            write!(f, "{:02x}", &byte)?
+        }
+        Ok(())
+    }
+}
+
 #[derive(Clone, PartialOrd, Ord, PartialEq, Eq)]
 pub struct SessionCommit {
     ids: BTreeMap<ModuleId, ModuleCommitId>,
@@ -86,7 +98,7 @@ impl SessionCommit {
     pub fn new() -> SessionCommit {
         SessionCommit {
             ids: BTreeMap::new(),
-            id: SessionCommitId::default(),
+            id: SessionCommitId::uninitialized(),
         }
     }
 
@@ -120,7 +132,7 @@ impl SessionCommits {
         self.0.insert(session_commit.commit_id(), session_commit);
     }
 
-    pub fn get(&self, session_commit_id: &SessionCommitId) -> Option<&SessionCommit> {
-        self.get(session_commit_id)
+    pub fn get_session_commit(&self, session_commit_id: &SessionCommitId) -> Option<&SessionCommit> {
+        self.0.get(session_commit_id)
     }
 }

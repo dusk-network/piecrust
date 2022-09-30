@@ -20,7 +20,8 @@ modules: ## Build WASM modules
 test: modules assert-counter-module-small ## Run the tests
 	cargo test \
 	  --manifest-path=./vmx/Cargo.toml \
-	  --color=always
+	  --color=always \
+	  -- --nocapture
 
 .PHONY: test modules assert-counter-module-small
 

@@ -6,7 +6,7 @@
 
 use vmx::{module_bytecode, Error, RawTransaction, VM};
 
-#[test]
+#[ignore]
 fn self_snapshot() -> Result<(), Error> {
     let mut vm = VM::ephemeral()?;
 

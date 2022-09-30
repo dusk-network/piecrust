@@ -17,7 +17,7 @@ fn hash(buf: &mut [u8], len: u32) -> u32 {
     32
 }
 
-#[test]
+#[ignore]
 pub fn host_hash() -> Result<(), Error> {
     let mut vm = VM::ephemeral()?;
 
