@@ -23,6 +23,7 @@ impl DefaultImports {
                 "t" => Function::new_typed_with_env(store, &fenv, t),
                 "nq" => Function::new_typed_with_env(store, &fenv, nq),
                 "host_debug" => Function::new_typed_with_env(store, &fenv, host_debug),
+                "emit" => Function::new_typed_with_env(store, &fenv, emit),
             }
         }
     }
@@ -155,6 +156,11 @@ fn nq(
     instance
         .with_arg_buffer(|buf| env.host_query(&name, buf, arg_len))
         .expect("TODO: error handling")
+}
+
+fn emit(mut fenv: FunctionEnvMut<Env>, arg_len: u32) {
+    let env = fenv.data_mut();
+    env.emit(arg_len)
 }
 
 fn host_debug(fenv: FunctionEnvMut<Env>, msg_ofs: i32, msg_len: u32) {

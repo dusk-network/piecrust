@@ -124,6 +124,11 @@ impl Session {
             .map_err(CommitError)?;
         Ok(commit_id)
     }
+    
+    pub(crate) fn push_event(&mut self, event: Event) {
+        let mut events = self.events.write();
+        events.push(event);
+    }
 
     pub(crate) fn instance(&self, mod_id: ModuleId) -> WrappedInstance {
         self.vm.with_module(mod_id, |module| {
