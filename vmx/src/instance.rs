@@ -22,6 +22,7 @@ use wasmer::{Store, Tunables, TypedFunction};
 use wasmer_compiler_singlepass::Singlepass;
 use wasmer_vm::VMMemory;
 
+use crate::event::Event;
 use crate::imports::DefaultImports;
 use crate::linear::{Linear, MEMORY_PAGES};
 use crate::module::WrappedModule;
@@ -70,6 +71,16 @@ impl DerefMut for Env {
 impl Env {
     pub fn self_instance(&self) -> WrappedInstance {
         self.session.instance(self.self_id)
+    }
+
+    pub fn emit(&mut self, arg_len: u32) {
+        let data = self.self_instance().with_arg_buffer(|buf| {
+            let arg_len = arg_len as usize;
+            Vec::from(&buf[..arg_len])
+        });
+
+        let event = Event::new(self.self_id, data);
+        self.session.push_event(event);
     }
 }
 

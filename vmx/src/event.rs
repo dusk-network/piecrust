@@ -12,6 +12,10 @@ pub struct Event {
 }
 
 impl Event {
+    pub(crate) fn new(source: ModuleId, data: Vec<u8>) -> Self {
+        Self { source, data }
+    }
+
     pub fn source(&self) -> ModuleId {
         self.source
     }
