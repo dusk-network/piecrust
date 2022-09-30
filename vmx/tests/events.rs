@@ -7,6 +7,7 @@
 use vmx::{module_bytecode, Error, VM};
 
 #[test]
+#[ignore]
 pub fn vm_center_events() -> Result<(), Error> {
     let mut vm = VM::ephemeral()?;
 
