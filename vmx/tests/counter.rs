@@ -32,7 +32,7 @@ fn counter_read_write_simple() -> Result<(), Error> {
     Ok(())
 }
 
-#[ignore]
+#[test]
 fn counter_read_write_session() -> Result<(), Error> {
     let mut vm = VM::ephemeral()?;
     let id = vm.deploy(module_bytecode!("counter"))?;
@@ -60,7 +60,7 @@ fn counter_read_write_session() -> Result<(), Error> {
 
     // session committed, new value accessible
 
-    assert_eq!(vm.query::<(), i64>(id, "read_value", ())?, 0xfd);
+    assert_eq!(other_session.query::<(), i64>(id, "read_value", ())?, 0xfd);
 
     Ok(())
 }

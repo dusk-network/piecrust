@@ -12,7 +12,6 @@ use rkyv::{
     validation::validators::DefaultValidator, Archive, Deserialize, Infallible,
     Serialize,
 };
-use std::collections::BTreeMap;
 
 use uplink::ModuleId;
 
@@ -24,7 +23,6 @@ use crate::vm::VM;
 use crate::Error::{self, CommitError, RestoreError, SessionError};
 use crate::commit::{SessionCommits, SessionCommitId, SessionCommit, ModuleCommitId};
 use crate::vm::MemoryPath;
-use crate::util::{commit_id_to_name, module_id_to_name};
 
 
 #[derive(Clone)]
@@ -59,9 +57,7 @@ impl Session {
         Ret::Archived: Deserialize<Ret, Infallible>
             + for<'b> CheckBytes<DefaultValidator<'b>>,
     {
-        println!("query 1");
         let mut instance = self.instance(id);
-        println!("query 2");
 
         let arg_len = instance.write_to_arg_buffer(arg)?;
         let ret_len = instance.query(method_name, arg_len)?;
@@ -116,15 +112,13 @@ impl Session {
             }
 
             // if current commit exists, use it as memory image
-            println!("instance 1");
+            // todo - this part does not work yet
             if let Some(commit_path) = self.path_to_current_commit(&mod_id) {
-                println!("instance 1a");
                 let (target_path, _) = self.vm.memory_path(&mod_id);
                 std::fs::copy(commit_path.as_ref(), target_path.as_ref())
                     .expect("commit and memory paths exist");
                 memory.set_freshness(NotFresh)
             }
-            println!("instance 2");
             wrapped
         })
     }
@@ -171,9 +165,7 @@ impl Session {
                 .map_err(CommitError)?;
             session_commit.add(module_id, &module_commit_id);
         }
-        println!("c11 id={:?}", session_commit.commit_id());
         self.set_current_commit(&session_commit.commit_id());
-        println!("c22");
         self.commits.add(session_commit);
         Ok(session_commit_id)
     }
@@ -197,7 +189,7 @@ impl Session {
         }
     }
 
-    // todo: refactor this method
+    // todo: refactor this method or possibly eliminate
     pub fn path_to_current_commit(
         &self,
         module_id: &ModuleId,
@@ -205,10 +197,7 @@ impl Session {
         if self.current_commit_id.is_none(){
             return None;
         }
-        println!("path_to_current_commit 1");
         if let Some(session_commit_id) = self.current_commit_id {
-            println!("path_to_current_commit 2");
-            println!("path_to_current_commit 3 {:?} {:?}", module_id, session_commit_id);
             if let Some(session_commit) = self.commits.get_session_commit(&session_commit_id) {
                 return session_commit.get(module_id).map(|module_commit_id|self.vm.path_to_commit(module_id, module_commit_id));
             }
@@ -216,6 +205,7 @@ impl Session {
         None
     }
 
+    // todo: refactor this method or possibly eliminate
     pub fn set_current_commit(
         &mut self,
         session_commit_id: &SessionCommitId,

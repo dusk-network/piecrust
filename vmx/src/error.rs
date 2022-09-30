@@ -9,7 +9,6 @@
 use rkyv::ser::serializers::{
     BufferSerializerError, CompositeSerializerError, FixedSizeScratchError,
 };
-use std::borrow::Cow;
 
 pub type Compo = CompositeSerializerError<
     BufferSerializerError,

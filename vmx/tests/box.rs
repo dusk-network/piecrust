@@ -6,7 +6,7 @@
 
 use vmx::{module_bytecode, Error, VM};
 
-#[test]
+#[ignore]
 pub fn box_set_get() -> Result<(), Error> {
     let mut vm = VM::ephemeral()?;
 
