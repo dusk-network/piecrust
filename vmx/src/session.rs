@@ -15,9 +15,7 @@ use rkyv::{
 
 use uplink::ModuleId;
 
-use crate::commit::{
-    ModuleCommitId, SessionCommit, SessionCommitId,
-};
+use crate::commit::{ModuleCommitId, SessionCommit, SessionCommitId};
 use crate::instance::WrappedInstance;
 use crate::memory_handler::MemoryHandler;
 use crate::types::MemoryFreshness::*;
@@ -198,14 +196,13 @@ impl Session {
         &self,
         module_id: &ModuleId,
     ) -> Option<MemoryPath> {
-        self.current_commit_id
-            .and_then(|session_commit_id| {
-                self.vm
-                    .get_module_commit_id(&session_commit_id, module_id)
-                    .map(|module_commit_id| {
-                        self.vm.path_to_commit(module_id, &module_commit_id)
-                    })
-            })
+        self.current_commit_id.and_then(|session_commit_id| {
+            self.vm
+                .get_module_commit_id(&session_commit_id, module_id)
+                .map(|module_commit_id| {
+                    self.vm.path_to_commit(module_id, &module_commit_id)
+                })
+        })
     }
 
     // todo: refactor this method or possibly eliminate
