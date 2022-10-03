@@ -6,7 +6,7 @@
 
 use vmx::{module_bytecode, Error, VM};
 
-#[ignore]
+#[test]
 fn counter_read_simple() -> Result<(), Error> {
     let mut vm = VM::ephemeral()?;
     let id = vm.deploy(module_bytecode!("counter"))?;
@@ -16,7 +16,7 @@ fn counter_read_simple() -> Result<(), Error> {
     Ok(())
 }
 
-#[ignore]
+#[test]
 fn counter_read_write_simple() -> Result<(), Error> {
     let mut vm = VM::ephemeral()?;
     let id = vm.deploy(module_bytecode!("counter"))?;
@@ -32,7 +32,7 @@ fn counter_read_write_simple() -> Result<(), Error> {
     Ok(())
 }
 
-#[ignore]
+#[test]
 fn counter_read_write_session() -> Result<(), Error> {
     let mut vm = VM::ephemeral()?;
     let id = vm.deploy(module_bytecode!("counter"))?;
@@ -78,7 +78,6 @@ fn counter_commit_restore() -> Result<(), Error> {
     session_1.transact::<(), ()>(id, "increment", ())?;
 
     let commit_1 = session_1.commit()?;
-    println!("committed {:?}", commit_1);
 
     // commit 2
     let mut session_2 = vm.session();

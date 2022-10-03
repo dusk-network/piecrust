@@ -15,15 +15,16 @@ use rkyv::{
 
 use uplink::ModuleId;
 
+use crate::commit::{
+    ModuleCommitId, SessionCommit, SessionCommitId, SessionCommits,
+};
 use crate::instance::WrappedInstance;
 use crate::memory_handler::MemoryHandler;
 use crate::types::MemoryFreshness::*;
 use crate::types::StandardBufSerializer;
+use crate::vm::MemoryPath;
 use crate::vm::VM;
 use crate::Error::{self, CommitError, RestoreError, SessionError};
-use crate::commit::{SessionCommits, SessionCommitId, SessionCommit, ModuleCommitId};
-use crate::vm::MemoryPath;
-
 
 #[derive(Clone)]
 pub struct Session {
@@ -157,7 +158,8 @@ impl Session {
         for module_id in module_ids.iter() {
             let module_commit_id = ModuleCommitId::new();
             let (source_path, _) = self.vm.memory_path(module_id);
-            let target_path = self.vm.path_to_commit(module_id, &module_commit_id);
+            let target_path =
+                self.vm.path_to_commit(module_id, &module_commit_id);
             std::fs::copy(source_path.as_ref(), target_path.as_ref())
                 .map_err(CommitError)?;
             session_commit.add(module_id, &module_commit_id);
@@ -171,20 +173,22 @@ impl Session {
 
     pub fn restore(
         &mut self,
-        session_commit_id: &SessionCommitId
+        session_commit_id: &SessionCommitId,
     ) -> Result<(), Error> {
         println!("getting session commit {:?}", session_commit_id);
         match self.vm.get_session_commit(&session_commit_id) {
             Some(session_commit) => {
-                for (module_id, module_commit_id) in session_commit.ids().iter() {
-                    let source_path = self.vm.path_to_commit(module_id, module_commit_id);
+                for (module_id, module_commit_id) in session_commit.ids().iter()
+                {
+                    let source_path =
+                        self.vm.path_to_commit(module_id, module_commit_id);
                     let (target_path, _) = self.vm.memory_path(module_id);
                     std::fs::copy(source_path.as_ref(), target_path.as_ref())
                         .map_err(RestoreError)?;
                 }
                 self.set_current_commit(session_commit_id);
                 Ok(())
-            },
+            }
             None => Err(SessionError("unknown session commit id".to_string())),
         }
     }
@@ -194,22 +198,22 @@ impl Session {
         &self,
         module_id: &ModuleId,
     ) -> Option<MemoryPath> {
-        if self.current_commit_id.is_none(){
+        if self.current_commit_id.is_none() {
             return None;
         }
         if let Some(session_commit_id) = self.current_commit_id {
-            if let Some(session_commit) = self.vm.get_session_commit(&session_commit_id) {
-                return session_commit.get(module_id).map(|module_commit_id|self.vm.path_to_commit(module_id, module_commit_id));
-            }
+            self.vm
+                .get_module_commit_id(&session_commit_id, module_id)
+                .and_then(|module_commit_id| {
+                    Some(self.vm.path_to_commit(module_id, &module_commit_id))
+                })
+        } else {
+            None
         }
-        None
     }
 
     // todo: refactor this method or possibly eliminate
-    pub fn set_current_commit(
-        &mut self,
-        session_commit_id: &SessionCommitId,
-    ) {
+    pub fn set_current_commit(&mut self, session_commit_id: &SessionCommitId) {
         self.current_commit_id = Some(*session_commit_id);
     }
 }

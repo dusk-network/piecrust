@@ -115,7 +115,7 @@ impl SessionCommit {
         &self.ids
     }
 
-    pub fn get(&self, module_id: &ModuleId) -> Option<&ModuleCommitId>{
+    pub fn get(&self, module_id: &ModuleId) -> Option<&ModuleCommitId> {
         self.ids.get(module_id)
     }
 }
@@ -132,7 +132,10 @@ impl SessionCommits {
         self.0.insert(session_commit.commit_id(), session_commit);
     }
 
-    pub fn get_session_commit(&self, session_commit_id: &SessionCommitId) -> Option<&SessionCommit> {
+    pub fn get_session_commit(
+        &self,
+        session_commit_id: &SessionCommitId,
+    ) -> Option<&SessionCommit> {
         self.0.get(session_commit_id)
     }
 }

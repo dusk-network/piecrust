@@ -7,7 +7,7 @@
 use uplink::{ModuleId, RawQuery, RawResult, RawTransaction};
 use vmx::{module_bytecode, Error, VM};
 
-#[ignore]
+#[test]
 pub fn cc_read_counter() -> Result<(), Error> {
     let mut world = VM::ephemeral()?;
 
@@ -27,7 +27,7 @@ pub fn cc_read_counter() -> Result<(), Error> {
     Ok(())
 }
 
-#[ignore]
+#[test]
 pub fn cc_direct() -> Result<(), Error> {
     let mut world = VM::ephemeral()?;
 
@@ -59,7 +59,7 @@ pub fn cc_direct() -> Result<(), Error> {
     Ok(())
 }
 
-#[ignore]
+#[test]
 pub fn cc_passthrough() -> Result<(), Error> {
     let mut world = VM::ephemeral()?;
 
@@ -75,7 +75,7 @@ pub fn cc_passthrough() -> Result<(), Error> {
     Ok(())
 }
 
-#[ignore]
+#[test]
 pub fn cc_delegated_read() -> Result<(), Error> {
     let mut world = VM::ephemeral()?;
 
@@ -98,7 +98,7 @@ pub fn cc_delegated_read() -> Result<(), Error> {
     Ok(())
 }
 
-#[ignore]
+#[test]
 pub fn cc_delegated_write() -> Result<(), Error> {
     let mut world = VM::ephemeral()?;
 
@@ -124,7 +124,7 @@ pub fn cc_delegated_write() -> Result<(), Error> {
     Ok(())
 }
 
-#[ignore]
+#[test]
 pub fn cc_self() -> Result<(), Error> {
     let mut world = VM::ephemeral()?;
 
@@ -138,7 +138,7 @@ pub fn cc_self() -> Result<(), Error> {
     Ok(())
 }
 
-#[ignore]
+#[test]
 pub fn cc_caller() -> Result<(), Error> {
     let mut world = VM::ephemeral()?;
 
@@ -150,7 +150,7 @@ pub fn cc_caller() -> Result<(), Error> {
     Ok(())
 }
 
-#[ignore]
+#[test]
 pub fn cc_caller_uninit() -> Result<(), Error> {
     let mut world = VM::ephemeral()?;
 
@@ -162,7 +162,7 @@ pub fn cc_caller_uninit() -> Result<(), Error> {
     Ok(())
 }
 
-#[ignore]
+#[test]
 pub fn cc_self_id() -> Result<(), Error> {
     let mut world = VM::ephemeral()?;
 

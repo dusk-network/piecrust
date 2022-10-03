@@ -322,7 +322,7 @@ mod test {
     };
     use wasmer_compiler_singlepass::Singlepass;
 
-    #[ignore]
+    #[test]
     fn instantiate_test() -> Result<(), Error> {
         let wasm_bytes = wat2wasm(
             br#"(module
@@ -372,7 +372,7 @@ mod test {
         Ok(())
     }
 
-    #[ignore]
+    #[test]
     fn micro_test() -> Result<(), Error> {
         let wasm_bytes = module_bytecode!("micro");
 

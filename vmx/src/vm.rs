@@ -20,13 +20,15 @@ use tempfile::tempdir;
 
 use uplink::ModuleId;
 
+use crate::commit::{
+    ModuleCommitId, SessionCommit, SessionCommitId, SessionCommits,
+};
 use crate::module::WrappedModule;
 use crate::session::Session;
 use crate::types::MemoryFreshness::*;
 use crate::types::{MemoryFreshness, StandardBufSerializer};
 use crate::util::{commit_id_to_name, module_id_to_name};
 use crate::Error::{self, PersistenceError};
-use crate::commit::{SessionCommits, SessionCommitId, SessionCommit, ModuleCommitId};
 
 #[derive(Debug)]
 pub struct MemoryPath {
@@ -89,8 +91,8 @@ pub struct VM {
 
 impl VM {
     pub fn new<P: AsRef<Path>>(path: P) -> Self
-        where
-            P: Into<PathBuf>,
+    where
+        P: Into<PathBuf>,
     {
         VM {
             inner: Arc::new(RwLock::new(VMInner::new(path))),
@@ -105,9 +107,9 @@ impl VM {
 
     /// Registers a [`HostQuery`] with the given `name`.
     pub fn register_host_query<Q, S>(&mut self, name: S, query: Q)
-        where
-            Q: 'static + HostQuery,
-            S: Into<Cow<'static, str>>,
+    where
+        Q: 'static + HostQuery,
+        S: Into<Cow<'static, str>>,
     {
         let mut guard = self.inner.write();
         guard.host_queries.insert(name, query);
@@ -154,8 +156,8 @@ impl VM {
     }
 
     pub fn with_module<F, R>(&self, id: ModuleId, closure: F) -> R
-        where
-            F: FnOnce(&WrappedModule) -> R,
+    where
+        F: FnOnce(&WrappedModule) -> R,
     {
         let guard = self.inner.read();
         let wrapped = guard.modules.get(&id).expect("invalid module");
@@ -169,10 +171,10 @@ impl VM {
         method_name: &str,
         arg: Arg,
     ) -> Result<Ret, Error>
-        where
-            Arg: for<'b> Serialize<StandardBufSerializer<'b>>,
-            Ret: Archive,
-            Ret::Archived: Deserialize<Ret, Infallible>
+    where
+        Arg: for<'b> Serialize<StandardBufSerializer<'b>>,
+        Ret: Archive,
+        Ret::Archived: Deserialize<Ret, Infallible>
             + for<'b> CheckBytes<DefaultValidator<'b>>,
     {
         let mut session = Session::new(self.clone());
@@ -197,9 +199,28 @@ impl VM {
         &mut self.inner.write().commits.add(session_commit);
     }
 
-    // todo: remove clone
-    pub fn get_session_commit(&self, session_commit_id: &SessionCommitId) -> Option<SessionCommit> {
-        self.inner.read().commits.get_session_commit(session_commit_id).map(|sc|sc.clone())
+    // todo: eliminate this call
+    pub fn get_session_commit(
+        &self,
+        session_commit_id: &SessionCommitId,
+    ) -> Option<SessionCommit> {
+        self.inner
+            .read()
+            .commits
+            .get_session_commit(session_commit_id)
+            .map(|sc| sc.clone())
+    }
+
+    pub fn get_module_commit_id(
+        &self,
+        session_commit_id: &SessionCommitId,
+        module_id: &ModuleId,
+    ) -> Option<ModuleCommitId> {
+        self.inner
+            .read()
+            .commits
+            .get_session_commit(session_commit_id)
+            .and_then(|sc| sc.get(module_id).map(|a| a.clone()))
     }
 }
 

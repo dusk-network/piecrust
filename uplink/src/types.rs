@@ -186,7 +186,7 @@ impl RawResult {
 mod test {
     use super::*;
 
-    #[ignore]
+    #[test]
     fn raw_query() {
         let q = RawQuery::new("hello", 42u128);
 
@@ -200,7 +200,7 @@ mod test {
         );
     }
 
-    #[ignore]
+    #[test]
     fn raw_transaction() {
         let q = RawQuery::new("world", 666u128);
 
