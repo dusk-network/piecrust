@@ -32,7 +32,7 @@ fn counter_read_write_simple() -> Result<(), Error> {
     Ok(())
 }
 
-#[test]
+#[ignore]
 fn counter_read_write_session() -> Result<(), Error> {
     let mut vm = VM::ephemeral()?;
     let id = vm.deploy(module_bytecode!("counter"))?;
@@ -78,18 +78,19 @@ fn counter_commit_restore() -> Result<(), Error> {
     session_1.transact::<(), ()>(id, "increment", ())?;
 
     let commit_1 = session_1.commit()?;
+    println!("committed {:?}", commit_1);
 
     // commit 2
-    // let mut session_2 = vm.session();
+    let mut session_2 = vm.session();
 
-    // assert_eq!(session_2.query::<(), i64>(id, "read_value", ())?, 0xfd);
+    assert_eq!(session_2.query::<(), i64>(id, "read_value", ())?, 0xfc);
 
-    // session_2.transact::<(), ()>(id, "increment", ())?;
-    // session_2.transact::<(), ()>(id, "increment", ())?;
+    session_2.transact::<(), ()>(id, "increment", ())?;
+    session_2.transact::<(), ()>(id, "increment", ())?;
 
-    // let commit_2 = session_2.commit()?;
+    let commit_2 = session_2.commit()?;
 
-    // assert_eq!(session_2.query::<(), i64>(id, "read_value", ())?, 0xfe);
+    assert_eq!(session_2.query::<(), i64>(id, "read_value", ())?, 0xfe);
 
     // restore commit 1
 
@@ -97,15 +98,15 @@ fn counter_commit_restore() -> Result<(), Error> {
 
     session_3.restore(&commit_1)?;
 
-    // assert_eq!(session_3.query::<(), i64>(id, "read_value", ())?, 0xfd);
+    assert_eq!(session_3.query::<(), i64>(id, "read_value", ())?, 0xfd);
 
     // restore commit 2
 
-    // let mut session_4 = vm.session();
+    let mut session_4 = vm.session();
 
-    // session_4.restore(&commit_2)?;
+    session_4.restore(&commit_2)?;
 
-    // assert_eq!(session_4.query::<(), i64>(id, "read_value", ())?, 0xfe);
+    assert_eq!(session_4.query::<(), i64>(id, "read_value", ())?, 0xfe);
 
     Ok(())
 }

@@ -153,7 +153,6 @@ impl Session {
 
     pub fn commit(&mut self) -> Result<SessionCommitId, Error> {
         let mut session_commit = SessionCommit::new();
-        let session_commit_id = session_commit.commit_id();
         let module_ids: Vec<ModuleId> = self.memory_handler.get_module_ids();
         for module_id in module_ids.iter() {
             let module_commit_id = ModuleCommitId::new();
@@ -164,6 +163,8 @@ impl Session {
             session_commit.add(module_id, &module_commit_id);
         }
         self.set_current_commit(&session_commit.commit_id());
+        println!("adding session commit {:?}", session_commit.commit_id());
+        let session_commit_id = session_commit.commit_id();
         self.vm.add_session_commit(session_commit);
         Ok(session_commit_id)
     }
@@ -172,6 +173,7 @@ impl Session {
         &mut self,
         session_commit_id: &SessionCommitId
     ) -> Result<(), Error> {
+        println!("getting session commit {:?}", session_commit_id);
         match self.vm.get_session_commit(&session_commit_id) {
             Some(session_commit) => {
                 for (module_id, module_commit_id) in session_commit.ids().iter() {
