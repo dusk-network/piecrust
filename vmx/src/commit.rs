@@ -56,7 +56,7 @@ impl core::fmt::Debug for ModuleCommitId {
 
 // SessionCommitId is physically the same as ModuleCommitId
 // yet semantically it applies to aggregates
-#[derive(Clone, Copy, PartialOrd, Ord, PartialEq, Eq)]
+#[derive(Clone, Copy, Default, PartialOrd, Ord, PartialEq, Eq)]
 pub struct SessionCommitId([u8; COMMIT_ID_BYTES]);
 
 impl SessionCommitId {
@@ -88,7 +88,7 @@ impl core::fmt::Debug for SessionCommitId {
     }
 }
 
-#[derive(Clone, PartialOrd, Ord, PartialEq, Eq)]
+#[derive(Clone, Default, PartialOrd, Ord, PartialEq, Eq)]
 pub struct SessionCommit {
     ids: BTreeMap<ModuleId, ModuleCommitId>,
     id: SessionCommitId,

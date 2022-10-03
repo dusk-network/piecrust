@@ -196,7 +196,7 @@ impl VM {
     }
 
     pub fn add_session_commit(&mut self, session_commit: SessionCommit) {
-        &mut self.inner.write().commits.add(session_commit);
+        self.inner.write().commits.add(session_commit);
     }
 
     // todo: eliminate this call
@@ -208,7 +208,7 @@ impl VM {
             .read()
             .commits
             .get_session_commit(session_commit_id)
-            .map(|sc| sc.clone())
+            .cloned()
     }
 
     pub fn get_module_commit_id(
@@ -220,7 +220,7 @@ impl VM {
             .read()
             .commits
             .get_session_commit(session_commit_id)
-            .and_then(|sc| sc.get(module_id).map(|a| a.clone()))
+            .and_then(|sc| sc.get(module_id).copied())
     }
 }
 

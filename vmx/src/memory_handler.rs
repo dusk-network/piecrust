@@ -55,6 +55,6 @@ impl MemoryHandler {
     }
 
     pub fn get_module_ids(&self) -> Vec<ModuleId> {
-        self.memories.read().keys().map(|v| v.clone()).collect()
+        self.memories.read().keys().copied().collect()
     }
 }

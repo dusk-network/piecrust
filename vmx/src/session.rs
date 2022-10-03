@@ -16,7 +16,7 @@ use rkyv::{
 use uplink::ModuleId;
 
 use crate::commit::{
-    ModuleCommitId, SessionCommit, SessionCommitId, SessionCommits,
+    ModuleCommitId, SessionCommit, SessionCommitId,
 };
 use crate::instance::WrappedInstance;
 use crate::memory_handler::MemoryHandler;
@@ -176,7 +176,7 @@ impl Session {
         session_commit_id: &SessionCommitId,
     ) -> Result<(), Error> {
         println!("getting session commit {:?}", session_commit_id);
-        match self.vm.get_session_commit(&session_commit_id) {
+        match self.vm.get_session_commit(session_commit_id) {
             Some(session_commit) => {
                 for (module_id, module_commit_id) in session_commit.ids().iter()
                 {
@@ -198,18 +198,14 @@ impl Session {
         &self,
         module_id: &ModuleId,
     ) -> Option<MemoryPath> {
-        if self.current_commit_id.is_none() {
-            return None;
-        }
-        if let Some(session_commit_id) = self.current_commit_id {
-            self.vm
-                .get_module_commit_id(&session_commit_id, module_id)
-                .and_then(|module_commit_id| {
-                    Some(self.vm.path_to_commit(module_id, &module_commit_id))
-                })
-        } else {
-            None
-        }
+        self.current_commit_id
+            .and_then(|session_commit_id| {
+                self.vm
+                    .get_module_commit_id(&session_commit_id, module_id)
+                    .map(|module_commit_id| {
+                        self.vm.path_to_commit(module_id, &module_commit_id)
+                    })
+            })
     }
 
     // todo: refactor this method or possibly eliminate
