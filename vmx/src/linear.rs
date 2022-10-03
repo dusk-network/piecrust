@@ -16,13 +16,13 @@ use parking_lot::RwLock;
 
 use wasmer::{MemoryType, Pages};
 use wasmer_vm::{
-    LinearMemory, MemoryError, MemoryStyle, VMMemory, VMMemoryDefinition,
+    initialize_memory_with_data, LinearMemory, MemoryError, MemoryStyle, Trap,
+    VMMemory, VMMemoryDefinition,
 };
 
 use uplink::ModuleId;
 
 use crate::error::Error;
-use crate::module::VolatileMem;
 use crate::types::MemoryFreshness;
 use crate::Error::{MemorySetupError, RegionError};
 
@@ -34,9 +34,6 @@ pub const WASM_PAGE_LOG2: u32 = 16;
 #[derive(Debug)]
 struct LinearInner {
     file_opt: Option<File>,
-    // Workaround for not overwriting memory on initialization,
-    volatile: Vec<VolatileMem>,
-    vol_buffer: Vec<u8>,
     fresh: MemoryFreshness,
     pub memory_definition: VMMemoryDefinition,
 }
@@ -58,7 +55,6 @@ impl Linear {
         accessible_size: usize,
         mapping_size: usize,
         fresh: MemoryFreshness,
-        volatile: Vec<VolatileMem>,
     ) -> Result<Self, Error>
     where
         P: std::fmt::Debug,
@@ -70,9 +66,7 @@ impl Linear {
                 base: &mut 0u8 as _,
                 current_length: 0,
             },
-            vol_buffer: vec![],
             fresh,
-            volatile,
         })));
 
         let ptr: *mut std::ffi::c_void;
@@ -198,46 +192,6 @@ impl Linear {
         slice.copy_from_slice(bytes);
     }
 
-    // workaround, to be deprecatedd
-    pub(crate) fn save_volatile(&self) {
-        let base: *mut u8;
-        {
-            let imm_guard = self.0.read();
-            base = imm_guard.memory_definition.base;
-        }
-        let mut guard = self.0.write();
-        let inner = &mut *guard;
-
-        inner.vol_buffer.truncate(0);
-        for reg in &inner.volatile {
-            let slice = unsafe {
-                std::slice::from_raw_parts(base.add(reg.offset), reg.length)
-            };
-            inner.vol_buffer.extend_from_slice(slice);
-        }
-    }
-
-    // workaround, to be deprecated
-    pub(crate) fn restore_volatile(&self) {
-        let base: *mut u8;
-        {
-            let imm_guard = self.0.read();
-            base = imm_guard.memory_definition.base;
-        }
-        let mut guard = self.0.write();
-        let inner = &mut *guard;
-        let mut buf_ofs = 0;
-
-        for reg in &inner.volatile {
-            unsafe {
-                std::slice::from_raw_parts_mut(base.add(reg.offset), reg.length)
-            }
-            .copy_from_slice(&inner.vol_buffer[buf_ofs..][..reg.length]);
-            buf_ofs += reg.length;
-        }
-    }
-
-    // workaround, to be deprecated
     pub fn freshness(&self) -> MemoryFreshness {
         let guard = self.0.read();
         let inner = &*guard;
@@ -245,7 +199,6 @@ impl Linear {
         inner.fresh
     }
 
-    // workaround, to be deprecated
     pub fn set_freshness(&self, to: MemoryFreshness) {
         let mut guard = self.0.write();
         let inner = &mut *guard;
@@ -308,6 +261,19 @@ impl LinearMemory for Linear {
     fn try_clone(&self) -> Option<Box<dyn LinearMemory + 'static>> {
         None
     }
+
+    unsafe fn initialize_with_data(
+        &self,
+        start: usize,
+        data: &[u8],
+    ) -> Result<(), Trap> {
+        if self.freshness() == MemoryFreshness::Fresh {
+            let memory = self.vmmemory().as_ref();
+            initialize_memory_with_data(memory, start, data)
+        } else {
+            Ok(())
+        }
+    }
 }
 
 #[cfg(test)]
@@ -345,7 +311,6 @@ mod test {
             MEMORY_PAGES * WASM_PAGE_SIZE,
             MAX_MEMORY_BYTES,
             Fresh,
-            vec![],
         )?);
         let mut store = Store::new_with_tunables(compiler, tunables);
         let module = Module::new(&store, wasm_bytes).unwrap();
@@ -388,7 +353,6 @@ mod test {
             MEMORY_PAGES * WASM_PAGE_SIZE,
             MAX_MEMORY_BYTES,
             Fresh,
-            vec![],
         )?);
         let mut store = Store::new_with_tunables(compiler, tunables);
         let module = Module::new(&store, wasm_bytes).unwrap();

@@ -26,7 +26,7 @@ use crate::imports::DefaultImports;
 use crate::linear::{Linear, MEMORY_PAGES};
 use crate::module::WrappedModule;
 use crate::session::Session;
-use crate::types::StandardBufSerializer;
+use crate::types::{MemoryFreshness, StandardBufSerializer};
 use crate::Error;
 
 pub struct WrappedInstance {
@@ -97,6 +97,7 @@ impl WrappedInstance {
             unsafe { wasmer::Module::deserialize(&store, module_bytes)? };
 
         let instance = wasmer::Instance::new(&mut store, &module, &imports)?;
+        memory.set_freshness(MemoryFreshness::NotFresh);
 
         let arg_buf_ofs =
             match instance.exports.get_global("A")?.get(&mut store) {

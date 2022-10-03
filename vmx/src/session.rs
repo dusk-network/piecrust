@@ -18,7 +18,6 @@ use uplink::ModuleId;
 
 use crate::instance::WrappedInstance;
 use crate::memory_handler::MemoryHandler;
-use crate::types::MemoryFreshness::*;
 use crate::types::StandardBufSerializer;
 use crate::vm::VM;
 use crate::Error::{self, CommitError};
@@ -127,26 +126,8 @@ impl Session {
                 .get_memory(mod_id)
                 .expect("memory available");
 
-            let freshness = memory.freshness();
-            if freshness == NotFresh {
-                memory.save_volatile();
-            }
-
-            let wrapped = WrappedInstance::new(
-                memory.clone(),
-                self.clone(),
-                mod_id,
-                module,
-            )
-            .expect("todo, error handling");
-
-            if freshness == NotFresh {
-                memory.restore_volatile();
-            } else {
-                memory.set_freshness(NotFresh);
-            }
-
-            wrapped
+            WrappedInstance::new(memory, self.clone(), mod_id, module)
+                .expect("todo, error handling")
         })
     }
 
