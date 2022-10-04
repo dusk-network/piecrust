@@ -4,7 +4,7 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-// use std::fmt::{Display, Formatter};
+use std::borrow::Cow;
 
 use rkyv::ser::serializers::{
     BufferSerializerError, CompositeSerializerError, FixedSizeScratchError,
@@ -30,7 +30,7 @@ pub enum Error {
     PersistenceError(std::io::Error),
     CommitError(std::io::Error),
     RestoreError(std::io::Error),
-    SessionError(String),
+    SessionError(Cow<'static, str>),
     MemorySetupError(std::io::Error),
     RegionError(region::Error),
     ValidationError,

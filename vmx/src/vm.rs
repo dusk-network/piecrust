@@ -23,39 +23,20 @@ use uplink::ModuleId;
 use crate::commit::{
     ModuleCommitId, SessionCommit, SessionCommitId, SessionCommits,
 };
+use crate::memory_path::MemoryPath;
 use crate::module::WrappedModule;
 use crate::session::Session;
 use crate::types::MemoryFreshness::*;
 use crate::types::{MemoryFreshness, StandardBufSerializer};
 use crate::util::{commit_id_to_name, module_id_to_name};
-use crate::Error::{self, PersistenceError};
-
-#[derive(Debug)]
-pub struct MemoryPath {
-    path: PathBuf,
-}
-
-impl MemoryPath {
-    pub fn new<P: AsRef<Path>>(path: P) -> Self
-    where
-        P: Into<PathBuf>,
-    {
-        MemoryPath { path: path.into() }
-    }
-}
-
-impl AsRef<Path> for MemoryPath {
-    fn as_ref(&self) -> &Path {
-        self.path.as_path()
-    }
-}
+use crate::Error::{self, PersistenceError, RestoreError};
 
 #[derive(Default)]
 struct VMInner {
     modules: BTreeMap<ModuleId, WrappedModule>,
     host_queries: HostQueries,
     base_memory_path: PathBuf,
-    commits: SessionCommits,
+    session_commits: SessionCommits,
 }
 
 impl VMInner {
@@ -67,7 +48,7 @@ impl VMInner {
             modules: BTreeMap::default(),
             host_queries: HostQueries::default(),
             base_memory_path: path.into(),
-            commits: SessionCommits::new(),
+            session_commits: SessionCommits::new(),
         }
     }
 
@@ -79,7 +60,7 @@ impl VMInner {
                 .path()
                 .into(),
             host_queries: HostQueries::default(),
-            commits: SessionCommits::new(),
+            session_commits: SessionCommits::new(),
         })
     }
 }
@@ -113,37 +94,6 @@ impl VM {
     {
         let mut guard = self.inner.write();
         guard.host_queries.insert(name, query);
-    }
-
-    pub fn memory_path(
-        &self,
-        module_id: &ModuleId,
-    ) -> (MemoryPath, MemoryFreshness) {
-        (
-            MemoryPath::new(
-                    self.inner
-                        .read()
-                        .base_memory_path
-                        .join(module_id_to_name(*module_id)),
-            ),
-            Fresh,
-
-        )
-    }
-
-    pub fn path_to_commit(
-        &self,
-        module_id: &ModuleId,
-        module_commit_id: &ModuleCommitId,
-    ) -> MemoryPath {
-        const SEPARATOR: char = '_';
-        let commit_id_name = &*commit_id_to_name(*module_commit_id);
-        let mut name = module_id_to_name(*module_id);
-        name.push(SEPARATOR);
-        name.push_str(commit_id_name);
-        let path = self.inner.read().base_memory_path.join(name);
-        MemoryPath::new(path)
-
     }
 
     pub fn deploy(&mut self, bytecode: &[u8]) -> Result<ModuleId, Error> {
@@ -196,28 +146,77 @@ impl VM {
     pub fn session(&mut self) -> Session {
         Session::new(self.clone())
     }
-    pub fn add_session_commit(&mut self, session_commit: SessionCommit) {
-        self.inner.write().commits.add(session_commit);
+
+    pub(crate) fn memory_path(
+        &self,
+        module_id: &ModuleId,
+    ) -> (MemoryPath, MemoryFreshness) {
+        (
+            MemoryPath::new(
+                self.inner
+                    .read()
+                    .base_memory_path
+                    .join(module_id_to_name(*module_id)),
+            ),
+            Fresh,
+        )
     }
-    // todo: eliminate this call
-    pub fn get_session_commit(
+
+    pub(crate) fn path_to_module_commit(
+        &self,
+        module_id: &ModuleId,
+        module_commit_id: &ModuleCommitId,
+    ) -> MemoryPath {
+        const SEPARATOR: char = '_';
+        let commit_id_name = &*commit_id_to_name(*module_commit_id);
+        let mut name = module_id_to_name(*module_id);
+        name.push(SEPARATOR);
+        name.push_str(commit_id_name);
+        let path = self.inner.read().base_memory_path.join(name);
+        MemoryPath::new(path)
+    }
+
+    pub(crate) fn path_to_session_commit(
+        &self,
+        module_id: &ModuleId,
+        session_commit_id: &SessionCommitId,
+    ) -> Option<MemoryPath> {
+        self.get_module_commit_id(session_commit_id, module_id).map(
+            |module_commit_id| {
+                self.path_to_module_commit(module_id, &module_commit_id)
+            },
+        )
+    }
+
+    pub(crate) fn add_session_commit(&mut self, session_commit: SessionCommit) {
+        self.inner.write().session_commits.add(session_commit);
+    }
+
+    pub(crate) fn restore_session(
         &self,
         session_commit_id: &SessionCommitId,
-    ) -> Option<SessionCommit> {
-        self.inner
-            .read()
-            .commits
-            .get_session_commit(session_commit_id)
-            .cloned()
+    ) -> Result<(), Error> {
+        self.inner.read().session_commits.with_every_module_commit(
+            session_commit_id,
+            |module_id, module_commit_id| {
+                let source_path =
+                    self.path_to_module_commit(module_id, module_commit_id);
+                let (target_path, _) = self.memory_path(module_id);
+                std::fs::copy(source_path.as_ref(), target_path.as_ref())
+                    .map_err(RestoreError)?;
+                Ok(())
+            },
+        )
     }
-    pub fn get_module_commit_id(
+
+    pub(crate) fn get_module_commit_id(
         &self,
         session_commit_id: &SessionCommitId,
         module_id: &ModuleId,
     ) -> Option<ModuleCommitId> {
         self.inner
             .read()
-            .commits
+            .session_commits
             .get_session_commit(session_commit_id)
             .and_then(|sc| sc.get(module_id).copied())
     }

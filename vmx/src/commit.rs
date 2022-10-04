@@ -8,17 +8,21 @@
 
 use uplink::ModuleId;
 
-use rand::prelude::*;
 use std::collections::BTreeMap;
 
-pub const COMMIT_ID_BYTES: usize = 4;
+use crate::error::Error::{self, SessionError};
+use crate::memory_path::MemoryPath;
+
+pub const COMMIT_ID_BYTES: usize = 32;
 
 #[derive(Clone, Copy, PartialOrd, Ord, PartialEq, Eq)]
 pub struct ModuleCommitId([u8; COMMIT_ID_BYTES]);
 
 impl ModuleCommitId {
-    pub fn new() -> ModuleCommitId {
-        ModuleCommitId(thread_rng().gen::<[u8; COMMIT_ID_BYTES]>())
+    pub fn from(memory_path: &MemoryPath) -> Result<Self, Error> {
+        Ok(ModuleCommitId(
+            *blake3::hash(memory_path.read()?.as_slice()).as_bytes(),
+        ))
     }
 
     pub fn uninitialized() -> ModuleCommitId {
@@ -36,12 +40,6 @@ impl From<[u8; COMMIT_ID_BYTES]> for ModuleCommitId {
     }
 }
 
-impl Default for ModuleCommitId {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl core::fmt::Debug for ModuleCommitId {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         if f.alternate() {
@@ -54,8 +52,6 @@ impl core::fmt::Debug for ModuleCommitId {
     }
 }
 
-// SessionCommitId is physically the same as ModuleCommitId
-// yet semantically it applies to aggregates
 #[derive(Clone, Copy, Default, PartialOrd, Ord, PartialEq, Eq)]
 pub struct SessionCommitId([u8; COMMIT_ID_BYTES]);
 
@@ -69,10 +65,10 @@ impl SessionCommitId {
     }
 
     pub fn add(&mut self, module_commit_id: &ModuleCommitId) {
-        let p = module_commit_id.as_bytes().as_ptr();
-        for (i, b) in self.0.iter_mut().enumerate() {
-            *b ^= unsafe { *p.add(i) };
-        }
+        let mut hasher = blake3::Hasher::new();
+        hasher.update(self.0.as_slice());
+        hasher.update(module_commit_id.as_bytes());
+        self.0 = *hasher.finalize().as_bytes();
     }
 }
 
@@ -88,7 +84,6 @@ impl core::fmt::Debug for SessionCommitId {
     }
 }
 
-#[derive(Clone, Default, PartialOrd, Ord, PartialEq, Eq)]
 pub struct SessionCommit {
     ids: BTreeMap<ModuleId, ModuleCommitId>,
     id: SessionCommitId,
@@ -120,7 +115,12 @@ impl SessionCommit {
     }
 }
 
-#[derive(Clone, PartialOrd, Ord, PartialEq, Eq)]
+impl Default for SessionCommit {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 pub struct SessionCommits(BTreeMap<SessionCommitId, SessionCommit>);
 
 impl SessionCommits {
@@ -137,6 +137,26 @@ impl SessionCommits {
         session_commit_id: &SessionCommitId,
     ) -> Option<&SessionCommit> {
         self.0.get(session_commit_id)
+    }
+
+    pub fn with_every_module_commit<F>(
+        &self,
+        session_commit_id: &SessionCommitId,
+        closure: F,
+    ) -> Result<(), Error>
+    where
+        F: Fn(&ModuleId, &ModuleCommitId) -> Result<(), Error>,
+    {
+        match self.get_session_commit(session_commit_id) {
+            Some(session_commit) => {
+                for (module_id, module_commit_id) in session_commit.ids().iter()
+                {
+                    closure(module_id, module_commit_id)?;
+                }
+                Ok(())
+            }
+            None => Err(SessionError("unknown session commit id".into())),
+        }
     }
 }
 

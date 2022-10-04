@@ -53,7 +53,14 @@ impl MemoryHandler {
             })
         })
     }
-    pub fn get_module_ids(&self) -> Vec<ModuleId> {
-        self.memories.read().keys().copied().collect()
+
+    pub fn with_every_module_id<F>(&self, mut closure: F) -> Result<(), Error>
+    where
+        F: FnMut(&ModuleId) -> Result<(), Error>,
+    {
+        for module_id in self.memories.read().keys() {
+            closure(module_id)?
+        }
+        Ok(())
     }
 }
