@@ -20,8 +20,11 @@ use tempfile::tempdir;
 
 use uplink::ModuleId;
 
+use crate::commit::{
+    ModuleCommitId, SessionCommit, SessionCommitId, SessionCommits,
+};
 use crate::module::WrappedModule;
-use crate::session::{CommitId, Session};
+use crate::session::Session;
 use crate::types::MemoryFreshness::*;
 use crate::types::{MemoryFreshness, StandardBufSerializer};
 use crate::util::{commit_id_to_name, module_id_to_name};
@@ -52,7 +55,7 @@ struct VMInner {
     modules: BTreeMap<ModuleId, WrappedModule>,
     host_queries: HostQueries,
     base_memory_path: PathBuf,
-    commit_ids: BTreeMap<ModuleId, CommitId>,
+    commits: SessionCommits,
 }
 
 impl VMInner {
@@ -64,7 +67,7 @@ impl VMInner {
             modules: BTreeMap::default(),
             host_queries: HostQueries::default(),
             base_memory_path: path.into(),
-            commit_ids: BTreeMap::default(),
+            commits: SessionCommits::new(),
         }
     }
 
@@ -76,7 +79,7 @@ impl VMInner {
                 .path()
                 .into(),
             host_queries: HostQueries::default(),
-            commit_ids: BTreeMap::default(),
+            commits: SessionCommits::new(),
         })
     }
 }
@@ -112,55 +115,35 @@ impl VM {
         guard.host_queries.insert(name, query);
     }
 
-    pub fn module_memory_path(
+    pub fn memory_path(
         &self,
         module_id: &ModuleId,
     ) -> (MemoryPath, MemoryFreshness) {
-        match self.memory_path_for_commit(module_id) {
-            Some(path) => (path, NotFresh),
-            None => {
-                let path = MemoryPath::new(
+        (
+            MemoryPath::new(
                     self.inner
                         .read()
                         .base_memory_path
                         .join(module_id_to_name(*module_id)),
-                );
-                (path, Fresh)
-            }
-        }
+            ),
+            Fresh,
+
+        )
     }
 
-    fn memory_path_for_commit(
+    pub fn path_to_commit(
         &self,
         module_id: &ModuleId,
-    ) -> Option<MemoryPath> {
-        let guard = self.inner.read();
-        let commit = guard.commit_ids.get(module_id);
-        commit.map(|commit_id| {
-            self.do_memory_path_for_commit(module_id, commit_id)
-        })
-    }
-
-    fn do_memory_path_for_commit(
-        &self,
-        module_id: &ModuleId,
-        commit_id: &CommitId,
+        module_commit_id: &ModuleCommitId,
     ) -> MemoryPath {
-        let commit_id_name = &*commit_id_to_name(*commit_id);
+        const SEPARATOR: char = '_';
+        let commit_id_name = &*commit_id_to_name(*module_commit_id);
         let mut name = module_id_to_name(*module_id);
-        name.push('_');
+        name.push(SEPARATOR);
         name.push_str(commit_id_name);
         let path = self.inner.read().base_memory_path.join(name);
         MemoryPath::new(path)
-    }
 
-    pub fn commit(
-        &mut self,
-        module_id: &ModuleId,
-        commit_id: &CommitId,
-    ) -> MemoryPath {
-        self.inner.write().commit_ids.insert(*module_id, *commit_id);
-        self.do_memory_path_for_commit(module_id, commit_id)
     }
 
     pub fn deploy(&mut self, bytecode: &[u8]) -> Result<ModuleId, Error> {
@@ -212,6 +195,31 @@ impl VM {
 
     pub fn session(&mut self) -> Session {
         Session::new(self.clone())
+    }
+    pub fn add_session_commit(&mut self, session_commit: SessionCommit) {
+        self.inner.write().commits.add(session_commit);
+    }
+    // todo: eliminate this call
+    pub fn get_session_commit(
+        &self,
+        session_commit_id: &SessionCommitId,
+    ) -> Option<SessionCommit> {
+        self.inner
+            .read()
+            .commits
+            .get_session_commit(session_commit_id)
+            .cloned()
+    }
+    pub fn get_module_commit_id(
+        &self,
+        session_commit_id: &SessionCommitId,
+        module_id: &ModuleId,
+    ) -> Option<ModuleCommitId> {
+        self.inner
+            .read()
+            .commits
+            .get_session_commit(session_commit_id)
+            .and_then(|sc| sc.get(module_id).copied())
     }
 }
 

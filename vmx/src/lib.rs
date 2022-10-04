@@ -6,6 +6,7 @@
 
 #[macro_use]
 mod bytecode_macro;
+mod commit;
 mod error;
 mod imports;
 mod instance;

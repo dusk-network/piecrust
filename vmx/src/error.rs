@@ -29,6 +29,8 @@ pub enum Error {
     CompositeSerializerError(Box<Compo>),
     PersistenceError(std::io::Error),
     CommitError(std::io::Error),
+    RestoreError(std::io::Error),
+    SessionError(String),
     MemorySetupError(std::io::Error),
     RegionError(region::Error),
     ValidationError,
