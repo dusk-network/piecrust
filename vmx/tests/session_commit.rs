@@ -105,3 +105,31 @@ fn commit_restore_two_modules_session() -> Result<(), Error> {
     );
     Ok(())
 }
+
+#[test]
+fn multiple_commits_per_session() -> Result<(), Error> {
+    let mut vm = VM::ephemeral()?;
+    let id = vm.deploy(module_bytecode!("counter"))?;
+
+    let mut session = vm.session();
+    // commit 1
+    assert_eq!(session.query::<(), i64>(id, "read_value", ())?, 0xfc);
+    session.transact::<(), ()>(id, "increment", ())?;
+    let commit_1 = session.commit()?;
+
+    // commit 2
+    assert_eq!(session.query::<(), i64>(id, "read_value", ())?, 0xfd);
+    session.transact::<(), ()>(id, "increment", ())?;
+    session.transact::<(), ()>(id, "increment", ())?;
+    let commit_2 = session.commit()?;
+    assert_eq!(session.query::<(), i64>(id, "read_value", ())?, 0xff);
+
+    // restore commit 1
+    session.restore(&commit_1)?;
+    assert_eq!(session.query::<(), i64>(id, "read_value", ())?, 0xfd);
+
+    // restore commit 2
+    session.restore(&commit_2)?;
+    assert_eq!(session.query::<(), i64>(id, "read_value", ())?, 0xff);
+    Ok(())
+}

@@ -79,6 +79,8 @@ impl Session {
         let arg_len = instance.write_to_arg_buffer(arg)?;
         let ret_len = instance.transact(method_name, arg_len)?;
 
+        self.reset_current_commit();
+
         instance.read_from_arg_buffer(ret_len)
     }
 
@@ -188,5 +190,9 @@ impl Session {
 
     fn set_current_commit(&mut self, session_commit_id: &SessionCommitId) {
         self.current_commit_id = Some(*session_commit_id);
+    }
+
+    fn reset_current_commit(&mut self) {
+        self.current_commit_id = None;
     }
 }
