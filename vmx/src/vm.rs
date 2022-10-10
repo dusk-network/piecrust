@@ -20,9 +20,7 @@ use tempfile::tempdir;
 
 use uplink::ModuleId;
 
-use crate::commit::{
-    ModuleCommitId, SessionCommit, SessionCommitId, SessionCommits,
-};
+use crate::commit::{CommitId, ModuleCommitId, SessionCommit, SessionCommits};
 use crate::memory_path::MemoryPath;
 use crate::module::WrappedModule;
 use crate::session::Session;
@@ -193,7 +191,7 @@ impl VM {
 
     pub(crate) fn restore_session(
         &self,
-        session_commit_id: &SessionCommitId,
+        session_commit_id: &CommitId,
     ) -> Result<(), Error> {
         self.inner.read().session_commits.with_every_module_commit(
             session_commit_id,

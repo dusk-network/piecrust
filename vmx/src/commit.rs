@@ -46,11 +46,11 @@ impl core::fmt::Debug for ModuleCommitId {
 }
 
 #[derive(Clone, Copy, Default, PartialOrd, Ord, PartialEq, Eq)]
-pub struct SessionCommitId([u8; COMMIT_ID_BYTES]);
+pub struct CommitId([u8; COMMIT_ID_BYTES]);
 
-impl SessionCommitId {
+impl CommitId {
     pub fn uninitialized() -> Self {
-        SessionCommitId([0; COMMIT_ID_BYTES])
+        CommitId([0; COMMIT_ID_BYTES])
     }
 
     pub fn as_bytes(&self) -> &[u8] {
@@ -65,7 +65,7 @@ impl SessionCommitId {
     }
 }
 
-impl core::fmt::Debug for SessionCommitId {
+impl core::fmt::Debug for CommitId {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         if f.alternate() {
             write!(f, "0x")?
@@ -79,18 +79,18 @@ impl core::fmt::Debug for SessionCommitId {
 
 pub struct SessionCommit {
     ids: BTreeMap<ModuleId, ModuleCommitId>,
-    id: SessionCommitId,
+    id: CommitId,
 }
 
 impl SessionCommit {
     pub fn new() -> SessionCommit {
         SessionCommit {
             ids: BTreeMap::new(),
-            id: SessionCommitId::uninitialized(),
+            id: CommitId::uninitialized(),
         }
     }
 
-    pub fn commit_id(&self) -> SessionCommitId {
+    pub fn commit_id(&self) -> CommitId {
         self.id
     }
 
@@ -110,7 +110,7 @@ impl Default for SessionCommit {
     }
 }
 
-pub struct SessionCommits(BTreeMap<SessionCommitId, SessionCommit>);
+pub struct SessionCommits(BTreeMap<CommitId, SessionCommit>);
 
 impl SessionCommits {
     pub fn new() -> SessionCommits {
@@ -123,14 +123,14 @@ impl SessionCommits {
 
     pub fn get_session_commit(
         &self,
-        session_commit_id: &SessionCommitId,
+        session_commit_id: &CommitId,
     ) -> Option<&SessionCommit> {
         self.0.get(session_commit_id)
     }
 
     pub fn with_every_module_commit<F>(
         &self,
-        session_commit_id: &SessionCommitId,
+        session_commit_id: &CommitId,
         closure: F,
     ) -> Result<(), Error>
     where

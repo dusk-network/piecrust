@@ -16,7 +16,7 @@ use rkyv::{
 
 use uplink::ModuleId;
 
-use crate::commit::{ModuleCommitId, SessionCommit, SessionCommitId};
+use crate::commit::{CommitId, ModuleCommitId, SessionCommit};
 use crate::instance::WrappedInstance;
 use crate::memory_handler::MemoryHandler;
 use crate::memory_path::MemoryPath;
@@ -153,7 +153,7 @@ impl Session {
         s.pop();
     }
 
-    pub fn commit(&mut self) -> Result<SessionCommitId, Error> {
+    pub fn commit(&mut self) -> Result<CommitId, Error> {
         let mut session_commit = SessionCommit::new();
         self.memory_handler.with_every_module_id(|module_id, mem| {
             let (source_path, _) = self.vm.memory_path(module_id);
@@ -177,7 +177,7 @@ impl Session {
 
     pub fn restore(
         &mut self,
-        session_commit_id: &SessionCommitId,
+        session_commit_id: &CommitId,
     ) -> Result<(), Error> {
         self.vm.restore_session(session_commit_id)?;
         Ok(())
