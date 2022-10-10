@@ -6,14 +6,19 @@ edition = "2021"
 [dependencies]
 uplink = { path = "../uplink" }
 
-#wasmer = { git = "https://github.com/wasmerio/wasmer/lib/api", branch = "feat_enhanced_tinytunable_test" }
-#wasmer-vm = { git = "https://github.com/wasmerio/wasmer/lib/vm", branch = "feat_enhanced_tinytunable_test" }
-#wasmer-types = { git = "https://github.com/wasmerio/wasmer/lib/types", branch = "feat_enhanced_tinytunable_test" }
-#wasmer-compiler-singlepass = { git = "https://github.com/wasmerio/wasmer/lib/compiler-singlepass", branch = "feat_enhanced_tinytunable_test" }
-wasmer = { path = "../../../rust/wasmer/lib/api" }
-wasmer-vm = { path = "../../../rust/wasmer/lib/vm" }
-wasmer-types = { path = "../../../rust/wasmer/lib/types" }
-wasmer-compiler-singlepass = { path = "../../../rust/wasmer/lib/compiler-singlepass" }
+#wasmer = { git = "https://github.com/wasmerio/wasmer/lib/api", branch = "master" }
+#wasmer-vm = { git = "https://github.com/wasmerio/wasmer/lib/vm", branch = "master" }
+#wasmer-types = { git = "https://github.com/wasmerio/wasmer/lib/types", branch = "master" }
+#wasmer-compiler-singlepass = { git = "https://github.com/wasmerio/wasmer/lib/compiler-singlepass", branch = "master" }
+wasmer = { git = "https://github.com/wasmerio/wasmer", rev = "06300d32b" }
+wasmer-vm = { git = "https://github.com/wasmerio/wasmer", rev = "06300d32b" }
+wasmer-types = { git = "https://github.com/wasmerio/wasmer", rev = "06300d32b" }
+wasmer-compiler-singlepass = { git = "https://github.com/wasmerio/wasmer", rev = "06300d32b" }
+
+#wasmer = { path = "../../../rust/wasmer/lib/api" }
+#wasmer-vm = { path = "../../../rust/wasmer/lib/vm" }
+#wasmer-types = { path = "../../../rust/wasmer/lib/types" }
+#wasmer-compiler-singlepass = { path = "../../../rust/wasmer/lib/compiler-singlepass" }
 bytecheck = "0.6"
 rkyv = { version = "0.7", features = ["size_32", "validation"] }
 parking_lot = "0.12.1"
