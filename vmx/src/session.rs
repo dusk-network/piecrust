@@ -153,9 +153,9 @@ impl Session {
 
     pub fn commit(&mut self) -> Result<SessionCommitId, Error> {
         let mut session_commit = SessionCommit::new();
-        self.memory_handler.with_every_module_id(|module_id| {
+        self.memory_handler.with_every_module_id(|module_id, mem| {
             let (source_path, _) = self.vm.memory_path(module_id);
-            let module_commit_id = ModuleCommitId::from(&source_path)?;
+            let module_commit_id = ModuleCommitId::from(mem)?;
             let target_path =
                 self.vm.path_to_module_commit(module_id, &module_commit_id);
             std::fs::copy(source_path.as_ref(), target_path.as_ref())

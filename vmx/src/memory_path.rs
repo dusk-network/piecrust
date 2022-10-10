@@ -4,10 +4,7 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use std::io::Read;
 use std::path::{Path, PathBuf};
-
-use crate::error::Error::{self, PersistenceError};
 
 #[derive(Debug)]
 pub struct MemoryPath {
@@ -20,16 +17,6 @@ impl MemoryPath {
         P: Into<PathBuf>,
     {
         MemoryPath { path: path.into() }
-    }
-
-    pub fn read(&self) -> Result<Vec<u8>, Error> {
-        let mut f = std::fs::File::open(self.path.as_path())
-            .map_err(PersistenceError)?;
-        let metadata =
-            std::fs::metadata(self.path.as_path()).map_err(PersistenceError)?;
-        let mut buffer = vec![0; metadata.len() as usize];
-        f.read(buffer.as_mut_slice()).map_err(PersistenceError)?;
-        Ok(buffer)
     }
 }
 

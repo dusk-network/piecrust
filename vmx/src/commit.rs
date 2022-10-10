@@ -11,7 +11,6 @@ use uplink::ModuleId;
 use std::collections::BTreeMap;
 
 use crate::error::Error::{self, SessionError};
-use crate::memory_path::MemoryPath;
 
 pub const COMMIT_ID_BYTES: usize = 32;
 
@@ -19,14 +18,8 @@ pub const COMMIT_ID_BYTES: usize = 32;
 pub struct ModuleCommitId([u8; COMMIT_ID_BYTES]);
 
 impl ModuleCommitId {
-    pub fn from(memory_path: &MemoryPath) -> Result<Self, Error> {
-        Ok(ModuleCommitId(
-            *blake3::hash(memory_path.read()?.as_slice()).as_bytes(),
-        ))
-    }
-
-    pub fn uninitialized() -> ModuleCommitId {
-        ModuleCommitId([0; COMMIT_ID_BYTES])
+    pub fn from(mem: &[u8]) -> Result<Self, Error> {
+        Ok(ModuleCommitId(*blake3::hash(mem).as_bytes()))
     }
 
     pub fn as_bytes(&self) -> &[u8] {
@@ -64,7 +57,7 @@ impl SessionCommitId {
         &self.0[..]
     }
 
-    pub fn add(&mut self, module_commit_id: &ModuleCommitId) {
+    fn add(&mut self, module_commit_id: &ModuleCommitId) {
         let mut hasher = blake3::Hasher::new();
         hasher.update(self.0.as_slice());
         hasher.update(module_commit_id.as_bytes());

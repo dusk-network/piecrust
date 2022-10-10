@@ -198,6 +198,13 @@ impl Linear {
         slice.copy_from_slice(bytes);
     }
 
+    pub fn as_slice(&self) -> &[u8] {
+        let guard = self.0.read();
+        let base = guard.memory_definition.base;
+        let len = guard.memory_definition.current_length;
+        unsafe { std::slice::from_raw_parts(base, len) }
+    }
+
     // workaround, to be deprecatedd
     pub(crate) fn save_volatile(&self) {
         let base: *mut u8;

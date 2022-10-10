@@ -56,10 +56,12 @@ impl MemoryHandler {
 
     pub fn with_every_module_id<F>(&self, mut closure: F) -> Result<(), Error>
     where
-        F: FnMut(&ModuleId) -> Result<(), Error>,
+        F: FnMut(&ModuleId, &[u8]) -> Result<(), Error>,
     {
-        for module_id in self.memories.read().keys() {
-            closure(module_id)?
+        let guard = self.memories.read();
+        for module_id in guard.keys() {
+            let linear = guard.get(module_id).expect("linear memory exists");
+            closure(module_id, linear.as_slice())?
         }
         Ok(())
     }
