@@ -153,7 +153,7 @@ impl Session {
         s.pop();
     }
 
-    pub fn commit(&mut self) -> Result<CommitId, Error> {
+    pub fn commit(mut self) -> Result<CommitId, Error> {
         let mut session_commit = SessionCommit::new();
         self.memory_handler.with_every_module_id(|module_id, mem| {
             let (source_path, _) = self.vm.memory_path(module_id);
