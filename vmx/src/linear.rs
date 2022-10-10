@@ -51,6 +51,29 @@ impl From<Linear> for VMMemory {
 }
 
 impl Linear {
+    pub fn grow_to(&mut self, byte_size: u32) -> Result<Pages, MemoryError> {
+        let new_pages = Pages(byte_size >> WASM_PAGE_LOG2);
+        let prev_pages = Pages::from(
+            self.definition().current_length as u32 >> WASM_PAGE_LOG2,
+        );
+        if new_pages.0 <= prev_pages.0 {
+            return Ok(prev_pages);
+        }
+        let delta = new_pages - prev_pages;
+        let delta_bytes = delta.bytes().0;
+        let prev_bytes = prev_pages.bytes().0;
+        self.make_accessible(prev_bytes, delta_bytes)
+            .map_err(|_e| {
+                MemoryError::Region("todo error to string conv".to_string())
+            })?;
+        unsafe {
+            let mut md_ptr = self.definition_ptr();
+            let md = md_ptr.as_mut();
+            md.current_length = new_pages.bytes().0;
+        }
+        Ok(prev_pages)
+    }
+
     /// Creates a new copy-on-write WASM linear memory backed by a file at the
     /// given `path`.
     pub fn new<P: AsRef<Path>>(
@@ -291,21 +314,8 @@ impl LinearMemory for Linear {
         }
 
         let new_pages = prev_pages + delta;
-        let delta_bytes = delta.bytes().0;
-        let prev_bytes = prev_pages.bytes().0;
 
-        self.make_accessible(prev_bytes, delta_bytes)
-            .map_err(|_e| {
-                MemoryError::Region("todo error to string conv".to_string())
-            })?;
-
-        unsafe {
-            let mut md_ptr = self.definition_ptr();
-            let md = md_ptr.as_mut();
-            md.current_length = new_pages.bytes().0;
-        }
-
-        Ok(prev_pages)
+        self.grow_to(new_pages.bytes().0 as u32)
     }
 
     fn vmmemory(&self) -> NonNull<VMMemoryDefinition> {

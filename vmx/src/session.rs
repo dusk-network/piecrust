@@ -4,6 +4,7 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
+use std::fs;
 use std::sync::Arc;
 
 use bytecheck::CheckBytes;
@@ -29,7 +30,6 @@ pub struct Session {
     vm: VM,
     memory_handler: MemoryHandler,
     callstack: Arc<RwLock<Vec<ModuleId>>>,
-    current_commit_id: Option<SessionCommitId>,
 }
 
 impl Session {
@@ -38,7 +38,6 @@ impl Session {
             memory_handler: MemoryHandler::new(vm.clone()),
             vm,
             callstack: Arc::new(RwLock::new(vec![])),
-            current_commit_id: None,
         }
     }
 
@@ -79,14 +78,12 @@ impl Session {
         let arg_len = instance.write_to_arg_buffer(arg)?;
         let ret_len = instance.transact(method_name, arg_len)?;
 
-        self.reset_current_commit();
-
         instance.read_from_arg_buffer(ret_len)
     }
 
     pub(crate) fn instance(&self, mod_id: ModuleId) -> WrappedInstance {
         self.vm.with_module(mod_id, |module| {
-            let memory = self
+            let mut memory = self
                 .memory_handler
                 .get_memory(mod_id)
                 .expect("memory available");
@@ -112,6 +109,11 @@ impl Session {
 
             // if current commit exists, use it as memory image
             if let Some(commit_path) = self.path_to_current_commit(&mod_id) {
+                let metadata = std::fs::metadata(commit_path.as_ref())
+                    .expect("todo - metadata error handling");
+                memory
+                    .grow_to(metadata.len() as u32)
+                    .expect("todo - grow error handling");
                 let (target_path, _) = self.vm.memory_path(&mod_id);
                 std::fs::copy(commit_path.as_ref(), target_path.as_ref())
                     .expect("commit and memory paths exist");
@@ -158,12 +160,16 @@ impl Session {
             let module_commit_id = ModuleCommitId::from(mem)?;
             let target_path =
                 self.vm.path_to_module_commit(module_id, &module_commit_id);
+            let last_commit_path =
+                self.vm.path_to_module_last_commit(module_id);
             std::fs::copy(source_path.as_ref(), target_path.as_ref())
                 .map_err(CommitError)?;
+            std::fs::copy(source_path.as_ref(), last_commit_path.as_ref())
+                .map_err(CommitError)?;
+            fs::remove_file(source_path.as_ref()).map_err(CommitError)?;
             session_commit.add(module_id, &module_commit_id);
             Ok(())
         })?;
-        self.set_current_commit(&session_commit.commit_id());
         let session_commit_id = session_commit.commit_id();
         self.vm.add_session_commit(session_commit);
         Ok(session_commit_id)
@@ -174,7 +180,6 @@ impl Session {
         session_commit_id: &SessionCommitId,
     ) -> Result<(), Error> {
         self.vm.restore_session(session_commit_id)?;
-        self.set_current_commit(session_commit_id);
         Ok(())
     }
 
@@ -182,17 +187,7 @@ impl Session {
         &self,
         module_id: &ModuleId,
     ) -> Option<MemoryPath> {
-        self.current_commit_id.and_then(|session_commit_id| {
-            self.vm
-                .path_to_session_commit(module_id, &session_commit_id)
-        })
-    }
-
-    fn set_current_commit(&mut self, session_commit_id: &SessionCommitId) {
-        self.current_commit_id = Some(*session_commit_id);
-    }
-
-    fn reset_current_commit(&mut self) {
-        self.current_commit_id = None;
+        let path = self.vm.path_to_module_last_commit(module_id);
+        Some(path).filter(|p| p.as_ref().exists())
     }
 }

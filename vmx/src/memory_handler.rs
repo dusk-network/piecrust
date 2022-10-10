@@ -5,6 +5,7 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 use std::collections::BTreeMap;
+use std::fs;
 use std::sync::Arc;
 
 use parking_lot::RwLock;
@@ -40,6 +41,9 @@ impl MemoryHandler {
 
         self.vm.with_module(mod_id, |module| {
             let (path, fresh) = self.vm.memory_path(&mod_id);
+            if path.as_ref().exists() {
+                fs::remove_file(path.as_ref()).expect("file removed if exists");
+            }
             let result = Linear::new(
                 Some(path),
                 MEMORY_PAGES * WASM_PAGE_SIZE,

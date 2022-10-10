@@ -34,7 +34,7 @@ fn read_write_session() -> Result<(), Error> {
 
     // session committed, new value accessible
 
-    assert_eq!(other_session.query::<(), i64>(id, "read_value", ())?, 0xfd);
+    assert_eq!(vm.session().query::<(), i64>(id, "read_value", ())?, 0xfd);
     Ok(())
 }
 
@@ -50,11 +50,11 @@ fn commit_restore() -> Result<(), Error> {
 
     // commit 2
     let mut session_2 = vm.session();
-    assert_eq!(session_2.query::<(), i64>(id, "read_value", ())?, 0xfc);
+    assert_eq!(session_2.query::<(), i64>(id, "read_value", ())?, 0xfd);
     session_2.transact::<(), ()>(id, "increment", ())?;
     session_2.transact::<(), ()>(id, "increment", ())?;
     let commit_2 = session_2.commit()?;
-    assert_eq!(session_2.query::<(), i64>(id, "read_value", ())?, 0xfe);
+    assert_eq!(vm.session().query::<(), i64>(id, "read_value", ())?, 0xfe);
 
     // restore commit 1
     let mut session_3 = vm.session();
@@ -86,9 +86,11 @@ fn commit_restore_two_modules_session() -> Result<(), Error> {
 
     let commit_1 = session.commit()?;
 
+    let mut session = vm.session();
     session.transact::<(), ()>(id_1, "increment", ())?;
     session.transact::<i16, ()>(id_2, "set", 0x12)?;
     let _commit_2 = session.commit();
+    let mut session = vm.session();
     assert_eq!(session.query::<(), i64>(id_1, "read_value", ())?, 0xfe);
     assert_eq!(
         session.query::<_, Option<i16>>(id_2, "get", ())?,
@@ -107,7 +109,7 @@ fn commit_restore_two_modules_session() -> Result<(), Error> {
 }
 
 #[test]
-fn multiple_commits_per_session() -> Result<(), Error> {
+fn multiple_commits() -> Result<(), Error> {
     let mut vm = VM::ephemeral()?;
     let id = vm.deploy(module_bytecode!("counter"))?;
 
@@ -118,11 +120,13 @@ fn multiple_commits_per_session() -> Result<(), Error> {
     let commit_1 = session.commit()?;
 
     // commit 2
+    let mut session = vm.session();
     assert_eq!(session.query::<(), i64>(id, "read_value", ())?, 0xfd);
     session.transact::<(), ()>(id, "increment", ())?;
     session.transact::<(), ()>(id, "increment", ())?;
     let commit_2 = session.commit()?;
-    assert_eq!(session.query::<(), i64>(id, "read_value", ())?, 0xff);
+    let mut session = vm.session();
+    assert_eq!(session.query::<(), i64>(id, "read_value", ())?, 0xfe);
 
     // restore commit 1
     session.restore(&commit_1)?;
@@ -130,6 +134,6 @@ fn multiple_commits_per_session() -> Result<(), Error> {
 
     // restore commit 2
     session.restore(&commit_2)?;
-    assert_eq!(session.query::<(), i64>(id, "read_value", ())?, 0xff);
+    assert_eq!(session.query::<(), i64>(id, "read_value", ())?, 0xfe);
     Ok(())
 }

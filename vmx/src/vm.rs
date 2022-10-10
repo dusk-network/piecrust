@@ -176,16 +176,15 @@ impl VM {
         MemoryPath::new(path)
     }
 
-    pub(crate) fn path_to_session_commit(
+    pub(crate) fn path_to_module_last_commit(
         &self,
         module_id: &ModuleId,
-        session_commit_id: &SessionCommitId,
-    ) -> Option<MemoryPath> {
-        self.get_module_commit_id(session_commit_id, module_id).map(
-            |module_commit_id| {
-                self.path_to_module_commit(module_id, &module_commit_id)
-            },
-        )
+    ) -> MemoryPath {
+        const LAST_COMMIT_POSTFIX: &str = "_last";
+        let mut name = module_id_to_name(*module_id);
+        name.push_str(LAST_COMMIT_POSTFIX);
+        let path = self.inner.read().base_memory_path.join(name);
+        MemoryPath::new(path)
     }
 
     pub(crate) fn add_session_commit(&mut self, session_commit: SessionCommit) {
@@ -202,23 +201,15 @@ impl VM {
                 let source_path =
                     self.path_to_module_commit(module_id, module_commit_id);
                 let (target_path, _) = self.memory_path(module_id);
+                let last_commit_path =
+                    self.path_to_module_last_commit(module_id);
                 std::fs::copy(source_path.as_ref(), target_path.as_ref())
+                    .map_err(RestoreError)?;
+                std::fs::copy(source_path.as_ref(), last_commit_path.as_ref())
                     .map_err(RestoreError)?;
                 Ok(())
             },
         )
-    }
-
-    pub(crate) fn get_module_commit_id(
-        &self,
-        session_commit_id: &SessionCommitId,
-        module_id: &ModuleId,
-    ) -> Option<ModuleCommitId> {
-        self.inner
-            .read()
-            .session_commits
-            .get_session_commit(session_commit_id)
-            .and_then(|sc| sc.get(module_id).copied())
     }
 }
 
