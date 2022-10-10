@@ -19,7 +19,6 @@ pub fn box_set_get() -> Result<(), Error> {
     let mut session = vm.session();
 
     session.transact::<i16, ()>(id, "set", 0x11)?;
-    session.commit(&id)?;
 
     let value = session.query::<_, Option<i16>>(id, "get", ())?;
 

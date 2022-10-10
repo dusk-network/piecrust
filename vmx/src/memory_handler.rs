@@ -5,6 +5,7 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 use std::collections::BTreeMap;
+use std::fs;
 use std::sync::Arc;
 
 use parking_lot::RwLock;
@@ -39,7 +40,10 @@ impl MemoryHandler {
         }
 
         self.vm.with_module(mod_id, |module| {
-            let (path, fresh) = self.vm.module_memory_path(&mod_id);
+            let (path, fresh) = self.vm.memory_path(&mod_id);
+            if path.as_ref().exists() {
+                fs::remove_file(path.as_ref()).expect("file removed if exists");
+            }
             let result = Linear::new(
                 Some(path),
                 MEMORY_PAGES * WASM_PAGE_SIZE,
@@ -52,5 +56,17 @@ impl MemoryHandler {
                 mem
             })
         })
+    }
+
+    pub fn with_every_module_id<F>(&self, mut closure: F) -> Result<(), Error>
+    where
+        F: FnMut(&ModuleId, &[u8]) -> Result<(), Error>,
+    {
+        let guard = self.memories.read();
+        for module_id in guard.keys() {
+            let linear = guard.get(module_id).expect("linear memory exists");
+            closure(module_id, linear.as_slice())?
+        }
+        Ok(())
     }
 }

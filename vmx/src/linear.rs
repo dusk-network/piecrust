@@ -51,6 +51,29 @@ impl From<Linear> for VMMemory {
 }
 
 impl Linear {
+    pub fn grow_to(&mut self, byte_size: u32) -> Result<Pages, MemoryError> {
+        let new_pages = Pages(byte_size >> WASM_PAGE_LOG2);
+        let prev_pages = Pages::from(
+            self.definition().current_length as u32 >> WASM_PAGE_LOG2,
+        );
+        if new_pages.0 <= prev_pages.0 {
+            return Ok(prev_pages);
+        }
+        let delta = new_pages - prev_pages;
+        let delta_bytes = delta.bytes().0;
+        let prev_bytes = prev_pages.bytes().0;
+        self.make_accessible(prev_bytes, delta_bytes)
+            .map_err(|_e| {
+                MemoryError::Region("todo error to string conv".to_string())
+            })?;
+        unsafe {
+            let mut md_ptr = self.definition_ptr();
+            let md = md_ptr.as_mut();
+            md.current_length = new_pages.bytes().0;
+        }
+        Ok(prev_pages)
+    }
+
     /// Creates a new copy-on-write WASM linear memory backed by a file at the
     /// given `path`.
     pub fn new<P: AsRef<Path>>(
@@ -198,6 +221,13 @@ impl Linear {
         slice.copy_from_slice(bytes);
     }
 
+    pub fn as_slice(&self) -> &[u8] {
+        let guard = self.0.read();
+        let base = guard.memory_definition.base;
+        let len = guard.memory_definition.current_length;
+        unsafe { std::slice::from_raw_parts(base, len) }
+    }
+
     // workaround, to be deprecatedd
     pub(crate) fn save_volatile(&self) {
         let base: *mut u8;
@@ -284,21 +314,8 @@ impl LinearMemory for Linear {
         }
 
         let new_pages = prev_pages + delta;
-        let delta_bytes = delta.bytes().0;
-        let prev_bytes = prev_pages.bytes().0;
 
-        self.make_accessible(prev_bytes, delta_bytes)
-            .map_err(|_e| {
-                MemoryError::Region("todo error to string conv".to_string())
-            })?;
-
-        unsafe {
-            let mut md_ptr = self.definition_ptr();
-            let md = md_ptr.as_mut();
-            md.current_length = new_pages.bytes().0;
-        }
-
-        Ok(prev_pages)
+        self.grow_to(new_pages.bytes().0 as u32)
     }
 
     fn vmmemory(&self) -> NonNull<VMMemoryDefinition> {

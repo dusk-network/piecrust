@@ -4,15 +4,15 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use crate::session::CommitId;
+use crate::commit::ModuleCommitId;
 use uplink::ModuleId;
 
 pub fn module_id_to_name(module_id: ModuleId) -> String {
     format!("{}", ByteArrayWrapper(module_id.as_bytes()))
 }
 
-pub fn commit_id_to_name(commit_id: CommitId) -> String {
-    format!("{}", ByteArrayWrapper(commit_id.as_bytes()))
+pub fn commit_id_to_name(module_commit_id: ModuleCommitId) -> String {
+    format!("{}", ByteArrayWrapper(module_commit_id.as_bytes()))
 }
 
 pub struct ByteArrayWrapper<'a>(pub &'a [u8]);
