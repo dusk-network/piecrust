@@ -6,10 +6,14 @@ edition = "2021"
 [dependencies]
 uplink = { path = "../uplink" }
 
-wasmer = { git = "https://github.com/wasmerio/wasmer", rev = "dafdd94" }
-wasmer-vm = { git = "https://github.com/wasmerio/wasmer", rev = "dafdd94" }
-wasmer-types = { git = "https://github.com/wasmerio/wasmer", rev = "dafdd94" }
-wasmer-compiler-singlepass = { git = "https://github.com/wasmerio/wasmer", rev = "dafdd94" }
+#wasmer = { git = "https://github.com/wasmerio/wasmer", rev = "dafdd94" }
+#wasmer-vm = { git = "https://github.com/wasmerio/wasmer", rev = "dafdd94" }
+#wasmer-types = { git = "https://github.com/wasmerio/wasmer", rev = "dafdd94" }
+#wasmer-compiler-singlepass = { git = "https://github.com/wasmerio/wasmer", rev = "dafdd94" }
+wasmer = { path = "../../../rust/wasmer/lib/api" }
+wasmer-vm = { path = "../../../rust/wasmer/lib/vm" }
+wasmer-types = { path = "../../../rust/wasmer/lib/types" }
+wasmer-compiler-singlepass = { path = "../../../rust/wasmer/lib/compiler-singlepass" }
 bytecheck = "0.6"
 rkyv = { version = "0.7", features = ["size_32", "validation"] }
 parking_lot = "0.12.1"

@@ -39,22 +39,19 @@ impl MemoryHandler {
             }
         }
 
-        self.vm.with_module(mod_id, |module| {
-            let (path, fresh) = self.vm.memory_path(&mod_id);
-            if path.as_ref().exists() {
-                fs::remove_file(path.as_ref()).expect("file removed if exists");
-            }
-            let result = Linear::new(
-                Some(path),
-                MEMORY_PAGES * WASM_PAGE_SIZE,
-                MAX_MEMORY_BYTES,
-                fresh,
-                module.volatile().clone(),
-            );
-            result.map(|mem| {
-                self.memories.write().insert(mod_id, mem.clone());
-                mem
-            })
+        let (path, fresh) = self.vm.memory_path(&mod_id);
+        if path.as_ref().exists() {
+            fs::remove_file(path.as_ref()).expect("file removed if exists");
+        }
+        let result = Linear::new(
+            Some(path),
+            MEMORY_PAGES * WASM_PAGE_SIZE,
+            MAX_MEMORY_BYTES,
+            fresh,
+        );
+        result.map(|mem| {
+            self.memories.write().insert(mod_id, mem.clone());
+            mem
         })
     }
 

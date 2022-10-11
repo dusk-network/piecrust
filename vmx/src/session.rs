@@ -88,11 +88,6 @@ impl Session {
                 .get_memory(mod_id)
                 .expect("memory available");
 
-            let freshness = memory.freshness();
-            if freshness == NotFresh {
-                memory.save_volatile();
-            }
-
             let wrapped = WrappedInstance::new(
                 memory.clone(),
                 self.clone(),
@@ -101,11 +96,7 @@ impl Session {
             )
             .expect("todo, error handling");
 
-            if freshness == NotFresh {
-                memory.restore_volatile();
-            } else {
-                memory.set_freshness(NotFresh);
-            }
+            memory.set_freshness(NotFresh);
 
             // if current commit exists, use it as memory image
             if let Some(commit_path) = self.path_to_current_commit(&mod_id) {
@@ -117,7 +108,6 @@ impl Session {
                 let (target_path, _) = self.vm.memory_path(&mod_id);
                 std::fs::copy(commit_path.as_ref(), target_path.as_ref())
                     .expect("commit and memory paths exist");
-                memory.set_freshness(NotFresh)
             }
             wrapped
         })
