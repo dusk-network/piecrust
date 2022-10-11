@@ -6,11 +6,13 @@
 
 #[macro_use]
 mod bytecode_macro;
+mod commit;
 mod error;
 mod imports;
 mod instance;
 mod linear;
 mod memory_handler;
+mod memory_path;
 mod module;
 mod session;
 mod types;

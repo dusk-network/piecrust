@@ -269,9 +269,9 @@ impl WrappedInstance {
                             print!(" ");
                         }
 
-                        let buf_start = self.arg_buf_ofs as usize;
-                        let buf_end = buf_start + uplink::ARGBUF_LEN as usize;
-                        let heap_base = self.heap_base as usize;
+                        let buf_start = self.arg_buf_ofs;
+                        let buf_end = buf_start + uplink::ARGBUF_LEN;
+                        let heap_base = self.heap_base;
 
                         if ofs + i >= buf_start && ofs + i < buf_end {
                             print!("{}", format!("{:02x}", byte).red());
