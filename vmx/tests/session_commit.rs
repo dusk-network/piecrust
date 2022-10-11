@@ -54,7 +54,7 @@ fn commit_restore() -> Result<(), Error> {
     session_2.transact::<(), ()>(id, "increment", ())?;
     session_2.transact::<(), ()>(id, "increment", ())?;
     let commit_2 = session_2.commit()?;
-    assert_eq!(vm.session().query::<(), i64>(id, "read_value", ())?, 0xfe);
+    assert_eq!(vm.session().query::<(), i64>(id, "read_value", ())?, 0xff);
 
     // restore commit 1
     let mut session_3 = vm.session();
@@ -64,7 +64,7 @@ fn commit_restore() -> Result<(), Error> {
     // restore commit 2
     let mut session_4 = vm.session();
     session_4.restore(&commit_2)?;
-    assert_eq!(session_4.query::<(), i64>(id, "read_value", ())?, 0xfe);
+    assert_eq!(session_4.query::<(), i64>(id, "read_value", ())?, 0xff);
     Ok(())
 }
 
@@ -126,7 +126,7 @@ fn multiple_commits() -> Result<(), Error> {
     session.transact::<(), ()>(id, "increment", ())?;
     let commit_2 = session.commit()?;
     let mut session = vm.session();
-    assert_eq!(session.query::<(), i64>(id, "read_value", ())?, 0xfe);
+    assert_eq!(session.query::<(), i64>(id, "read_value", ())?, 0xff);
 
     // restore commit 1
     session.restore(&commit_1)?;
@@ -134,6 +134,6 @@ fn multiple_commits() -> Result<(), Error> {
 
     // restore commit 2
     session.restore(&commit_2)?;
-    assert_eq!(session.query::<(), i64>(id, "read_value", ())?, 0xfe);
+    assert_eq!(session.query::<(), i64>(id, "read_value", ())?, 0xff);
     Ok(())
 }

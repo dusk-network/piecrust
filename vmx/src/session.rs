@@ -96,19 +96,21 @@ impl Session {
             )
             .expect("todo, error handling");
 
-            memory.set_freshness(NotFresh);
-
-            // if current commit exists, use it as memory image
-            if let Some(commit_path) = self.path_to_current_commit(&mod_id) {
-                let metadata = std::fs::metadata(commit_path.as_ref())
-                    .expect("todo - metadata error handling");
-                memory
-                    .grow_to(metadata.len() as u32)
-                    .expect("todo - grow error handling");
-                let (target_path, _) = self.vm.memory_path(&mod_id);
-                std::fs::copy(commit_path.as_ref(), target_path.as_ref())
-                    .expect("commit and memory paths exist");
+            if memory.freshness() == Fresh {
+                // if current commit exists, use it as memory image
+                if let Some(commit_path) = self.path_to_current_commit(&mod_id)
+                {
+                    let metadata = std::fs::metadata(commit_path.as_ref())
+                        .expect("todo - metadata error handling");
+                    memory
+                        .grow_to(metadata.len() as u32)
+                        .expect("todo - grow error handling");
+                    let (target_path, _) = self.vm.memory_path(&mod_id);
+                    std::fs::copy(commit_path.as_ref(), target_path.as_ref())
+                        .expect("commit and memory paths exist");
+                }
             }
+            memory.set_freshness(NotFresh);
             wrapped
         })
     }
