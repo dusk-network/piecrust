@@ -58,8 +58,8 @@ mod ext {
         pub(crate) fn height();
         pub(crate) fn caller();
         pub(crate) fn emit(arg_len: u32);
-        pub(crate) fn limit();
-        pub(crate) fn spent();
+        pub(crate) fn limit() -> u64;
+        pub(crate) fn spent() -> u64;
     }
 }
 
@@ -199,23 +199,11 @@ pub fn caller() -> ModuleId {
 }
 
 pub fn limit() -> u64 {
-    unsafe { ext::limit() };
-    with_arg_buf(|buf| {
-        let ret = unsafe {
-            archived_root::<u64>(&buf[..core::mem::size_of::<Archived<u64>>()])
-        };
-        ret.deserialize(&mut Infallible).expect("Infallible")
-    })
+    unsafe { ext::limit() }
 }
 
 pub fn spent() -> u64 {
-    unsafe { ext::spent() };
-    with_arg_buf(|buf| {
-        let ret = unsafe {
-            archived_root::<u64>(&buf[..core::mem::size_of::<Archived<u64>>()])
-        };
-        ret.deserialize(&mut Infallible).expect("Infallible")
-    })
+    unsafe { ext::spent() }
 }
 
 impl<S> State<S> {
