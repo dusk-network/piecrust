@@ -55,7 +55,7 @@ pub fn limit_and_spent() -> Result<(), Error> {
     let mut session = vm.session();
     session.set_point_limit(LIMIT);
 
-    let (limit, spent_before, spent_after, called_limit, called_after) =
+    let (limit, spent_before, spent_after, called_limit, called_spent) =
         session.query::<_, (u64, u64, u64, u64, u64)>(
             spender_id,
             "get_limit_and_spent",
@@ -69,11 +69,11 @@ pub fn limit_and_spent() -> Result<(), Error> {
 
     println!("limit       : {}", limit);
     println!("spent before: {}", spent_before);
-    println!("called limit: {}", called_limit);
-    println!("called after: {}", called_after);
     println!("spent after : {}\n", spent_after);
+    println!("called limit: {}", called_limit);
+    println!("called spent: {}", called_spent);
 
-    println!("=== Actual cost  ===");
+    println!("===  Actual cost  ===");
     println!("actual cost : {}", spender_spent);
 
     Ok(())
