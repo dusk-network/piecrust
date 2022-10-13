@@ -38,6 +38,7 @@ jobs:
         with:
           profile: minimal
           toolchain: nightly
+          override: false
       - name: Install WASM target
         run: rustup target add wasm32-unknown-unknown
       - name: Add `rust-src` component
@@ -73,6 +74,7 @@ jobs:
         with:
           profile: minimal
           toolchain: nightly
+          override: false
       - run: rustup component add clippy
       - name: Run `cargo clippy`
         uses: actions-rs/cargo@v1
