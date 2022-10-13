@@ -29,6 +29,8 @@ use crate::types::{MemoryFreshness, StandardBufSerializer};
 use crate::util::{commit_id_to_name, module_id_to_name};
 use crate::Error::{self, PersistenceError, RestoreError};
 
+const SESSION_COMMITS_FILENAME: &str = "commits";
+
 #[derive(Default)]
 struct VMInner {
     modules: BTreeMap<ModuleId, WrappedModule>,
@@ -38,16 +40,20 @@ struct VMInner {
 }
 
 impl VMInner {
-    fn new<P: AsRef<Path>>(path: P) -> Self
+    fn new<P: AsRef<Path>>(path: P) -> Result<Self, Error>
     where
         P: Into<PathBuf>,
     {
-        Self {
+        let base_memory_path = path.into();
+        let session_commits = SessionCommits::from(
+            base_memory_path.join(SESSION_COMMITS_FILENAME),
+        )?;
+        Ok(Self {
             modules: BTreeMap::default(),
             host_queries: HostQueries::default(),
-            base_memory_path: path.into(),
-            session_commits: SessionCommits::new(),
-        }
+            base_memory_path,
+            session_commits,
+        })
     }
 
     fn ephemeral() -> Result<Self, Error> {
@@ -69,13 +75,13 @@ pub struct VM {
 }
 
 impl VM {
-    pub fn new<P: AsRef<Path>>(path: P) -> Self
+    pub fn new<P: AsRef<Path>>(path: P) -> Result<Self, Error>
     where
         P: Into<PathBuf>,
     {
-        VM {
-            inner: Arc::new(RwLock::new(VMInner::new(path))),
-        }
+        Ok(VM {
+            inner: Arc::new(RwLock::new(VMInner::new(path)?)),
+        })
     }
 
     pub fn ephemeral() -> Result<Self, Error> {
@@ -185,6 +191,13 @@ impl VM {
         MemoryPath::new(path)
     }
 
+    fn path_to_session_commits(&self) -> PathBuf {
+        self.inner
+            .read()
+            .base_memory_path
+            .join(SESSION_COMMITS_FILENAME)
+    }
+
     pub(crate) fn add_session_commit(&mut self, session_commit: SessionCommit) {
         self.inner.write().session_commits.add(session_commit);
     }
@@ -208,6 +221,15 @@ impl VM {
                 Ok(())
             },
         )
+    }
+
+    pub fn persist(&self) -> Result<(), Error> {
+        let guard = self.inner.read();
+        guard.session_commits.write(self.path_to_session_commits())
+    }
+
+    pub fn base_path(&self) -> PathBuf {
+        self.inner.read().base_memory_path.to_path_buf()
     }
 }
 
