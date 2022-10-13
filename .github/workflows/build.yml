@@ -16,7 +16,6 @@ jobs:
         uses: actions-rs/toolchain@v1
         with:
           profile: minimal
-          toolchain: nightly
           override: true
       - name: Install cargo-dusk-analyzer
         uses: actions-rs/cargo@v1
@@ -37,8 +36,7 @@ jobs:
         uses: actions-rs/toolchain@v1
         with:
           profile: minimal
-          toolchain: nightly
-          override: false
+          override: true
       - name: Install WASM target
         run: rustup target add wasm32-unknown-unknown
       - name: Add `rust-src` component
@@ -55,7 +53,6 @@ jobs:
         uses: actions-rs/toolchain@v1
         with:
           profile: minimal
-          toolchain: nightly
           override: true
       - run: rustup component add rustfmt
       - name: Run `cargo fmt`
@@ -73,8 +70,7 @@ jobs:
         uses: actions-rs/toolchain@v1
         with:
           profile: minimal
-          toolchain: nightly
-          override: false
+          override: true
       - run: rustup component add clippy
       - name: Run `cargo clippy`
         uses: actions-rs/cargo@v1
