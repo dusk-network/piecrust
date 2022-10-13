@@ -19,3 +19,4 @@ wasmparser = "0.90.0"
 libc = { version = "^0.2", default-features = false }
 region = { version = "3.0" }
 tempfile = "3.2.0"
+#build trigger
