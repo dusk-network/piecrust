@@ -15,8 +15,9 @@ use uplink::ModuleId;
 
 use std::collections::BTreeMap;
 use std::fs::OpenOptions;
-use std::io::Read;
+use std::os::unix::io::AsRawFd;
 use std::path::Path;
+use std::ptr;
 
 use crate::error::Error::{self, PersistenceError, SessionError};
 
@@ -198,11 +199,24 @@ impl SessionCommits {
     }
 
     pub fn read<P: AsRef<Path>>(path: P) -> Result<Self, Error> {
-        let mut file =
+        let file =
             std::fs::File::open(path.as_ref()).map_err(PersistenceError)?;
-        let mut data = Vec::new();
-        file.read_to_end(&mut data).map_err(PersistenceError)?;
-        let archived = rkyv::check_archived_root::<Self>(&data[..]).unwrap();
+        let metadata =
+            std::fs::metadata(path.as_ref()).map_err(PersistenceError)?;
+        let ptr = unsafe {
+            libc::mmap(
+                ptr::null_mut(),
+                u32::MAX as usize,
+                libc::PROT_READ,
+                libc::MAP_SHARED,
+                file.as_raw_fd(),
+                0,
+            ) as *mut u8
+        };
+        let slice = unsafe {
+            core::slice::from_raw_parts(ptr, metadata.len() as usize)
+        };
+        let archived = rkyv::check_archived_root::<Self>(slice).unwrap();
         Ok(archived.deserialize(&mut rkyv::Infallible).unwrap())
     }
 
