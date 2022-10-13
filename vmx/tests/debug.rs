@@ -12,7 +12,7 @@ pub fn debug() -> Result<(), Error> {
 
     let id = world.deploy(module_bytecode!("debugger"))?;
 
-    let session = world.session();
+    let mut session = world.session();
 
     session.query(id, "debug", String::from("Hello world"))?;
 
