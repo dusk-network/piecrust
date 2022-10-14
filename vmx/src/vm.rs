@@ -225,7 +225,9 @@ impl VM {
 
     pub fn persist(&self) -> Result<(), Error> {
         let guard = self.inner.read();
-        guard.session_commits.persist(self.path_to_session_commits())
+        guard
+            .session_commits
+            .persist(self.path_to_session_commits())
     }
 
     pub fn base_path(&self) -> PathBuf {
