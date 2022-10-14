@@ -19,9 +19,9 @@ static SELF_ID: ModuleId = ModuleId::uninitialized();
 static mut STATE: State<Eventer> = State::new(Eventer);
 
 impl Eventer {
-    pub fn emit_num(&self, num: u32) {
+    pub fn emit_num(self: &mut State<Eventer>, num: u32) {
         for i in 0..num {
-            uplink::emit(i);
+            self.emit(i);
         }
     }
 }

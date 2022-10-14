@@ -34,6 +34,7 @@ pub enum Error {
     MemorySetupError(std::io::Error),
     RegionError(region::Error),
     ValidationError,
+    OutOfPoints,
 }
 
 impl From<wasmer::InstantiationError> for Error {

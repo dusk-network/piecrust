@@ -17,6 +17,7 @@ use rkyv::{
 use uplink::ModuleId;
 
 use crate::commit::{CommitId, ModuleCommitId, SessionCommit};
+use crate::event::Event;
 use crate::instance::WrappedInstance;
 use crate::memory_handler::MemoryHandler;
 use crate::memory_path::MemoryPath;
@@ -25,11 +26,65 @@ use crate::types::StandardBufSerializer;
 use crate::vm::VM;
 use crate::Error::{self, CommitError};
 
+const DEFAULT_LIMIT: u64 = 65_536;
+
+pub struct StackElementView<'a> {
+    pub module_id: ModuleId,
+    pub instance: &'a mut WrappedInstance,
+    pub limit: u64,
+}
+
+struct StackElement {
+    module_id: ModuleId,
+    instance: *mut WrappedInstance,
+    limit: u64,
+}
+
+impl StackElement {
+    /// Creates a new stack element and __leaks__ the instance, returning a
+    /// pointer to it.
+    ///
+    /// # Safety
+    /// The instance will be re-acquired and dropped once the stack element is
+    /// dropped. Any remaining pointers to the instance will be left dangling.
+    /// It is up to the user to ensure the pointer and any aliases are only
+    /// de-referenced for the lifetime of the element.
+    pub fn new(
+        module_id: ModuleId,
+        instance: WrappedInstance,
+        limit: u64,
+    ) -> Self {
+        let instance = Box::leak(Box::new(instance)) as *mut WrappedInstance;
+        Self {
+            module_id,
+            instance,
+            limit,
+        }
+    }
+
+    fn instance<'a, 'b>(&'a self) -> &'b mut WrappedInstance {
+        unsafe { &mut *self.instance }
+    }
+}
+
+impl Drop for StackElement {
+    fn drop(&mut self) {
+        unsafe { Box::from_raw(self.instance) };
+    }
+}
+
+unsafe impl Send for Session {}
+unsafe impl Sync for Session {}
+
 #[derive(Clone)]
 pub struct Session {
     vm: VM,
     memory_handler: MemoryHandler,
-    callstack: Arc<RwLock<Vec<ModuleId>>>,
+    callstack: Arc<RwLock<Vec<StackElement>>>,
+    debug: Arc<RwLock<Vec<String>>>,
+    events: Arc<RwLock<Vec<Event>>>,
+    limit: u64,
+    spent: u64,
 }
 
 impl Session {
@@ -38,6 +93,10 @@ impl Session {
             memory_handler: MemoryHandler::new(vm.clone()),
             vm,
             callstack: Arc::new(RwLock::new(vec![])),
+            debug: Arc::new(RwLock::new(vec![])),
+            events: Arc::new(RwLock::new(vec![])),
+            limit: DEFAULT_LIMIT,
+            spent: 0,
         }
     }
 
@@ -53,12 +112,23 @@ impl Session {
         Ret::Archived: Deserialize<Ret, Infallible>
             + for<'b> CheckBytes<DefaultValidator<'b>>,
     {
-        let mut instance = self.instance(id);
+        let instance = self.new_instance(id);
+        let instance = self.push_callstack(id, instance, self.limit).instance;
 
-        let arg_len = instance.write_to_arg_buffer(arg)?;
-        let ret_len = instance.query(method_name, arg_len)?;
+        let ret = {
+            let arg_len = instance.write_to_arg_buffer(arg)?;
+            let ret_len = instance.query(method_name, arg_len, self.limit)?;
+            instance.read_from_arg_buffer(ret_len)
+        };
 
-        instance.read_from_arg_buffer(ret_len)
+        self.spent = self.limit
+            - instance
+                .get_remaining_points()
+                .expect("there should be remaining points");
+
+        self.pop_callstack();
+
+        ret
     }
 
     pub fn transact<Arg, Ret>(
@@ -73,15 +143,32 @@ impl Session {
         Ret::Archived: Deserialize<Ret, Infallible>
             + for<'b> CheckBytes<DefaultValidator<'b>>,
     {
-        let mut instance = self.instance(id);
+        let instance = self.new_instance(id);
+        let instance = self.push_callstack(id, instance, self.limit).instance;
 
-        let arg_len = instance.write_to_arg_buffer(arg)?;
-        let ret_len = instance.transact(method_name, arg_len)?;
+        let ret = {
+            let arg_len = instance.write_to_arg_buffer(arg)?;
+            let ret_len =
+                instance.transact(method_name, arg_len, self.limit)?;
+            instance.read_from_arg_buffer(ret_len)
+        };
 
-        instance.read_from_arg_buffer(ret_len)
+        self.spent = self.limit
+            - instance
+                .get_remaining_points()
+                .expect("there should be remaining points");
+
+        self.pop_callstack();
+
+        ret
     }
 
-    pub(crate) fn instance(&self, mod_id: ModuleId) -> WrappedInstance {
+    pub(crate) fn push_event(&mut self, event: Event) {
+        let mut events = self.events.write();
+        events.push(event);
+    }
+
+    pub(crate) fn new_instance(&self, mod_id: ModuleId) -> WrappedInstance {
         self.vm.with_module(mod_id, |module| {
             let mut memory = self
                 .memory_handler
@@ -124,23 +211,56 @@ impl Session {
         self.vm.host_query(name, buf, arg_len)
     }
 
-    pub fn nth_from_top(&self, n: usize) -> ModuleId {
+    /// Sets the point limit for the next call to `query` or `transact`.
+    pub fn set_point_limit(&mut self, limit: u64) {
+        self.limit = limit
+    }
+
+    pub fn spent(&self) -> u64 {
+        self.spent
+    }
+
+    pub(crate) fn nth_from_top<'a, 'b>(
+        &'a self,
+        n: usize,
+    ) -> Option<StackElementView<'b>> {
         let stack = self.callstack.read();
         let len = stack.len();
 
-        if len > n + 1 {
-            stack[len - (n + 1)]
+        if len > n {
+            let elem = &stack[len - (n + 1)];
+
+            Some(StackElementView {
+                module_id: elem.module_id,
+                instance: elem.instance(),
+                limit: elem.limit,
+            })
         } else {
-            ModuleId::uninitialized()
+            None
         }
     }
 
-    pub(crate) fn push_callstack(&mut self, id: ModuleId) {
+    pub(crate) fn push_callstack<'a, 'b>(
+        &'a self,
+        module_id: ModuleId,
+        instance: WrappedInstance,
+        limit: u64,
+    ) -> StackElementView<'b> {
         let mut s = self.callstack.write();
-        s.push(id);
+
+        let element = StackElement::new(module_id, instance, limit);
+        let instance = element.instance();
+
+        s.push(element);
+
+        StackElementView {
+            module_id,
+            instance,
+            limit,
+        }
     }
 
-    pub(crate) fn pop_callstack(&mut self) {
+    pub(crate) fn pop_callstack(&self) {
         let mut s = self.callstack.write();
         s.pop();
     }
@@ -181,5 +301,24 @@ impl Session {
     ) -> Option<MemoryPath> {
         let path = self.vm.path_to_module_last_commit(module_id);
         Some(path).filter(|p| p.as_ref().exists())
+    }
+
+    pub(crate) fn register_debug<M: Into<String>>(&self, msg: M) {
+        self.debug.write().push(msg.into());
+    }
+
+    pub fn take_events(&self) -> Vec<Event> {
+        core::mem::take(&mut *self.events.write())
+    }
+
+    pub fn with_debug<C, R>(&self, c: C) -> R
+    where
+        C: FnOnce(&[String]) -> R,
+    {
+        c(&self.debug.read())
+    }
+
+    pub fn set_meta<V>(&self, _name: &str, _value: V) {
+        todo!()
     }
 }

@@ -58,8 +58,8 @@ mod ext {
         pub(crate) fn height();
         pub(crate) fn caller();
         pub(crate) fn emit(arg_len: u32);
-        pub(crate) fn limit();
-        pub(crate) fn spent();
+        pub(crate) fn limit() -> u64;
+        pub(crate) fn spent() -> u64;
     }
 }
 
@@ -198,46 +198,34 @@ pub fn caller() -> ModuleId {
     })
 }
 
-/// Emits an event with the given data.
-pub fn emit<D>(data: D)
-where
-    for<'a> D: Serialize<StandardBufSerializer<'a>>,
-{
-    with_arg_buf(|buf| {
-        let mut sbuf = [0u8; SCRATCH_BUF_BYTES];
-        let scratch = BufferScratch::new(&mut sbuf);
-        let ser = BufferSerializer::new(buf);
-        let mut composite =
-            CompositeSerializer::new(ser, scratch, rkyv::Infallible);
-
-        composite.serialize_value(&data).unwrap();
-        let arg_len = composite.pos() as u32;
-
-        unsafe { ext::emit(arg_len) }
-    });
-}
-
 pub fn limit() -> u64 {
-    unsafe { ext::limit() };
-    with_arg_buf(|buf| {
-        let ret = unsafe {
-            archived_root::<u64>(&buf[..core::mem::size_of::<Archived<u64>>()])
-        };
-        ret.deserialize(&mut Infallible).expect("Infallible")
-    })
+    unsafe { ext::limit() }
 }
 
 pub fn spent() -> u64 {
-    unsafe { ext::spent() };
-    with_arg_buf(|buf| {
-        let ret = unsafe {
-            archived_root::<u64>(&buf[..core::mem::size_of::<Archived<u64>>()])
-        };
-        ret.deserialize(&mut Infallible).expect("Infallible")
-    })
+    unsafe { ext::spent() }
 }
 
 impl<S> State<S> {
+    /// Emits an event with the given data.
+    pub fn emit<D>(&mut self, data: D)
+    where
+        for<'a> D: Serialize<StandardBufSerializer<'a>>,
+    {
+        with_arg_buf(|buf| {
+            let mut sbuf = [0u8; SCRATCH_BUF_BYTES];
+            let scratch = BufferScratch::new(&mut sbuf);
+            let ser = BufferSerializer::new(buf);
+            let mut composite =
+                CompositeSerializer::new(ser, scratch, rkyv::Infallible);
+
+            composite.serialize_value(&data).unwrap();
+            let arg_len = composite.pos() as u32;
+
+            unsafe { ext::emit(arg_len) }
+        });
+    }
+
     pub fn transact_raw(
         &mut self,
         mod_id: ModuleId,
