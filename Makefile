@@ -5,15 +5,15 @@ modules: ## Build WASM modules
 	@RUSTFLAGS="-C link-args=-zstack-size=65536" \
 	cargo build \
 	  --release \
-      --manifest-path=modules/Cargo.toml \
+	  --manifest-path=modules/Cargo.toml \
 	  --color=always \
 	  -Z build-std=core,alloc,panic_abort \
 	  -Z build-std-features=panic_immediate_abort \
 	  --target wasm32-unknown-unknown
 	@mkdir -p target/stripped
 	@find target/wasm32-unknown-unknown/release -maxdepth 1 -name "*.wasm" \
-	 | xargs -I % basename % \
-	 | xargs -I % wasm-tools strip -a \
+	    | xargs -I % basename % \
+	    | xargs -I % wasm-tools strip -a \
 	 	          target/wasm32-unknown-unknown/release/% \
 	 	          -o target/stripped/%
 
