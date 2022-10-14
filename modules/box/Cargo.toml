@@ -8,7 +8,7 @@ edition = "2021"
 license = "MPL-2.0"
 
 [dependencies]
-dallo = { path = "../../dallo", default-features = false }
+uplink = { path = "../../uplink", default-features = false, features = ["wee_alloc"] }
 
 [lib]
 crate-type = ["cdylib", "rlib"]

@@ -1,0 +1,15 @@
+[package]
+name = "micro"
+version = "0.1.0"
+authors = [
+    "Kristoffer Ström <kristoffer@dusk.network>",
+]
+edition = "2021"
+
+license = "MPL-2.0"
+
+[dependencies]
+uplink = { path = "../../uplink", default-features = false, features = ["wee_alloc"] }
+
+[lib]
+crate-type = ["cdylib", "rlib"]

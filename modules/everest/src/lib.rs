@@ -8,13 +8,10 @@
 #![no_std]
 #![no_main]
 
-#[global_allocator]
-static ALLOCATOR: dallo::HostAlloc = dallo::HostAlloc;
-
 #[derive(Default)]
 pub struct Height;
 
-use dallo::{ModuleId, State};
+use uplink::{ModuleId, State};
 
 #[no_mangle]
 static SELF_ID: ModuleId = ModuleId::uninitialized();
@@ -23,11 +20,11 @@ static mut STATE: State<Height> = State::new(Height);
 
 impl Height {
     pub fn get_height(&self) -> u64 {
-        dallo::height()
+        uplink::height()
     }
 }
 
 #[no_mangle]
 unsafe fn get_height(a: u32) -> u32 {
-    dallo::wrap_query(a, |_: ()| STATE.get_height())
+    uplink::wrap_query(a, |_: ()| STATE.get_height())
 }
