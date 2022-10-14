@@ -5,6 +5,7 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 use std::ops::{Deref, DerefMut};
+use std::sync::Arc;
 
 use bytecheck::CheckBytes;
 use colored::*;
@@ -18,8 +19,13 @@ use rkyv::{
     Archive, Deserialize, Infallible, Serialize,
 };
 use uplink::{ModuleId, SCRATCH_BUF_BYTES};
-use wasmer::{Store, Tunables, TypedFunction};
+use wasmer::wasmparser::Operator;
+use wasmer::{CompilerConfig, RuntimeError, Tunables, TypedFunction};
 use wasmer_compiler_singlepass::Singlepass;
+use wasmer_middlewares::metering::{
+    get_remaining_points, set_remaining_points, MeteringPoints,
+};
+use wasmer_middlewares::Metering;
 use wasmer_vm::VMMemory;
 
 use crate::event::Event;
@@ -69,8 +75,22 @@ impl DerefMut for Env {
 }
 
 impl Env {
-    pub fn self_instance(&self) -> WrappedInstance {
-        self.session.instance(self.self_id)
+    pub fn self_instance<'a, 'b>(&'a self) -> &'b mut WrappedInstance {
+        self.session
+            .nth_from_top(0)
+            .expect("there should be at least one element in the call stack")
+            .instance
+    }
+
+    pub fn new_instance(&self, module_id: ModuleId) -> WrappedInstance {
+        self.session.new_instance(module_id)
+    }
+
+    pub fn limit(&self) -> u64 {
+        self.session
+            .nth_from_top(0)
+            .expect("there should be at least one element in the call stack")
+            .limit
     }
 
     pub fn emit(&mut self, arg_len: u32) {
@@ -84,6 +104,40 @@ impl Env {
     }
 }
 
+/// Convenience methods for dealing with our custom store
+pub struct Store;
+
+impl Store {
+    const INITIAL_POINT_LIMIT: u64 = 1_000_000;
+
+    pub fn new_store() -> wasmer::Store {
+        Self::with_creator(|compiler_config| {
+            wasmer::Store::new(compiler_config)
+        })
+    }
+
+    pub fn new_store_with_tunables(
+        tunables: impl Tunables + Send + Sync + 'static,
+    ) -> wasmer::Store {
+        Self::with_creator(|compiler_config| {
+            wasmer::Store::new_with_tunables(compiler_config, tunables)
+        })
+    }
+
+    fn with_creator<F>(f: F) -> wasmer::Store
+    where
+        F: FnOnce(Singlepass) -> wasmer::Store,
+    {
+        let metering =
+            Arc::new(Metering::new(Self::INITIAL_POINT_LIMIT, cost_function));
+
+        let mut compiler_config = Singlepass::default();
+        compiler_config.push_middleware(metering);
+
+        f(compiler_config)
+    }
+}
+
 impl WrappedInstance {
     pub fn new(
         memory: Linear,
@@ -91,10 +145,8 @@ impl WrappedInstance {
         id: ModuleId,
         wrap: &WrappedModule,
     ) -> Result<Self, Error> {
-        let mut store = Store::new_with_tunables(
-            Singlepass::default(),
-            InstanceTunables::new(memory.clone()),
-        );
+        let tunables = InstanceTunables::new(memory.clone());
+        let mut store = Store::new_store_with_tunables(tunables);
 
         let env = Env {
             self_id: id,
@@ -229,28 +281,43 @@ impl WrappedInstance {
         &mut self,
         method_name: &str,
         arg_len: u32,
+        limit: u64,
     ) -> Result<u32, Error> {
         let fun: TypedFunction<u32, u32> = self
             .instance
             .exports
             .get_typed_function(&self.store, method_name)?;
 
-        let res = fun.call(&mut self.store, arg_len)?;
-
-        Ok(res)
+        self.set_remaining_points(limit);
+        fun.call(&mut self.store, arg_len)
+            .map_err(|e| map_call_err(self, e))
     }
 
     pub fn transact(
         &mut self,
         method_name: &str,
         arg_len: u32,
+        limit: u64,
     ) -> Result<u32, Error> {
         let fun: TypedFunction<u32, u32> = self
             .instance
             .exports
             .get_typed_function(&self.store, method_name)?;
 
-        Ok(fun.call(&mut self.store, arg_len)?)
+        self.set_remaining_points(limit);
+        fun.call(&mut self.store, arg_len)
+            .map_err(|e| map_call_err(self, e))
+    }
+
+    pub fn set_remaining_points(&mut self, limit: u64) {
+        set_remaining_points(&mut self.store, &self.instance, limit);
+    }
+
+    pub fn get_remaining_points(&mut self) -> Option<u64> {
+        match get_remaining_points(&mut self.store, &self.instance) {
+            MeteringPoints::Remaining(points) => Some(points),
+            MeteringPoints::Exhausted => None,
+        }
     }
 
     #[allow(unused)]
@@ -302,6 +369,14 @@ impl WrappedInstance {
     pub fn arg_buffer_offset(&self) -> usize {
         self.arg_buf_ofs
     }
+}
+
+fn map_call_err(instance: &mut WrappedInstance, err: RuntimeError) -> Error {
+    if instance.get_remaining_points().is_none() {
+        return Error::OutOfPoints;
+    }
+
+    err.into()
 }
 
 pub struct InstanceTunables {
@@ -375,4 +450,8 @@ impl Tunables for InstanceTunables {
     ) -> Result<wasmer_vm::VMTable, String> {
         wasmer_vm::VMTable::from_definition(ty, style, vm_definition_location)
     }
+}
+
+fn cost_function(_op: &Operator) -> u64 {
+    1
 }

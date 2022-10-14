@@ -5,6 +5,7 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 use crate::error::Error;
+use crate::instance::Store;
 
 pub struct WrappedModule {
     serialized: Vec<u8>,
@@ -12,7 +13,9 @@ pub struct WrappedModule {
 
 impl WrappedModule {
     pub fn new(bytecode: &[u8]) -> Result<Self, Error> {
-        let module = wasmer::Module::new(&wasmer::Store::default(), bytecode)?;
+        let store = Store::new_store();
+
+        let module = wasmer::Module::new(&store, bytecode)?;
         let serialized = module.serialize()?;
 
         Ok(WrappedModule {
