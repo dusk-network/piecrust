@@ -1,4 +1,4 @@
-# On-disk store
+# On-Disk Store
 
 VM uses on disk store to manage commits and state persistence.
 A session can perform one commit before it ceases to exist.
@@ -45,6 +45,10 @@ to memory instead of normal memory initialization.
 |                                   | ModId2        | mmap backing file          |
 |                                   | ModId2_Commit1|                            |
 |                                   | ModId2_last   | points to commit1          |
+
+Note that by "points to commitN", it is currently meant that the file has the same content as commitN file.
+In future implementations this semantics will be preserved yet actual technical mechanism will differ,
+for example, symbolic link or a postfix name will be used instead.
 
 Here is how the contents of the directory will look like in real life:
 ```

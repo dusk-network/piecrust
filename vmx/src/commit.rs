@@ -161,7 +161,7 @@ impl SessionCommits {
 
     pub fn from<P: AsRef<Path>>(path: P) -> Result<SessionCommits, Error> {
         if path.as_ref().exists() {
-            SessionCommits::read(path)
+            SessionCommits::restore(path)
         } else {
             Ok(SessionCommits::new())
         }
@@ -198,7 +198,7 @@ impl SessionCommits {
         }
     }
 
-    pub fn read<P: AsRef<Path>>(path: P) -> Result<Self, Error> {
+    pub fn restore<P: AsRef<Path>>(path: P) -> Result<Self, Error> {
         let file =
             std::fs::File::open(path.as_ref()).map_err(PersistenceError)?;
         let metadata =
@@ -220,7 +220,7 @@ impl SessionCommits {
         Ok(archived.deserialize(&mut rkyv::Infallible).unwrap())
     }
 
-    pub fn write<P: AsRef<Path>>(&self, path: P) -> Result<(), Error> {
+    pub fn persist<P: AsRef<Path>>(&self, path: P) -> Result<(), Error> {
         let file = OpenOptions::new()
             .write(true)
             .create(true)
