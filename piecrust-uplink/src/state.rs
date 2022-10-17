@@ -67,6 +67,12 @@ mod ext {
 use crate::ModuleId;
 use core::ops::{Deref, DerefMut};
 
+#[derive(Debug, Archive, Serialize, Deserialize)]
+pub enum ModuleError {
+    Panic,
+    OutOfGas,
+}
+
 pub struct State<S> {
     inner: S,
 }
@@ -119,7 +125,11 @@ where
     })
 }
 
-pub fn query<Arg, Ret>(mod_id: ModuleId, name: &str, arg: Arg) -> Ret
+pub fn query<Arg, Ret>(
+    mod_id: ModuleId,
+    name: &str,
+    arg: Arg,
+) -> Result<Ret, ModuleError>
 where
     Arg: for<'a> Serialize<StandardBufSerializer<'a>>,
     Ret: Archive,
@@ -149,11 +159,14 @@ where
     with_arg_buf(|buf| {
         let slice = &buf[..ret_len as usize];
         let ret = unsafe { archived_root::<Ret>(slice) };
-        ret.deserialize(&mut Infallible).expect("Infallible")
+        Ok(ret.deserialize(&mut Infallible).expect("Infallible"))
     })
 }
 
-pub fn query_raw(mod_id: ModuleId, raw: RawQuery) -> RawResult {
+pub fn query_raw(
+    mod_id: ModuleId,
+    raw: RawQuery,
+) -> Result<RawResult, ModuleError> {
     with_arg_buf(|buf| {
         let bytes = raw.arg_bytes();
         buf[..bytes.len()].copy_from_slice(bytes);
@@ -163,14 +176,10 @@ pub fn query_raw(mod_id: ModuleId, raw: RawQuery) -> RawResult {
     let arg_len = raw.arg_bytes().len() as u32;
 
     let ret_len = unsafe {
-        crate::debug!("Corv");
-
         ext::q(&mod_id.as_bytes()[0], &name[0], name.len() as u32, arg_len)
     };
 
-    crate::debug!("D");
-
-    with_arg_buf(|buf| RawResult::new(&buf[..ret_len as usize]))
+    with_arg_buf(|buf| Ok(RawResult::new(&buf[..ret_len as usize])))
 }
 
 /// Returns data made available by the host under the given name. The type `D`
@@ -253,8 +262,8 @@ impl<S> State<S> {
         &mut self,
         mod_id: ModuleId,
         raw: RawTransaction,
-    ) -> RawResult {
-        // Necessary to avoid ruling out potential memory changes from recursive
+    ) -> Result<RawResult, ModuleError> {
+        // Neccesary to avoid ruling out potential memory changes from recursive
         // calls
         core::hint::black_box(self);
 
@@ -271,7 +280,7 @@ impl<S> State<S> {
             ext::t(&mod_id.as_bytes()[0], &name[0], name.len() as u32, arg_len)
         };
 
-        with_arg_buf(|buf| RawResult::new(&buf[..ret_len as usize]))
+        with_arg_buf(|buf| Ok(RawResult::new(&buf[..ret_len as usize])))
     }
 
     pub fn transact<Arg, Ret>(
@@ -279,7 +288,7 @@ impl<S> State<S> {
         mod_id: ModuleId,
         name: &str,
         arg: Arg,
-    ) -> Ret
+    ) -> Result<Ret, ModuleError>
     where
         Arg: for<'a> Serialize<StandardBufSerializer<'a>>,
         Ret: Archive,
@@ -314,7 +323,7 @@ impl<S> State<S> {
         with_arg_buf(|buf| {
             let slice = &buf[..ret_len as usize];
             let ret = unsafe { archived_root::<Ret>(slice) };
-            ret.deserialize(&mut Infallible).expect("Infallible")
+            Ok(ret.deserialize(&mut Infallible).expect("Infallible"))
         })
     }
 }

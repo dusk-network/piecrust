@@ -33,7 +33,8 @@ impl Spender {
                     u64,
                     u64,
                     u64,
-                ) = piecrust_uplink::query(self_id, "get_limit_and_spent", ());
+                ) = piecrust_uplink::query(self_id, "get_limit_and_spent", ())
+                    .expect("Self query should succeed");
 
                 let spent_after = piecrust_uplink::spent();
                 (limit, spent_before, spent_after, called_limit, called_spent)

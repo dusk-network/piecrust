@@ -9,7 +9,7 @@
 #![no_main]
 
 use piecrust_uplink::{
-    wrap_query, wrap_transaction, ModuleId, RawQuery, RawResult,
+    wrap_query, wrap_transaction, ModuleError, ModuleId, RawQuery, RawResult,
     RawTransaction, State,
 };
 
@@ -23,19 +23,18 @@ static mut STATE: State<Callcenter> = State::new(Callcenter);
 
 impl Callcenter {
     pub fn query_counter(&self, counter_id: ModuleId) -> i64 {
-        let result = piecrust_uplink::query(counter_id, "read_value", ());
-        result
+        piecrust_uplink::query(counter_id, "read_value", ()).unwrap();
     }
 
     pub fn increment_counter(self: &mut State<Self>, counter_id: ModuleId) {
-        self.transact(counter_id, "increment", ())
+        self.transact(counter_id, "increment", ()).unwrap()
     }
 
     pub fn delegate_query(
         &self,
         module_id: ModuleId,
         raw: RawQuery,
-    ) -> RawResult {
+    ) -> Result<RawResult, ModuleError> {
         piecrust_uplink::debug!("raw query {:?} at {:?}", raw, module_id);
         piecrust_uplink::query_raw(module_id, raw)
     }
@@ -50,7 +49,7 @@ impl Callcenter {
         module_id: ModuleId,
         raw: RawTransaction,
     ) -> RawResult {
-        self.transact_raw(module_id, raw)
+        self.transact_raw(module_id, raw).unwrap()
     }
 
     pub fn calling_self(&self, id: ModuleId) -> bool {
@@ -65,13 +64,13 @@ impl Callcenter {
         piecrust_uplink::caller()
     }
 
-    pub fn call_self(&self) -> bool {
-        let self_id = piecrust_uplink::self_id();
-        let caller = piecrust_uplink::caller();
+    pub fn call_self(&self) -> Result<bool, ModuleError> {
+        let self_id = uplink::self_id();
+        let caller = uplink::caller();
 
         match caller.is_uninitialized() {
             true => piecrust_uplink::query(self_id, "call_self", ()),
-            false => caller == self_id,
+            false => Ok(caller == self_id),
         }
     }
 }
