@@ -47,7 +47,8 @@ mod ext {
             name_len: u32,
             arg_len: u32,
         ) -> u32;
-        pub(crate) fn nq(name: *const u8, name_len: u32, arg_len: u32) -> u32;
+        pub(crate) fn hq(name: *const u8, name_len: u32, arg_len: u32) -> u32;
+        pub(crate) fn hd(name: *const u8, name_len: u32) -> u32;
         pub(crate) fn t(
             mod_id_ofs: *const u8,
             name: *const u8,
@@ -109,7 +110,7 @@ where
     let name_ptr = name.as_bytes().as_ptr() as *const u8;
     let name_len = name.as_bytes().len() as u32;
 
-    let ret_len = unsafe { ext::nq(name_ptr, name_len, arg_len) };
+    let ret_len = unsafe { ext::hq(name_ptr, name_len, arg_len) };
 
     with_arg_buf(|buf| {
         let slice = &buf[..ret_len as usize];
@@ -172,6 +173,28 @@ pub fn query_raw(mod_id: ModuleId, raw: RawQuery) -> RawResult {
     with_arg_buf(|buf| RawResult::new(&buf[..ret_len as usize]))
 }
 
+/// Returns data made available by the host under the given name. The type `D`
+/// must be correctly specified, otherwise undefined behavior will occur.
+pub fn host_data<D>(name: &str) -> D
+where
+    D: Archive,
+    D::Archived: Deserialize<D, Infallible>,
+{
+    let name_slice = name.as_bytes();
+
+    let name = name_slice.as_ptr();
+    let name_len = name_slice.len() as u32;
+
+    unsafe {
+        let arg_pos = ext::hd(name, name_len) as usize;
+
+        with_arg_buf(|buf| {
+            let ret = archived_root::<D>(&buf[..arg_pos]);
+            ret.deserialize(&mut Infallible).expect("Infallible")
+        })
+    }
+}
+
 /// Return the current height.
 pub fn height() -> u64 {
     unsafe { ext::height() };
@@ -231,7 +254,7 @@ impl<S> State<S> {
         mod_id: ModuleId,
         raw: RawTransaction,
     ) -> RawResult {
-        // Neccesary to avoid ruling out potential memory changes from recursive
+        // Necessary to avoid ruling out potential memory changes from recursive
         // calls
         core::hint::black_box(self);
 
@@ -262,7 +285,7 @@ impl<S> State<S> {
         Ret: Archive,
         Ret::Archived: Deserialize<Ret, Infallible>,
     {
-        // Neccesary to avoid ruling out potential memory changes from recursive
+        // Necessary to avoid ruling out potential memory changes from recursive
         // calls
         core::hint::black_box(self);
 
