@@ -49,17 +49,6 @@ pub(crate) struct Env {
     session: Session,
 }
 
-impl Env {
-    pub fn host_query(
-        &self,
-        name: &str,
-        buf: &mut [u8],
-        arg_len: u32,
-    ) -> Option<u32> {
-        self.session.host_query(name, buf, arg_len)
-    }
-}
-
 impl Deref for Env {
     type Target = Session;
 
