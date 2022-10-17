@@ -20,7 +20,7 @@ static mut STATE: State<Height> = State::new(Height);
 
 impl Height {
     pub fn get_height(&self) -> u64 {
-        uplink::height()
+        uplink::host_data::<u64>("height")
     }
 }
 

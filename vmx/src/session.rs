@@ -4,17 +4,20 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
+use std::borrow::Cow;
+use std::collections::BTreeMap;
 use std::fs;
 use std::sync::Arc;
 
 use bytecheck::CheckBytes;
 use parking_lot::RwLock;
+use rkyv::ser::serializers::{BufferScratch, BufferSerializer};
+use rkyv::ser::Serializer;
 use rkyv::{
     validation::validators::DefaultValidator, Archive, Deserialize, Infallible,
     Serialize,
 };
-
-use uplink::ModuleId;
+use uplink::{ModuleId, SCRATCH_BUF_BYTES};
 
 use crate::commit::{CommitId, ModuleCommitId, SessionCommit};
 use crate::event::Event;
@@ -27,6 +30,7 @@ use crate::vm::VM;
 use crate::Error::{self, CommitError};
 
 const DEFAULT_LIMIT: u64 = 65_536;
+const MAX_META_SIZE: usize = 65_536;
 
 pub struct StackElementView<'a> {
     pub module_id: ModuleId,
@@ -83,6 +87,7 @@ pub struct Session {
     callstack: Arc<RwLock<Vec<StackElement>>>,
     debug: Arc<RwLock<Vec<String>>>,
     events: Arc<RwLock<Vec<Event>>>,
+    data: Arc<RwLock<HostData>>,
     limit: u64,
     spent: u64,
 }
@@ -95,6 +100,7 @@ impl Session {
             callstack: Arc::new(RwLock::new(vec![])),
             debug: Arc::new(RwLock::new(vec![])),
             events: Arc::new(RwLock::new(vec![])),
+            data: Arc::new(RwLock::new(HostData::new())),
             limit: DEFAULT_LIMIT,
             spent: 0,
         }
@@ -318,7 +324,54 @@ impl Session {
         c(&self.debug.read())
     }
 
-    pub fn set_meta<V>(&self, _name: &str, _value: V) {
-        todo!()
+    pub fn meta(&self, name: &str) -> Option<Vec<u8>> {
+        let host_data = self.data.read();
+        host_data.get(name)
+    }
+
+    pub fn set_meta<S, V>(&mut self, name: S, value: V)
+    where
+        S: Into<Cow<'static, str>>,
+        V: for<'a> Serialize<StandardBufSerializer<'a>>,
+    {
+        let mut host_data = self.data.write();
+
+        let mut buf = [0u8; MAX_META_SIZE];
+        let mut sbuf = [0u8; SCRATCH_BUF_BYTES];
+
+        let ser = BufferSerializer::new(&mut buf[..]);
+        let scratch = BufferScratch::new(&mut sbuf);
+
+        let mut serializer =
+            StandardBufSerializer::new(ser, scratch, Infallible);
+        serializer.serialize_value(&value).expect("Infallible");
+
+        let pos = serializer.pos();
+
+        let data = buf[..pos].to_vec();
+        host_data.insert(name, data);
+    }
+}
+
+struct HostData {
+    data: BTreeMap<Cow<'static, str>, Vec<u8>>,
+}
+
+impl HostData {
+    fn new() -> Self {
+        Self {
+            data: BTreeMap::new(),
+        }
+    }
+
+    fn insert<S>(&mut self, name: S, data: Vec<u8>)
+    where
+        S: Into<Cow<'static, str>>,
+    {
+        self.data.insert(name.into(), data);
+    }
+
+    fn get(&self, name: &str) -> Option<Vec<u8>> {
+        self.data.get(name).cloned()
     }
 }

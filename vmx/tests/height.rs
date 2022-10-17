@@ -7,7 +7,6 @@
 use vmx::{module_bytecode, Error, VM};
 
 #[test]
-#[ignore]
 pub fn height() -> Result<(), Error> {
     let mut vm = VM::ephemeral()?;
 
@@ -15,7 +14,7 @@ pub fn height() -> Result<(), Error> {
 
     let mut session = vm.session();
 
-    for h in 0..1024 {
+    for h in 0u64..1024 {
         session.set_meta("height", h);
         let height: u64 = session.transact(id, "get_height", ())?;
         assert_eq!(height, h);

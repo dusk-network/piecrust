@@ -23,7 +23,8 @@ impl DefaultImports {
                 "caller" => Function::new_typed_with_env(store, &fenv, caller),
                 "q" => Function::new_typed_with_env(store, &fenv, q),
                 "t" => Function::new_typed_with_env(store, &fenv, t),
-                "nq" => Function::new_typed_with_env(store, &fenv, nq),
+                "hq" => Function::new_typed_with_env(store, &fenv, hq),
+                "hd" => Function::new_typed_with_env(store, &fenv, hd),
                 "host_debug" => Function::new_typed_with_env(store, &fenv, host_debug),
                 "emit" => Function::new_typed_with_env(store, &fenv, emit),
                 "limit" => Function::new_typed_with_env(store, &fenv, limit),
@@ -162,7 +163,7 @@ fn t(
     ret_len
 }
 
-fn nq(
+fn hq(
     mut fenv: FunctionEnvMut<Env>,
     name_ofs: i32,
     name_len: u32,
@@ -185,6 +186,30 @@ fn nq(
     instance
         .with_arg_buffer(|buf| env.host_query(&name, buf, arg_len))
         .expect("TODO: error handling")
+}
+
+fn hd(mut fenv: FunctionEnvMut<Env>, name_ofs: i32, name_len: u32) -> u32 {
+    let env = fenv.data_mut();
+
+    let instance = env.self_instance();
+
+    let name_ofs = name_ofs as usize;
+    let name_len = name_len as usize;
+
+    let name = instance.with_memory(|buf| {
+        // performance: use a dedicated buffer here?
+        core::str::from_utf8(&buf[name_ofs..][..name_len])
+            .expect("TODO, error out cleaner")
+            .to_owned()
+    });
+
+    let data = env.meta(&name).expect("the metadata should exist");
+
+    instance.with_arg_buffer(|buf| {
+        buf[..data.len()].copy_from_slice(&data);
+    });
+
+    data.len() as u32
 }
 
 fn emit(mut fenv: FunctionEnvMut<Env>, arg_len: u32) {
