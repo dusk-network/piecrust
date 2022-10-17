@@ -24,7 +24,7 @@ pub enum Error {
     RuntimeError(wasmer::RuntimeError),
     SerializeError(Box<wasmer::SerializeError>),
     DeserializeError(Box<wasmer::DeserializeError>),
-    ParsingError(Box<wasmparser::BinaryReaderError>),
+    ParsingError(Box<wasmer::wasmparser::BinaryReaderError>),
     Trap(Box<wasmer_vm::Trap>),
     CompositeSerializerError(Box<Compo>),
     PersistenceError(std::io::Error),
