@@ -38,10 +38,10 @@ pub fn multi_push_pop() -> Result<(), Error> {
 
     let mut session = vm.session();
 
-    const N: i32 = 1_000;
+    const N: i32 = 16;
 
     for i in 0..N {
-        let _: () = session.transact(id, "push", i)?;
+        session.transact(id, "push", i)?;
         let len: i32 = session.query(id, "len", ())?;
 
         assert_eq!(len, i + 1);
