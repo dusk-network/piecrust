@@ -7,7 +7,7 @@
 #![no_std]
 #![feature(core_intrinsics, lang_items, arbitrary_self_types)]
 
-use uplink::{ModuleId, RawTransaction, State};
+use piecrust_uplink::{ModuleId, RawTransaction, State};
 
 #[no_mangle]
 static SELF_ID: ModuleId = ModuleId::uninitialized();
@@ -26,7 +26,7 @@ impl SelfSnapshot {
 
     pub fn set_crossover(&mut self, to: i32) -> i32 {
         let old_val = self.crossover;
-        uplink::debug!(
+        piecrust_uplink::debug!(
             "setting crossover from {:?} to {:?}",
             self.crossover,
             to
@@ -38,7 +38,7 @@ impl SelfSnapshot {
     // updates crossover and returns the old value
     pub fn self_call_test_a(self: &mut State<Self>, update: i32) -> i32 {
         let old_value = self.crossover;
-        let callee = uplink::self_id();
+        let callee = piecrust_uplink::self_id();
         self.transact::<_, i32>(callee, "set_crossover", update);
 
         assert_eq!(self.crossover, update);
@@ -59,14 +59,15 @@ impl SelfSnapshot {
 
     pub fn update_and_panic(&mut self, new_value: i32) {
         let old_value = self.crossover;
-        let callee = uplink::self_id();
+        let callee = piecrust_uplink::self_id();
 
         // What should self.crossover be in this case?
 
         // A: we live with inconsistencies and communicate them.
         // B: we update self, which then should be passed to the transaction
 
-        if uplink::query::<_, i32>(callee, "crossover", new_value) == old_value
+        if piecrust_uplink::query::<_, i32>(callee, "crossover", new_value)
+            == old_value
         {
             panic!("OH NOES")
         }
@@ -75,22 +76,26 @@ impl SelfSnapshot {
 
 #[no_mangle]
 unsafe fn crossover(arg_len: u32) -> u32 {
-    uplink::wrap_query(arg_len, |_: ()| STATE.crossover())
+    piecrust_uplink::wrap_query(arg_len, |_: ()| STATE.crossover())
 }
 
 #[no_mangle]
 unsafe fn set_crossover(arg_len: u32) -> u32 {
-    uplink::wrap_transaction(arg_len, |arg: i32| STATE.set_crossover(arg))
+    piecrust_uplink::wrap_transaction(arg_len, |arg: i32| {
+        STATE.set_crossover(arg)
+    })
 }
 
 #[no_mangle]
 unsafe fn self_call_test_a(arg_len: u32) -> u32 {
-    uplink::wrap_transaction(arg_len, |arg: i32| STATE.self_call_test_a(arg))
+    piecrust_uplink::wrap_transaction(arg_len, |arg: i32| {
+        STATE.self_call_test_a(arg)
+    })
 }
 
 #[no_mangle]
 unsafe fn self_call_test_b(arg_len: u32) -> u32 {
-    uplink::wrap_transaction(arg_len, |(target, transaction)| {
+    piecrust_uplink::wrap_transaction(arg_len, |(target, transaction)| {
         STATE.self_call_test_b(target, transaction)
     })
 }

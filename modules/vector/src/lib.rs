@@ -10,7 +10,7 @@
 extern crate alloc;
 
 use alloc::vec::Vec;
-use uplink::{ModuleId, State};
+use piecrust_uplink::{ModuleId, State};
 
 pub struct Vector {
     a: Vec<i16>,
@@ -33,10 +33,10 @@ impl Vector {
 
 #[no_mangle]
 unsafe fn push(arg_len: u32) -> u32 {
-    uplink::wrap_transaction(arg_len, |arg| STATE.push(arg))
+    piecrust_uplink::wrap_transaction(arg_len, |arg| STATE.push(arg))
 }
 
 #[no_mangle]
 unsafe fn pop(arg_len: u32) -> u32 {
-    uplink::wrap_transaction(arg_len, |_arg: ()| STATE.pop())
+    piecrust_uplink::wrap_transaction(arg_len, |_arg: ()| STATE.pop())
 }
