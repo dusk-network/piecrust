@@ -11,7 +11,7 @@
 #[derive(Default)]
 pub struct Eventer;
 
-use uplink::{ModuleId, State};
+use piecrust_uplink::{ModuleId, State};
 
 #[no_mangle]
 static SELF_ID: ModuleId = ModuleId::uninitialized();
@@ -28,5 +28,5 @@ impl Eventer {
 
 #[no_mangle]
 unsafe fn emit_events(arg_len: u32) -> u32 {
-    uplink::wrap_query(arg_len, |num| STATE.emit_num(num))
+    piecrust_uplink::wrap_query(arg_len, |num| STATE.emit_num(num))
 }

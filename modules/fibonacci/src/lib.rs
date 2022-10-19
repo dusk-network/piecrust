@@ -11,7 +11,7 @@
 #[derive(Default)]
 pub struct Fibonacci;
 
-use uplink::{ModuleId, State};
+use piecrust_uplink::{ModuleId, State};
 
 #[no_mangle]
 static SELF_ID: ModuleId = ModuleId::uninitialized();
@@ -30,5 +30,5 @@ impl Fibonacci {
 
 #[no_mangle]
 unsafe fn nth(arg_len: u32) -> u32 {
-    uplink::wrap_query(arg_len, |n: u32| Fibonacci::nth(n))
+    piecrust_uplink::wrap_query(arg_len, |n: u32| Fibonacci::nth(n))
 }

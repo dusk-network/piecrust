@@ -19,7 +19,7 @@ modules: ## Build WASM modules
 
 test: modules assert-counter-module-small ## Run the tests
 	@cargo test \
-	  --manifest-path=./vmx/Cargo.toml \
+	  --manifest-path=./piecrust/Cargo.toml \
 	  --color=always
 
 .PHONY: test modules assert-counter-module-small

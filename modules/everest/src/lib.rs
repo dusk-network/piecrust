@@ -11,7 +11,7 @@
 #[derive(Default)]
 pub struct Height;
 
-use uplink::{ModuleId, State};
+use piecrust_uplink::{ModuleId, State};
 
 #[no_mangle]
 static SELF_ID: ModuleId = ModuleId::uninitialized();
@@ -20,11 +20,11 @@ static mut STATE: State<Height> = State::new(Height);
 
 impl Height {
     pub fn get_height(&self) -> u64 {
-        uplink::host_data::<u64>("height")
+        piecrust_uplink::host_data::<u64>("height")
     }
 }
 
 #[no_mangle]
 unsafe fn get_height(a: u32) -> u32 {
-    uplink::wrap_query(a, |_: ()| STATE.get_height())
+    piecrust_uplink::wrap_query(a, |_: ()| STATE.get_height())
 }

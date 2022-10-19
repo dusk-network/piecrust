@@ -11,4 +11,4 @@ edition = "2018"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-uplink = { path = "../../uplink", default-features = false, features = ["wee_alloc"] }
+piecrust-uplink = { path = "../../piecrust-uplink", default-features = false, features = ["wee_alloc"] }

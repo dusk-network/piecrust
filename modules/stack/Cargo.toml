@@ -9,7 +9,7 @@ edition = "2021"
 license = "MPL-2.0"
 
 [dependencies]
-uplink = { path = "../../uplink", default-features = false, features = ["wee_alloc"] }
+piecrust-uplink = { path = "../../piecrust-uplink", default-features = false, features = ["wee_alloc"] }
 nstack = "0.16.0-rc"
 ranno = "0.1"
 

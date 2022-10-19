@@ -8,7 +8,7 @@
 #![no_main]
 
 #[allow(unused)]
-use uplink;
+use piecrust_uplink;
 
 static mut A: u32 = 42;
 
