@@ -29,7 +29,7 @@ To build and test the crate one will need a
 `wasm-tools` binary.
 
 ```sh
-sudo apt install -y make
+sudo apt install -y make # ubuntu/debian - adapt to own system
 cargo install wasm-tools
 make test
 ```
