@@ -5,24 +5,22 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 use bytecheck::CheckBytes;
-use rkyv::{
-    ser::serializers::{BufferScratch, CompositeSerializer, WriteSerializer},
-    ser::Serializer,
-    Archive, Deserialize, Serialize,
-};
+use rkyv::{Archive, Deserialize, Serialize};
 
 use piecrust_uplink::ModuleId;
 
 use std::collections::BTreeMap;
-use std::fs::OpenOptions;
-use std::os::unix::io::AsRawFd;
 use std::path::Path;
-use std::ptr;
 
-use crate::error::Error::{self, PersistenceError, SessionError};
+use crate::error::Error::{self, SessionError};
+use crate::persistable::Persistable;
 
 pub const COMMIT_ID_BYTES: usize = 32;
-const SESSION_COMMITS_SCRATCH_SIZE: usize = 64;
+
+pub trait Hashable {
+    fn uninitialized() -> Self;
+    fn as_slice(&self) -> &[u8];
+}
 
 #[derive(
     PartialEq,
@@ -42,11 +40,19 @@ const SESSION_COMMITS_SCRATCH_SIZE: usize = 64;
 pub struct ModuleCommitId([u8; COMMIT_ID_BYTES]);
 
 impl ModuleCommitId {
-    pub fn from(mem: &[u8]) -> Result<Self, Error> {
+    pub fn from_hash_of(mem: &[u8]) -> Result<Self, Error> {
         Ok(ModuleCommitId(*blake3::hash(mem).as_bytes()))
     }
 
-    pub fn as_bytes(&self) -> &[u8] {
+    pub fn inner(&self) -> [u8; COMMIT_ID_BYTES] {
+        self.0
+    }
+}
+impl Hashable for ModuleCommitId {
+    fn uninitialized() -> Self {
+        ModuleCommitId([0; COMMIT_ID_BYTES])
+    }
+    fn as_slice(&self) -> &[u8] {
         &self.0[..]
     }
 }
@@ -68,6 +74,7 @@ impl core::fmt::Debug for ModuleCommitId {
         Ok(())
     }
 }
+impl Persistable for ModuleCommitId {}
 
 #[derive(
     PartialEq,
@@ -91,14 +98,14 @@ impl CommitId {
         CommitId([0; COMMIT_ID_BYTES])
     }
 
-    pub fn as_bytes(&self) -> &[u8] {
+    pub fn as_slice(&self) -> &[u8] {
         &self.0[..]
     }
 
     fn add(&mut self, module_commit_id: &ModuleCommitId) {
         let mut hasher = blake3::Hasher::new();
         hasher.update(self.0.as_slice());
-        hasher.update(module_commit_id.as_bytes());
+        hasher.update(module_commit_id.as_slice());
         self.0 = *hasher.finalize().as_bytes();
     }
 }
@@ -197,47 +204,9 @@ impl SessionCommits {
             None => Err(SessionError("unknown session commit id".into())),
         }
     }
-
-    pub fn restore<P: AsRef<Path>>(path: P) -> Result<Self, Error> {
-        let file =
-            std::fs::File::open(path.as_ref()).map_err(PersistenceError)?;
-        let metadata =
-            std::fs::metadata(path.as_ref()).map_err(PersistenceError)?;
-        let ptr = unsafe {
-            libc::mmap(
-                ptr::null_mut(),
-                u32::MAX as usize,
-                libc::PROT_READ,
-                libc::MAP_SHARED,
-                file.as_raw_fd(),
-                0,
-            ) as *mut u8
-        };
-        let slice = unsafe {
-            core::slice::from_raw_parts(ptr, metadata.len() as usize)
-        };
-        let archived = rkyv::check_archived_root::<Self>(slice).unwrap();
-        Ok(archived.deserialize(&mut rkyv::Infallible).unwrap())
-    }
-
-    pub fn persist<P: AsRef<Path>>(&self, path: P) -> Result<(), Error> {
-        let file = OpenOptions::new()
-            .write(true)
-            .create(true)
-            .truncate(true)
-            .open(path)
-            .map_err(PersistenceError)?;
-
-        let mut scratch_buf = [0u8; SESSION_COMMITS_SCRATCH_SIZE];
-        let scratch = BufferScratch::new(&mut scratch_buf);
-        let serializer = WriteSerializer::new(file);
-        let mut composite =
-            CompositeSerializer::new(serializer, scratch, rkyv::Infallible);
-
-        composite.serialize_value(self).unwrap();
-        Ok(())
-    }
 }
+
+impl Persistable for SessionCommits {}
 
 impl Default for SessionCommits {
     fn default() -> Self {

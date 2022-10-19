@@ -4,7 +4,7 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use crate::commit::ModuleCommitId;
+use crate::commit::{Hashable, ModuleCommitId};
 use piecrust_uplink::ModuleId;
 
 pub fn module_id_to_name(module_id: ModuleId) -> String {
@@ -12,7 +12,7 @@ pub fn module_id_to_name(module_id: ModuleId) -> String {
 }
 
 pub fn commit_id_to_name(module_commit_id: ModuleCommitId) -> String {
-    format!("{}", ByteArrayWrapper(module_commit_id.as_bytes()))
+    format!("{}", ByteArrayWrapper(module_commit_id.as_slice()))
 }
 
 pub struct ByteArrayWrapper<'a>(pub &'a [u8]);

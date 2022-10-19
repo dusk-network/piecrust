@@ -17,12 +17,15 @@ use rkyv::{
     Serialize,
 };
 use tempfile::tempdir;
+use walkdir::WalkDir;
 
 use piecrust_uplink::ModuleId;
 
 use crate::commit::{CommitId, ModuleCommitId, SessionCommit, SessionCommits};
 use crate::memory_path::MemoryPath;
+use crate::merkle::Merkle;
 use crate::module::WrappedModule;
+use crate::persistable::Persistable;
 use crate::session::Session;
 use crate::types::MemoryFreshness::*;
 use crate::types::{MemoryFreshness, StandardBufSerializer};
@@ -30,6 +33,8 @@ use crate::util::{commit_id_to_name, module_id_to_name};
 use crate::Error::{self, PersistenceError, RestoreError};
 
 const SESSION_COMMITS_FILENAME: &str = "commits";
+const LAST_COMMIT_POSTFIX: &str = "_last";
+const LAST_COMMIT_ID_POSTFIX: &str = "_last_id";
 
 #[derive(Default)]
 struct VMInner {
@@ -37,6 +42,7 @@ struct VMInner {
     host_queries: HostQueries,
     base_memory_path: PathBuf,
     session_commits: SessionCommits,
+    root: Option<[u8; 32]>,
 }
 
 impl VMInner {
@@ -53,6 +59,7 @@ impl VMInner {
             host_queries: HostQueries::default(),
             base_memory_path,
             session_commits,
+            root: None,
         })
     }
 
@@ -65,6 +72,7 @@ impl VMInner {
                 .into(),
             host_queries: HostQueries::default(),
             session_commits: SessionCommits::new(),
+            root: None,
         })
     }
 }
@@ -184,9 +192,21 @@ impl VM {
         &self,
         module_id: &ModuleId,
     ) -> MemoryPath {
-        const LAST_COMMIT_POSTFIX: &str = "_last";
+        self.path_to_module_with_postfix(module_id, LAST_COMMIT_POSTFIX)
+    }
+    pub(crate) fn path_to_module_last_commit_id(
+        &self,
+        module_id: &ModuleId,
+    ) -> MemoryPath {
+        self.path_to_module_with_postfix(module_id, LAST_COMMIT_ID_POSTFIX)
+    }
+    fn path_to_module_with_postfix<P: AsRef<str>>(
+        &self,
+        module_id: &ModuleId,
+        postfix: P,
+    ) -> MemoryPath {
         let mut name = module_id_to_name(*module_id);
-        name.push_str(LAST_COMMIT_POSTFIX);
+        name.push_str(postfix.as_ref());
         let path = self.inner.read().base_memory_path.join(name);
         MemoryPath::new(path)
     }
@@ -203,9 +223,10 @@ impl VM {
     }
 
     pub(crate) fn restore_session(
-        &self,
+        &mut self,
         session_commit_id: &CommitId,
     ) -> Result<(), Error> {
+        self.reset_root();
         self.inner.read().session_commits.with_every_module_commit(
             session_commit_id,
             |module_id, module_commit_id| {
@@ -214,10 +235,13 @@ impl VM {
                 let (target_path, _) = self.memory_path(module_id);
                 let last_commit_path =
                     self.path_to_module_last_commit(module_id);
+                let last_commit_path_id =
+                    self.path_to_module_last_commit_id(module_id);
                 std::fs::copy(source_path.as_ref(), target_path.as_ref())
                     .map_err(RestoreError)?;
                 std::fs::copy(source_path.as_ref(), last_commit_path.as_ref())
                     .map_err(RestoreError)?;
+                module_commit_id.persist(last_commit_path_id)?;
                 Ok(())
             },
         )
@@ -232,6 +256,48 @@ impl VM {
 
     pub fn base_path(&self) -> PathBuf {
         self.inner.read().base_memory_path.to_path_buf()
+    }
+    pub(crate) fn get_module_commit_ids(
+        &self,
+    ) -> Result<Vec<ModuleCommitId>, Error> {
+        let mut vec = vec![];
+        for id_file in WalkDir::new(self.base_path())
+            .into_iter()
+            .filter_map(|file| file.ok())
+        {
+            if id_file.metadata().expect("metadata exists").is_file()
+                && id_file
+                    .file_name()
+                    .to_str()
+                    .expect("filename is UTF8")
+                    .ends_with(LAST_COMMIT_ID_POSTFIX)
+            {
+                let module_commit_id = ModuleCommitId::restore(id_file.path())?;
+                vec.push(module_commit_id);
+            }
+        }
+        Ok(vec)
+    }
+    pub fn root(&mut self) -> Result<[u8; 32], Error> {
+        let current_root;
+        {
+            current_root = self.inner.read().root;
+        }
+        Ok(if let Some(r) = current_root {
+            r
+        } else {
+            let r = self.calculate_root()?;
+            self.inner.write().root = Some(r);
+            r
+        })
+    }
+    fn calculate_root(&self) -> Result<[u8; 32], Error> {
+        let mut vec = self.get_module_commit_ids()?;
+        vec.sort();
+        Ok(Merkle::merkle(&mut vec).inner())
+    }
+    pub(crate) fn reset_root(&mut self) {
+        self.inner.write().root = None;
     }
 }
 
