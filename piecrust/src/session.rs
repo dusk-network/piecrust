@@ -293,6 +293,7 @@ impl Session {
             session_commit.add(module_id, &module_commit_id);
             Ok(())
         })?;
+        session_commit.calculate_id();
         let session_commit_id = session_commit.commit_id();
         self.vm.add_session_commit(session_commit);
         Ok(session_commit_id)

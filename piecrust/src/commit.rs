@@ -14,6 +14,7 @@ use std::path::Path;
 
 use crate::error::Error::{self, SessionError};
 use crate::persistable::Persistable;
+use crate::merkle::Merkle;
 
 pub const COMMIT_ID_BYTES: usize = 32;
 
@@ -102,11 +103,14 @@ impl CommitId {
         &self.0[..]
     }
 
-    fn add(&mut self, module_commit_id: &ModuleCommitId) {
-        let mut hasher = blake3::Hasher::new();
-        hasher.update(self.0.as_slice());
-        hasher.update(module_commit_id.as_slice());
-        self.0 = *hasher.finalize().as_bytes();
+    pub fn inner(&self) -> [u8; COMMIT_ID_BYTES] {
+        self.0
+    }
+}
+
+impl From<[u8; COMMIT_ID_BYTES]> for CommitId {
+    fn from(array: [u8; COMMIT_ID_BYTES]) -> Self {
+        CommitId(array)
     }
 }
 
@@ -141,14 +145,29 @@ impl SessionCommit {
         self.id
     }
 
+    pub fn set_commit_id(&mut self, root: [u8; 32]) {
+        self.id = CommitId::from(root);
+    }
+
     pub fn add(&mut self, module_id: &ModuleId, commit_id: &ModuleCommitId) {
         self.ids.insert(*module_id, *commit_id);
-        self.id.add(commit_id);
     }
 
     pub fn ids(&self) -> &BTreeMap<ModuleId, ModuleCommitId> {
         &self.ids
     }
+
+    pub fn calculate_id(&mut self) {
+        let mut vec = self
+            .ids()
+            .values()
+            .cloned()
+            .collect::<Vec<ModuleCommitId>>();
+        vec.sort();
+        let root = Merkle::merkle(&mut vec).inner();
+        self.set_commit_id(root)
+    }
+
 }
 
 impl Default for SessionCommit {
@@ -203,6 +222,19 @@ impl SessionCommits {
             }
             None => Err(SessionError("unknown session commit id".into())),
         }
+    }
+
+    pub fn with_every_session_commit<F>(
+        &self,
+        mut closure: F,
+    ) -> Result<(), Error>
+    where
+        F: FnMut(&SessionCommit) -> Result<(), Error>,
+    {
+        for (_commit_id, session_commit) in self.0.iter() {
+            closure(session_commit)?;
+        }
+        Ok(())
     }
 }
 

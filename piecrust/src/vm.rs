@@ -5,7 +5,7 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 use std::borrow::Cow;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 use std::fmt::{self, Debug, Formatter};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -17,13 +17,11 @@ use rkyv::{
     Serialize,
 };
 use tempfile::tempdir;
-use walkdir::WalkDir;
 
 use piecrust_uplink::ModuleId;
 
 use crate::commit::{CommitId, ModuleCommitId, SessionCommit, SessionCommits};
 use crate::memory_path::MemoryPath;
-use crate::merkle::Merkle;
 use crate::module::WrappedModule;
 use crate::persistable::Persistable;
 use crate::session::Session;
@@ -260,29 +258,34 @@ impl VM {
         self.inner.read().base_memory_path.to_path_buf()
     }
 
-    pub(crate) fn get_module_commit_ids(
-        &self,
-    ) -> Result<Vec<ModuleCommitId>, Error> {
-        let mut vec = vec![];
-        for id_file in WalkDir::new(self.base_path())
-            .into_iter()
-            .filter_map(|file| file.ok())
-        {
-            if id_file.metadata().expect("metadata exists").is_file()
-                && id_file
-                    .file_name()
-                    .to_str()
-                    .expect("filename is UTF8")
-                    .ends_with(LAST_COMMIT_ID_POSTFIX)
+    pub(crate) fn get_current_vm_commit(&self) -> Result<SessionCommit, Error> {
+        let mut module_ids: HashSet<ModuleId> = HashSet::new();
+        let mut session_commit = SessionCommit::new();
+
+        self.inner
+            .read()
+            .session_commits
+            .with_every_session_commit(|session_commit| {
+                for (module_id, _module_commit_id) in
+                    session_commit.ids().iter()
+                {
+                    module_ids.insert(*module_id);
+                }
+                Ok(())
+            })?;
+
+        for module_id in module_ids.iter() {
+            let path = self.path_to_module_last_commit_id(module_id);
+            if let Ok(module_commit_id) =
+                ModuleCommitId::restore::<ModuleCommitId, MemoryPath>(path)
             {
-                let module_commit_id = ModuleCommitId::restore(id_file.path())?;
-                vec.push(module_commit_id);
+                session_commit.add(module_id, &module_commit_id)
             }
         }
-        Ok(vec)
+        Ok(session_commit)
     }
 
-    pub fn root(&mut self) -> Result<[u8; 32], Error> {
+    pub fn root(&mut self, persist: bool) -> Result<[u8; 32], Error> {
         let current_root;
         {
             current_root = self.inner.read().root;
@@ -290,16 +293,20 @@ impl VM {
         Ok(if let Some(r) = current_root {
             r
         } else {
-            let r = self.calculate_root()?;
-            self.inner.write().root = Some(r);
-            r
+            let mut session_commit = self.get_current_vm_commit()?;
+            session_commit.calculate_id();
+            self.inner.write().root = Some(session_commit.commit_id().inner());
+            let root = session_commit.commit_id().inner();
+            if persist {
+                self.inner.write().session_commits.add(session_commit);
+            }
+            root
         })
     }
 
-    fn calculate_root(&self) -> Result<[u8; 32], Error> {
-        let mut vec = self.get_module_commit_ids()?;
-        vec.sort();
-        Ok(Merkle::merkle(&mut vec).inner())
+    pub fn restore_root(&mut self, root: &[u8; 32]) -> Result<(), Error> {
+        self.restore_session(&CommitId::from(*root))?;
+        Ok(())
     }
 
     pub(crate) fn reset_root(&mut self) {
