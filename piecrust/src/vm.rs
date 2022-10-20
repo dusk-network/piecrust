@@ -291,17 +291,18 @@ impl VM {
         {
             current_root = self.inner.read().root;
         }
-        Ok(if let Some(r) = current_root {
-            r
-        } else {
-            let session_commit = self.get_current_vm_commit()?;
-            let root = session_commit.commit_id().inner();
-            if persist {
-                self.inner.write().session_commits.add(session_commit);
+        match current_root {
+            Some(r) if !persist => Ok(r),
+            _ => {
+                let session_commit = self.get_current_vm_commit()?;
+                let root = session_commit.commit_id().inner();
+                if persist {
+                    self.inner.write().session_commits.add(session_commit);
+                }
+                self.inner.write().root = Some(root);
+                Ok(root)
             }
-            self.inner.write().root = Some(root);
-            root
-        })
+        }
     }
 
     pub fn restore_root(&mut self, root: &[u8; 32]) -> Result<(), Error> {
