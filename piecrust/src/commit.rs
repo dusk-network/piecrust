@@ -13,8 +13,8 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 use crate::error::Error::{self, SessionError};
-use crate::persistable::Persistable;
 use crate::merkle::Merkle;
+use crate::persistable::Persistable;
 
 pub const COMMIT_ID_BYTES: usize = 32;
 
@@ -167,7 +167,6 @@ impl SessionCommit {
         let root = Merkle::merkle(&mut vec).inner();
         self.set_commit_id(root)
     }
-
 }
 
 impl Default for SessionCommit {
