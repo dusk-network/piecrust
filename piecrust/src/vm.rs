@@ -194,12 +194,14 @@ impl VM {
     ) -> MemoryPath {
         self.path_to_module_with_postfix(module_id, LAST_COMMIT_POSTFIX)
     }
+
     pub(crate) fn path_to_module_last_commit_id(
         &self,
         module_id: &ModuleId,
     ) -> MemoryPath {
         self.path_to_module_with_postfix(module_id, LAST_COMMIT_ID_POSTFIX)
     }
+
     fn path_to_module_with_postfix<P: AsRef<str>>(
         &self,
         module_id: &ModuleId,
@@ -257,6 +259,7 @@ impl VM {
     pub fn base_path(&self) -> PathBuf {
         self.inner.read().base_memory_path.to_path_buf()
     }
+
     pub(crate) fn get_module_commit_ids(
         &self,
     ) -> Result<Vec<ModuleCommitId>, Error> {
@@ -278,6 +281,7 @@ impl VM {
         }
         Ok(vec)
     }
+
     pub fn root(&mut self) -> Result<[u8; 32], Error> {
         let current_root;
         {
@@ -291,11 +295,13 @@ impl VM {
             r
         })
     }
+
     fn calculate_root(&self) -> Result<[u8; 32], Error> {
         let mut vec = self.get_module_commit_ids()?;
         vec.sort();
         Ok(Merkle::merkle(&mut vec).inner())
     }
+
     pub(crate) fn reset_root(&mut self) {
         self.inner.write().root = None;
     }
