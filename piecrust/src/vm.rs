@@ -282,6 +282,7 @@ impl VM {
                 session_commit.add(module_id, &module_commit_id)
             }
         }
+        session_commit.calculate_id();
         Ok(session_commit)
     }
 
@@ -293,13 +294,12 @@ impl VM {
         Ok(if let Some(r) = current_root {
             r
         } else {
-            let mut session_commit = self.get_current_vm_commit()?;
-            session_commit.calculate_id();
-            self.inner.write().root = Some(session_commit.commit_id().inner());
+            let session_commit = self.get_current_vm_commit()?;
             let root = session_commit.commit_id().inner();
             if persist {
                 self.inner.write().session_commits.add(session_commit);
             }
+            self.inner.write().root = Some(root);
             root
         })
     }
