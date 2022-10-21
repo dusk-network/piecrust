@@ -161,11 +161,7 @@ impl SessionCommit {
     }
 
     pub fn calculate_id(&mut self) {
-        let mut vec = self
-            .ids()
-            .values()
-            .cloned()
-            .collect::<Vec<ModuleCommitId>>();
+        let mut vec = Vec::from_iter(self.ids().values().cloned());
         vec.sort();
         let root = Merkle::merkle(&mut vec).inner();
         self.id = CommitId::from(root);
