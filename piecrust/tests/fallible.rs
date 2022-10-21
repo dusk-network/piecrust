@@ -24,7 +24,7 @@ fn fallible_read_write_panic() -> Result<(), Error> {
     assert_eq!(
         session.query::<(), i64>(id, "read_value", ())?,
         0xfd,
-        "should remain unchanged, since the panic happened"
+        "should remain unchanged, since panics revert any changes"
     );
 
     Ok(())

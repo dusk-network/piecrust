@@ -42,6 +42,7 @@ impl MemoryHandler {
 
         let (path, fresh) =
             VM::get_memory_path(&self.base_memory_path, &mod_id);
+
         if path.as_ref().exists() {
             fs::remove_file(path.as_ref()).expect("file removed if exists");
         }
@@ -49,7 +50,7 @@ impl MemoryHandler {
             Some(path),
             MEMORY_PAGES * WASM_PAGE_SIZE,
             MAX_MEMORY_BYTES,
-            fresh,
+            state,
         );
         result.map(|mem| {
             self.memories.write().insert(mod_id, mem.clone());

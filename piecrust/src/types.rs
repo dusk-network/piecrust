@@ -15,7 +15,7 @@ pub type StandardBufSerializer<'a> = CompositeSerializer<
 >;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub enum MemoryFreshness {
-    Fresh,
-    NotFresh,
+pub enum MemoryState {
+    Uninitialized,
+    Initialized,
 }
