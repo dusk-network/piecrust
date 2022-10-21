@@ -10,10 +10,11 @@
 
 extern crate alloc;
 
+use piecrust_uplink as uplink;
+use uplink::{ModuleId, State};
+
 #[derive(Default)]
 pub struct Debug;
-
-use piecrust_uplink::{ModuleId, State};
 
 #[no_mangle]
 static SELF_ID: ModuleId = ModuleId::uninitialized();
@@ -22,7 +23,7 @@ static mut STATE: State<Debug> = State::new(Debug);
 
 impl Debug {
     pub fn debug(&self, string: alloc::string::String) {
-        piecrust_uplink::debug!("What a string! {}", string);
+        uplink::debug!("What a string! {}", string);
     }
 
     pub fn panic(&self) {
@@ -32,7 +33,5 @@ impl Debug {
 
 #[no_mangle]
 unsafe fn debug(arg_len: u32) -> u32 {
-    piecrust_uplink::wrap_query(arg_len, |s: alloc::string::String| {
-        STATE.debug(s)
-    })
+    uplink::wrap_query(arg_len, |s: alloc::string::String| STATE.debug(s))
 }

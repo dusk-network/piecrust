@@ -8,12 +8,13 @@
 #![no_std]
 #![no_main]
 
+use piecrust_uplink as uplink;
+use uplink::{ModuleId, State};
+
 #[derive(Default)]
 pub struct Counter {
     value: i64,
 }
-
-use piecrust_uplink::{ModuleId, State};
 
 #[no_mangle]
 static SELF_ID: ModuleId = ModuleId::uninitialized();
@@ -33,10 +34,10 @@ impl Counter {
 
 #[no_mangle]
 unsafe fn read_value(arg_len: u32) -> u32 {
-    piecrust_uplink::wrap_query(arg_len, |_: ()| STATE.read_value())
+    uplink::wrap_query(arg_len, |_: ()| STATE.read_value())
 }
 
 #[no_mangle]
 unsafe fn increment(arg_len: u32) -> u32 {
-    piecrust_uplink::wrap_transaction(arg_len, |_: ()| STATE.increment())
+    uplink::wrap_transaction(arg_len, |_: ()| STATE.increment())
 }
