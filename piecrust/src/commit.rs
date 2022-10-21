@@ -49,10 +49,12 @@ impl ModuleCommitId {
         self.0
     }
 }
+
 impl Hashable for ModuleCommitId {
     fn uninitialized() -> Self {
         ModuleCommitId([0; COMMIT_ID_BYTES])
     }
+
     fn as_slice(&self) -> &[u8] {
         &self.0[..]
     }
@@ -69,12 +71,14 @@ impl core::fmt::Debug for ModuleCommitId {
         if f.alternate() {
             write!(f, "0x")?
         }
+
         for byte in self.0 {
             write!(f, "{:02x}", &byte)?
         }
         Ok(())
     }
 }
+
 impl Persistable for ModuleCommitId {}
 
 #[derive(
@@ -95,16 +99,18 @@ impl Persistable for ModuleCommitId {}
 pub struct CommitId([u8; COMMIT_ID_BYTES]);
 
 impl CommitId {
-    pub fn uninitialized() -> Self {
+    pub fn inner(&self) -> [u8; COMMIT_ID_BYTES] {
+        self.0
+    }
+}
+
+impl Hashable for CommitId {
+    fn uninitialized() -> Self {
         CommitId([0; COMMIT_ID_BYTES])
     }
 
-    pub fn as_slice(&self) -> &[u8] {
+    fn as_slice(&self) -> &[u8] {
         &self.0[..]
-    }
-
-    pub fn inner(&self) -> [u8; COMMIT_ID_BYTES] {
-        self.0
     }
 }
 
@@ -119,6 +125,7 @@ impl core::fmt::Debug for CommitId {
         if f.alternate() {
             write!(f, "0x")?
         }
+
         for byte in self.0 {
             write!(f, "{:02x}", &byte)?
         }
@@ -145,10 +152,6 @@ impl SessionCommit {
         self.id
     }
 
-    pub fn set_commit_id(&mut self, root: [u8; 32]) {
-        self.id = CommitId::from(root);
-    }
-
     pub fn add(&mut self, module_id: &ModuleId, commit_id: &ModuleCommitId) {
         self.ids.insert(*module_id, *commit_id);
     }
@@ -165,7 +168,7 @@ impl SessionCommit {
             .collect::<Vec<ModuleCommitId>>();
         vec.sort();
         let root = Merkle::merkle(&mut vec).inner();
-        self.set_commit_id(root)
+        self.id = CommitId::from(root);
     }
 }
 
@@ -223,17 +226,13 @@ impl SessionCommits {
         }
     }
 
-    pub fn with_every_session_commit<F>(
-        &self,
-        mut closure: F,
-    ) -> Result<(), Error>
+    pub fn with_every_session_commit<F>(&self, mut closure: F)
     where
-        F: FnMut(&SessionCommit) -> Result<(), Error>,
+        F: FnMut(&SessionCommit),
     {
         for (_commit_id, session_commit) in self.0.iter() {
-            closure(session_commit)?;
+            closure(session_commit);
         }
-        Ok(())
     }
 }
 

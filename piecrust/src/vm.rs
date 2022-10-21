@@ -262,17 +262,15 @@ impl VM {
         let mut module_ids: HashSet<ModuleId> = HashSet::new();
         let mut session_commit = SessionCommit::new();
 
-        self.inner
-            .read()
-            .session_commits
-            .with_every_session_commit(|session_commit| {
+        self.inner.read().session_commits.with_every_session_commit(
+            |session_commit| {
                 for (module_id, _module_commit_id) in
                     session_commit.ids().iter()
                 {
                     module_ids.insert(*module_id);
                 }
-                Ok(())
-            })?;
+            },
+        );
 
         for module_id in module_ids.iter() {
             let path = self.path_to_module_last_commit_id(module_id);
