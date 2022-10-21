@@ -101,14 +101,22 @@ impl VM {
     }
 
     pub fn deploy(&mut self, bytecode: &[u8]) -> Result<ModuleId, Error> {
+        let hash = blake3::hash(bytecode);
+        let module_id = ModuleId::from(<[u8; 32]>::from(hash));
+        self.deploy_with_id(module_id, bytecode)?;
+        Ok(module_id)
+    }
+
+    pub fn deploy_with_id(
+        &mut self,
+        module_id: ModuleId,
+        bytecode: &[u8],
+    ) -> Result<(), Error> {
         // This should be the only place that we need a write lock.
         let mut guard = self.inner.write();
-        let hash = blake3::hash(bytecode);
-        let id = ModuleId::from(<[u8; 32]>::from(hash));
-
         let module = WrappedModule::new(bytecode)?;
-        guard.modules.insert(id, module);
-        Ok(id)
+        guard.modules.insert(module_id, module);
+        Ok(())
     }
 
     pub fn with_module<F, R>(&self, id: ModuleId, closure: F) -> R
