@@ -44,6 +44,14 @@ impl ModuleId {
         ModuleId([0u8; MODULE_ID_BYTES])
     }
 
+    pub const fn from_bytes(bytes: [u8; MODULE_ID_BYTES]) -> Self {
+        Self(bytes)
+    }
+
+    pub const fn to_bytes(self) -> [u8; MODULE_ID_BYTES] {
+        self.0
+    }
+
     pub fn as_bytes(&self) -> &[u8] {
         &self.0
     }
@@ -57,9 +65,9 @@ impl ModuleId {
     }
 }
 
-impl From<[u8; 32]> for ModuleId {
-    fn from(array: [u8; 32]) -> Self {
-        ModuleId(array)
+impl From<[u8; MODULE_ID_BYTES]> for ModuleId {
+    fn from(bytes: [u8; MODULE_ID_BYTES]) -> Self {
+        Self::from_bytes(bytes)
     }
 }
 
