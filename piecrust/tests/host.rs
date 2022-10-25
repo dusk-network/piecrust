@@ -21,12 +21,14 @@ fn hash(buf: &mut [u8], len: u32) -> u32 {
 pub fn host_hash() -> Result<(), Error> {
     let mut vm = VM::ephemeral()?;
 
-    let id = vm.deploy(module_bytecode!("host"))?;
+    let mut session = vm.session();
+
+    let id = session.deploy(module_bytecode!("host"))?;
 
     vm.register_host_query("hash", hash);
 
     let v = vec![0u8, 1, 2];
-    let h = vm
+    let h = session
         .query::<_, [u8; 32]>(id, "hash", v)
         .expect("query should succeed");
     assert_eq!(blake3::hash(&vec![0u8, 1, 2]).as_bytes(), &h);

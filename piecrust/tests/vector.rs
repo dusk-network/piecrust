@@ -10,11 +10,11 @@ use piecrust::{module_bytecode, Error, VM};
 pub fn vector_push_pop() -> Result<(), Error> {
     let mut vm = VM::ephemeral()?;
 
-    let id = vm.deploy(module_bytecode!("vector"))?;
+    let mut session = vm.session();
+
+    let id = session.deploy(module_bytecode!("vector"))?;
 
     const N: usize = 128;
-
-    let mut session = vm.session();
 
     for i in 0..N {
         session.transact::<_, ()>(id, "push", i as i16)?;

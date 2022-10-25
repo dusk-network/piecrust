@@ -10,13 +10,15 @@ use piecrust::{module_bytecode, Error, VM};
 pub fn fibo() -> Result<(), Error> {
     let mut vm = VM::ephemeral()?;
 
-    let id = vm.deploy(module_bytecode!("fibonacci"))?;
+    let mut session = vm.session();
 
-    assert_eq!(vm.query::<u32, u64>(id, "nth", 0)?, 1);
-    assert_eq!(vm.query::<u32, u64>(id, "nth", 1)?, 1);
-    assert_eq!(vm.query::<u32, u64>(id, "nth", 2)?, 2);
-    assert_eq!(vm.query::<u32, u64>(id, "nth", 3)?, 3);
-    assert_eq!(vm.query::<u32, u64>(id, "nth", 4)?, 5);
+    let id = session.deploy(module_bytecode!("fibonacci"))?;
+
+    assert_eq!(session.query::<u32, u64>(id, "nth", 0)?, 1);
+    assert_eq!(session.query::<u32, u64>(id, "nth", 1)?, 1);
+    assert_eq!(session.query::<u32, u64>(id, "nth", 2)?, 2);
+    assert_eq!(session.query::<u32, u64>(id, "nth", 3)?, 3);
+    assert_eq!(session.query::<u32, u64>(id, "nth", 4)?, 5);
 
     Ok(())
 }

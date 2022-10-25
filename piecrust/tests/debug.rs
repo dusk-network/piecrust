@@ -10,9 +10,9 @@ use piecrust::{module_bytecode, Error, VM};
 pub fn debug() -> Result<(), Error> {
     let mut world = VM::ephemeral()?;
 
-    let id = world.deploy(module_bytecode!("debugger"))?;
-
     let mut session = world.session();
+
+    let id = session.deploy(module_bytecode!("debugger"))?;
 
     session.query(id, "debug", String::from("Hello world"))?;
 

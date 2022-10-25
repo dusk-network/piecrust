@@ -14,9 +14,8 @@ pub fn deploy_with_id() -> Result<(), Error> {
     let bytecode = module_bytecode!("counter");
     let some_id = [1u8; 32];
     let module_id = ModuleId::from(some_id);
-    vm.deploy_with_id(module_id, bytecode)?;
-
     let mut session = vm.session();
+    session.deploy_with_id(module_id, bytecode)?;
 
     assert_eq!(session.query::<(), i64>(module_id, "read_value", ())?, 0xfc);
 

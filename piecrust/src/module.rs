@@ -7,6 +7,7 @@
 use crate::error::Error;
 use crate::instance::Store;
 
+#[derive(Clone)]
 pub struct WrappedModule {
     serialized: Vec<u8>,
 }

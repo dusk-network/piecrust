@@ -24,6 +24,7 @@ use crate::event::Event;
 use crate::instance::WrappedInstance;
 use crate::memory_handler::MemoryHandler;
 use crate::memory_path::MemoryPath;
+use crate::module::WrappedModule;
 use crate::types::MemoryFreshness::*;
 use crate::types::StandardBufSerializer;
 use crate::vm::VM;
@@ -83,6 +84,7 @@ unsafe impl Sync for Session {}
 #[derive(Clone)]
 pub struct Session {
     vm: VM,
+    modules: BTreeMap<ModuleId, WrappedModule>,
     memory_handler: MemoryHandler,
     callstack: Arc<RwLock<Vec<StackElement>>>,
     debug: Arc<RwLock<Vec<String>>>,
@@ -95,6 +97,7 @@ pub struct Session {
 impl Session {
     pub fn new(vm: VM) -> Self {
         Session {
+            modules: BTreeMap::default(),
             memory_handler: MemoryHandler::new(vm.clone()),
             vm,
             callstack: Arc::new(RwLock::new(vec![])),
@@ -104,6 +107,32 @@ impl Session {
             limit: DEFAULT_LIMIT,
             spent: 0,
         }
+    }
+
+    pub fn deploy(&mut self, bytecode: &[u8]) -> Result<ModuleId, Error> {
+        let hash = blake3::hash(bytecode);
+        let module_id = ModuleId::from(<[u8; 32]>::from(hash));
+        self.deploy_with_id(module_id, bytecode)?;
+        Ok(module_id)
+    }
+
+    pub fn deploy_with_id(
+        &mut self,
+        module_id: ModuleId,
+        bytecode: &[u8],
+    ) -> Result<(), Error> {
+        let module = WrappedModule::new(bytecode)?;
+        self.modules.insert(module_id, module);
+        Ok(())
+    }
+
+    pub fn with_module<F, R>(&self, id: ModuleId, closure: F) -> R
+    where
+        F: FnOnce(&WrappedModule) -> R,
+    {
+        let wrapped = self.modules.get(&id).expect("invalid module");
+
+        closure(wrapped)
     }
 
     pub fn query<Arg, Ret>(
@@ -175,7 +204,7 @@ impl Session {
     }
 
     pub(crate) fn new_instance(&self, mod_id: ModuleId) -> WrappedInstance {
-        self.vm.with_module(mod_id, |module| {
+        self.with_module(mod_id, |module| {
             let mut memory = self
                 .memory_handler
                 .get_memory(mod_id)

@@ -10,22 +10,16 @@ use std::fmt::{self, Debug, Formatter};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use bytecheck::CheckBytes;
 use parking_lot::RwLock;
-use rkyv::{
-    validation::validators::DefaultValidator, Archive, Deserialize, Infallible,
-    Serialize,
-};
 use tempfile::tempdir;
 
 use piecrust_uplink::ModuleId;
 
 use crate::commit::{CommitId, ModuleCommitId, SessionCommit, SessionCommits};
 use crate::memory_path::MemoryPath;
-use crate::module::WrappedModule;
 use crate::session::Session;
+use crate::types::MemoryFreshness;
 use crate::types::MemoryFreshness::*;
-use crate::types::{MemoryFreshness, StandardBufSerializer};
 use crate::util::{commit_id_to_name, module_id_to_name};
 use crate::Error::{self, PersistenceError, RestoreError};
 
@@ -33,7 +27,6 @@ const SESSION_COMMITS_FILENAME: &str = "commits";
 
 #[derive(Default)]
 struct VMInner {
-    modules: BTreeMap<ModuleId, WrappedModule>,
     host_queries: HostQueries,
     base_memory_path: PathBuf,
     session_commits: SessionCommits,
@@ -49,7 +42,6 @@ impl VMInner {
             base_memory_path.join(SESSION_COMMITS_FILENAME),
         )?;
         Ok(Self {
-            modules: BTreeMap::default(),
             host_queries: HostQueries::default(),
             base_memory_path,
             session_commits,
@@ -58,7 +50,6 @@ impl VMInner {
 
     fn ephemeral() -> Result<Self, Error> {
         Ok(Self {
-            modules: BTreeMap::default(),
             base_memory_path: tempdir()
                 .map_err(PersistenceError)?
                 .path()
@@ -98,51 +89,6 @@ impl VM {
     {
         let mut guard = self.inner.write();
         guard.host_queries.insert(name, query);
-    }
-
-    pub fn deploy(&mut self, bytecode: &[u8]) -> Result<ModuleId, Error> {
-        let hash = blake3::hash(bytecode);
-        let module_id = ModuleId::from(<[u8; 32]>::from(hash));
-        self.deploy_with_id(module_id, bytecode)?;
-        Ok(module_id)
-    }
-
-    pub fn deploy_with_id(
-        &mut self,
-        module_id: ModuleId,
-        bytecode: &[u8],
-    ) -> Result<(), Error> {
-        // This should be the only place that we need a write lock.
-        let mut guard = self.inner.write();
-        let module = WrappedModule::new(bytecode)?;
-        guard.modules.insert(module_id, module);
-        Ok(())
-    }
-
-    pub fn with_module<F, R>(&self, id: ModuleId, closure: F) -> R
-    where
-        F: FnOnce(&WrappedModule) -> R,
-    {
-        let guard = self.inner.read();
-        let wrapped = guard.modules.get(&id).expect("invalid module");
-
-        closure(wrapped)
-    }
-
-    pub fn query<Arg, Ret>(
-        &self,
-        id: ModuleId,
-        method_name: &str,
-        arg: Arg,
-    ) -> Result<Ret, Error>
-    where
-        Arg: for<'b> Serialize<StandardBufSerializer<'b>>,
-        Ret: Archive,
-        Ret::Archived: Deserialize<Ret, Infallible>
-            + for<'b> CheckBytes<DefaultValidator<'b>>,
-    {
-        let mut session = Session::new(self.clone());
-        session.query(id, method_name, arg)
     }
 
     pub(crate) fn host_query(
