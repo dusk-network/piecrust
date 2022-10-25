@@ -310,7 +310,7 @@ impl WrappedInstance {
     }
 
     #[allow(unused)]
-    #[allow(clippy::uninlined-format-args)]
+    #[allow(clippy::uninlined_format_args)]
     pub fn snap(&self) {
         let mem = self
             .instance
