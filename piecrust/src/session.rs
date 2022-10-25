@@ -126,7 +126,7 @@ impl Session {
         Ok(())
     }
 
-    pub fn with_module<F, R>(&self, id: ModuleId, closure: F) -> R
+    fn with_module<F, R>(&self, id: ModuleId, closure: F) -> R
     where
         F: FnOnce(&WrappedModule) -> R,
     {
