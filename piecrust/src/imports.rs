@@ -217,7 +217,6 @@ fn emit(mut fenv: FunctionEnvMut<Env>, arg_len: u32) {
     env.emit(arg_len)
 }
 
-#[allow(clippy::uninlined_format_args)]
 fn host_debug(fenv: FunctionEnvMut<Env>, msg_ofs: i32, msg_len: u32) {
     let env = fenv.data();
 
@@ -228,7 +227,7 @@ fn host_debug(fenv: FunctionEnvMut<Env>, msg_ofs: i32, msg_len: u32) {
 
         env.register_debug(msg);
 
-        println!("MODULE DEBUG {:?}", msg)
+        println!("MODULE DEBUG {msg}")
     })
 }
 
