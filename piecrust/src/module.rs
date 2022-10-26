@@ -4,11 +4,14 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
+use std::sync::Arc;
+
 use crate::error::Error;
 use crate::instance::Store;
 
+#[derive(Clone)]
 pub struct WrappedModule {
-    serialized: Vec<u8>,
+    serialized: Arc<Vec<u8>>,
 }
 
 impl WrappedModule {
@@ -19,7 +22,7 @@ impl WrappedModule {
         let serialized = module.serialize()?;
 
         Ok(WrappedModule {
-            serialized: serialized.to_vec(),
+            serialized: Arc::new(serialized.to_vec()),
         })
     }
 

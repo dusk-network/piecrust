@@ -9,19 +9,21 @@ use piecrust_uplink::{ModuleId, RawQuery, RawResult, RawTransaction};
 
 #[test]
 pub fn cc_read_counter() -> Result<(), Error> {
-    let mut world = VM::ephemeral()?;
+    let mut vm = VM::ephemeral()?;
 
-    let counter_id = world.deploy(module_bytecode!("counter"))?;
+    let mut session = vm.session();
+
+    let counter_id = session.deploy(module_bytecode!("counter"))?;
 
     // read direct
 
-    let value: i64 = world.query(counter_id, "read_value", ())?;
+    let value: i64 = session.query(counter_id, "read_value", ())?;
     assert_eq!(value, 0xfc);
 
-    let center_id = world.deploy(module_bytecode!("callcenter"))?;
+    let center_id = session.deploy(module_bytecode!("callcenter"))?;
 
     // read value through callcenter
-    let value: i64 = world.query(center_id, "query_counter", counter_id)?;
+    let value: i64 = session.query(center_id, "query_counter", counter_id)?;
     assert_eq!(value, 0xfc);
 
     Ok(())
@@ -29,21 +31,21 @@ pub fn cc_read_counter() -> Result<(), Error> {
 
 #[test]
 pub fn cc_direct() -> Result<(), Error> {
-    let mut world = VM::ephemeral()?;
+    let mut vm = VM::ephemeral()?;
 
-    let counter_id = world.deploy(module_bytecode!("counter"))?;
+    let mut session = vm.session();
+
+    let counter_id = session.deploy(module_bytecode!("counter"))?;
 
     // read value directly
-    let value: i64 = world.query(counter_id, "read_value", ())?;
+    let value: i64 = session.query(counter_id, "read_value", ())?;
     assert_eq!(value, 0xfc);
 
-    let center_id = world.deploy(module_bytecode!("callcenter"))?;
+    let center_id = session.deploy(module_bytecode!("callcenter"))?;
 
     // read value through callcenter
-    let value: i64 = world.query(center_id, "query_counter", counter_id)?;
+    let value: i64 = session.query(center_id, "query_counter", counter_id)?;
     assert_eq!(value, 0xfc);
-
-    let mut session = world.session();
 
     // increment through call center
     session.transact(center_id, "increment_counter", counter_id)?;
@@ -61,14 +63,16 @@ pub fn cc_direct() -> Result<(), Error> {
 
 #[test]
 pub fn cc_passthrough() -> Result<(), Error> {
-    let mut world = VM::ephemeral()?;
+    let mut vm = VM::ephemeral()?;
 
-    let center_id = world.deploy(module_bytecode!("callcenter"))?;
+    let mut session = vm.session();
+
+    let center_id = session.deploy(module_bytecode!("callcenter"))?;
 
     let rq = RawQuery::new("read_value", ());
 
     let res: RawQuery =
-        world.query(center_id, "query_passthrough", rq.clone())?;
+        session.query(center_id, "query_passthrough", rq.clone())?;
 
     assert_eq!(rq, res);
 
@@ -77,15 +81,17 @@ pub fn cc_passthrough() -> Result<(), Error> {
 
 #[test]
 pub fn cc_delegated_read() -> Result<(), Error> {
-    let mut world = VM::ephemeral()?;
+    let mut vm = VM::ephemeral()?;
 
-    let counter_id = world.deploy(module_bytecode!("counter"))?;
-    let center_id = world.deploy(module_bytecode!("callcenter"))?;
+    let mut session = vm.session();
+
+    let counter_id = session.deploy(module_bytecode!("counter"))?;
+    let center_id = session.deploy(module_bytecode!("callcenter"))?;
 
     let rq = RawQuery::new("read_value", ());
 
     // read value through callcenter
-    let res = world.query::<_, RawResult>(
+    let res = session.query::<_, RawResult>(
         center_id,
         "delegate_query",
         (counter_id, rq),
@@ -100,16 +106,15 @@ pub fn cc_delegated_read() -> Result<(), Error> {
 
 #[test]
 pub fn cc_delegated_write() -> Result<(), Error> {
-    let mut world = VM::ephemeral()?;
-
-    let counter_id = world.deploy(module_bytecode!("counter"))?;
-    let center_id = world.deploy(module_bytecode!("callcenter"))?;
+    let mut vm = VM::ephemeral()?;
 
     // increment through delegated transaction
 
     let rt = RawTransaction::new("increment", ());
 
-    let mut session = world.session();
+    let mut session = vm.session();
+    let counter_id = session.deploy(module_bytecode!("counter"))?;
+    let center_id = session.deploy(module_bytecode!("callcenter"))?;
 
     let _: () = session.transact(
         center_id,
@@ -126,13 +131,15 @@ pub fn cc_delegated_write() -> Result<(), Error> {
 
 #[test]
 pub fn cc_self() -> Result<(), Error> {
-    let mut world = VM::ephemeral()?;
+    let mut vm = VM::ephemeral()?;
 
-    let center_id = world.deploy(module_bytecode!("callcenter"))?;
+    let mut session = vm.session();
+
+    let center_id = session.deploy(module_bytecode!("callcenter"))?;
 
     // am i calling myself
     let calling_self: bool =
-        world.query(center_id, "calling_self", center_id)?;
+        session.query(center_id, "calling_self", center_id)?;
     assert!(calling_self);
 
     Ok(())
@@ -140,11 +147,13 @@ pub fn cc_self() -> Result<(), Error> {
 
 #[test]
 pub fn cc_caller() -> Result<(), Error> {
-    let mut world = VM::ephemeral()?;
+    let mut vm = VM::ephemeral()?;
 
-    let center_id = world.deploy(module_bytecode!("callcenter"))?;
+    let mut session = vm.session();
 
-    let value: bool = world.query(center_id, "call_self", ())?;
+    let center_id = session.deploy(module_bytecode!("callcenter"))?;
+
+    let value: bool = session.query(center_id, "call_self", ())?;
     assert!(value);
 
     Ok(())
@@ -152,11 +161,13 @@ pub fn cc_caller() -> Result<(), Error> {
 
 #[test]
 pub fn cc_caller_uninit() -> Result<(), Error> {
-    let mut world = VM::ephemeral()?;
+    let mut vm = VM::ephemeral()?;
 
-    let center_id = world.deploy(module_bytecode!("callcenter"))?;
+    let mut session = vm.session();
 
-    let caller: ModuleId = world.query(center_id, "return_caller", ())?;
+    let center_id = session.deploy(module_bytecode!("callcenter"))?;
+
+    let caller: ModuleId = session.query(center_id, "return_caller", ())?;
     assert_eq!(caller, ModuleId::uninitialized());
 
     Ok(())
@@ -164,11 +175,13 @@ pub fn cc_caller_uninit() -> Result<(), Error> {
 
 #[test]
 pub fn cc_self_id() -> Result<(), Error> {
-    let mut world = VM::ephemeral()?;
+    let mut vm = VM::ephemeral()?;
 
-    let center_id = world.deploy(module_bytecode!("callcenter"))?;
+    let mut session = vm.session();
 
-    let value: ModuleId = world.query(center_id, "return_self_id", ())?;
+    let center_id = session.deploy(module_bytecode!("callcenter"))?;
+
+    let value: ModuleId = session.query(center_id, "return_self_id", ())?;
     assert_eq!(value, center_id);
 
     Ok(())

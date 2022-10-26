@@ -10,11 +10,11 @@ use piecrust::{module_bytecode, Error, VM};
 pub fn push_pop() -> Result<(), Error> {
     let mut vm = VM::ephemeral()?;
 
-    let id = vm.deploy(module_bytecode!("stack"))?;
+    let mut session = vm.session();
+
+    let id = session.deploy(module_bytecode!("stack"))?;
 
     let val = 42;
-
-    let mut session = vm.session();
 
     session.transact(id, "push", val)?;
 
@@ -34,9 +34,9 @@ pub fn push_pop() -> Result<(), Error> {
 pub fn multi_push_pop() -> Result<(), Error> {
     let mut vm = VM::ephemeral()?;
 
-    let id = vm.deploy(module_bytecode!("stack"))?;
-
     let mut session = vm.session();
+
+    let id = session.deploy(module_bytecode!("stack"))?;
 
     const N: i32 = 16;
 

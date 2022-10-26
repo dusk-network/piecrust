@@ -10,13 +10,13 @@ use piecrust::{module_bytecode, Error, RawTransaction, VM};
 fn self_snapshot() -> Result<(), Error> {
     let mut vm = VM::ephemeral()?;
 
-    let contract_id = vm.deploy(module_bytecode!("self_snapshot"))?;
+    let mut session = vm.session();
 
-    assert_eq!(7, vm.query::<_, i32>(contract_id, "crossover", ())?);
+    let contract_id = session.deploy(module_bytecode!("self_snapshot"))?;
+
+    assert_eq!(7, session.query::<_, i32>(contract_id, "crossover", ())?);
 
     // returns old value
-
-    let mut session = vm.session();
 
     let res = session.transact::<_, i32>(contract_id, "set_crossover", 9)?;
 

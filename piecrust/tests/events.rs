@@ -10,11 +10,11 @@ use piecrust::{module_bytecode, Error, VM};
 pub fn vm_center_events() -> Result<(), Error> {
     let mut vm = VM::ephemeral()?;
 
-    let eventer_id = vm.deploy(module_bytecode!("eventer"))?;
+    let mut session = vm.session();
+
+    let eventer_id = session.deploy(module_bytecode!("eventer"))?;
 
     const EVENT_NUM: u32 = 5;
-
-    let mut session = vm.session();
 
     // increment through call center
     session.transact(eventer_id, "emit_events", EVENT_NUM)?;

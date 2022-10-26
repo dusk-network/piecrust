@@ -227,7 +227,7 @@ fn host_debug(fenv: FunctionEnvMut<Env>, msg_ofs: i32, msg_len: u32) {
 
         env.register_debug(msg);
 
-        println!("MODULE DEBUG {:?}", msg)
+        println!("MODULE DEBUG {msg}")
     })
 }
 

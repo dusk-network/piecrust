@@ -10,9 +10,9 @@ use piecrust::{module_bytecode, Error, VM};
 pub fn height() -> Result<(), Error> {
     let mut vm = VM::ephemeral()?;
 
-    let id = vm.deploy(module_bytecode!("everest"))?;
-
     let mut session = vm.session();
+
+    let id = session.deploy(module_bytecode!("everest"))?;
 
     for h in 0u64..1024 {
         session.set_meta("height", h);

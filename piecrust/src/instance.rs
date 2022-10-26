@@ -328,7 +328,7 @@ impl WrappedInstance {
                 for (row_nr, row) in chunk.chunks(RSZ).enumerate() {
                     let ofs = chunk_nr * CSZ + row_nr * RSZ;
 
-                    print!("{:08x}:", ofs);
+                    print!("{ofs:08x}:");
 
                     for (i, byte) in row.iter().enumerate() {
                         if i % 4 == 0 {
@@ -340,12 +340,12 @@ impl WrappedInstance {
                         let heap_base = self.heap_base;
 
                         if ofs + i >= buf_start && ofs + i < buf_end {
-                            print!("{}", format!("{:02x}", byte).red());
+                            print!("{}", format!("{byte:02x}").red());
                             print!(" ");
                         } else if ofs + i >= heap_base {
-                            print!("{}", format!("{:02x} ", byte).green());
+                            print!("{}", format!("{byte:02x} ").green());
                         } else {
-                            print!("{:02x} ", byte)
+                            print!("{byte:02x} ")
                         }
                     }
 

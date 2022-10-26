@@ -10,10 +10,10 @@ use piecrust::{module_bytecode, Error, VM};
 pub fn points_get_used() -> Result<(), Error> {
     let mut vm = VM::ephemeral()?;
 
-    let counter_id = vm.deploy(module_bytecode!("counter"))?;
-    let center_id = vm.deploy(module_bytecode!("callcenter"))?;
-
     let mut session = vm.session();
+
+    let counter_id = session.deploy(module_bytecode!("counter"))?;
+    let center_id = session.deploy(module_bytecode!("callcenter"))?;
 
     session.query::<_, i64>(counter_id, "read_value", ())?;
     let counter_spent = session.spent();
@@ -30,9 +30,10 @@ pub fn points_get_used() -> Result<(), Error> {
 pub fn fails_with_out_of_points() -> Result<(), Error> {
     let mut vm = VM::ephemeral()?;
 
-    let counter_id = vm.deploy(module_bytecode!("counter"))?;
-
     let mut session = vm.session();
+
+    let counter_id = session.deploy(module_bytecode!("counter"))?;
+
     session.set_point_limit(0);
 
     let err = session
@@ -50,9 +51,10 @@ pub fn limit_and_spent() -> Result<(), Error> {
 
     const LIMIT: u64 = 10000;
 
-    let spender_id = vm.deploy(module_bytecode!("spender"))?;
-
     let mut session = vm.session();
+
+    let spender_id = session.deploy(module_bytecode!("spender"))?;
+
     session.set_point_limit(LIMIT);
 
     let (limit, spent_before, spent_after, called_limit, called_spent) =
