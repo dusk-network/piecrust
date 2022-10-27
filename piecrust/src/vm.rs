@@ -16,7 +16,7 @@ use piecrust_uplink::ModuleId;
 use crate::commit::{CommitId, ModuleCommitId, SessionCommit, SessionCommits};
 use crate::memory_path::MemoryPath;
 use crate::session::Session;
-use crate::types::{MemoryState, StandardBufSerializer};
+use crate::types::MemoryState;
 use crate::util::{commit_id_to_name, module_id_to_name};
 use crate::Error::{self, PersistenceError, RestoreError};
 

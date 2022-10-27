@@ -9,9 +9,10 @@ use piecrust::{module_bytecode, Error, VM};
 #[test]
 fn fallible_read_write_panic() -> Result<(), Error> {
     let mut vm = VM::ephemeral()?;
-    let id = vm.deploy(module_bytecode!("fallible_counter"))?;
 
     let mut session = vm.session();
+
+    let id = session.deploy(module_bytecode!("fallible_counter"))?;
 
     session.transact::<bool, ()>(id, "increment", false)?;
 
