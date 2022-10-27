@@ -190,7 +190,8 @@ impl VM {
     }
 
     pub fn persist(&self) -> Result<(), Error> {
-        self.inner.read()
+        self.inner
+            .read()
             .session_commits
             .borrow()
             .persist(self.path_to_session_commits())
