@@ -20,11 +20,11 @@ use crate::vm::VM;
 pub struct MemoryHandler {
     memories: Arc<RwLock<BTreeMap<ModuleId, Linear>>>,
     #[allow(unused)]
-    vm: VM,
+    vm: *const VM,
 }
 
 impl MemoryHandler {
-    pub fn new(vm: VM) -> Self {
+    pub fn new(vm: &VM) -> Self {
         MemoryHandler {
             memories: Arc::new(RwLock::new(BTreeMap::new())),
             vm,
@@ -39,7 +39,7 @@ impl MemoryHandler {
             }
         }
 
-        let (path, fresh) = self.vm.memory_path(&mod_id);
+        let (path, fresh) = self.vm().memory_path(&mod_id);
         if path.as_ref().exists() {
             fs::remove_file(path.as_ref()).expect("file removed if exists");
         }
@@ -65,5 +65,9 @@ impl MemoryHandler {
             closure(module_id, linear.as_slice())?
         }
         Ok(())
+    }
+
+    fn vm<'a, 'b>(&'a self) -> &'b VM {
+        unsafe { &*self.vm }
     }
 }

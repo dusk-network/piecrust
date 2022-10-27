@@ -5,6 +5,7 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 use std::borrow::Cow;
+use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::fmt::{self, Debug, Formatter};
 use std::path::{Path, PathBuf};
@@ -29,7 +30,7 @@ const SESSION_COMMITS_FILENAME: &str = "commits";
 struct VMInner {
     host_queries: HostQueries,
     base_memory_path: PathBuf,
-    session_commits: SessionCommits,
+    session_commits: RefCell<SessionCommits>,
 }
 
 impl VMInner {
@@ -44,7 +45,7 @@ impl VMInner {
         Ok(Self {
             host_queries: HostQueries::default(),
             base_memory_path,
-            session_commits,
+            session_commits: RefCell::new(session_commits),
         })
     }
 
@@ -55,7 +56,7 @@ impl VMInner {
                 .path()
                 .into(),
             host_queries: HostQueries::default(),
-            session_commits: SessionCommits::new(),
+            session_commits: RefCell::new(SessionCommits::new()),
         })
     }
 }
@@ -102,7 +103,7 @@ impl VM {
     }
 
     pub fn session(&mut self) -> Session {
-        Session::new(self.clone())
+        Session::new(self)
     }
 
     pub(crate) fn memory_path(
@@ -152,35 +153,46 @@ impl VM {
             .join(SESSION_COMMITS_FILENAME)
     }
 
-    pub(crate) fn add_session_commit(&mut self, session_commit: SessionCommit) {
-        self.inner.write().session_commits.add(session_commit);
+    pub(crate) fn add_session_commit(&self, session_commit: SessionCommit) {
+        self.inner
+            .read()
+            .session_commits
+            .borrow_mut()
+            .add(session_commit);
     }
 
     pub(crate) fn restore_session(
         &self,
         session_commit_id: &CommitId,
     ) -> Result<(), Error> {
-        self.inner.read().session_commits.with_every_module_commit(
-            session_commit_id,
-            |module_id, module_commit_id| {
-                let source_path =
-                    self.path_to_module_commit(module_id, module_commit_id);
-                let (target_path, _) = self.memory_path(module_id);
-                let last_commit_path =
-                    self.path_to_module_last_commit(module_id);
-                std::fs::copy(source_path.as_ref(), target_path.as_ref())
+        self.inner
+            .read()
+            .session_commits
+            .borrow()
+            .with_every_module_commit(
+                session_commit_id,
+                |module_id, module_commit_id| {
+                    let source_path =
+                        self.path_to_module_commit(module_id, module_commit_id);
+                    let (target_path, _) = self.memory_path(module_id);
+                    let last_commit_path =
+                        self.path_to_module_last_commit(module_id);
+                    std::fs::copy(source_path.as_ref(), target_path.as_ref())
+                        .map_err(RestoreError)?;
+                    std::fs::copy(
+                        source_path.as_ref(),
+                        last_commit_path.as_ref(),
+                    )
                     .map_err(RestoreError)?;
-                std::fs::copy(source_path.as_ref(), last_commit_path.as_ref())
-                    .map_err(RestoreError)?;
-                Ok(())
-            },
-        )
+                    Ok(())
+                },
+            )
     }
 
     pub fn persist(&self) -> Result<(), Error> {
-        let guard = self.inner.read();
-        guard
+        self.inner.read()
             .session_commits
+            .borrow()
             .persist(self.path_to_session_commits())
     }
 
