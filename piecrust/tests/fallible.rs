@@ -7,6 +7,7 @@
 use piecrust::{module_bytecode, Error, VM};
 
 #[test]
+#[ignore]
 fn fallible_read_write_panic() -> Result<(), Error> {
     let mut vm = VM::ephemeral()?;
 
