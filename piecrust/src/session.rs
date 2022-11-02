@@ -81,11 +81,10 @@ impl Drop for StackElement {
 unsafe impl<'c> Send for Session<'c> {}
 unsafe impl<'c> Sync for Session<'c> {}
 
-#[derive(Clone)]
 pub struct Session<'c> {
-    vm: &'c VM,
+    vm: &'c mut VM,
     modules: BTreeMap<ModuleId, WrappedModule>,
-    memory_handler: MemoryHandler<'c>,
+    memory_handler: MemoryHandler,
     callstack: Arc<RwLock<Vec<StackElement>>>,
     debug: Arc<RwLock<Vec<String>>>,
     events: Arc<RwLock<Vec<Event>>>,
@@ -95,11 +94,12 @@ pub struct Session<'c> {
 }
 
 impl<'c> Session<'c> {
-    pub fn new(vm: &'c VM) -> Self {
+    pub fn new(vm: &'c mut VM) -> Self {
+        let base_path = vm.base_path();
         Session {
-            modules: BTreeMap::default(),
-            memory_handler: MemoryHandler::new(vm),
             vm,
+            modules: BTreeMap::default(),
+            memory_handler: MemoryHandler::new(base_path),
             callstack: Arc::new(RwLock::new(vec![])),
             debug: Arc::new(RwLock::new(vec![])),
             events: Arc::new(RwLock::new(vec![])),
@@ -126,13 +126,8 @@ impl<'c> Session<'c> {
         Ok(())
     }
 
-    fn with_module<F, R>(&self, id: ModuleId, closure: F) -> R
-    where
-        F: FnOnce(&WrappedModule) -> R,
-    {
-        let wrapped = self.modules.get(&id).expect("invalid module");
-
-        closure(wrapped)
+    pub(crate) fn get_module(&self, id: ModuleId) -> &WrappedModule {
+        self.modules.get(&id).expect("invalid module")
     }
 
     pub fn query<Arg, Ret>(
@@ -203,38 +198,30 @@ impl<'c> Session<'c> {
         events.push(event);
     }
 
-    pub(crate) fn new_instance(&self, mod_id: ModuleId) -> WrappedInstance {
-        self.with_module(mod_id, |module| {
-            let mut memory = self
-                .memory_handler
-                .get_memory(mod_id)
-                .expect("memory available");
+    pub(crate) fn new_instance(&mut self, mod_id: ModuleId) -> WrappedInstance {
+        let mut memory = self
+            .memory_handler
+            .get_memory(mod_id)
+            .expect("memory available");
 
-            let wrapped = WrappedInstance::new(
-                memory.clone(),
-                self.clone(),
-                mod_id,
-                module,
-            )
+        let wrapped = WrappedInstance::new(memory.clone(), self, mod_id)
             .expect("todo, error handling");
 
-            if memory.freshness() == Fresh {
-                // if current commit exists, use it as memory image
-                if let Some(commit_path) = self.path_to_current_commit(&mod_id)
-                {
-                    let metadata = std::fs::metadata(commit_path.as_ref())
-                        .expect("todo - metadata error handling");
-                    memory
-                        .grow_to(metadata.len() as u32)
-                        .expect("todo - grow error handling");
-                    let (target_path, _) = self.vm.memory_path(&mod_id);
-                    std::fs::copy(commit_path.as_ref(), target_path.as_ref())
-                        .expect("commit and memory paths exist");
-                }
+        if memory.freshness() == Fresh {
+            // if current commit exists, use it as memory image
+            if let Some(commit_path) = self.path_to_current_commit(&mod_id) {
+                let metadata = std::fs::metadata(commit_path.as_ref())
+                    .expect("todo - metadata error handling");
+                memory
+                    .grow_to(metadata.len() as u32)
+                    .expect("todo - grow error handling");
+                let (target_path, _) = self.vm.memory_path(&mod_id);
+                std::fs::copy(commit_path.as_ref(), target_path.as_ref())
+                    .expect("commit and memory paths exist");
             }
-            memory.set_freshness(NotFresh);
-            wrapped
-        })
+        }
+        memory.set_freshness(NotFresh);
+        wrapped
     }
 
     pub(crate) fn host_query(
@@ -300,7 +287,7 @@ impl<'c> Session<'c> {
         s.pop();
     }
 
-    pub fn commit(self) -> Result<CommitId, Error> {
+    pub fn commit(&mut self) -> Result<CommitId, Error> {
         let mut session_commit = SessionCommit::new();
         self.memory_handler.with_every_module_id(|module_id, mem| {
             let (source_path, _) = self.vm.memory_path(module_id);

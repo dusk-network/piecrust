@@ -5,7 +5,6 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 use std::borrow::Cow;
-use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::fmt::{self, Debug, Formatter};
 use std::path::{Path, PathBuf};
@@ -30,7 +29,7 @@ const SESSION_COMMITS_FILENAME: &str = "commits";
 struct VMInner {
     host_queries: HostQueries,
     base_memory_path: PathBuf,
-    session_commits: RefCell<SessionCommits>,
+    session_commits: SessionCommits,
 }
 
 impl VMInner {
@@ -45,7 +44,7 @@ impl VMInner {
         Ok(Self {
             host_queries: HostQueries::default(),
             base_memory_path,
-            session_commits: RefCell::new(session_commits),
+            session_commits,
         })
     }
 
@@ -56,7 +55,7 @@ impl VMInner {
                 .path()
                 .into(),
             host_queries: HostQueries::default(),
-            session_commits: RefCell::new(SessionCommits::new()),
+            session_commits: SessionCommits::new(),
         })
     }
 }
@@ -110,13 +109,15 @@ impl VM {
         &self,
         module_id: &ModuleId,
     ) -> (MemoryPath, MemoryFreshness) {
+        Self::get_memory_path(&self.inner.read().base_memory_path, module_id)
+    }
+
+    pub(crate) fn get_memory_path(
+        base_path: &Path,
+        module_id: &ModuleId,
+    ) -> (MemoryPath, MemoryFreshness) {
         (
-            MemoryPath::new(
-                self.inner
-                    .read()
-                    .base_memory_path
-                    .join(module_id_to_name(*module_id)),
-            ),
+            MemoryPath::new(base_path.join(module_id_to_name(*module_id))),
             Fresh,
         )
     }
@@ -153,47 +154,35 @@ impl VM {
             .join(SESSION_COMMITS_FILENAME)
     }
 
-    pub(crate) fn add_session_commit(&self, session_commit: SessionCommit) {
-        self.inner
-            .read()
-            .session_commits
-            .borrow_mut()
-            .add(session_commit);
+    pub(crate) fn add_session_commit(&mut self, session_commit: SessionCommit) {
+        self.inner.write().session_commits.add(session_commit);
     }
 
     pub(crate) fn restore_session(
         &self,
         session_commit_id: &CommitId,
     ) -> Result<(), Error> {
-        self.inner
-            .read()
-            .session_commits
-            .borrow()
-            .with_every_module_commit(
-                session_commit_id,
-                |module_id, module_commit_id| {
-                    let source_path =
-                        self.path_to_module_commit(module_id, module_commit_id);
-                    let (target_path, _) = self.memory_path(module_id);
-                    let last_commit_path =
-                        self.path_to_module_last_commit(module_id);
-                    std::fs::copy(source_path.as_ref(), target_path.as_ref())
-                        .map_err(RestoreError)?;
-                    std::fs::copy(
-                        source_path.as_ref(),
-                        last_commit_path.as_ref(),
-                    )
+        self.inner.read().session_commits.with_every_module_commit(
+            session_commit_id,
+            |module_id, module_commit_id| {
+                let source_path =
+                    self.path_to_module_commit(module_id, module_commit_id);
+                let (target_path, _) = self.memory_path(module_id);
+                let last_commit_path =
+                    self.path_to_module_last_commit(module_id);
+                std::fs::copy(source_path.as_ref(), target_path.as_ref())
                     .map_err(RestoreError)?;
-                    Ok(())
-                },
-            )
+                std::fs::copy(source_path.as_ref(), last_commit_path.as_ref())
+                    .map_err(RestoreError)?;
+                Ok(())
+            },
+        )
     }
 
     pub fn persist(&self) -> Result<(), Error> {
-        self.inner
-            .read()
+        let guard = self.inner.read();
+        guard
             .session_commits
-            .borrow()
             .persist(self.path_to_session_commits())
     }
 

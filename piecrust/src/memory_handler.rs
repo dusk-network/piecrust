@@ -6,6 +6,7 @@
 
 use std::collections::BTreeMap;
 use std::fs;
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use parking_lot::RwLock;
@@ -14,20 +15,20 @@ use piecrust_uplink::ModuleId;
 
 use crate::error::Error;
 use crate::linear::{Linear, MAX_MEMORY_BYTES, MEMORY_PAGES, WASM_PAGE_SIZE};
-use crate::vm::VM;
+use crate::VM;
 
 #[derive(Clone)]
-pub struct MemoryHandler<'c> {
+pub struct MemoryHandler {
     memories: Arc<RwLock<BTreeMap<ModuleId, Linear>>>,
     #[allow(unused)]
-    vm: &'c VM,
+    base_memory_path: PathBuf,
 }
 
-impl<'c> MemoryHandler<'c> {
-    pub fn new(vm: &'c VM) -> Self {
+impl MemoryHandler {
+    pub fn new(base_memory_path: PathBuf) -> Self {
         MemoryHandler {
             memories: Arc::new(RwLock::new(BTreeMap::new())),
-            vm,
+            base_memory_path,
         }
     }
 
@@ -39,7 +40,8 @@ impl<'c> MemoryHandler<'c> {
             }
         }
 
-        let (path, fresh) = self.vm.memory_path(&mod_id);
+        let (path, fresh) =
+            VM::get_memory_path(&self.base_memory_path, &mod_id);
         if path.as_ref().exists() {
             fs::remove_file(path.as_ref()).expect("file removed if exists");
         }
