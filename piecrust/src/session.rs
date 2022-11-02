@@ -227,7 +227,7 @@ impl<'c> Session<'c> {
                     memory
                         .grow_to(metadata.len() as u32)
                         .expect("todo - grow error handling");
-                    let (target_path, _) = self.vm().memory_path(&mod_id);
+                    let (target_path, _) = self.vm.memory_path(&mod_id);
                     std::fs::copy(commit_path.as_ref(), target_path.as_ref())
                         .expect("commit and memory paths exist");
                 }
@@ -243,7 +243,7 @@ impl<'c> Session<'c> {
         buf: &mut [u8],
         arg_len: u32,
     ) -> Option<u32> {
-        self.vm().host_query(name, buf, arg_len)
+        self.vm.host_query(name, buf, arg_len)
     }
 
     /// Sets the point limit for the next call to `query` or `transact`.
@@ -303,13 +303,12 @@ impl<'c> Session<'c> {
     pub fn commit(self) -> Result<CommitId, Error> {
         let mut session_commit = SessionCommit::new();
         self.memory_handler.with_every_module_id(|module_id, mem| {
-            let (source_path, _) = self.vm().memory_path(module_id);
+            let (source_path, _) = self.vm.memory_path(module_id);
             let module_commit_id = ModuleCommitId::from(mem)?;
-            let target_path = self
-                .vm()
-                .path_to_module_commit(module_id, &module_commit_id);
+            let target_path =
+                self.vm.path_to_module_commit(module_id, &module_commit_id);
             let last_commit_path =
-                self.vm().path_to_module_last_commit(module_id);
+                self.vm.path_to_module_last_commit(module_id);
             std::fs::copy(source_path.as_ref(), target_path.as_ref())
                 .map_err(CommitError)?;
             std::fs::copy(source_path.as_ref(), last_commit_path.as_ref())
@@ -319,7 +318,7 @@ impl<'c> Session<'c> {
             Ok(())
         })?;
         let session_commit_id = session_commit.commit_id();
-        self.vm().add_session_commit(session_commit);
+        self.vm.add_session_commit(session_commit);
         Ok(session_commit_id)
     }
 
@@ -327,7 +326,7 @@ impl<'c> Session<'c> {
         &mut self,
         session_commit_id: &CommitId,
     ) -> Result<(), Error> {
-        self.vm().restore_session(session_commit_id)?;
+        self.vm.restore_session(session_commit_id)?;
         Ok(())
     }
 
@@ -335,7 +334,7 @@ impl<'c> Session<'c> {
         &self,
         module_id: &ModuleId,
     ) -> Option<MemoryPath> {
-        let path = self.vm().path_to_module_last_commit(module_id);
+        let path = self.vm.path_to_module_last_commit(module_id);
         Some(path).filter(|p| p.as_ref().exists())
     }
 
@@ -380,10 +379,6 @@ impl<'c> Session<'c> {
 
         let data = buf[..pos].to_vec();
         host_data.insert(name, data);
-    }
-
-    fn vm<'a, 'b>(&'a self) -> &'b VM {
-        unsafe { &*self.vm }
     }
 }
 

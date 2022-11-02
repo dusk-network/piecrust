@@ -39,7 +39,7 @@ impl<'c> MemoryHandler<'c> {
             }
         }
 
-        let (path, fresh) = self.vm().memory_path(&mod_id);
+        let (path, fresh) = self.vm.memory_path(&mod_id);
         if path.as_ref().exists() {
             fs::remove_file(path.as_ref()).expect("file removed if exists");
         }
@@ -65,9 +65,5 @@ impl<'c> MemoryHandler<'c> {
             closure(module_id, linear.as_slice())?
         }
         Ok(())
-    }
-
-    fn vm<'a, 'b>(&'a self) -> &'b VM {
-        unsafe { &*self.vm }
     }
 }
