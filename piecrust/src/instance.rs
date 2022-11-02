@@ -141,8 +141,8 @@ impl WrappedInstance {
             self_id: id,
             /// # Safety
             /// Wasmer API requires that Env has a static lifetime.
-            /// We can safely assume that Env won't outlive Session
-            /// as Env lifetime is limited by Module's lifetime.
+            /// We can safely assume that Env won't outlive session
+            /// as Env lifetime is limited by module's lifetime.
             /// Module's lifetime, in turn, won't exceed session's lifetime.
             /// Hence, we can safely enforce Env's lifetime to be static.
             session: unsafe {
