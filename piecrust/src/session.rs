@@ -78,14 +78,14 @@ impl Drop for StackElement {
     }
 }
 
-unsafe impl Send for Session {}
-unsafe impl Sync for Session {}
+unsafe impl<'c> Send for Session<'c> {}
+unsafe impl<'c> Sync for Session<'c> {}
 
 #[derive(Clone)]
-pub struct Session {
-    vm: VM,
+pub struct Session<'c> {
+    vm: &'c VM,
     modules: BTreeMap<ModuleId, WrappedModule>,
-    memory_handler: MemoryHandler,
+    memory_handler: MemoryHandler<'c>,
     callstack: Arc<RwLock<Vec<StackElement>>>,
     debug: Arc<RwLock<Vec<String>>>,
     events: Arc<RwLock<Vec<Event>>>,
@@ -94,11 +94,11 @@ pub struct Session {
     spent: u64,
 }
 
-impl Session {
-    pub fn new(vm: VM) -> Self {
+impl<'c> Session<'c> {
+    pub fn new(vm: &'c VM) -> Self {
         Session {
             modules: BTreeMap::default(),
-            memory_handler: MemoryHandler::new(vm.clone()),
+            memory_handler: MemoryHandler::new(vm),
             vm,
             callstack: Arc::new(RwLock::new(vec![])),
             debug: Arc::new(RwLock::new(vec![])),
@@ -300,7 +300,7 @@ impl Session {
         s.pop();
     }
 
-    pub fn commit(mut self) -> Result<CommitId, Error> {
+    pub fn commit(self) -> Result<CommitId, Error> {
         let mut session_commit = SessionCommit::new();
         self.memory_handler.with_every_module_id(|module_id, mem| {
             let (source_path, _) = self.vm.memory_path(module_id);

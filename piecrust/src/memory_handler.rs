@@ -17,14 +17,14 @@ use crate::linear::{Linear, MAX_MEMORY_BYTES, MEMORY_PAGES, WASM_PAGE_SIZE};
 use crate::vm::VM;
 
 #[derive(Clone)]
-pub struct MemoryHandler {
+pub struct MemoryHandler<'c> {
     memories: Arc<RwLock<BTreeMap<ModuleId, Linear>>>,
     #[allow(unused)]
-    vm: VM,
+    vm: &'c VM,
 }
 
-impl MemoryHandler {
-    pub fn new(vm: VM) -> Self {
+impl<'c> MemoryHandler<'c> {
+    pub fn new(vm: &'c VM) -> Self {
         MemoryHandler {
             memories: Arc::new(RwLock::new(BTreeMap::new())),
             vm,

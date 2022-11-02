@@ -20,12 +20,11 @@ fn hash(buf: &mut [u8], len: u32) -> u32 {
 #[test]
 pub fn host_hash() -> Result<(), Error> {
     let mut vm = VM::ephemeral()?;
+    vm.register_host_query("hash", hash);
 
     let mut session = vm.session();
 
     let id = session.deploy(module_bytecode!("host"))?;
-
-    vm.register_host_query("hash", hash);
 
     let v = vec![0u8, 1, 2];
     let h = session
