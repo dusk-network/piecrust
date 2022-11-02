@@ -31,7 +31,6 @@ use wasmer_vm::VMMemory;
 use crate::event::Event;
 use crate::imports::DefaultImports;
 use crate::linear::{Linear, MEMORY_PAGES};
-use crate::module::WrappedModule;
 use crate::session::Session;
 use crate::types::StandardBufSerializer;
 use crate::Error;
@@ -46,20 +45,20 @@ pub struct WrappedInstance {
 
 pub(crate) struct Env {
     self_id: ModuleId,
-    session: Session,
+    session: &'static mut Session<'static>,
 }
 
 impl Deref for Env {
-    type Target = Session;
+    type Target = Session<'static>;
 
     fn deref(&self) -> &Self::Target {
-        &self.session
+        self.session
     }
 }
 
 impl DerefMut for Env {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.session
+        self.session
     }
 }
 
@@ -71,7 +70,7 @@ impl Env {
             .instance
     }
 
-    pub fn new_instance(&self, module_id: ModuleId) -> WrappedInstance {
+    pub fn new_instance(&mut self, module_id: ModuleId) -> WrappedInstance {
         self.session.new_instance(module_id)
     }
 
@@ -130,19 +129,29 @@ impl Store {
 impl WrappedInstance {
     pub fn new(
         memory: Linear,
-        session: Session,
+        session: &mut Session,
         id: ModuleId,
-        wrap: &WrappedModule,
     ) -> Result<Self, Error> {
         let tunables = InstanceTunables::new(memory.clone());
         let mut store = Store::new_store_with_tunables(tunables);
 
         let env = Env {
             self_id: id,
-            session,
+            /// # Safety
+            /// Wasmer API requires that Env has a static lifetime.
+            /// We can safely assume that Env won't outlive session
+            /// as Env lifetime is limited by module's lifetime.
+            /// Module's lifetime, in turn, won't exceed session's lifetime.
+            /// Hence, we can safely enforce Env's lifetime to be static.
+            session: unsafe {
+                std::mem::transmute::<&mut Session, &'static mut Session>(
+                    session,
+                )
+            },
         };
 
         let imports = DefaultImports::default(&mut store, env);
+        let wrap = session.get_module(id);
         let module_bytes = wrap.as_bytes();
 
         let module =

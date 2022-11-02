@@ -8,9 +8,7 @@ use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::fmt::{self, Debug, Formatter};
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 
-use parking_lot::RwLock;
 use tempfile::tempdir;
 
 use piecrust_uplink::ModuleId;
@@ -25,15 +23,14 @@ use crate::Error::{self, PersistenceError, RestoreError};
 
 const SESSION_COMMITS_FILENAME: &str = "commits";
 
-#[derive(Default)]
-struct VMInner {
+pub struct VM {
     host_queries: HostQueries,
     base_memory_path: PathBuf,
     session_commits: SessionCommits,
 }
 
-impl VMInner {
-    fn new<P: AsRef<Path>>(path: P) -> Result<Self, Error>
+impl VM {
+    pub fn new<P: AsRef<Path>>(path: P) -> Result<Self, Error>
     where
         P: Into<PathBuf>,
     {
@@ -48,7 +45,7 @@ impl VMInner {
         })
     }
 
-    fn ephemeral() -> Result<Self, Error> {
+    pub fn ephemeral() -> Result<Self, Error> {
         Ok(Self {
             base_memory_path: tempdir()
                 .map_err(PersistenceError)?
@@ -58,28 +55,6 @@ impl VMInner {
             session_commits: SessionCommits::new(),
         })
     }
-}
-
-#[derive(Clone)]
-pub struct VM {
-    inner: Arc<RwLock<VMInner>>,
-}
-
-impl VM {
-    pub fn new<P: AsRef<Path>>(path: P) -> Result<Self, Error>
-    where
-        P: Into<PathBuf>,
-    {
-        Ok(VM {
-            inner: Arc::new(RwLock::new(VMInner::new(path)?)),
-        })
-    }
-
-    pub fn ephemeral() -> Result<Self, Error> {
-        Ok(VM {
-            inner: Arc::new(RwLock::new(VMInner::ephemeral()?)),
-        })
-    }
 
     /// Registers a [`HostQuery`] with the given `name`.
     pub fn register_host_query<Q, S>(&mut self, name: S, query: Q)
@@ -87,8 +62,7 @@ impl VM {
         Q: 'static + HostQuery,
         S: Into<Cow<'static, str>>,
     {
-        let mut guard = self.inner.write();
-        guard.host_queries.insert(name, query);
+        self.host_queries.insert(name, query);
     }
 
     pub(crate) fn host_query(
@@ -97,25 +71,26 @@ impl VM {
         buf: &mut [u8],
         arg_len: u32,
     ) -> Option<u32> {
-        let guard = self.inner.read();
-        guard.host_queries.call(name, buf, arg_len)
+        self.host_queries.call(name, buf, arg_len)
     }
 
     pub fn session(&mut self) -> Session {
-        Session::new(self.clone())
+        Session::new(self)
     }
 
     pub(crate) fn memory_path(
         &self,
         module_id: &ModuleId,
     ) -> (MemoryPath, MemoryFreshness) {
+        Self::get_memory_path(&self.base_memory_path, module_id)
+    }
+
+    pub(crate) fn get_memory_path(
+        base_path: &Path,
+        module_id: &ModuleId,
+    ) -> (MemoryPath, MemoryFreshness) {
         (
-            MemoryPath::new(
-                self.inner
-                    .read()
-                    .base_memory_path
-                    .join(module_id_to_name(*module_id)),
-            ),
+            MemoryPath::new(base_path.join(module_id_to_name(*module_id))),
             Fresh,
         )
     }
@@ -130,7 +105,7 @@ impl VM {
         let mut name = module_id_to_name(*module_id);
         name.push(SEPARATOR);
         name.push_str(commit_id_name);
-        let path = self.inner.read().base_memory_path.join(name);
+        let path = self.base_memory_path.join(name);
         MemoryPath::new(path)
     }
 
@@ -141,26 +116,23 @@ impl VM {
         const LAST_COMMIT_POSTFIX: &str = "_last";
         let mut name = module_id_to_name(*module_id);
         name.push_str(LAST_COMMIT_POSTFIX);
-        let path = self.inner.read().base_memory_path.join(name);
+        let path = self.base_memory_path.join(name);
         MemoryPath::new(path)
     }
 
     fn path_to_session_commits(&self) -> PathBuf {
-        self.inner
-            .read()
-            .base_memory_path
-            .join(SESSION_COMMITS_FILENAME)
+        self.base_memory_path.join(SESSION_COMMITS_FILENAME)
     }
 
     pub(crate) fn add_session_commit(&mut self, session_commit: SessionCommit) {
-        self.inner.write().session_commits.add(session_commit);
+        self.session_commits.add(session_commit);
     }
 
     pub(crate) fn restore_session(
         &self,
         session_commit_id: &CommitId,
     ) -> Result<(), Error> {
-        self.inner.read().session_commits.with_every_module_commit(
+        self.session_commits.with_every_module_commit(
             session_commit_id,
             |module_id, module_commit_id| {
                 let source_path =
@@ -178,14 +150,11 @@ impl VM {
     }
 
     pub fn persist(&self) -> Result<(), Error> {
-        let guard = self.inner.read();
-        guard
-            .session_commits
-            .persist(self.path_to_session_commits())
+        self.session_commits.persist(self.path_to_session_commits())
     }
 
     pub fn base_path(&self) -> PathBuf {
-        self.inner.read().base_memory_path.to_path_buf()
+        self.base_memory_path.to_path_buf()
     }
 }
 
