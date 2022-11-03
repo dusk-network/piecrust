@@ -87,10 +87,10 @@ impl VM {
     pub(crate) fn get_memory_path(
         base_path: &Path,
         module_id: &ModuleId,
-    ) -> (MemoryPath, MemoryFreshness) {
+    ) -> (MemoryPath, MemoryState) {
         (
             MemoryPath::new(base_path.join(module_id_to_name(*module_id))),
-            Fresh,
+            MemoryState::Uninitialized,
         )
     }
 

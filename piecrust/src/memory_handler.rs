@@ -40,7 +40,7 @@ impl MemoryHandler {
             }
         }
 
-        let (path, fresh) =
+        let (path, state) =
             VM::get_memory_path(&self.base_memory_path, &mod_id);
 
         if path.as_ref().exists() {
