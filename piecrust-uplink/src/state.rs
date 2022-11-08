@@ -263,7 +263,7 @@ impl<S> State<S> {
         mod_id: ModuleId,
         raw: RawTransaction,
     ) -> Result<RawResult, ModuleError> {
-        // Neccesary to avoid ruling out potential memory changes from recursive
+        // Necessary to avoid ruling out potential memory changes from recursive
         // calls
         core::hint::black_box(self);
 
