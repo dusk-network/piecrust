@@ -25,7 +25,7 @@ use crate::instance::WrappedInstance;
 use crate::memory_handler::MemoryHandler;
 use crate::memory_path::MemoryPath;
 use crate::module::WrappedModule;
-use crate::types::MemoryFreshness::*;
+use crate::types::MemoryState;
 use crate::types::StandardBufSerializer;
 use crate::vm::VM;
 use crate::Error::{self, CommitError};
@@ -207,7 +207,7 @@ impl<'c> Session<'c> {
         let wrapped = WrappedInstance::new(memory.clone(), self, mod_id)
             .expect("todo, error handling");
 
-        if memory.freshness() == Fresh {
+        if memory.state() == MemoryState::Uninitialized {
             // if current commit exists, use it as memory image
             if let Some(commit_path) = self.path_to_current_commit(&mod_id) {
                 let metadata = std::fs::metadata(commit_path.as_ref())
@@ -220,7 +220,7 @@ impl<'c> Session<'c> {
                     .expect("commit and memory paths exist");
             }
         }
-        memory.set_freshness(NotFresh);
+        memory.set_state(MemoryState::Initialized);
         wrapped
     }
 

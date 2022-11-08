@@ -9,7 +9,7 @@ use std::sync::Arc;
 
 use bytecheck::CheckBytes;
 use colored::*;
-use piecrust_uplink::{ModuleId, SCRATCH_BUF_BYTES};
+use piecrust_uplink as uplink;
 use rkyv::{
     check_archived_root,
     ser::{
@@ -19,6 +19,7 @@ use rkyv::{
     validation::validators::DefaultValidator,
     Archive, Deserialize, Infallible, Serialize,
 };
+use uplink::{ModuleId, SCRATCH_BUF_BYTES};
 use wasmer::wasmparser::Operator;
 use wasmer::{CompilerConfig, RuntimeError, Tunables, TypedFunction};
 use wasmer_compiler_singlepass::Singlepass;
@@ -251,7 +252,7 @@ impl WrappedInstance {
     {
         self.with_memory_mut(|memory_bytes| {
             let a = self.arg_buf_ofs;
-            let b = piecrust_uplink::ARGBUF_LEN;
+            let b = uplink::ARGBUF_LEN;
             let begin = &mut memory_bytes[a..];
             let trimmed = &mut begin[..b];
             f(trimmed)
@@ -345,7 +346,7 @@ impl WrappedInstance {
                         }
 
                         let buf_start = self.arg_buf_ofs;
-                        let buf_end = buf_start + piecrust_uplink::ARGBUF_LEN;
+                        let buf_end = buf_start + uplink::ARGBUF_LEN;
                         let heap_base = self.heap_base;
 
                         if ofs + i >= buf_start && ofs + i < buf_end {

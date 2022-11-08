@@ -12,23 +12,27 @@ use piecrust_uplink as uplink;
 use uplink::{ModuleId, State};
 
 #[derive(Default)]
-pub struct Counter {
+pub struct FallibleCounter {
     value: i64,
 }
 
 #[no_mangle]
 static SELF_ID: ModuleId = ModuleId::uninitialized();
 
-static mut STATE: State<Counter> = State::new(Counter { value: 0xfc });
+static mut STATE: State<FallibleCounter> =
+    State::new(FallibleCounter { value: 0xfc });
 
-impl Counter {
+impl FallibleCounter {
     pub fn read_value(&self) -> i64 {
         self.value
     }
 
-    pub fn increment(&mut self) {
+    pub fn increment(&mut self, panic: bool) {
         let value = self.value + 1;
         self.value = value;
+        if panic {
+            panic!()
+        }
     }
 }
 
@@ -39,5 +43,5 @@ unsafe fn read_value(arg_len: u32) -> u32 {
 
 #[no_mangle]
 unsafe fn increment(arg_len: u32) -> u32 {
-    uplink::wrap_transaction(arg_len, |_: ()| STATE.increment())
+    uplink::wrap_transaction(arg_len, |panic: bool| STATE.increment(panic))
 }

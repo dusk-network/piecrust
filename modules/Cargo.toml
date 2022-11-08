@@ -6,6 +6,7 @@ members = [
     "debugger",
     "eventer",
     "everest",
+    "fallible_counter",    
     "fibonacci",
     "host",
     "micro",

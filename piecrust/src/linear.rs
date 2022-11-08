@@ -23,7 +23,7 @@ use wasmer_vm::{
 use piecrust_uplink::ModuleId;
 
 use crate::error::Error;
-use crate::types::MemoryFreshness;
+use crate::types::MemoryState;
 use crate::Error::{MemorySetupError, RegionError};
 
 pub const MEMORY_PAGES: usize = 4;
@@ -34,7 +34,7 @@ pub const WASM_PAGE_LOG2: u32 = 16;
 #[derive(Debug)]
 struct LinearInner {
     file_opt: Option<File>,
-    fresh: MemoryFreshness,
+    fresh: MemoryState,
     pub memory_definition: VMMemoryDefinition,
 }
 
@@ -77,7 +77,7 @@ impl Linear {
         path: Option<P>,
         accessible_size: usize,
         mapping_size: usize,
-        fresh: MemoryFreshness,
+        fresh: MemoryState,
     ) -> Result<Self, Error>
     where
         P: std::fmt::Debug,
@@ -222,14 +222,14 @@ impl Linear {
         unsafe { std::slice::from_raw_parts(base, len) }
     }
 
-    pub fn freshness(&self) -> MemoryFreshness {
+    pub fn state(&self) -> MemoryState {
         let guard = self.0.read();
         let inner = &*guard;
 
         inner.fresh
     }
 
-    pub fn set_freshness(&self, to: MemoryFreshness) {
+    pub fn set_state(&self, to: MemoryState) {
         let mut guard = self.0.write();
         let inner = &mut *guard;
 
@@ -283,7 +283,7 @@ impl LinearMemory for Linear {
         start: usize,
         data: &[u8],
     ) -> Result<(), Trap> {
-        if self.freshness() == MemoryFreshness::Fresh {
+        if self.state() == MemoryState::Uninitialized {
             let memory = self.vmmemory().as_ref();
             initialize_memory_with_data(memory, start, data)
         } else {
@@ -298,7 +298,7 @@ mod test {
     use tempfile::tempdir;
 
     use crate::instance::InstanceTunables;
-    use crate::types::MemoryFreshness::*;
+    use crate::types::MemoryState;
     use wasmer::{
         imports, wat2wasm, Instance, Memory, Module, Store, TypedFunction,
     };
@@ -326,7 +326,7 @@ mod test {
             ),
             MEMORY_PAGES * WASM_PAGE_SIZE,
             MAX_MEMORY_BYTES,
-            Fresh,
+            MemoryState::Uninitialized,
         )?);
         let mut store = Store::new_with_tunables(compiler, tunables);
         let module = Module::new(&store, wasm_bytes).unwrap();
@@ -368,7 +368,7 @@ mod test {
             ),
             MEMORY_PAGES * WASM_PAGE_SIZE,
             MAX_MEMORY_BYTES,
-            Fresh,
+            MemoryState::Uninitialized,
         )?);
         let mut store = Store::new_with_tunables(compiler, tunables);
         let module = Module::new(&store, wasm_bytes).unwrap();

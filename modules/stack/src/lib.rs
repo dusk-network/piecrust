@@ -11,7 +11,8 @@ use nstack::annotation::Cardinality;
 use nstack::NStack;
 use ranno::Annotation;
 
-use piecrust_uplink::{ModuleId, State};
+use piecrust_uplink as uplink;
+use uplink::{ModuleId, State};
 
 #[derive(Default)]
 pub struct Stack {
@@ -41,15 +42,15 @@ impl Stack {
 
 #[no_mangle]
 unsafe fn push(arg_len: u32) -> u32 {
-    piecrust_uplink::wrap_transaction(arg_len, |elem: i32| STATE.push(elem))
+    uplink::wrap_transaction(arg_len, |elem: i32| STATE.push(elem))
 }
 
 #[no_mangle]
 unsafe fn pop(arg_len: u32) -> u32 {
-    piecrust_uplink::wrap_transaction(arg_len, |_arg: ()| STATE.pop())
+    uplink::wrap_transaction(arg_len, |_arg: ()| STATE.pop())
 }
 
 #[no_mangle]
 unsafe fn len(arg_len: u32) -> u32 {
-    piecrust_uplink::wrap_query(arg_len, |_arg: ()| STATE.len())
+    uplink::wrap_query(arg_len, |_arg: ()| STATE.len())
 }

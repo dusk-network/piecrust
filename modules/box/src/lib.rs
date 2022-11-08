@@ -11,7 +11,8 @@ extern crate alloc;
 
 use alloc::boxed::Box;
 
-use piecrust_uplink::{ModuleId, State};
+use piecrust_uplink as uplink;
+use uplink::{ModuleId, State};
 
 // One Box, many `Boxen`
 pub struct Boxen {
@@ -40,10 +41,10 @@ impl Boxen {
 
 #[no_mangle]
 unsafe fn set(arg_len: u32) -> u32 {
-    piecrust_uplink::wrap_transaction(arg_len, |to| STATE.set(to))
+    uplink::wrap_transaction(arg_len, |to| STATE.set(to))
 }
 
 #[no_mangle]
 unsafe fn get(arg_len: u32) -> u32 {
-    piecrust_uplink::wrap_transaction(arg_len, |_: ()| STATE.get())
+    uplink::wrap_transaction(arg_len, |_: ()| STATE.get())
 }

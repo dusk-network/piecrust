@@ -10,7 +10,8 @@
 extern crate alloc;
 
 use alloc::vec::Vec;
-use piecrust_uplink::{ModuleId, State};
+use piecrust_uplink as uplink;
+use uplink::{ModuleId, State};
 
 pub struct Hoster;
 
@@ -21,11 +22,11 @@ static mut STATE: State<Hoster> = State::new(Hoster);
 
 impl Hoster {
     pub fn hash(&self, bytes: Vec<u8>) -> [u8; 32] {
-        piecrust_uplink::host_query("hash", bytes)
+        uplink::host_query("hash", bytes)
     }
 }
 
 #[no_mangle]
 unsafe fn hash(arg_len: u32) -> u32 {
-    piecrust_uplink::wrap_query(arg_len, |num| STATE.hash(num))
+    uplink::wrap_query(arg_len, |num| STATE.hash(num))
 }
