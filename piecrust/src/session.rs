@@ -67,7 +67,7 @@ impl StackElement {
         }
     }
 
-    fn instance<'a, 'b>(&'a self) -> &'b mut WrappedInstance {
+    fn instance<'b>(&self) -> &'b mut WrappedInstance {
         unsafe { &mut *self.instance }
     }
 }
@@ -242,8 +242,8 @@ impl<'c> Session<'c> {
         self.spent
     }
 
-    pub(crate) fn nth_from_top<'a, 'b>(
-        &'a self,
+    pub(crate) fn nth_from_top<'b>(
+        &self,
         n: usize,
     ) -> Option<StackElementView<'b>> {
         let stack = self.callstack.read();
@@ -262,8 +262,8 @@ impl<'c> Session<'c> {
         }
     }
 
-    pub(crate) fn push_callstack<'a, 'b>(
-        &'a self,
+    pub(crate) fn push_callstack<'b>(
+        &self,
         module_id: ModuleId,
         instance: WrappedInstance,
         limit: u64,

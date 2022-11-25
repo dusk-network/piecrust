@@ -64,7 +64,7 @@ impl DerefMut for Env {
 }
 
 impl Env {
-    pub fn self_instance<'a, 'b>(&'a self) -> &'b mut WrappedInstance {
+    pub fn self_instance<'b>(&self) -> &'b mut WrappedInstance {
         self.session
             .nth_from_top(0)
             .expect("there should be at least one element in the call stack")
