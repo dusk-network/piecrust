@@ -4,6 +4,7 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
+use bytecheck::CheckBytes;
 use rkyv::{
     archived_root,
     ser::serializers::{BufferScratch, BufferSerializer, CompositeSerializer},
@@ -68,6 +69,7 @@ use crate::ModuleId;
 use core::ops::{Deref, DerefMut};
 
 #[derive(Debug, Archive, Serialize, Deserialize)]
+#[archive_attr(derive(CheckBytes))]
 pub enum ModuleError {
     Panic,
     OutOfGas,
