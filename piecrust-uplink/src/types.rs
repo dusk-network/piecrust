@@ -91,6 +91,7 @@ pub struct RawQuery {
 }
 
 impl RawQuery {
+    /// Creates a new [`RawQuery`] by serializing an argument.
     pub fn new<A>(name: &str, arg: A) -> Self
     where
         A: Serialize<AllocSerializer<64>>,
@@ -100,15 +101,21 @@ impl RawQuery {
         ser.serialize_value(&arg)
             .expect("We assume infallible serialization and allocation");
 
-        let arg_len = ser.pos() as u32;
+        let data = ser.into_serializer().into_inner().to_vec();
+        Self::from_parts(name, data)
+    }
 
-        let mut data = ser.into_serializer().into_inner().to_vec();
+    /// Create a new [`RawQuery`] from its parts without serializing data.
+    ///
+    /// This assumes the `data` given has already been correctly serialized for
+    /// the module to call.
+    pub fn from_parts(name: &str, data: alloc::vec::Vec<u8>) -> Self {
+        let mut data = data;
 
-        let name_as_bytes = name.as_bytes();
+        let arg_len = data.len() as u32;
+        data.extend_from_slice(name.as_bytes());
 
-        data.extend_from_slice(name_as_bytes);
-
-        RawQuery { arg_len, data }
+        Self { arg_len, data }
     }
 
     pub fn name_bytes(&self) -> &[u8] {
@@ -134,6 +141,7 @@ pub struct RawTransaction {
 }
 
 impl RawTransaction {
+    /// Creates a new [`RawTransaction`] by serializing an argument.
     pub fn new<A>(name: &str, arg: A) -> Self
     where
         A: Serialize<AllocSerializer<64>>,
@@ -143,13 +151,21 @@ impl RawTransaction {
         ser.serialize_value(&arg)
             .expect("We assume infallible serialization and allocation");
 
-        let arg_len = ser.pos() as u32;
+        let data = ser.into_serializer().into_inner().to_vec();
+        Self::from_parts(name, data)
+    }
 
-        let mut data = ser.into_serializer().into_inner().to_vec();
+    /// Create a new [`RawTransaction`] from its parts without serializing data.
+    ///
+    /// This assumes the `data` given has already been correctly serialized for
+    /// the module to call.
+    pub fn from_parts(name: &str, data: alloc::vec::Vec<u8>) -> Self {
+        let mut data = data;
 
+        let arg_len = data.len() as u32;
         data.extend_from_slice(name.as_bytes());
 
-        RawTransaction { arg_len, data }
+        Self { arg_len, data }
     }
 
     pub fn name(&self) -> &str {
