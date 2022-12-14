@@ -28,8 +28,9 @@ use crate::Error::{MemorySetupError, RegionError};
 
 pub const MEMORY_PAGES: usize = 4;
 pub const WASM_PAGE_SIZE: usize = 64 * 1024;
-pub const MAX_MEMORY_BYTES: usize = u32::MAX as usize;
 pub const WASM_PAGE_LOG2: u32 = 16;
+pub const MAX_MEMORY_BYTES: usize = u32::MAX as usize;
+pub const MAX_MEMORY_PAGES: usize = MAX_MEMORY_BYTES / WASM_PAGE_SIZE;
 
 #[derive(Debug)]
 struct LinearInner {
@@ -241,7 +242,7 @@ impl LinearMemory for Linear {
     fn ty(&self) -> MemoryType {
         MemoryType {
             minimum: Pages::from(MEMORY_PAGES as u32),
-            maximum: Some(Pages::from(MEMORY_PAGES as u32)),
+            maximum: Some(Pages::from(MAX_MEMORY_PAGES as u32)),
             shared: false,
         }
     }
@@ -344,7 +345,7 @@ mod test {
         let first_memory = memories.pop().unwrap();
         assert_eq!(
             first_memory.ty(&store).maximum.unwrap(),
-            Pages(MEMORY_PAGES as u32)
+            Pages(MAX_MEMORY_PAGES as u32)
         );
         let view = first_memory.view(&store);
 
