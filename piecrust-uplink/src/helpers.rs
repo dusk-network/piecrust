@@ -5,7 +5,7 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 use crate::state::with_arg_buf;
-use crate::SCRATCH_BUF_BYTES;
+use crate::{debug, SCRATCH_BUF_BYTES};
 
 use rkyv::ser::serializers::{
     BufferScratch, BufferSerializer, CompositeSerializer,
@@ -27,6 +27,8 @@ where
 {
     with_arg_buf(|buf| {
         let slice = &buf[..arg_len as usize];
+
+        debug!("QUERY BUF: {}", hex::encode(slice));
 
         let aa: &A::Archived = unsafe { archived_root::<A>(slice) };
         let a: A = aa.deserialize(&mut rkyv::Infallible).unwrap();
@@ -55,6 +57,9 @@ where
 {
     with_arg_buf(|buf| {
         let slice = &buf[..arg_len as usize];
+
+        debug!("TRANSACT BUF: {}", hex::encode(slice));
+
         let aa: &A::Archived = unsafe { archived_root::<A>(slice) };
         let a: A = aa.deserialize(&mut rkyv::Infallible).unwrap();
         let ret = f(a);

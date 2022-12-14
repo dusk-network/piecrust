@@ -13,7 +13,7 @@ use rkyv::{
 };
 
 use crate::{
-    RawQuery, RawResult, RawTransaction, StandardBufSerializer,
+    debug, RawQuery, RawResult, RawTransaction, StandardBufSerializer,
     SCRATCH_BUF_BYTES,
 };
 
