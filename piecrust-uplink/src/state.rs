@@ -289,7 +289,14 @@ impl<S> State<S> {
 
         debug!("TX RAW 4");
 
-        with_arg_buf(|buf| Ok(RawResult::new(&buf[..ret_len as usize])))
+        with_arg_buf(|buf| {
+            debug!("TX RAW 5");
+            let buf = &buf[..ret_len as usize];
+            debug!("TX RAW 6");
+            let raw_result = RawResult::new(buf);
+            debug!("TX RAW 7");
+            Ok(raw_result)
+        })
     }
 
     pub fn transact<Arg, Ret>(
