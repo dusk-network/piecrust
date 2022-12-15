@@ -13,7 +13,7 @@ use rkyv::{
 };
 
 use crate::{
-    RawQuery, RawResult, RawTransaction, StandardBufSerializer,
+    debug, RawQuery, RawResult, RawTransaction, StandardBufSerializer,
     SCRATCH_BUF_BYTES,
 };
 
@@ -269,18 +269,25 @@ impl<S> State<S> {
         // calls
         core::hint::black_box(self);
 
+        debug!("TX RAW 1");
+
         with_arg_buf(|buf| {
             let bytes = raw.arg_bytes();
             buf[..bytes.len()].copy_from_slice(bytes);
         });
 
+        debug!("TX RAW 2");
+
         let name = raw.name_bytes();
         let arg_len = raw.arg_bytes().len() as u32;
 
+        debug!("TX RAW 3");
         // ERROR?
         let ret_len = unsafe {
             ext::t(&mod_id.as_bytes()[0], &name[0], name.len() as u32, arg_len)
         };
+
+        debug!("TX RAW 4");
 
         with_arg_buf(|buf| Ok(RawResult::new(&buf[..ret_len as usize])))
     }
