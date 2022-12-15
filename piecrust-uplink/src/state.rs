@@ -167,7 +167,7 @@ where
 
 pub fn query_raw(
     mod_id: ModuleId,
-    raw: RawQuery,
+    raw: &RawQuery,
 ) -> Result<RawResult, ModuleError> {
     with_arg_buf(|buf| {
         let bytes = raw.arg_bytes();
@@ -263,7 +263,7 @@ impl<S> State<S> {
     pub fn transact_raw(
         &mut self,
         mod_id: ModuleId,
-        raw: RawTransaction,
+        raw: &RawTransaction,
     ) -> Result<RawResult, ModuleError> {
         // Necessary to avoid ruling out potential memory changes from recursive
         // calls
