@@ -269,36 +269,39 @@ impl<S> State<S> {
         // calls
         core::hint::black_box(self);
 
-        debug!("TX RAW 1");
+        debug!("TX RAW 1 data len: {}", raw.arg_bytes().len());
+        debug!("TX RAW 1 data ptr: {:p}", raw.arg_bytes().as_ptr());
 
         with_arg_buf(|buf| {
             let bytes = raw.arg_bytes();
             buf[..bytes.len()].copy_from_slice(bytes);
         });
 
-        debug!("TX RAW 2");
+        debug!("TX RAW 2 data len: {}", raw.arg_bytes().len());
+        debug!("TX RAW 2 data ptr: {:p}", raw.arg_bytes().as_ptr());
 
         let name = raw.name_bytes();
         let arg_len = raw.arg_bytes().len() as u32;
 
-        debug!("TX RAW 3");
+        debug!("TX RAW 3 data len: {}", raw.arg_bytes().len());
+        debug!("TX RAW 3 data ptr: {:p}", raw.arg_bytes().as_ptr());
+
         // ERROR?
         let ret_len = unsafe {
             ext::t(&mod_id.as_bytes()[0], &name[0], name.len() as u32, arg_len)
         };
 
-        debug!("TX RAW 4");
+        debug!("TX RAW 4 data len: {}", raw.arg_bytes().len());
+        debug!("TX RAW 4 data ptr: {:p}", raw.arg_bytes().as_ptr());
 
         let res = with_arg_buf(|buf| {
-            debug!("TX RAW 5");
             let buf = &buf[..ret_len as usize];
-            debug!("TX RAW 6");
             let raw_result = RawResult::new(buf);
-            debug!("TX RAW 7");
             Ok(raw_result)
         });
 
-        debug!("TX RAW 8");
+        debug!("TX RAW 5 data len: {}", raw.arg_bytes().len());
+        debug!("TX RAW 5 data ptr: {:p}", raw.arg_bytes().as_ptr());
 
         res
     }
