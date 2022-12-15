@@ -40,7 +40,7 @@ pub struct WrappedInstance {
     instance: wasmer::Instance,
     arg_buf_ofs: usize,
     #[allow(unused)]
-    heap_base: usize,
+    pub(crate) heap_base: usize,
     store: wasmer::Store,
 }
 

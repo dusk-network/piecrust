@@ -117,6 +117,9 @@ fn t(
     let instance = env.self_instance();
     let argbuf_ofs = instance.arg_buffer_offset();
 
+    instance.snap();
+    println!("HEAP BASE before: {}", instance.heap_base);
+
     let caller_remaining = instance
         .get_remaining_points()
         .expect("there should be points remaining");
@@ -136,6 +139,7 @@ fn t(
         );
 
         let callee = env.new_instance(mod_id);
+        println!("CALLEE HEAP BASE before: {}", callee.heap_base);
         let callee = env.push_callstack(mod_id, callee, callee_limit).instance;
 
         let arg = &arg_buf[..arg_len as usize];
@@ -157,6 +161,9 @@ fn t(
 
         (ret_len, callee_spent)
     });
+
+    // instance.snap();
+    println!("HEAP BASE after: {}", instance.heap_base);
 
     instance.set_remaining_points(caller_remaining - callee_spent);
 
