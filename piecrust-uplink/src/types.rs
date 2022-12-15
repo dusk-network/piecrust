@@ -197,7 +197,7 @@ impl Drop for RawTransaction {
     fn drop(&mut self) {
         debug!("were dropping the RawTransaction");
 
-        debug!("DROP 1 data ptr: {}", self.data.as_ptr() as usize);
+        debug!("DROP 1 data ptr: {:p}", self.data.as_ptr());
         debug!("DROP 1 data size: {}", self.data.len());
 
         let mut data = vec![];
@@ -205,7 +205,7 @@ impl Drop for RawTransaction {
 
         debug!("before dropping data");
 
-        debug!("DROP 2 data ptr: {}", data.as_ptr() as usize);
+        debug!("DROP 2 data ptr: {:p}", data.as_ptr());
         debug!("DROP 2 data size: {}", data.len());
 
         // let data_hex = hex::encode(&data);
