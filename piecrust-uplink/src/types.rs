@@ -4,7 +4,9 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
+use alloc::vec;
 use bytecheck::CheckBytes;
+use core::mem;
 use rkyv::{
     ser::serializers::{
         AllocSerializer, BufferScratch, BufferSerializer, CompositeSerializer,
@@ -13,7 +15,7 @@ use rkyv::{
     Archive, Deserialize, Infallible, Serialize,
 };
 
-use crate::SCRATCH_BUF_BYTES;
+use crate::{debug, SCRATCH_BUF_BYTES};
 
 pub type StandardBufSerializer<'a> = CompositeSerializer<
     BufferSerializer<&'a mut [u8]>,
@@ -179,6 +181,19 @@ impl RawTransaction {
 
     pub fn arg_bytes(&self) -> &[u8] {
         &self.data[..self.arg_len as usize]
+    }
+}
+
+impl Drop for RawTransaction {
+    fn drop(&mut self) {
+        debug!("were dropping the RawTransaction");
+
+        let mut data = vec![];
+        mem::swap(&mut data, &mut self.data);
+
+        debug!("before dropping data");
+        drop(data);
+        debug!("after dropping data");
     }
 }
 
