@@ -162,10 +162,19 @@ impl RawTransaction {
     /// This assumes the `data` given has already been correctly serialized for
     /// the module to call.
     pub fn from_parts(name: &str, data: alloc::vec::Vec<u8>) -> Self {
+        debug!("FROM PARTS 1 data len: {}", data.len());
+        debug!("FROM PARTS 1 data ptr: {:p}", data.as_ptr());
+
         let mut data = data;
+
+        debug!("FROM PARTS 2 data len: {}", data.len());
+        debug!("FROM PARTS 2 data ptr: {:p}", data.as_ptr());
 
         let arg_len = data.len() as u32;
         data.extend_from_slice(name.as_bytes());
+
+        debug!("FROM PARTS 3 data len: {}", data.len());
+        debug!("FROM PARTS 3 data ptr: {:p}", data.as_ptr());
 
         Self { arg_len, data }
     }
