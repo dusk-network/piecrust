@@ -13,13 +13,17 @@ mod snap;
 
 pub use snap::snap;
 
+#[cfg(not(feature = "std"))]
 mod state;
+#[cfg(not(feature = "std"))]
 pub use state::{
     caller, height, host_data, host_query, limit, query, query_raw, spent,
     ModuleError, State,
 };
 
+#[cfg(not(feature = "std"))]
 mod helpers;
+#[cfg(not(feature = "std"))]
 pub use helpers::*;
 
 mod ops;
