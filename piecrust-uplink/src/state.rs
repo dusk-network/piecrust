@@ -277,10 +277,16 @@ impl<S> State<S> {
         let name = raw.name_bytes();
         let arg_len = raw.arg_bytes().len() as u32;
 
+        crate::debug!("raw tx len: {}", raw.arg_bytes().len());
+        crate::debug!("raw tx ptr: {:p}", raw.arg_bytes().as_ptr());
+
         // ERROR?
         let ret_len = unsafe {
             ext::t(&mod_id.as_bytes()[0], &name[0], name.len() as u32, arg_len)
         };
+
+        crate::debug!("raw tx len: {}", raw.arg_bytes().len());
+        crate::debug!("raw tx ptr: {:p}", raw.arg_bytes().as_ptr());
 
         with_arg_buf(|buf| Ok(RawResult::new(&buf[..ret_len as usize])))
     }
