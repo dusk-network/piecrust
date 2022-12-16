@@ -86,14 +86,15 @@ impl core::fmt::Debug for ModuleId {
 #[derive(Archive, Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
 #[archive_attr(derive(CheckBytes))]
 pub struct RawQuery {
-    arg_len: u32,
+    name: alloc::string::String,
     data: alloc::vec::Vec<u8>,
 }
 
 impl RawQuery {
     /// Creates a new [`RawQuery`] by serializing an argument.
-    pub fn new<A>(name: &str, arg: A) -> Self
+    pub fn new<S, A>(name: S, arg: A) -> Self
     where
+        S: Into<alloc::string::String>,
         A: Serialize<AllocSerializer<64>>,
     {
         let mut ser = AllocSerializer::default();
@@ -101,7 +102,7 @@ impl RawQuery {
         ser.serialize_value(&arg)
             .expect("We assume infallible serialization and allocation");
 
-        let data = ser.into_serializer().into_inner().to_vec();
+        let data = ser.into_serializer().into_inner();
         Self::from_parts(name, data)
     }
 
@@ -109,17 +110,15 @@ impl RawQuery {
     ///
     /// This assumes the `data` given has already been correctly serialized for
     /// the module to call.
-    pub fn from_parts(name: &str, data: alloc::vec::Vec<u8>) -> Self {
-        let mut data = data;
-
-        let arg_len = data.len() as u32;
-        data.extend_from_slice(name.as_bytes());
-
-        Self { arg_len, data }
-    }
-
-    pub fn name_bytes(&self) -> &[u8] {
-        &self.data[self.arg_len as usize..]
+    pub fn from_parts<S, D>(name: S, data: D) -> Self
+    where
+        S: Into<alloc::string::String>,
+        D: Into<alloc::vec::Vec<u8>>,
+    {
+        Self {
+            name: name.into(),
+            data: data.into(),
+        }
     }
 
     pub fn name(&self) -> &str {
@@ -127,23 +126,28 @@ impl RawQuery {
             .expect("always created from a valid &str")
     }
 
+    pub fn name_bytes(&self) -> &[u8] {
+        self.name.as_bytes()
+    }
+
     pub fn arg_bytes(&self) -> &[u8] {
-        &self.data[..self.arg_len as usize]
+        &self.data
     }
 }
 
 #[derive(Archive, Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
 #[archive_attr(derive(CheckBytes))]
 pub struct RawTransaction {
-    arg_len: u32,
+    name: alloc::string::String,
     // TODO: use AlignedVec
     data: alloc::vec::Vec<u8>,
 }
 
 impl RawTransaction {
     /// Creates a new [`RawTransaction`] by serializing an argument.
-    pub fn new<A>(name: &str, arg: A) -> Self
+    pub fn new<S, A>(name: S, arg: A) -> Self
     where
+        S: Into<alloc::string::String>,
         A: Serialize<AllocSerializer<64>>,
     {
         let mut ser = AllocSerializer::default();
@@ -151,7 +155,7 @@ impl RawTransaction {
         ser.serialize_value(&arg)
             .expect("We assume infallible serialization and allocation");
 
-        let data = ser.into_serializer().into_inner().to_vec();
+        let data = ser.into_serializer().into_inner();
         Self::from_parts(name, data)
     }
 
@@ -159,13 +163,15 @@ impl RawTransaction {
     ///
     /// This assumes the `data` given has already been correctly serialized for
     /// the module to call.
-    pub fn from_parts(name: &str, data: alloc::vec::Vec<u8>) -> Self {
-        let mut data = data;
-
-        let arg_len = data.len() as u32;
-        data.extend_from_slice(name.as_bytes());
-
-        Self { arg_len, data }
+    pub fn from_parts<S, D>(name: S, data: D) -> Self
+    where
+        S: Into<alloc::string::String>,
+        D: Into<alloc::vec::Vec<u8>>,
+    {
+        Self {
+            name: name.into(),
+            data: data.into(),
+        }
     }
 
     pub fn name(&self) -> &str {
@@ -174,11 +180,11 @@ impl RawTransaction {
     }
 
     pub fn name_bytes(&self) -> &[u8] {
-        &self.data[self.arg_len as usize..]
+        self.name.as_bytes()
     }
 
     pub fn arg_bytes(&self) -> &[u8] {
-        &self.data[..self.arg_len as usize]
+        &self.data
     }
 }
 
