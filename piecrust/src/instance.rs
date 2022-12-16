@@ -71,10 +71,6 @@ impl Env {
             .instance
     }
 
-    pub fn new_instance(&mut self, module_id: ModuleId) -> WrappedInstance {
-        self.session.new_instance(module_id)
-    }
-
     pub fn limit(&self) -> u64 {
         self.session
             .nth_from_top(0)
