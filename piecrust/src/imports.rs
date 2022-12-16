@@ -77,8 +77,7 @@ fn q(
             &memory[mod_id_ofs as usize..][..std::mem::size_of::<ModuleId>()],
         );
 
-        let callee = env.new_instance(mod_id);
-        let callee = env.push_callstack(mod_id, callee, callee_limit).instance;
+        let callee = env.push_callstack(mod_id, callee_limit).instance;
 
         let arg = &arg_buf[..arg_len as usize];
 
@@ -135,8 +134,7 @@ fn t(
             &memory[mod_id_ofs as usize..][..std::mem::size_of::<ModuleId>()],
         );
 
-        let callee = env.new_instance(mod_id);
-        let callee = env.push_callstack(mod_id, callee, callee_limit).instance;
+        let callee = env.push_callstack(mod_id, callee_limit).instance;
 
         let arg = &arg_buf[..arg_len as usize];
 

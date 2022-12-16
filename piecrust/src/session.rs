@@ -4,6 +4,9 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
+pub mod call_stack;
+use call_stack::{CallStack, StackElementView};
+
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::fs;
@@ -33,51 +36,6 @@ use crate::Error::{self, CommitError};
 const DEFAULT_LIMIT: u64 = 65_536;
 const MAX_META_SIZE: usize = 65_536;
 
-pub struct StackElementView<'a> {
-    pub module_id: ModuleId,
-    pub instance: &'a mut WrappedInstance,
-    pub limit: u64,
-}
-
-struct StackElement {
-    module_id: ModuleId,
-    instance: *mut WrappedInstance,
-    limit: u64,
-}
-
-impl StackElement {
-    /// Creates a new stack element and __leaks__ the instance, returning a
-    /// pointer to it.
-    ///
-    /// # Safety
-    /// The instance will be re-acquired and dropped once the stack element is
-    /// dropped. Any remaining pointers to the instance will be left dangling.
-    /// It is up to the user to ensure the pointer and any aliases are only
-    /// de-referenced for the lifetime of the element.
-    pub fn new(
-        module_id: ModuleId,
-        instance: WrappedInstance,
-        limit: u64,
-    ) -> Self {
-        let instance = Box::leak(Box::new(instance)) as *mut WrappedInstance;
-        Self {
-            module_id,
-            instance,
-            limit,
-        }
-    }
-
-    fn instance<'b>(&self) -> &'b mut WrappedInstance {
-        unsafe { &mut *self.instance }
-    }
-}
-
-impl Drop for StackElement {
-    fn drop(&mut self) {
-        unsafe { Box::from_raw(self.instance) };
-    }
-}
-
 unsafe impl<'c> Send for Session<'c> {}
 unsafe impl<'c> Sync for Session<'c> {}
 
@@ -85,7 +43,7 @@ pub struct Session<'c> {
     vm: &'c mut VM,
     modules: BTreeMap<ModuleId, WrappedModule>,
     memory_handler: MemoryHandler,
-    callstack: Arc<RwLock<Vec<StackElement>>>,
+    callstack: Arc<RwLock<CallStack>>,
     debug: Arc<RwLock<Vec<String>>>,
     events: Arc<RwLock<Vec<Event>>>,
     data: Arc<RwLock<HostData>>,
@@ -100,7 +58,7 @@ impl<'c> Session<'c> {
             vm,
             modules: BTreeMap::default(),
             memory_handler: MemoryHandler::new(base_path),
-            callstack: Arc::new(RwLock::new(vec![])),
+            callstack: Arc::new(RwLock::new(CallStack::new())),
             debug: Arc::new(RwLock::new(vec![])),
             events: Arc::new(RwLock::new(vec![])),
             data: Arc::new(RwLock::new(HostData::new())),
@@ -142,8 +100,7 @@ impl<'c> Session<'c> {
         Ret::Archived: Deserialize<Ret, Infallible>
             + for<'b> CheckBytes<DefaultValidator<'b>>,
     {
-        let instance = self.new_instance(id);
-        let instance = self.push_callstack(id, instance, self.limit).instance;
+        let instance = self.push_callstack(id, self.limit).instance;
 
         let ret = {
             let arg_len = instance.write_to_arg_buffer(arg)?;
@@ -173,8 +130,7 @@ impl<'c> Session<'c> {
         Ret::Archived: Deserialize<Ret, Infallible>
             + for<'b> CheckBytes<DefaultValidator<'b>>,
     {
-        let instance = self.new_instance(id);
-        let instance = self.push_callstack(id, instance, self.limit).instance;
+        let instance = self.push_callstack(id, self.limit).instance;
 
         let ret = {
             let arg_len = instance.write_to_arg_buffer(arg)?;
@@ -198,7 +154,7 @@ impl<'c> Session<'c> {
         events.push(event);
     }
 
-    pub(crate) fn new_instance(&mut self, mod_id: ModuleId) -> WrappedInstance {
+    fn new_instance(&mut self, mod_id: ModuleId) -> WrappedInstance {
         let mut memory = self
             .memory_handler
             .get_memory(mod_id)
@@ -242,44 +198,39 @@ impl<'c> Session<'c> {
         self.spent
     }
 
-    pub(crate) fn nth_from_top<'b>(
+    pub(crate) fn nth_from_top<'a>(
         &self,
         n: usize,
-    ) -> Option<StackElementView<'b>> {
+    ) -> Option<StackElementView<'a>> {
         let stack = self.callstack.read();
-        let len = stack.len();
-
-        if len > n {
-            let elem = &stack[len - (n + 1)];
-
-            Some(StackElementView {
-                module_id: elem.module_id,
-                instance: elem.instance(),
-                limit: elem.limit,
-            })
-        } else {
-            None
-        }
+        stack.nth_from_top(n)
     }
 
     pub(crate) fn push_callstack<'b>(
-        &self,
+        &mut self,
         module_id: ModuleId,
-        instance: WrappedInstance,
         limit: u64,
     ) -> StackElementView<'b> {
-        let mut s = self.callstack.write();
+        let s = self.callstack.write();
+        let instance = s.instance(&module_id);
 
-        let element = StackElement::new(module_id, instance, limit);
-        let instance = element.instance();
+        drop(s);
 
-        s.push(element);
-
-        StackElementView {
-            module_id,
-            instance,
-            limit,
+        match instance {
+            Some(_) => {
+                let mut s = self.callstack.write();
+                s.push(module_id, limit);
+            }
+            None => {
+                let instance = self.new_instance(module_id);
+                let mut s = self.callstack.write();
+                s.push_instance(module_id, limit, instance);
+            }
         }
+
+        let s = self.callstack.write();
+        s.nth_from_top(0)
+            .expect("We just pushed an element to the stack")
     }
 
     pub(crate) fn pop_callstack(&self) {
