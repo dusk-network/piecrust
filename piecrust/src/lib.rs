@@ -20,10 +20,11 @@ mod types;
 mod util;
 mod vm;
 
+pub use commit::CommitId;
 pub use error::Error;
 pub use session::Session;
 pub use vm::{HostQuery, VM};
 
 // re-exports
 
-pub use piecrust_uplink::{RawQuery, RawTransaction};
+pub use piecrust_uplink::{ModuleId, RawQuery, RawTransaction};

@@ -2,5 +2,6 @@
 members = [
     "piecrust-uplink",
     "piecrust",
+    "cold_reboot_test",
 ]
 

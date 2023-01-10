@@ -4,5 +4,5 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-piecrust = { path = ".." }
+piecrust = { path = "../piecrust" }
 counter = { path = "../modules/counter" }

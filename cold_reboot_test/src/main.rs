@@ -4,16 +4,16 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
+extern crate core;
+
+use std::borrow::Cow;
 use std::env;
 use std::error::Error;
 use std::fmt::Display;
 use std::fs;
 use std::path::PathBuf;
 
-use counter::*;
-use map::*;
-use microkelvin::*;
-use rusk_vm::*;
+use piecrust::{CommitId, ModuleId, Session, VM};
 
 static mut PATH: String = String::new();
 
@@ -37,102 +37,79 @@ impl Display for PersistE {
     }
 }
 
-fn initialize(
-    backend: &BackendCtor<DiskBackend>,
-) -> Result<(), Box<dyn Error>> {
-    let counter = Counter::new(99);
-
-    let code = include_bytes!(
+fn initialize(session: &mut Session) -> Result<(), piecrust::Error> {
+    let counter_bytecode = include_bytes!(
         "../../target/wasm32-unknown-unknown/release/counter.wasm"
     );
 
-    let contract = Contract::new(counter, code.to_vec());
-
-    let mut network = NetworkState::new();
-
-    let contract_id = network.deploy(contract).unwrap();
-
-    let mut gas = GasMeter::with_limit(1_000_000_000);
+    let counter_module_id = session.deploy(counter_bytecode)?;
 
     assert_eq!(
-        network
-            .query::<_, i32>(contract_id, 0, counter::READ_VALUE, &mut gas)
-            .unwrap(),
-        99
+        session.query::<(), i64>(counter_module_id, "read_value", ())?,
+        0xfc
     );
 
-    network
-        .transact::<_, ()>(contract_id, 0, counter::INCREMENT, &mut gas)
-        .unwrap();
+    session.transact::<(), ()>(counter_module_id, "increment", ())?;
 
     assert_eq!(
-        network
-            .query::<_, i32>(contract_id, 0, counter::READ_VALUE, &mut gas)
-            .unwrap(),
-        100
+        session.query::<(), i64>(counter_module_id, "read_value", ())?,
+        0xfd
     );
 
-    network.commit();
+    let module_id_path =
+        PathBuf::from(unsafe { &PATH }).join("counter_module_id");
+    fs::write(&module_id_path, counter_module_id.as_bytes())
+        .map_err(|e| piecrust::Error::PersistenceError(e))?;
 
-    let persist_id = network.persist(backend).expect("Error in persistence");
-
-    let file_path = PathBuf::from(unsafe { &PATH }).join("counter_persist_id");
-
-    persist_id.write(file_path)?;
-
-    let contract_id_path =
-        PathBuf::from(unsafe { &PATH }).join("counter_contract_id");
-
-    fs::write(&contract_id_path, contract_id.as_bytes())?;
+    let commit_id_path = PathBuf::from(unsafe { &PATH }).join("commit_id");
+    let commit_id = session.commit()?;
+    commit_id.persist(commit_id_path)?;
 
     Ok(())
 }
 
-fn confirm(
-    _backend: &BackendCtor<DiskBackend>,
-) -> Result<(), Box<dyn Error>> {
-    let file_path = PathBuf::from(unsafe { &PATH }).join("counter_persist_id");
-    let state_id = NetworkStateId::read(file_path)?;
+fn confirm(session: &mut Session) -> Result<(), piecrust::Error> {
+    let file_path = PathBuf::from(unsafe { &PATH }).join("commit_id");
+    let commit_id = CommitId::from(file_path)?;
+    session.restore(&commit_id)?;
 
-    let mut network = NetworkState::new()
-        .restore(state_id)
-        .map_err(|_| PersistE)?;
-
-    let contract_id_path =
-        PathBuf::from(unsafe { &PATH }).join("counter_contract_id");
-    let buf = fs::read(&contract_id_path)?;
-
-    let contract_id = ContractId::from(buf);
-
-    let mut gas = GasMeter::with_limit(1_000_000_000);
+    let contract_module_id_path =
+        PathBuf::from(unsafe { &PATH }).join("counter_module_id");
+    let buf = fs::read(&contract_module_id_path)
+        .map_err(|e| piecrust::Error::RestoreError(e))?;
+    let mut bytes = [0u8; 32];
+    bytes.copy_from_slice(buf.as_ref());
+    let counter_module_id = ModuleId::from(bytes);
 
     assert_eq!(
-        network
-            .query::<_, i32>(contract_id, 0, counter::READ_VALUE, &mut gas)
-            .unwrap(),
-        100
+        session.query::<(), i64>(counter_module_id, "read_value", ())?,
+        0xfd
     );
 
     Ok(())
 }
 
-fn main() -> Result<(), Box<dyn Error>> {
+fn main() -> Result<(), piecrust::Error> {
     let args: Vec<String> = env::args().collect();
 
-    let backend = unsafe {
-        PATH = args[1].clone();
-        BackendCtor::new(|| DiskBackend::new(&PATH))
-    };
+    if args.len() != 3 {
+        println!("expected: <path> (initialize|confirm|test_both)");
+        return Ok(());
+    }
 
-    Persistence::with_backend(&backend, |_| Ok(())).unwrap();
+    let mut vm: VM = unsafe {
+        PATH = args[1].clone();
+        VM::new(&PATH).expect("Creating ephemeral VM should work")
+    };
+    let mut session = vm.session();
 
     match &*args[2] {
-        "initialize" => initialize(&backend),
-        "confirm" => confirm(&backend),
+        "initialize" => initialize(&mut session),
+        "confirm" => confirm(&mut session),
         "test_both" => {
-            initialize(&backend)?;
-            confirm(&backend)
+            initialize(&mut session)?;
+            confirm(&mut session)
         }
-        _ => Err(Box::new(IllegalArg)),
+        _ => Err(piecrust::Error::SessionError(Cow::from("invalid argument"))),
     }
 }
