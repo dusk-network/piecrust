@@ -4,27 +4,34 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
+//! Module to test the crossover functionality.
+
 #![no_std]
 #![feature(core_intrinsics, lang_items, arbitrary_self_types)]
 
 use piecrust_uplink as uplink;
 use uplink::{ModuleId, RawTransaction, State};
 
-#[no_mangle]
-static SELF_ID: ModuleId = ModuleId::uninitialized();
-
-static mut STATE: State<SelfSnapshot> =
-    State::new(SelfSnapshot { crossover: 7 });
-
+/// Struct that describes the state of the self snapshot module
 pub struct SelfSnapshot {
     crossover: i32,
 }
 
+/// Module ID, initialized by the host when the module is deployed
+#[no_mangle]
+static SELF_ID: ModuleId = ModuleId::uninitialized();
+
+/// State of the self snapshot module
+static mut STATE: State<SelfSnapshot> =
+    State::new(SelfSnapshot { crossover: 7 });
+
 impl SelfSnapshot {
+    /// Return crossover value
     pub fn crossover(&self) -> i32 {
         self.crossover
     }
 
+    /// Update crossover and return old value
     pub fn set_crossover(&mut self, to: i32) -> i32 {
         let old_val = self.crossover;
         uplink::debug!(
@@ -36,7 +43,7 @@ impl SelfSnapshot {
         old_val
     }
 
-    // updates crossover and returns the old value
+    /// Test `set_crossover` functionality through a host transaction
     pub fn self_call_test_a(self: &mut State<Self>, update: i32) -> i32 {
         let old_value = self.crossover;
         let callee = uplink::self_id();
@@ -47,7 +54,7 @@ impl SelfSnapshot {
         old_value
     }
 
-    // updates crossover and returns the old value
+    /// Test `set_crossover` functionality through a host raw transaction
     pub fn self_call_test_b(
         self: &mut State<Self>,
         target: ModuleId,
@@ -59,6 +66,7 @@ impl SelfSnapshot {
         self.crossover
     }
 
+    /// Update crossover and panic
     pub fn update_and_panic(&mut self, new_value: i32) {
         let old_value = self.crossover;
         let callee = uplink::self_id();
@@ -77,21 +85,25 @@ impl SelfSnapshot {
     }
 }
 
+/// Expose `SelfSnapshot::crossover()` to the host
 #[no_mangle]
 unsafe fn crossover(arg_len: u32) -> u32 {
     uplink::wrap_query(arg_len, |_: ()| STATE.crossover())
 }
 
+/// Expose `SelfSnapshot::set_crossover()` to the host
 #[no_mangle]
 unsafe fn set_crossover(arg_len: u32) -> u32 {
     uplink::wrap_transaction(arg_len, |arg: i32| STATE.set_crossover(arg))
 }
 
+/// Expose `SelfSnapshot::self_call_test_a()` to the host
 #[no_mangle]
 unsafe fn self_call_test_a(arg_len: u32) -> u32 {
     uplink::wrap_transaction(arg_len, |arg: i32| STATE.self_call_test_a(arg))
 }
 
+/// Expose `SelfSnapshot::self_call_test_b()` to the host
 #[no_mangle]
 unsafe fn self_call_test_b(arg_len: u32) -> u32 {
     uplink::wrap_transaction(arg_len, |(target, transaction)| {
