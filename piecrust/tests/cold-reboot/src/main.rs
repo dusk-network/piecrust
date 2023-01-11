@@ -16,8 +16,9 @@ fn initialize_counter<P: AsRef<Path>>(
     commit_id_file_path: P,
 ) -> Result<(), piecrust::Error> {
     let mut session = vm.session();
+
     let counter_bytecode = include_bytes!(
-        "../../target/wasm32-unknown-unknown/release/counter.wasm"
+        "../../../../target/wasm32-unknown-unknown/release/counter.wasm"
     );
 
     let module_id = session.deploy(counter_bytecode)?;
@@ -40,8 +41,9 @@ fn confirm_counter<P: AsRef<Path>>(
     session.restore(&commit_id)?;
 
     let counter_bytecode = include_bytes!(
-        "../../target/wasm32-unknown-unknown/release/counter.wasm"
+        "../../../../target/wasm32-unknown-unknown/release/counter.wasm"
     );
+
     /*
      * Note that module deployment does not change its state.
      */
@@ -53,20 +55,23 @@ fn confirm_counter<P: AsRef<Path>>(
 }
 
 fn initialize<P: AsRef<str>>(vm_data_path: P) -> Result<(), piecrust::Error> {
-    let commit_id_file_path = PathBuf::from(vm_data_path.as_ref()).join("commit_id");
+    let commit_id_file_path =
+        PathBuf::from(vm_data_path.as_ref()).join("commit_id");
     let mut vm = VM::new(vm_data_path.as_ref())?;
     initialize_counter(&mut vm, &commit_id_file_path)
 }
 
 fn confirm<P: AsRef<str>>(vm_data_path: P) -> Result<(), piecrust::Error> {
-    let commit_id_file_path = PathBuf::from(vm_data_path.as_ref()).join("commit_id");
+    let commit_id_file_path =
+        PathBuf::from(vm_data_path.as_ref()).join("commit_id");
     let mut vm = VM::new(vm_data_path.as_ref())?;
     let mut session = vm.session();
     confirm_counter(&mut session, &commit_id_file_path)
 }
 
 fn main() -> Result<(), piecrust::Error> {
-    const MESSAGE: &str = "argument expected: <path_for_vm_data> (initialize|confirm|test_both)";
+    const MESSAGE: &str =
+        "argument expected: <path_for_vm_data> (initialize|confirm|test_both)";
     let args: Vec<String> = env::args().collect();
 
     if args.len() < 3 {
@@ -85,7 +90,7 @@ fn main() -> Result<(), piecrust::Error> {
         }
         _ => {
             println!("{}", MESSAGE);
-        },
+        }
     }
 
     Ok(())

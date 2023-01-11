@@ -17,12 +17,21 @@ modules: ## Build WASM modules
 	 	          target/wasm32-unknown-unknown/release/% \
 	 	          -o target/stripped/%
 
-test: modules assert-counter-module-small ## Run the tests
+test: modules cold-reboot assert-counter-module-small ## Run all tests
 	@cargo test \
 	  --manifest-path=./piecrust/Cargo.toml \
 	  --color=always
 
-.PHONY: test modules assert-counter-module-small
+cold-reboot: modules ## Run the cold reboot test
+	@cargo build \
+	  --manifest-path=./piecrust/tests/cold-reboot/Cargo.toml \
+	  --color=always
+	@rm -rf /tmp/piecrust-cold-reboot
+	@./target/debug/cold_reboot /tmp/piecrust-cold-reboot initialize
+	@./target/debug/cold_reboot /tmp/piecrust-cold-reboot confirm
+	@rm -r /tmp/piecrust-cold-reboot
+
+.PHONY: test modules cold-reboot assert-counter-module-small
 
 COUNTER_MODULE_BYTE_SIZE_LIMIT = 512
 
