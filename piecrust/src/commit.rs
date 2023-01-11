@@ -19,8 +19,7 @@ use std::os::unix::io::AsRawFd;
 use std::path::Path;
 use std::ptr;
 
-use crate::error::Error::{self, PersistenceError, SessionError};
-use crate::Error::RestoreError;
+use crate::error::Error::{self, PersistenceError, RestoreError, SessionError};
 
 pub const COMMIT_ID_BYTES: usize = 32;
 const SESSION_COMMITS_SCRATCH_SIZE: usize = 64;
@@ -103,8 +102,8 @@ impl CommitId {
         self.0 = *hasher.finalize().as_bytes();
     }
 
-    pub fn from<P: AsRef<Path>>(path: P) -> Result<CommitId, Error> {
-        let buf = fs::read(&path).map_err(|e| RestoreError(e))?;
+    pub fn restore<P: AsRef<Path>>(path: P) -> Result<CommitId, Error> {
+        let buf = fs::read(&path).map_err(RestoreError)?;
         let archived =
             rkyv::check_archived_root::<Self>(buf.as_slice()).unwrap();
         Ok(archived.deserialize(&mut rkyv::Infallible).unwrap())
@@ -112,7 +111,7 @@ impl CommitId {
 
     pub fn persist<P: AsRef<Path>>(&self, path: P) -> Result<(), Error> {
         let buf = rkyv::to_bytes::<_, COMMIT_ID_BYTES>(&self.0).unwrap();
-        fs::write(&path, &buf).map_err(|e| PersistenceError(e))
+        fs::write(&path, &buf).map_err(PersistenceError)
     }
 }
 
