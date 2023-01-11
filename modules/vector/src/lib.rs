@@ -4,6 +4,8 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
+//! Module that implements the functionalities of a simple vector.
+
 #![no_std]
 
 extern crate alloc;
@@ -12,30 +14,37 @@ use alloc::vec::Vec;
 use piecrust_uplink as uplink;
 use uplink::{ModuleId, State};
 
+/// Struct that describes the state of the vector module
 pub struct Vector {
     a: Vec<i16>,
 }
 
+/// Module id, initialized by the host when the module is deployed
 #[no_mangle]
 static SELF_ID: ModuleId = ModuleId::uninitialized();
 
+/// State of the vector module
 static mut STATE: State<Vector> = State::new(Vector { a: Vec::new() });
 
 impl Vector {
+    /// Push an item to the vector
     pub fn push(&mut self, x: i16) {
         self.a.push(x);
     }
 
+    /// Pop the last item off the vector
     pub fn pop(&mut self) -> Option<i16> {
         self.a.pop()
     }
 }
 
+/// Expose `Vector::push()` to the host
 #[no_mangle]
 unsafe fn push(arg_len: u32) -> u32 {
     uplink::wrap_transaction(arg_len, |arg| STATE.push(arg))
 }
 
+/// Expose `Vector::pop()` to the host
 #[no_mangle]
 unsafe fn pop(arg_len: u32) -> u32 {
     uplink::wrap_transaction(arg_len, |_arg: ()| STATE.pop())

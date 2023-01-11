@@ -4,6 +4,9 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
+//! Minimal module, changes a static number and doesn't expose any functionality
+//! to the host.
+
 #![no_std]
 
 #[allow(unused)]

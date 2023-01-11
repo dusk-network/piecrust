@@ -4,28 +4,34 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
+//! Module of a counter that can panic if wanted.
+
 #![feature(arbitrary_self_types)]
 #![no_std]
 
 use piecrust_uplink as uplink;
 use uplink::{ModuleId, State};
 
-#[derive(Default)]
+/// Struct that describes the state of the fallible counter module
 pub struct FallibleCounter {
     value: i64,
 }
 
+/// Module id, initialized by the host when the module is deployed
 #[no_mangle]
 static SELF_ID: ModuleId = ModuleId::uninitialized();
 
+/// State of the fallible counter module
 static mut STATE: State<FallibleCounter> =
     State::new(FallibleCounter { value: 0xfc });
 
 impl FallibleCounter {
+    /// Read the value of the counter
     pub fn read_value(&self) -> i64 {
         self.value
     }
 
+    /// Increment the value of the counter and panic if wanted
     pub fn increment(&mut self, panic: bool) {
         let value = self.value + 1;
         self.value = value;
@@ -35,11 +41,13 @@ impl FallibleCounter {
     }
 }
 
+/// Expose `FallibleCounter::read_value()` to the host
 #[no_mangle]
 unsafe fn read_value(arg_len: u32) -> u32 {
     uplink::wrap_query(arg_len, |_: ()| STATE.read_value())
 }
 
+/// Expose `FallibleCounter::increment()` to the host
 #[no_mangle]
 unsafe fn increment(arg_len: u32) -> u32 {
     uplink::wrap_transaction(arg_len, |panic: bool| STATE.increment(panic))
