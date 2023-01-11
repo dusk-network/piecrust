@@ -14,12 +14,12 @@ use rkyv::{
 use piecrust_uplink::ModuleId;
 
 use std::collections::BTreeMap;
-use std::fs::OpenOptions;
+use std::fs::{self, OpenOptions};
 use std::os::unix::io::AsRawFd;
 use std::path::Path;
 use std::ptr;
 
-use crate::error::Error::{self, PersistenceError, SessionError};
+use crate::error::Error::{self, PersistenceError, RestoreError, SessionError};
 
 pub const COMMIT_ID_BYTES: usize = 32;
 const SESSION_COMMITS_SCRATCH_SIZE: usize = 64;
@@ -100,6 +100,18 @@ impl CommitId {
         hasher.update(self.0.as_slice());
         hasher.update(module_commit_id.as_bytes());
         self.0 = *hasher.finalize().as_bytes();
+    }
+
+    pub fn restore<P: AsRef<Path>>(path: P) -> Result<CommitId, Error> {
+        let buf = fs::read(&path).map_err(RestoreError)?;
+        let archived =
+            rkyv::check_archived_root::<Self>(buf.as_slice()).unwrap();
+        Ok(archived.deserialize(&mut rkyv::Infallible).unwrap())
+    }
+
+    pub fn persist<P: AsRef<Path>>(&self, path: P) -> Result<(), Error> {
+        let buf = rkyv::to_bytes::<_, COMMIT_ID_BYTES>(&self.0).unwrap();
+        fs::write(&path, &buf).map_err(PersistenceError)
     }
 }
 

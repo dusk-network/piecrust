@@ -1,0 +1,9 @@
+[package]
+name = "cold_reboot"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+piecrust = { path = "../../../piecrust" }
+
+[workspace]
