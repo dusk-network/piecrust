@@ -36,7 +36,7 @@ pub const MODULE_ID_BYTES: usize = 32;
     Copy,
 )]
 #[archive(as = "Self")]
-// #[repr(C)]
+#[repr(C)]
 pub struct ModuleId([u8; MODULE_ID_BYTES]);
 
 impl ModuleId {

@@ -9,6 +9,7 @@ use std::borrow::Cow;
 use rkyv::ser::serializers::{
     BufferSerializerError, CompositeSerializerError, FixedSizeScratchError,
 };
+use rkyv::validation::CheckArchiveError::CheckBytesError;
 
 pub type Compo = CompositeSerializerError<
     BufferSerializerError,
@@ -86,7 +87,12 @@ impl From<wasmer_vm::Trap> for Error {
 }
 
 impl<A, B> From<rkyv::validation::CheckArchiveError<A, B>> for Error {
-    fn from(_e: rkyv::validation::CheckArchiveError<A, B>) -> Self {
+    fn from(e: rkyv::validation::CheckArchiveError<A, B>) -> Self {
+        match e {
+            rkyv::validation::CheckArchiveError::<A,B>::CheckBytesError(_a) => println!("CheckBytesError"),
+            rkyv::validation::CheckArchiveError::<A,B>::ContextError(_b) => println!("ContextError"),
+        };
+        println!("check archive error");
         Error::ValidationError
     }
 }
