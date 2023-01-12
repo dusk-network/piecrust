@@ -53,10 +53,14 @@ where
     R: for<'a> Serialize<StandardBufSerializer<'a>>,
     F: FnMut(A) -> R,
 {
+    crate::debug!("inside wrap_transaction");
     with_arg_buf(|buf| {
+        crate::debug!("inside with_arg_buf1");
         let slice = &buf[..arg_len as usize];
         let aa: &A::Archived = unsafe { archived_root::<A>(slice) };
+        crate::debug!("inside with_arg_buf2");
         let a: A = aa.deserialize(&mut rkyv::Infallible).unwrap();
+        crate::debug!("inside with_arg_buf3");
         let ret = f(a);
 
         let mut sbuf = [0u8; SCRATCH_BUF_BYTES];

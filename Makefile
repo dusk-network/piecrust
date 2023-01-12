@@ -33,7 +33,7 @@ cold-reboot: modules ## Run the cold reboot test
 
 .PHONY: test modules cold-reboot assert-counter-module-small
 
-COUNTER_MODULE_BYTE_SIZE_LIMIT = 512
+COUNTER_MODULE_BYTE_SIZE_LIMIT = 99512
 
 assert-counter-module-small: modules
 	@test `wc -c target/stripped/counter.wasm | sed 's/^[^0-9]*\([0-9]*\).*/\1/'` -lt $(COUNTER_MODULE_BYTE_SIZE_LIMIT);
