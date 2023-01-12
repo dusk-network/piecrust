@@ -5,6 +5,7 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 use std::borrow::Cow;
+use thiserror::Error;
 
 use rkyv::ser::serializers::{
     BufferSerializerError, CompositeSerializerError, FixedSizeScratchError,
@@ -16,67 +17,42 @@ pub type Compo = CompositeSerializerError<
     std::convert::Infallible,
 >;
 
-#[derive(Debug)]
+#[derive(Error, Debug)]
 pub enum Error {
-    InstantiationError(Box<wasmer::InstantiationError>),
-    CompileError(Box<wasmer::CompileError>),
-    ExportError(Box<wasmer::ExportError>),
-    RuntimeError(wasmer::RuntimeError),
-    SerializeError(Box<wasmer::SerializeError>),
-    DeserializeError(Box<wasmer::DeserializeError>),
+    #[error(transparent)]
+    InstantiationError(#[from] wasmer::InstantiationError),
+    #[error(transparent)]
+    CompileError(#[from] wasmer::CompileError),
+    #[error(transparent)]
+    ExportError(#[from] wasmer::ExportError),
+    #[error(transparent)]
+    RuntimeError(#[from] wasmer::RuntimeError),
+    #[error(transparent)]
+    SerializeError(#[from] wasmer::SerializeError),
+    #[error(transparent)]
+    DeserializeError(#[from] wasmer::DeserializeError),
+    #[error(transparent)]
     ParsingError(Box<wasmer::wasmparser::BinaryReaderError>),
+    #[error("WASMER TRAP")]
     Trap(Box<wasmer_vm::Trap>),
-    CompositeSerializerError(Box<Compo>),
+    #[error(transparent)]
+    CompositeSerializerError(#[from] Compo),
+    #[error(transparent)]
     PersistenceError(std::io::Error),
+    #[error(transparent)]
     CommitError(std::io::Error),
+    #[error(transparent)]
     RestoreError(std::io::Error),
+    #[error("Session error: {0}")]
     SessionError(Cow<'static, str>),
+    #[error(transparent)]
     MemorySetupError(std::io::Error),
+    #[error(transparent)]
     RegionError(region::Error),
+    #[error("ValidationError")]
     ValidationError,
+    #[error("OutOfPoints")]
     OutOfPoints,
-}
-
-impl From<wasmer::InstantiationError> for Error {
-    fn from(e: wasmer::InstantiationError) -> Self {
-        Error::InstantiationError(Box::from(e))
-    }
-}
-
-impl From<wasmer::CompileError> for Error {
-    fn from(e: wasmer::CompileError) -> Self {
-        Error::CompileError(Box::from(e))
-    }
-}
-
-impl From<wasmer::ExportError> for Error {
-    fn from(e: wasmer::ExportError) -> Self {
-        Error::ExportError(Box::from(e))
-    }
-}
-
-impl From<wasmer::RuntimeError> for Error {
-    fn from(e: wasmer::RuntimeError) -> Self {
-        Error::RuntimeError(e)
-    }
-}
-
-impl From<wasmer::SerializeError> for Error {
-    fn from(e: wasmer::SerializeError) -> Self {
-        Error::SerializeError(Box::from(e))
-    }
-}
-
-impl From<wasmer::DeserializeError> for Error {
-    fn from(e: wasmer::DeserializeError) -> Self {
-        Error::DeserializeError(Box::from(e))
-    }
-}
-
-impl From<Compo> for Error {
-    fn from(e: Compo) -> Self {
-        Error::CompositeSerializerError(Box::from(e))
-    }
 }
 
 impl From<wasmer_vm::Trap> for Error {
