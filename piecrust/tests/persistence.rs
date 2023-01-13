@@ -16,11 +16,11 @@ fn session_commits_persistence() -> Result<(), Error> {
         let id_1 = session.deploy(module_bytecode!("counter"))?;
         let id_2 = session.deploy(module_bytecode!("box"))?;
 
-        session.transact::<(), ()>(id_1, "increment", ())?;
-        session.transact::<i16, ()>(id_2, "set", 0x11)?;
-        assert_eq!(session.query::<(), i64>(id_1, "read_value", ())?, 0xfd);
+        session.transact::<(), ()>(id_1, "increment", &())?;
+        session.transact::<i16, ()>(id_2, "set", &0x11)?;
+        assert_eq!(session.query::<(), i64>(id_1, "read_value", &())?, 0xfd);
         assert_eq!(
-            session.query::<_, Option<i16>>(id_2, "get", ())?,
+            session.query::<_, Option<i16>>(id_2, "get", &())?,
             Some(0x11)
         );
         commit_1 = session.commit()?;
@@ -32,11 +32,11 @@ fn session_commits_persistence() -> Result<(), Error> {
         let id_1 = session.deploy(module_bytecode!("counter"))?;
         let id_2 = session.deploy(module_bytecode!("box"))?;
 
-        session.transact::<(), ()>(id_1, "increment", ())?;
-        session.transact::<i16, ()>(id_2, "set", 0x12)?;
-        assert_eq!(session.query::<(), i64>(id_1, "read_value", ())?, 0xfe);
+        session.transact::<(), ()>(id_1, "increment", &())?;
+        session.transact::<i16, ()>(id_2, "set", &0x12)?;
+        assert_eq!(session.query::<(), i64>(id_1, "read_value", &())?, 0xfe);
         assert_eq!(
-            session.query::<_, Option<i16>>(id_2, "get", ())?,
+            session.query::<_, Option<i16>>(id_2, "get", &())?,
             Some(0x12)
         );
         commit_2 = session.commit()?;
@@ -53,9 +53,9 @@ fn session_commits_persistence() -> Result<(), Error> {
         session.restore(&commit_1)?;
 
         // check if both modules' state was restored
-        assert_eq!(session.query::<(), i64>(id_1, "read_value", ())?, 0xfd);
+        assert_eq!(session.query::<(), i64>(id_1, "read_value", &())?, 0xfd);
         assert_eq!(
-            session.query::<_, Option<i16>>(id_2, "get", ())?,
+            session.query::<_, Option<i16>>(id_2, "get", &())?,
             Some(0x11)
         );
     }
@@ -69,9 +69,9 @@ fn session_commits_persistence() -> Result<(), Error> {
         session.restore(&commit_2)?;
 
         // check if both modules' state was restored
-        assert_eq!(session.query::<(), i64>(id_1, "read_value", ())?, 0xfe);
+        assert_eq!(session.query::<(), i64>(id_1, "read_value", &())?, 0xfe);
         assert_eq!(
-            session.query::<_, Option<i16>>(id_2, "get", ())?,
+            session.query::<_, Option<i16>>(id_2, "get", &())?,
             Some(0x12)
         );
     }
@@ -85,11 +85,11 @@ fn modules_persistence() -> Result<(), Error> {
     let id_1 = session.deploy(module_bytecode!("counter"))?;
     let id_2 = session.deploy(module_bytecode!("box"))?;
 
-    session.transact::<(), ()>(id_1, "increment", ())?;
-    session.transact::<i16, ()>(id_2, "set", 0x11)?;
-    assert_eq!(session.query::<(), i64>(id_1, "read_value", ())?, 0xfd);
+    session.transact::<(), ()>(id_1, "increment", &())?;
+    session.transact::<i16, ()>(id_2, "set", &0x11)?;
+    assert_eq!(session.query::<(), i64>(id_1, "read_value", &())?, 0xfd);
     assert_eq!(
-        session.query::<_, Option<i16>>(id_2, "get", ())?,
+        session.query::<_, Option<i16>>(id_2, "get", &())?,
         Some(0x11)
     );
 
@@ -101,9 +101,9 @@ fn modules_persistence() -> Result<(), Error> {
     let id_2 = session2.deploy(module_bytecode!("box"))?;
 
     // check if both modules' state was restored
-    assert_eq!(session2.query::<(), i64>(id_1, "read_value", ())?, 0xfd);
+    assert_eq!(session2.query::<(), i64>(id_1, "read_value", &())?, 0xfd);
     assert_eq!(
-        session2.query::<_, Option<i16>>(id_2, "get", ())?,
+        session2.query::<_, Option<i16>>(id_2, "get", &())?,
         Some(0x11)
     );
     Ok(())

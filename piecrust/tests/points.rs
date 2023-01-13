@@ -15,10 +15,10 @@ pub fn points_get_used() -> Result<(), Error> {
     let counter_id = session.deploy(module_bytecode!("counter"))?;
     let center_id = session.deploy(module_bytecode!("callcenter"))?;
 
-    session.query::<_, i64>(counter_id, "read_value", ())?;
+    session.query::<_, i64>(counter_id, "read_value", &())?;
     let counter_spent = session.spent();
 
-    session.query::<_, i64>(center_id, "query_counter", counter_id)?;
+    session.query::<_, i64>(center_id, "query_counter", &counter_id)?;
     let center_spent = session.spent();
 
     assert!(counter_spent < center_spent);
@@ -37,7 +37,7 @@ pub fn fails_with_out_of_points() -> Result<(), Error> {
     session.set_point_limit(0);
 
     let err = session
-        .query::<(), i64>(counter_id, "read_value", ())
+        .query::<(), i64>(counter_id, "read_value", &())
         .expect_err("should error with no gas");
 
     assert!(matches!(err, Error::OutOfPoints));
@@ -61,7 +61,7 @@ pub fn limit_and_spent() -> Result<(), Error> {
         session.query::<_, (u64, u64, u64, u64, u64)>(
             spender_id,
             "get_limit_and_spent",
-            (),
+            &(),
         )?;
     let spender_spent = session.spent();
 

@@ -17,7 +17,7 @@ let mut vm = VM::ephemeral()?;
 let module_id = vm.deploy(bytecode)?;
 
 let mut session = vm.session();
-let result = session.transact::<i16, i32>(module_id, "function_name", 0x11)?;
+let result = session.transact::<i16, i32>(module_id, "function_name", &0x11)?;
 
 // use result
 ```

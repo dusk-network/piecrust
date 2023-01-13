@@ -16,7 +16,7 @@ pub fn height() -> Result<(), Error> {
 
     for h in 0u64..1024 {
         session.set_meta("height", h);
-        let height: u64 = session.transact(id, "get_height", ())?;
+        let height: u64 = session.transact(id, "get_height", &())?;
         assert_eq!(height, h);
     }
 

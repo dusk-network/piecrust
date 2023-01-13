@@ -23,9 +23,15 @@ fn initialize_counter<P: AsRef<Path>>(
 
     let module_id = session.deploy(counter_bytecode)?;
 
-    assert_eq!(session.query::<(), i64>(module_id, "read_value", ())?, 0xfc);
-    session.transact::<(), ()>(module_id, "increment", ())?;
-    assert_eq!(session.query::<(), i64>(module_id, "read_value", ())?, 0xfd);
+    assert_eq!(
+        session.query::<(), i64>(module_id, "read_value", &())?,
+        0xfc
+    );
+    session.transact::<(), ()>(module_id, "increment", &())?;
+    assert_eq!(
+        session.query::<(), i64>(module_id, "read_value", &())?,
+        0xfd
+    );
 
     let commit_id = session.commit()?;
     commit_id.persist(commit_id_file_path)?;
@@ -49,7 +55,10 @@ fn confirm_counter<P: AsRef<Path>>(
      */
     let module_id = session.deploy(counter_bytecode)?;
 
-    assert_eq!(session.query::<(), i64>(module_id, "read_value", ())?, 0xfd);
+    assert_eq!(
+        session.query::<(), i64>(module_id, "read_value", &())?,
+        0xfd
+    );
 
     Ok(())
 }
