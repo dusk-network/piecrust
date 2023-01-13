@@ -23,11 +23,11 @@ static mut STATE: State<Callcenter> = State::new(Callcenter);
 
 impl Callcenter {
     pub fn query_counter(&self, counter_id: ModuleId) -> i64 {
-        uplink::query(counter_id, "read_value", ()).unwrap()
+        uplink::query(counter_id, "read_value", &()).unwrap()
     }
 
     pub fn increment_counter(self: &mut State<Self>, counter_id: ModuleId) {
-        self.transact(counter_id, "increment", ()).unwrap()
+        self.transact(counter_id, "increment", &()).unwrap()
     }
 
     pub fn delegate_query(
@@ -36,7 +36,7 @@ impl Callcenter {
         raw: RawQuery,
     ) -> Result<RawResult, ModuleError> {
         uplink::debug!("raw query {:?} at {:?}", raw, module_id);
-        uplink::query_raw(module_id, raw)
+        uplink::query_raw(module_id, &raw)
     }
 
     pub fn query_passthrough(&mut self, raw: RawQuery) -> RawQuery {
@@ -49,7 +49,7 @@ impl Callcenter {
         module_id: ModuleId,
         raw: RawTransaction,
     ) -> RawResult {
-        self.transact_raw(module_id, raw).unwrap()
+        self.transact_raw(module_id, &raw).unwrap()
     }
 
     pub fn calling_self(&self, id: ModuleId) -> bool {
@@ -69,7 +69,7 @@ impl Callcenter {
         let caller = uplink::caller();
 
         match caller.is_uninitialized() {
-            true => uplink::query(self_id, "call_self", ()),
+            true => uplink::query(self_id, "call_self", &()),
             false => Ok(caller == self_id),
         }
     }
