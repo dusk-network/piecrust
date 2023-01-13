@@ -5,7 +5,6 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 #![no_std]
-#![no_main]
 
 use nstack::annotation::Cardinality;
 use nstack::NStack;

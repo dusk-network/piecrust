@@ -6,7 +6,6 @@
 
 #![feature(arbitrary_self_types)]
 #![no_std]
-#![no_main]
 
 #[derive(Default)]
 pub struct Fibonacci;
