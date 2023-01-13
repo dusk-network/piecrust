@@ -20,23 +20,23 @@ pub type Compo = CompositeSerializerError<
 #[derive(Error, Debug)]
 pub enum Error {
     #[error(transparent)]
-    InstantiationError(#[from] wasmer::InstantiationError),
+    InstantiationError(Box<wasmer::InstantiationError>),
     #[error(transparent)]
-    CompileError(#[from] wasmer::CompileError),
+    CompileError(Box<wasmer::CompileError>),
     #[error(transparent)]
-    ExportError(#[from] wasmer::ExportError),
+    ExportError(Box<wasmer::ExportError>),
     #[error(transparent)]
-    RuntimeError(#[from] wasmer::RuntimeError),
+    RuntimeError(wasmer::RuntimeError),
     #[error(transparent)]
-    SerializeError(#[from] wasmer::SerializeError),
+    SerializeError(Box<wasmer::SerializeError>),
     #[error(transparent)]
-    DeserializeError(#[from] wasmer::DeserializeError),
+    DeserializeError(Box<wasmer::DeserializeError>),
     #[error(transparent)]
     ParsingError(Box<wasmer::wasmparser::BinaryReaderError>),
     #[error("WASMER TRAP")]
     Trap(Box<wasmer_vm::Trap>),
     #[error(transparent)]
-    CompositeSerializerError(#[from] Compo),
+    CompositeSerializerError(Box<Compo>),
     #[error(transparent)]
     PersistenceError(std::io::Error),
     #[error(transparent)]
@@ -53,6 +53,48 @@ pub enum Error {
     ValidationError,
     #[error("OutOfPoints")]
     OutOfPoints,
+}
+
+impl From<wasmer::InstantiationError> for Error {
+    fn from(e: wasmer::InstantiationError) -> Self {
+        Error::InstantiationError(Box::from(e))
+    }
+}
+
+impl From<wasmer::CompileError> for Error {
+    fn from(e: wasmer::CompileError) -> Self {
+        Error::CompileError(Box::from(e))
+    }
+}
+
+impl From<wasmer::ExportError> for Error {
+    fn from(e: wasmer::ExportError) -> Self {
+        Error::ExportError(Box::from(e))
+    }
+}
+
+impl From<wasmer::RuntimeError> for Error {
+    fn from(e: wasmer::RuntimeError) -> Self {
+        Error::RuntimeError(e)
+    }
+}
+
+impl From<wasmer::SerializeError> for Error {
+    fn from(e: wasmer::SerializeError) -> Self {
+        Error::SerializeError(Box::from(e))
+    }
+}
+
+impl From<wasmer::DeserializeError> for Error {
+    fn from(e: wasmer::DeserializeError) -> Self {
+        Error::DeserializeError(Box::from(e))
+    }
+}
+
+impl From<Compo> for Error {
+    fn from(e: Compo) -> Self {
+        Error::CompositeSerializerError(Box::from(e))
+    }
 }
 
 impl From<wasmer_vm::Trap> for Error {
