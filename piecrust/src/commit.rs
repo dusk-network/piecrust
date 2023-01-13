@@ -46,14 +46,16 @@ impl ModuleCommitId {
         Ok(ModuleCommitId(*blake3::hash(mem).as_bytes()))
     }
 
+    pub const fn from_bytes(bytes: [u8; COMMIT_ID_BYTES]) -> Self {
+        Self(bytes)
+    }
+
+    pub const fn to_bytes(self) -> [u8; COMMIT_ID_BYTES] {
+        self.0
+    }
+
     pub fn as_bytes(&self) -> &[u8] {
         &self.0[..]
-    }
-}
-
-impl From<[u8; COMMIT_ID_BYTES]> for ModuleCommitId {
-    fn from(array: [u8; COMMIT_ID_BYTES]) -> Self {
-        ModuleCommitId(array)
     }
 }
 
@@ -66,6 +68,24 @@ impl core::fmt::Debug for ModuleCommitId {
             write!(f, "{:02x}", &byte)?
         }
         Ok(())
+    }
+}
+
+impl AsRef<[u8]> for ModuleCommitId {
+    fn as_ref(&self) -> &[u8] {
+        &self.0
+    }
+}
+
+impl From<[u8; COMMIT_ID_BYTES]> for ModuleCommitId {
+    fn from(bytes: [u8; COMMIT_ID_BYTES]) -> Self {
+        Self::from_bytes(bytes)
+    }
+}
+
+impl From<ModuleCommitId> for [u8; COMMIT_ID_BYTES] {
+    fn from(commit: ModuleCommitId) -> Self {
+        commit.to_bytes()
     }
 }
 
@@ -93,6 +113,14 @@ impl CommitId {
 
     pub fn as_bytes(&self) -> &[u8] {
         &self.0[..]
+    }
+
+    pub const fn to_bytes(self) -> [u8; COMMIT_ID_BYTES] {
+        self.0
+    }
+
+    pub const fn from_bytes(bytes: [u8; COMMIT_ID_BYTES]) -> Self {
+        Self(bytes)
     }
 
     fn add(&mut self, module_commit_id: &ModuleCommitId) {
@@ -124,6 +152,24 @@ impl core::fmt::Debug for CommitId {
             write!(f, "{:02x}", &byte)?
         }
         Ok(())
+    }
+}
+
+impl AsRef<[u8]> for CommitId {
+    fn as_ref(&self) -> &[u8] {
+        &self.0
+    }
+}
+
+impl From<[u8; COMMIT_ID_BYTES]> for CommitId {
+    fn from(bytes: [u8; COMMIT_ID_BYTES]) -> Self {
+        Self::from_bytes(bytes)
+    }
+}
+
+impl From<CommitId> for [u8; COMMIT_ID_BYTES] {
+    fn from(commit: CommitId) -> Self {
+        commit.to_bytes()
     }
 }
 
