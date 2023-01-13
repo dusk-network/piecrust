@@ -40,7 +40,7 @@ impl SelfSnapshot {
     pub fn self_call_test_a(self: &mut State<Self>, update: i32) -> i32 {
         let old_value = self.crossover;
         let callee = uplink::self_id();
-        self.transact::<_, i32>(callee, "set_crossover", update)
+        self.transact::<_, i32>(callee, "set_crossover", &update)
             .unwrap();
 
         assert_eq!(self.crossover, update);
@@ -55,7 +55,7 @@ impl SelfSnapshot {
     ) -> i32 {
         let co = self.crossover;
         self.set_crossover(co * 2);
-        self.transact_raw(target, raw_transaction).unwrap();
+        self.transact_raw(target, &raw_transaction).unwrap();
         self.crossover
     }
 
@@ -68,7 +68,7 @@ impl SelfSnapshot {
         // A: we live with inconsistencies and communicate them.
         // B: we update self, which then should be passed to the transaction
 
-        let q = uplink::query::<_, i32>(callee, "crossover", new_value);
+        let q = uplink::query::<_, i32>(callee, "crossover", &new_value);
 
         match q {
             Ok(old) if old == old_value => panic!("OH NOES"),

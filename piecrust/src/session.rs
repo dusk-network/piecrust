@@ -92,7 +92,7 @@ impl<'c> Session<'c> {
         &mut self,
         id: ModuleId,
         method_name: &str,
-        arg: Arg,
+        arg: &Arg,
     ) -> Result<Ret, Error>
     where
         Arg: for<'b> Serialize<StandardBufSerializer<'b>>,
@@ -122,7 +122,7 @@ impl<'c> Session<'c> {
         &mut self,
         id: ModuleId,
         method_name: &str,
-        arg: Arg,
+        arg: &Arg,
     ) -> Result<Ret, Error>
     where
         Arg: for<'b> Serialize<StandardBufSerializer<'b>>,

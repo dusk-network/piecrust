@@ -17,7 +17,7 @@ pub fn vm_center_events() -> Result<(), Error> {
     const EVENT_NUM: u32 = 5;
 
     // increment through call center
-    session.transact(eventer_id, "emit_events", EVENT_NUM)?;
+    session.transact(eventer_id, "emit_events", &EVENT_NUM)?;
 
     let events = session.take_events();
     assert_eq!(events.len() as u32, EVENT_NUM);

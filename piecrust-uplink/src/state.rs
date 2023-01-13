@@ -130,7 +130,7 @@ where
 pub fn query<Arg, Ret>(
     mod_id: ModuleId,
     name: &str,
-    arg: Arg,
+    arg: &Arg,
 ) -> Result<Ret, ModuleError>
 where
     Arg: for<'a> Serialize<StandardBufSerializer<'a>>,
@@ -143,7 +143,7 @@ where
         let ser = BufferSerializer::new(buf);
         let mut composite =
             CompositeSerializer::new(ser, scratch, rkyv::Infallible);
-        composite.serialize_value(&arg).expect("infallible");
+        composite.serialize_value(arg).expect("infallible");
         composite.pos() as u32
     });
 
@@ -167,7 +167,7 @@ where
 
 pub fn query_raw(
     mod_id: ModuleId,
-    raw: RawQuery,
+    raw: &RawQuery,
 ) -> Result<RawResult, ModuleError> {
     with_arg_buf(|buf| {
         let bytes = raw.arg_bytes();
@@ -263,7 +263,7 @@ impl<S> State<S> {
     pub fn transact_raw(
         &mut self,
         mod_id: ModuleId,
-        raw: RawTransaction,
+        raw: &RawTransaction,
     ) -> Result<RawResult, ModuleError> {
         // Necessary to avoid ruling out potential memory changes from recursive
         // calls
@@ -289,7 +289,7 @@ impl<S> State<S> {
         &mut self,
         mod_id: ModuleId,
         name: &str,
-        arg: Arg,
+        arg: &Arg,
     ) -> Result<Ret, ModuleError>
     where
         Arg: for<'a> Serialize<StandardBufSerializer<'a>>,
@@ -306,7 +306,7 @@ impl<S> State<S> {
             let ser = BufferSerializer::new(buf);
             let mut composite =
                 CompositeSerializer::new(ser, scratch, rkyv::Infallible);
-            composite.serialize_value(&arg).expect("infallible");
+            composite.serialize_value(arg).expect("infallible");
 
             composite.pos() as u32
         });

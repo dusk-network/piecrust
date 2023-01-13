@@ -255,7 +255,7 @@ impl WrappedInstance {
         })
     }
 
-    pub(crate) fn write_to_arg_buffer<T>(&self, value: T) -> Result<u32, Error>
+    pub(crate) fn write_to_arg_buffer<T>(&self, value: &T) -> Result<u32, Error>
     where
         T: for<'b> Serialize<StandardBufSerializer<'b>>,
     {
@@ -266,7 +266,7 @@ impl WrappedInstance {
             let mut ser =
                 CompositeSerializer::new(ser, scratch, rkyv::Infallible);
 
-            ser.serialize_value(&value)?;
+            ser.serialize_value(value)?;
 
             Ok(ser.pos() as u32)
         })

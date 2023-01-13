@@ -14,7 +14,7 @@ fn counter_read_simple() -> Result<(), Error> {
 
     let id = session.deploy(module_bytecode!("counter"))?;
 
-    assert_eq!(session.query::<(), i64>(id, "read_value", ())?, 0xfc);
+    assert_eq!(session.query::<(), i64>(id, "read_value", &())?, 0xfc);
 
     Ok(())
 }
@@ -27,11 +27,11 @@ fn counter_read_write_simple() -> Result<(), Error> {
 
     let id = session.deploy(module_bytecode!("counter"))?;
 
-    assert_eq!(session.query::<(), i64>(id, "read_value", ())?, 0xfc);
+    assert_eq!(session.query::<(), i64>(id, "read_value", &())?, 0xfc);
 
-    session.transact::<(), ()>(id, "increment", ())?;
+    session.transact::<(), ()>(id, "increment", &())?;
 
-    assert_eq!(session.query::<(), i64>(id, "read_value", ())?, 0xfd);
+    assert_eq!(session.query::<(), i64>(id, "read_value", &())?, 0xfd);
 
     Ok(())
 }

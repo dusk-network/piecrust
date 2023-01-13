@@ -15,16 +15,18 @@ fn fallible_read_write_panic() -> Result<(), Error> {
 
     let id = session.deploy(module_bytecode!("fallible_counter"))?;
 
-    session.transact::<bool, ()>(id, "increment", false)?;
+    session.transact::<bool, ()>(id, "increment", &false)?;
 
-    assert_eq!(session.query::<(), i64>(id, "read_value", ())?, 0xfd);
+    assert_eq!(session.query::<(), i64>(id, "read_value", &())?, 0xfd);
 
-    let err = session.transact::<bool, ()>(id, "increment", true).is_err();
+    let err = session
+        .transact::<bool, ()>(id, "increment", &true)
+        .is_err();
 
     assert!(err, "execution failed");
 
     assert_eq!(
-        session.query::<(), i64>(id, "read_value", ())?,
+        session.query::<(), i64>(id, "read_value", &())?,
         0xfd,
         "should remain unchanged, since panics revert any changes"
     );

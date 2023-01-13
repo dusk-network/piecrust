@@ -33,7 +33,7 @@ impl Spender {
                     u64,
                     u64,
                     u64,
-                ) = uplink::query(self_id, "get_limit_and_spent", ())
+                ) = uplink::query(self_id, "get_limit_and_spent", &())
                     .expect("Self query should succeed");
 
                 let spent_after = uplink::spent();

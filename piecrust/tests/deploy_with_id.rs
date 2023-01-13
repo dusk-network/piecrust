@@ -17,11 +17,17 @@ pub fn deploy_with_id() -> Result<(), Error> {
     let mut session = vm.session();
     session.deploy_with_id(module_id, bytecode)?;
 
-    assert_eq!(session.query::<(), i64>(module_id, "read_value", ())?, 0xfc);
+    assert_eq!(
+        session.query::<(), i64>(module_id, "read_value", &())?,
+        0xfc
+    );
 
-    session.transact::<(), ()>(module_id, "increment", ())?;
+    session.transact::<(), ()>(module_id, "increment", &())?;
 
-    assert_eq!(session.query::<(), i64>(module_id, "read_value", ())?, 0xfd);
+    assert_eq!(
+        session.query::<(), i64>(module_id, "read_value", &())?,
+        0xfd
+    );
 
     Ok(())
 }
