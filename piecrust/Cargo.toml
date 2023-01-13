@@ -19,7 +19,7 @@ colored = "2"
 libc = { version = "^0.2", default-features = false }
 region = "3"
 tempfile = "3"
-thiserror = "1.0"
+thiserror = "1"
 
 [dev-dependencies]
 criterion = "0.4"
