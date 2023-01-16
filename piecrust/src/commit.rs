@@ -5,11 +5,7 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 use bytecheck::CheckBytes;
-use rkyv::{
-    ser::serializers::{BufferScratch, CompositeSerializer, WriteSerializer},
-    ser::Serializer,
-    Archive, Deserialize, Serialize,
-};
+use rkyv::{Archive, Deserialize, Serialize};
 
 use piecrust_uplink::ModuleId;
 
@@ -20,9 +16,15 @@ use std::path::Path;
 use std::ptr;
 
 use crate::error::Error::{self, PersistenceError, RestoreError, SessionError};
+use crate::merkle::Merkle;
+use crate::persistable::Persistable;
 
 pub const COMMIT_ID_BYTES: usize = 32;
-const SESSION_COMMITS_SCRATCH_SIZE: usize = 64;
+
+pub trait Hashable {
+    fn uninitialized() -> Self;
+    fn as_slice(&self) -> &[u8];
+}
 
 #[derive(
     PartialEq,
@@ -42,7 +44,7 @@ const SESSION_COMMITS_SCRATCH_SIZE: usize = 64;
 pub struct ModuleCommitId([u8; COMMIT_ID_BYTES]);
 
 impl ModuleCommitId {
-    pub fn from(mem: &[u8]) -> Result<Self, Error> {
+    pub fn from_hash_of(mem: &[u8]) -> Result<Self, Error> {
         Ok(ModuleCommitId(*blake3::hash(mem).as_bytes()))
     }
 
@@ -55,6 +57,20 @@ impl ModuleCommitId {
     }
 
     pub fn as_bytes(&self) -> &[u8] {
+        &self.0[..]
+    }
+    
+    pub fn inner(&self) -> [u8; COMMIT_ID_BYTES] {
+        self.0
+    }
+}
+
+impl Hashable for ModuleCommitId {
+    fn uninitialized() -> Self {
+        ModuleCommitId([0; COMMIT_ID_BYTES])
+    }
+
+    fn as_slice(&self) -> &[u8] {
         &self.0[..]
     }
 }
@@ -70,6 +86,8 @@ impl core::fmt::Debug for ModuleCommitId {
         Ok(())
     }
 }
+
+impl Persistable for ModuleCommitId {}
 
 impl AsRef<[u8]> for ModuleCommitId {
     fn as_ref(&self) -> &[u8] {
@@ -141,6 +159,20 @@ impl CommitId {
         let buf = rkyv::to_bytes::<_, COMMIT_ID_BYTES>(&self.0).unwrap();
         fs::write(&path, &buf).map_err(PersistenceError)
     }
+    
+    pub fn inner(&self) -> [u8; COMMIT_ID_BYTES] {
+        self.0
+    }
+}
+
+impl Hashable for CommitId {
+    fn uninitialized() -> Self {
+        CommitId([0; COMMIT_ID_BYTES])
+    }
+
+    fn as_slice(&self) -> &[u8] {
+        &self.0[..]
+    }
 }
 
 impl core::fmt::Debug for CommitId {
@@ -200,6 +232,12 @@ impl SessionCommit {
     pub fn ids(&self) -> &BTreeMap<ModuleId, ModuleCommitId> {
         &self.ids
     }
+    pub fn calculate_id(&mut self) {
+        let mut vec = Vec::from_iter(self.ids().values().cloned());
+        vec.sort();
+        let root = Merkle::merkle(&mut vec).inner();
+        self.id = CommitId::from(root);
+    }
 }
 
 impl Default for SessionCommit {
@@ -256,47 +294,17 @@ impl SessionCommits {
         }
     }
 
-    pub fn restore<P: AsRef<Path>>(path: P) -> Result<Self, Error> {
-        let file =
-            std::fs::File::open(path.as_ref()).map_err(PersistenceError)?;
-        let metadata =
-            std::fs::metadata(path.as_ref()).map_err(PersistenceError)?;
-        let ptr = unsafe {
-            libc::mmap(
-                ptr::null_mut(),
-                u32::MAX as usize,
-                libc::PROT_READ,
-                libc::MAP_SHARED,
-                file.as_raw_fd(),
-                0,
-            ) as *mut u8
-        };
-        let slice = unsafe {
-            core::slice::from_raw_parts(ptr, metadata.len() as usize)
-        };
-        let archived = rkyv::check_archived_root::<Self>(slice).unwrap();
-        Ok(archived.deserialize(&mut rkyv::Infallible).unwrap())
-    }
-
-    pub fn persist<P: AsRef<Path>>(&self, path: P) -> Result<(), Error> {
-        let file = OpenOptions::new()
-            .write(true)
-            .create(true)
-            .truncate(true)
-            .open(path)
-            .map_err(PersistenceError)?;
-
-        let mut scratch_buf = [0u8; SESSION_COMMITS_SCRATCH_SIZE];
-        let scratch = BufferScratch::new(&mut scratch_buf);
-        let serializer = WriteSerializer::new(file);
-        let mut composite =
-            CompositeSerializer::new(serializer, scratch, rkyv::Infallible);
-
-        composite.serialize_value(self).unwrap();
-        Ok(())
+    pub fn with_every_session_commit<F>(&self, mut closure: F)
+    where
+        F: FnMut(&SessionCommit),
+    {
+        for (_commit_id, session_commit) in self.0.iter() {
+            closure(session_commit);
+        }
     }
 }
 
+impl Persistable for SessionCommits {}
 impl Default for SessionCommits {
     fn default() -> Self {
         Self::new()
