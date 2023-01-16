@@ -4,8 +4,8 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-//! Minimal module, changes a static number and doesn't expose any functionality
-//! to the host.
+//! Minimal module, allows for changing a static number and doesn't expose any
+//! other functionality to the host
 
 #![no_std]
 
