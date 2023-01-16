@@ -139,13 +139,6 @@ impl CommitId {
         Self(bytes)
     }
 
-    fn add(&mut self, module_commit_id: &ModuleCommitId) {
-        let mut hasher = blake3::Hasher::new();
-        hasher.update(self.0.as_slice());
-        hasher.update(module_commit_id.as_bytes());
-        self.0 = *hasher.finalize().as_bytes();
-    }
-
     pub fn restore<P: AsRef<Path>>(path: P) -> Result<CommitId, Error> {
         let buf = fs::read(&path).map_err(RestoreError)?;
         let archived =
@@ -156,10 +149,6 @@ impl CommitId {
     pub fn persist<P: AsRef<Path>>(&self, path: P) -> Result<(), Error> {
         let buf = rkyv::to_bytes::<_, COMMIT_ID_BYTES>(&self.0).unwrap();
         fs::write(&path, &buf).map_err(PersistenceError)
-    }
-    
-    pub fn inner(&self) -> [u8; COMMIT_ID_BYTES] {
-        self.0
     }
 }
 
@@ -224,7 +213,6 @@ impl SessionCommit {
 
     pub fn add(&mut self, module_id: &ModuleId, commit_id: &ModuleCommitId) {
         self.ids.insert(*module_id, *commit_id);
-        self.id.add(commit_id);
     }
 
     pub fn ids(&self) -> &BTreeMap<ModuleId, ModuleCommitId> {

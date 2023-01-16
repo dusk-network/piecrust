@@ -209,7 +209,7 @@ impl VM {
             Some(r) if !persist => Ok(r),
             _ => {
                 let session_commit = self.get_current_vm_commit()?;
-                let root = session_commit.commit_id().inner();
+                let root = session_commit.commit_id().to_bytes();
                 if persist {
                     self.session_commits.add(session_commit);
                 }
