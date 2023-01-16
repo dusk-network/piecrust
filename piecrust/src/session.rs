@@ -27,8 +27,8 @@ use crate::event::Event;
 use crate::instance::WrappedInstance;
 use crate::memory_handler::MemoryHandler;
 use crate::memory_path::MemoryPath;
-use crate::persistable::Persistable;
 use crate::module::WrappedModule;
+use crate::persistable::Persistable;
 use crate::types::MemoryState;
 use crate::types::StandardBufSerializer;
 use crate::vm::VM;
@@ -241,7 +241,6 @@ impl<'c> Session<'c> {
 
     pub fn commit(self) -> Result<CommitId, Error> {
         let mut session_commit = SessionCommit::new();
-        let mut m = 0;
         self.memory_handler.with_every_module_id(|module_id, mem| {
             let (source_path, _) = self.vm.memory_path(module_id);
             let module_commit_id = ModuleCommitId::from_hash_of(mem)?;
@@ -259,12 +258,10 @@ impl<'c> Session<'c> {
             self.vm.reset_root();
             fs::remove_file(source_path.as_ref()).map_err(CommitError)?;
             session_commit.add(module_id, &module_commit_id);
-            m = m+1;
             Ok(())
         })?;
         session_commit.calculate_id();
         let session_commit_id = session_commit.commit_id();
-        println!("commit id={:?} number of modules={}", session_commit_id, m);
         self.vm.add_session_commit(session_commit);
         Ok(session_commit_id)
     }
@@ -326,6 +323,10 @@ impl<'c> Session<'c> {
 
         let data = buf[..pos].to_vec();
         host_data.insert(name, data);
+    }
+
+    pub fn root(&mut self, persist: bool) -> Result<[u8; 32], Error> {
+        self.vm.root(persist)
     }
 }
 

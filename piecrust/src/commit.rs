@@ -57,7 +57,7 @@ impl ModuleCommitId {
     pub fn as_bytes(&self) -> &[u8] {
         &self.0[..]
     }
-    
+
     pub fn inner(&self) -> [u8; COMMIT_ID_BYTES] {
         self.0
     }

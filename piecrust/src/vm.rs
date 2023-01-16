@@ -183,15 +183,14 @@ impl VM {
     pub(crate) fn get_current_vm_commit(&self) -> Result<SessionCommit, Error> {
         let mut module_ids: HashSet<ModuleId> = HashSet::new();
         let mut session_commit = SessionCommit::new();
-        self.session_commits.with_every_session_commit(
-            |session_commit| {
+        self.session_commits
+            .with_every_session_commit(|session_commit| {
                 for (module_id, _module_commit_id) in
                     session_commit.ids().iter()
                 {
                     module_ids.insert(*module_id);
                 }
-            },
-        );
+            });
         for module_id in module_ids.iter() {
             let path = self.path_to_module_last_commit_id(module_id);
             if let Ok(module_commit_id) =
@@ -201,20 +200,16 @@ impl VM {
             }
         }
         session_commit.calculate_id();
-        println!("commit id calculated in get_current_vm_commit={:?}", session_commit.commit_id());
         Ok(session_commit)
     }
 
-    pub fn root(&mut self, persist: bool) -> Result<[u8; 32], Error> {
+    pub(crate) fn root(&mut self, persist: bool) -> Result<[u8; 32], Error> {
         let current_root;
         {
             current_root = self.root;
         }
         match current_root {
-            Some(r) if !persist => {
-                println!("root - same remains={:?}", self.root);
-                Ok(r)
-            },
+            Some(r) if !persist => Ok(r),
             _ => {
                 let session_commit = self.get_current_vm_commit()?;
                 let root = session_commit.commit_id().to_bytes();
@@ -222,15 +217,9 @@ impl VM {
                     self.session_commits.add(session_commit);
                 }
                 self.root = Some(root);
-                println!("root - setting current root to={:?}", self.root);
                 Ok(root)
             }
         }
-    }
-
-    pub fn restore_root(&mut self, root: &[u8; 32]) -> Result<(), Error> {
-        self.restore_session(&CommitId::from(*root))?;
-        Ok(())
     }
 
     pub(crate) fn reset_root(&mut self) {

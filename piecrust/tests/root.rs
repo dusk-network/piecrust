@@ -4,33 +4,26 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use piecrust::{module_bytecode, Error, VM, CommitId};
+use piecrust::{module_bytecode, CommitId, Error, VM};
 
 #[test]
 pub fn state_root_calculation() -> Result<(), Error> {
     let mut vm = VM::ephemeral()?;
     let mut session = vm.session();
     let id_1 = session.deploy(module_bytecode!("counter"))?;
-    let id_2 = session.deploy(module_bytecode!("box"))?;
 
     session.transact::<(), ()>(id_1, "increment", &())?;
-    println!("1st commit");
     let _commit = session.commit()?;
-    println!("after 1st commit");
 
     let mut session = vm.session();
-    let id_1 = session.deploy(module_bytecode!("counter"))?;
     let id_2 = session.deploy(module_bytecode!("box"))?;
     session.transact::<i16, ()>(id_2, "set", &0x11)?;
-    println!("2nd commit");
     let _commit = session.commit()?;
-    println!("after 2nd commit");
-
-    let root_1 = vm.root(false)?;
 
     let mut session = vm.session();
+    let root_1 = session.root(false)?;
+
     let id_1 = session.deploy(module_bytecode!("counter"))?;
-    let id_2 = session.deploy(module_bytecode!("box"))?;
     session.transact::<(), ()>(id_1, "increment", &())?;
 
     let root_2 = session.root(false)?;
@@ -38,10 +31,8 @@ pub fn state_root_calculation() -> Result<(), Error> {
     // not committed changes do not cause the root to change
     assert_eq!(root_1, root_2);
 
-    // session.query::<(), i64>(id_1, "read_value", &())?;
-    println!("3rd commit");
     let _commit = session.commit()?;
-    println!("after 3rd commit");
+    let mut session = vm.session();
 
     let root_3 = session.root(false)?;
 
@@ -60,7 +51,7 @@ pub fn initial_state_root() -> Result<(), Error> {
     session.transact::<(), ()>(id_1, "increment", &())?;
     session.transact::<i16, ()>(id_2, "set", &0x11)?;
 
-    let root = vm.root(false)?;
+    let root = session.root(false)?;
     assert_eq!(root, [0u8; 32]);
     Ok(())
 }
@@ -75,17 +66,23 @@ pub fn state_root_persist_restore() -> Result<(), Error> {
     session.transact::<(), ()>(id_1, "increment", &())?;
     session.transact::<i16, ()>(id_2, "set", &0x11)?;
     let _commit = session.commit()?;
+    let mut session = vm.session();
 
-    let root_1 = vm.root(true)?;
+    let root_1 = session.root(true)?;
 
     let mut session = vm.session();
+    let id_1 = session.deploy(module_bytecode!("counter"))?;
+    let id_2 = session.deploy(module_bytecode!("box"))?;
     session.transact::<(), ()>(id_1, "increment", &())?;
     session.transact::<i16, ()>(id_2, "set", &0x13)?;
     let _commit = session.commit()?;
+    let mut session = vm.session();
 
-    let root_2 = vm.root(true)?;
+    let root_2 = session.root(true)?;
 
     let mut session = vm.session();
+    let id_1 = session.deploy(module_bytecode!("counter"))?;
+    let id_2 = session.deploy(module_bytecode!("box"))?;
     assert_eq!(session.query::<(), i64>(id_1, "read_value", &())?, 0xfe);
     assert_eq!(
         session.query::<_, Option<i16>>(id_2, "get", &())?,
@@ -93,6 +90,8 @@ pub fn state_root_persist_restore() -> Result<(), Error> {
     );
 
     let mut session = vm.session();
+    let id_1 = session.deploy(module_bytecode!("counter"))?;
+    let id_2 = session.deploy(module_bytecode!("box"))?;
     session.restore(&CommitId::from_bytes(root_1))?;
 
     assert_eq!(session.query::<(), i64>(id_1, "read_value", &())?, 0xfd);
