@@ -14,26 +14,36 @@ pub fn state_root_calculation() -> Result<(), Error> {
     let id_2 = session.deploy(module_bytecode!("box"))?;
 
     session.transact::<(), ()>(id_1, "increment", &())?;
+    println!("1st commit");
     let _commit = session.commit()?;
+    println!("after 1st commit");
 
     let mut session = vm.session();
+    let id_1 = session.deploy(module_bytecode!("counter"))?;
+    let id_2 = session.deploy(module_bytecode!("box"))?;
     session.transact::<i16, ()>(id_2, "set", &0x11)?;
+    println!("2nd commit");
     let _commit = session.commit()?;
+    println!("after 2nd commit");
 
     let root_1 = vm.root(false)?;
 
     let mut session = vm.session();
+    let id_1 = session.deploy(module_bytecode!("counter"))?;
+    let id_2 = session.deploy(module_bytecode!("box"))?;
     session.transact::<(), ()>(id_1, "increment", &())?;
 
-    let root_2 = vm.root(false)?;
-    let session = vm.session();
+    let root_2 = session.root(false)?;
 
     // not committed changes do not cause the root to change
     assert_eq!(root_1, root_2);
 
+    // session.query::<(), i64>(id_1, "read_value", &())?;
+    println!("3rd commit");
     let _commit = session.commit()?;
+    println!("after 3rd commit");
 
-    let root_3 = vm.root(false)?;
+    let root_3 = session.root(false)?;
 
     // committed changes cause the root to change
     assert_ne!(root_2, root_3);

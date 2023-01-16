@@ -120,12 +120,14 @@ impl VM {
     ) -> MemoryPath {
         self.path_to_module_with_postfix(module_id, LAST_COMMIT_POSTFIX)
     }
+
     pub(crate) fn path_to_module_last_commit_id(
         &self,
         module_id: &ModuleId,
     ) -> MemoryPath {
         self.path_to_module_with_postfix(module_id, LAST_COMMIT_ID_POSTFIX)
     }
+
     fn path_to_module_with_postfix<P: AsRef<str>>(
         &self,
         module_id: &ModuleId,
@@ -177,6 +179,7 @@ impl VM {
     pub fn base_path(&self) -> PathBuf {
         self.base_memory_path.to_path_buf()
     }
+
     pub(crate) fn get_current_vm_commit(&self) -> Result<SessionCommit, Error> {
         let mut module_ids: HashSet<ModuleId> = HashSet::new();
         let mut session_commit = SessionCommit::new();
@@ -198,15 +201,20 @@ impl VM {
             }
         }
         session_commit.calculate_id();
+        println!("commit id calculated in get_current_vm_commit={:?}", session_commit.commit_id());
         Ok(session_commit)
     }
+
     pub fn root(&mut self, persist: bool) -> Result<[u8; 32], Error> {
         let current_root;
         {
             current_root = self.root;
         }
         match current_root {
-            Some(r) if !persist => Ok(r),
+            Some(r) if !persist => {
+                println!("root - same remains={:?}", self.root);
+                Ok(r)
+            },
             _ => {
                 let session_commit = self.get_current_vm_commit()?;
                 let root = session_commit.commit_id().to_bytes();
@@ -214,14 +222,17 @@ impl VM {
                     self.session_commits.add(session_commit);
                 }
                 self.root = Some(root);
+                println!("root - setting current root to={:?}", self.root);
                 Ok(root)
             }
         }
     }
+
     pub fn restore_root(&mut self, root: &[u8; 32]) -> Result<(), Error> {
         self.restore_session(&CommitId::from(*root))?;
         Ok(())
     }
+
     pub(crate) fn reset_root(&mut self) {
         self.root = None;
     }

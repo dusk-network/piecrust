@@ -241,6 +241,7 @@ impl<'c> Session<'c> {
 
     pub fn commit(self) -> Result<CommitId, Error> {
         let mut session_commit = SessionCommit::new();
+        let mut m = 0;
         self.memory_handler.with_every_module_id(|module_id, mem| {
             let (source_path, _) = self.vm.memory_path(module_id);
             let module_commit_id = ModuleCommitId::from_hash_of(mem)?;
@@ -258,10 +259,12 @@ impl<'c> Session<'c> {
             self.vm.reset_root();
             fs::remove_file(source_path.as_ref()).map_err(CommitError)?;
             session_commit.add(module_id, &module_commit_id);
+            m = m+1;
             Ok(())
         })?;
         session_commit.calculate_id();
         let session_commit_id = session_commit.commit_id();
+        println!("commit id={:?} number of modules={}", session_commit_id, m);
         self.vm.add_session_commit(session_commit);
         Ok(session_commit_id)
     }
