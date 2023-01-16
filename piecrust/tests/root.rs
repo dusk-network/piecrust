@@ -26,7 +26,7 @@ pub fn state_root_calculation() -> Result<(), Error> {
     session.transact::<(), ()>(id_1, "increment", &())?;
 
     let root_2 = vm.root(false)?;
-    let mut session = vm.session();
+    let session = vm.session();
 
     // not committed changes do not cause the root to change
     assert_eq!(root_1, root_2);
@@ -83,7 +83,7 @@ pub fn state_root_persist_restore() -> Result<(), Error> {
     );
 
     let mut session = vm.session();
-    session.restore(&CommitId::from_bytes(root_1));
+    session.restore(&CommitId::from_bytes(root_1))?;
 
     assert_eq!(session.query::<(), i64>(id_1, "read_value", &())?, 0xfd);
     assert_eq!(
@@ -91,7 +91,7 @@ pub fn state_root_persist_restore() -> Result<(), Error> {
         Some(0x11)
     );
 
-    session.restore(&CommitId::from_bytes(root_2));
+    session.restore(&CommitId::from_bytes(root_2))?;
 
     assert_eq!(session.query::<(), i64>(id_1, "read_value", &())?, 0xfe);
     assert_eq!(

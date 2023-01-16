@@ -10,10 +10,8 @@ use rkyv::{Archive, Deserialize, Serialize};
 use piecrust_uplink::ModuleId;
 
 use std::collections::BTreeMap;
-use std::fs::{self, OpenOptions};
-use std::os::unix::io::AsRawFd;
+use std::fs;
 use std::path::Path;
-use std::ptr;
 
 use crate::error::Error::{self, PersistenceError, RestoreError, SessionError};
 use crate::merkle::Merkle;
