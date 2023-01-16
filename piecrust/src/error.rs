@@ -5,6 +5,7 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 use std::borrow::Cow;
+use thiserror::Error;
 
 use rkyv::ser::serializers::{
     BufferSerializerError, CompositeSerializerError, FixedSizeScratchError,
@@ -16,24 +17,41 @@ pub type Compo = CompositeSerializerError<
     std::convert::Infallible,
 >;
 
-#[derive(Debug)]
+#[derive(Error, Debug)]
 pub enum Error {
+    #[error(transparent)]
     InstantiationError(Box<wasmer::InstantiationError>),
+    #[error(transparent)]
     CompileError(Box<wasmer::CompileError>),
+    #[error(transparent)]
     ExportError(Box<wasmer::ExportError>),
+    #[error(transparent)]
     RuntimeError(wasmer::RuntimeError),
+    #[error(transparent)]
     SerializeError(Box<wasmer::SerializeError>),
+    #[error(transparent)]
     DeserializeError(Box<wasmer::DeserializeError>),
+    #[error(transparent)]
     ParsingError(Box<wasmer::wasmparser::BinaryReaderError>),
+    #[error("WASMER TRAP")]
     Trap(Box<wasmer_vm::Trap>),
+    #[error(transparent)]
     CompositeSerializerError(Box<Compo>),
+    #[error(transparent)]
     PersistenceError(std::io::Error),
+    #[error(transparent)]
     CommitError(std::io::Error),
+    #[error(transparent)]
     RestoreError(std::io::Error),
+    #[error("Session error: {0}")]
     SessionError(Cow<'static, str>),
+    #[error(transparent)]
     MemorySetupError(std::io::Error),
+    #[error(transparent)]
     RegionError(region::Error),
+    #[error("ValidationError")]
     ValidationError,
+    #[error("OutOfPoints")]
     OutOfPoints,
 }
 
