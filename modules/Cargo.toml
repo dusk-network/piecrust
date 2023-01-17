@@ -10,7 +10,7 @@ members = [
     "fibonacci",
     "host",
     "micro",
-    "self_snapshot",
+    "crossover",
     "spender",
     "stack",
     "vector",

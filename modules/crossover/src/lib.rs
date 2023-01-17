@@ -12,8 +12,8 @@
 use piecrust_uplink as uplink;
 use uplink::{ModuleId, RawTransaction, State};
 
-/// Struct that describes the state of the self snapshot module
-pub struct SelfSnapshot {
+/// Struct that describes the state of the crossover module
+pub struct Crossover {
     crossover: i32,
 }
 
@@ -21,11 +21,10 @@ pub struct SelfSnapshot {
 #[no_mangle]
 static SELF_ID: ModuleId = ModuleId::uninitialized();
 
-/// State of the self snapshot module
-static mut STATE: State<SelfSnapshot> =
-    State::new(SelfSnapshot { crossover: 7 });
+/// State of the crossover module
+static mut STATE: State<Crossover> = State::new(Crossover { crossover: 7 });
 
-impl SelfSnapshot {
+impl Crossover {
     /// Return crossover value
     pub fn crossover(&self) -> i32 {
         self.crossover
@@ -85,25 +84,25 @@ impl SelfSnapshot {
     }
 }
 
-/// Expose `SelfSnapshot::crossover()` to the host
+/// Expose `Crossover::crossover()` to the host
 #[no_mangle]
 unsafe fn crossover(arg_len: u32) -> u32 {
     uplink::wrap_query(arg_len, |_: ()| STATE.crossover())
 }
 
-/// Expose `SelfSnapshot::set_crossover()` to the host
+/// Expose `Crossover::set_crossover()` to the host
 #[no_mangle]
 unsafe fn set_crossover(arg_len: u32) -> u32 {
     uplink::wrap_transaction(arg_len, |arg: i32| STATE.set_crossover(arg))
 }
 
-/// Expose `SelfSnapshot::self_call_test_a()` to the host
+/// Expose `Crossover::self_call_test_a()` to the host
 #[no_mangle]
 unsafe fn self_call_test_a(arg_len: u32) -> u32 {
     uplink::wrap_transaction(arg_len, |arg: i32| STATE.self_call_test_a(arg))
 }
 
-/// Expose `SelfSnapshot::self_call_test_b()` to the host
+/// Expose `Crossover::self_call_test_b()` to the host
 #[no_mangle]
 unsafe fn self_call_test_b(arg_len: u32) -> u32 {
     uplink::wrap_transaction(arg_len, |(target, transaction)| {
