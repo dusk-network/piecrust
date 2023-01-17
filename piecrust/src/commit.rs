@@ -53,14 +53,6 @@ impl ModuleCommitId {
     pub const fn to_bytes(self) -> [u8; COMMIT_ID_BYTES] {
         self.0
     }
-
-    pub fn as_bytes(&self) -> &[u8] {
-        &self.0[..]
-    }
-
-    pub fn inner(&self) -> [u8; COMMIT_ID_BYTES] {
-        self.0
-    }
 }
 
 impl Hashable for ModuleCommitId {
@@ -218,10 +210,11 @@ impl SessionCommit {
     pub fn ids(&self) -> &BTreeMap<ModuleId, ModuleCommitId> {
         &self.ids
     }
+
     pub fn calculate_id(&mut self) {
         let mut vec = Vec::from_iter(self.ids().values().cloned());
         vec.sort();
-        let root = Merkle::merkle(&mut vec).inner();
+        let root = Merkle::merkle(&mut vec).to_bytes();
         self.id = CommitId::from(root);
     }
 }

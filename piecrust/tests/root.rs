@@ -28,7 +28,7 @@ pub fn state_root_calculation() -> Result<(), Error> {
 
     let root_2 = session.root(false)?;
 
-    // not committed changes do not cause the root to change
+    // not committed changes do not cause the root change
     assert_eq!(root_1, root_2);
 
     let _commit = session.commit()?;
@@ -36,7 +36,7 @@ pub fn state_root_calculation() -> Result<(), Error> {
 
     let root_3 = session.root(false)?;
 
-    // committed changes cause the root to change
+    // committed changes cause the root change
     assert_ne!(root_2, root_3);
     Ok(())
 }
@@ -52,6 +52,7 @@ pub fn initial_state_root() -> Result<(), Error> {
     session.transact::<i16, ()>(id_2, "set", &0x11)?;
 
     let root = session.root(false)?;
+    // without commit, the root is initially set to zero
     assert_eq!(root, [0u8; 32]);
     Ok(())
 }

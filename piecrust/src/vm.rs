@@ -203,17 +203,17 @@ impl VM {
         Ok(session_commit)
     }
 
-    pub(crate) fn root(&mut self, persist: bool) -> Result<[u8; 32], Error> {
+    pub(crate) fn root(&mut self, refresh: bool) -> Result<[u8; 32], Error> {
         let current_root;
         {
             current_root = self.root;
         }
         match current_root {
-            Some(r) if !persist => Ok(r),
+            Some(r) if !refresh => Ok(r),
             _ => {
                 let session_commit = self.get_current_vm_commit()?;
                 let root = session_commit.commit_id().to_bytes();
-                if persist {
+                if refresh {
                     self.session_commits.add(session_commit);
                 }
                 self.root = Some(root);
