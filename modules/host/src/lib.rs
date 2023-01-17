@@ -4,6 +4,8 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
+//! Module to perform a simple host call.
+
 #![no_std]
 
 extern crate alloc;
@@ -12,20 +14,25 @@ use alloc::vec::Vec;
 use piecrust_uplink as uplink;
 use uplink::{ModuleId, State};
 
+/// Struct that describes the state of the host module
 pub struct Hoster;
 
+/// Module ID, initialized by the host when the module is deployed
 #[no_mangle]
 static SELF_ID: ModuleId = ModuleId::uninitialized();
 
+/// State of the host module
 static mut STATE: State<Hoster> = State::new(Hoster);
 
 impl Hoster {
-    pub fn hash(&self, bytes: Vec<u8>) -> [u8; 32] {
+    /// Call 'hash' function via the host
+    pub fn host_hash(&self, bytes: Vec<u8>) -> [u8; 32] {
         uplink::host_query("hash", bytes)
     }
 }
 
+/// Expose `Hoster::host_hash()` to the host
 #[no_mangle]
-unsafe fn hash(arg_len: u32) -> u32 {
-    uplink::wrap_query(arg_len, |num| STATE.hash(num))
+unsafe fn host_hash(arg_len: u32) -> u32 {
+    uplink::wrap_query(arg_len, |num| STATE.host_hash(num))
 }

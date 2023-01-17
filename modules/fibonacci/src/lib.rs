@@ -4,22 +4,27 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
+//! Module that calculates the nth number of the Fibonacci sequence
+
 #![feature(arbitrary_self_types)]
 #![no_std]
 
-#[derive(Default)]
+/// Struct that describes the state of the fibonacci module
 pub struct Fibonacci;
 
 use piecrust_uplink as uplink;
 use uplink::{ModuleId, State};
 
+/// Module ID, initialized by the host when the module is deployed
 #[no_mangle]
 static SELF_ID: ModuleId = ModuleId::uninitialized();
 
 #[allow(unused)]
+/// State of the fibonacci module
 static mut STATE: State<Fibonacci> = State::new(Fibonacci);
 
 impl Fibonacci {
+    /// Calculate the nth number in the fibonacci sequence
     fn nth(n: u32) -> u64 {
         match n {
             0 | 1 => 1,
@@ -28,6 +33,7 @@ impl Fibonacci {
     }
 }
 
+/// Expose `Fibonacci::nth()` to the host
 #[no_mangle]
 unsafe fn nth(arg_len: u32) -> u32 {
     uplink::wrap_query(arg_len, |n: u32| Fibonacci::nth(n))
