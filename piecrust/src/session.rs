@@ -325,8 +325,8 @@ impl<'c> Session<'c> {
         host_data.insert(name, data);
     }
 
-    pub fn root(&mut self, persist: bool) -> Result<[u8; 32], Error> {
-        self.vm.root(persist)
+    pub fn root(&mut self, refresh: bool) -> Result<[u8; 32], Error> {
+        self.vm.root(refresh)
     }
 }
 
