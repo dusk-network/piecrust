@@ -5,7 +5,7 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 use std::borrow::Cow;
-use std::collections::{BTreeMap, HashSet};
+use std::collections::BTreeMap;
 use std::fmt::{self, Debug, Formatter};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -14,25 +14,25 @@ use tempfile::tempdir;
 
 use piecrust_uplink::ModuleId;
 
-use crate::commit::{CommitId, ModuleCommitId, SessionCommit, SessionCommits};
+use crate::commit::{
+    BagSizeInfo, CommitId, CommitPath, ModuleCommit, ModuleCommitBag,
+    ModuleCommitId, ModuleCommitLike, SessionCommit, SessionCommits,
+};
 use crate::memory_path::MemoryPath;
 use crate::module::WrappedModule;
 use crate::persistable::Persistable;
 use crate::session::Session;
 use crate::types::MemoryState;
-use crate::util::{commit_id_to_name, module_id_to_name, read_modules};
-use crate::Error::{self, PersistenceError, RestoreError};
+use crate::util::{module_id_to_name, read_modules};
+use crate::Error::{self, PersistenceError, SessionError};
 
 const SESSION_COMMITS_FILENAME: &str = "commits";
-const LAST_COMMIT_POSTFIX: &str = "_last";
-const LAST_COMMIT_ID_POSTFIX: &str = "_last_id";
 pub(crate) const MODULES_DIR: &str = "modules";
 
 pub struct VM {
     host_queries: HostQueries,
     base_memory_path: PathBuf,
     session_commits: SessionCommits,
-    root: Option<[u8; 32]>,
     modules: BTreeMap<ModuleId, WrappedModule>,
 }
 
@@ -48,12 +48,10 @@ impl VM {
             base_memory_path.join(SESSION_COMMITS_FILENAME),
         )?;
         let modules = read_modules(&base_memory_path)?;
-
         Ok(Self {
             host_queries: HostQueries::default(),
             base_memory_path,
             session_commits,
-            root: None,
             modules,
         })
     }
@@ -67,7 +65,6 @@ impl VM {
                 .into(),
             host_queries: HostQueries::default(),
             session_commits: SessionCommits::new(),
-            root: None,
             modules: BTreeMap::default(),
         })
     }
@@ -93,26 +90,21 @@ impl VM {
     pub fn session(&mut self) -> Session {
         Session::new(self)
     }
-
     pub(crate) fn get_module(&self, id: ModuleId) -> &WrappedModule {
         self.modules.get(&id).expect("invalid module")
     }
-
     pub(crate) fn insert_module(
         &mut self,
         module_id: ModuleId,
         bytecode: &[u8],
     ) -> Result<(), Error> {
         let modules_dir = self.base_memory_path.join(MODULES_DIR);
-
         let module = WrappedModule::new(bytecode)?;
         self.modules.insert(module_id, module);
-
         fs::create_dir_all(&modules_dir).map_err(PersistenceError)?;
         let module_hex = hex::encode(module_id.as_bytes());
         let module_path = modules_dir.join(module_hex);
         fs::write(module_path, bytecode).map_err(PersistenceError)?;
-
         Ok(())
     }
 
@@ -133,43 +125,19 @@ impl VM {
         )
     }
 
-    pub(crate) fn path_to_module_commit(
-        &self,
+    pub(crate) fn current_module_commit_path(
+        &mut self,
         module_id: &ModuleId,
-        module_commit_id: &ModuleCommitId,
-    ) -> MemoryPath {
-        const SEPARATOR: char = '_';
-        let commit_id_name = &*commit_id_to_name(*module_commit_id);
-        let mut name = module_id_to_name(*module_id);
-        name.push(SEPARATOR);
-        name.push_str(commit_id_name);
-        let path = self.base_memory_path.join(name);
-        MemoryPath::new(path)
-    }
-
-    pub(crate) fn path_to_module_last_commit(
-        &self,
-        module_id: &ModuleId,
-    ) -> MemoryPath {
-        self.path_to_module_with_postfix(module_id, LAST_COMMIT_POSTFIX)
-    }
-
-    pub(crate) fn path_to_module_last_commit_id(
-        &self,
-        module_id: &ModuleId,
-    ) -> MemoryPath {
-        self.path_to_module_with_postfix(module_id, LAST_COMMIT_ID_POSTFIX)
-    }
-
-    fn path_to_module_with_postfix<P: AsRef<str>>(
-        &self,
-        module_id: &ModuleId,
-        postfix: P,
-    ) -> MemoryPath {
-        let mut name = module_id_to_name(*module_id);
-        name.push_str(postfix.as_ref());
-        let path = self.base_memory_path.join(name);
-        MemoryPath::new(path)
+    ) -> Option<CommitPath> {
+        let current_session_commit =
+            self.session_commits.get_current_session_commit()?;
+        let module_commit_id =
+            current_session_commit.module_commit_ids().get(module_id)?;
+        let (memory_path, _) = self.memory_path(module_id);
+        let module_commit_id = *module_commit_id;
+        self.get_bag_mut(module_id)
+            .restore_module_commit(module_commit_id, &memory_path)
+            .ok()?
     }
 
     fn path_to_session_commits(&self) -> PathBuf {
@@ -182,27 +150,44 @@ impl VM {
 
     pub(crate) fn restore_session(
         &mut self,
-        session_commit_id: &CommitId,
+        commit_id: &CommitId,
     ) -> Result<(), Error> {
-        self.reset_root();
-        self.session_commits.with_every_module_commit(
-            session_commit_id,
-            |module_id, module_commit_id| {
-                let source_path =
-                    self.path_to_module_commit(module_id, module_commit_id);
-                let (target_path, _) = self.memory_path(module_id);
-                let last_commit_path =
-                    self.path_to_module_last_commit(module_id);
-                let last_commit_path_id =
-                    self.path_to_module_last_commit_id(module_id);
-                fs::copy(source_path.as_ref(), target_path.as_ref())
-                    .map_err(RestoreError)?;
-                fs::copy(source_path.as_ref(), last_commit_path.as_ref())
-                    .map_err(RestoreError)?;
-                module_commit_id.persist(last_commit_path_id)?;
-                Ok(())
-            },
-        )
+        let base_path = self.base_path();
+        let mut pairs = Vec::<(ModuleId, ModuleCommitId)>::new();
+        {
+            let session_commit = self
+                .session_commits
+                .get_session_commit(commit_id)
+                .ok_or_else(|| {
+                    SessionError("unknown session commit id".into())
+                })?;
+            for (module_id, module_commit_id) in
+                session_commit.module_commit_ids().iter()
+            {
+                pairs.push((*module_id, *module_commit_id))
+            }
+        }
+        self.session_commits.set_current(commit_id);
+        for (module_id, module_commit_id) in pairs {
+            let (memory_path, _) =
+                Self::get_memory_path(&base_path, &module_id);
+            let restored = self
+                .session_commits
+                .get_bag_mut(&module_id)
+                .restore_module_commit(module_commit_id, &memory_path)?;
+            if let Some(commit_path) = restored {
+                let commit = ModuleCommit::from_id_and_path_direct(
+                    module_commit_id,
+                    commit_path.path(),
+                )?;
+                commit.restore(&memory_path)?;
+                if commit_path.can_remove() {
+                    fs::remove_file(commit_path.path())
+                        .map_err(PersistenceError)?;
+                }
+            }
+        }
+        Ok(())
     }
 
     pub fn persist(&self) -> Result<(), Error> {
@@ -213,50 +198,32 @@ impl VM {
         self.base_memory_path.to_path_buf()
     }
 
-    pub(crate) fn get_current_vm_commit(&self) -> Result<SessionCommit, Error> {
-        let mut module_ids: HashSet<ModuleId> = HashSet::new();
-        let mut session_commit = SessionCommit::new();
-        self.session_commits
-            .with_every_session_commit(|session_commit| {
-                for (module_id, _module_commit_id) in
-                    session_commit.ids().iter()
-                {
-                    module_ids.insert(*module_id);
-                }
-            });
-        for module_id in module_ids.iter() {
-            let path = self.path_to_module_last_commit_id(module_id);
-            if let Ok(module_commit_id) =
-                ModuleCommitId::restore::<ModuleCommitId, MemoryPath>(path)
-            {
-                session_commit.add(module_id, &module_commit_id)
-            }
-        }
-        session_commit.calculate_id();
-        Ok(session_commit)
+    pub(crate) fn root(&mut self, _refresh: bool) -> Result<[u8; 32], Error> {
+        Ok(self.session_commits.get_current_commit().to_bytes())
     }
 
-    pub(crate) fn root(&mut self, refresh: bool) -> Result<[u8; 32], Error> {
-        let current_root;
-        {
-            current_root = self.root;
-        }
-        match current_root {
-            Some(r) if !refresh => Ok(r),
-            _ => {
-                let session_commit = self.get_current_vm_commit()?;
-                let root = session_commit.commit_id().to_bytes();
-                if refresh {
-                    self.session_commits.add(session_commit);
-                }
-                self.root = Some(root);
-                Ok(root)
-            }
-        }
+    pub(crate) fn get_bag_mut(
+        &mut self,
+        module_id: &ModuleId,
+    ) -> &mut ModuleCommitBag {
+        self.session_commits.get_bag_mut(module_id)
     }
 
-    pub(crate) fn reset_root(&mut self) {
-        self.root = None;
+    pub(crate) fn get_bag(
+        &self,
+        module_id: &ModuleId,
+    ) -> Option<&ModuleCommitBag> {
+        self.session_commits.get_bag(module_id)
+    }
+
+    pub(crate) fn get_bag_size_info(
+        &self,
+        module_id: &ModuleId,
+    ) -> Result<BagSizeInfo, Error> {
+        let (memory_path, _) = self.memory_path(module_id);
+        self.get_bag(module_id)
+            .expect("module bag found")
+            .get_bag_size_info(&memory_path)
     }
 }
 

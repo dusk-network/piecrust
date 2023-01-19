@@ -22,17 +22,15 @@ use rkyv::{
     Serialize,
 };
 
-use crate::commit::{CommitId, ModuleCommitId, SessionCommit};
+use crate::commit::{BagSizeInfo, CommitId, ModuleCommitStore, SessionCommit};
 use crate::event::Event;
 use crate::instance::WrappedInstance;
 use crate::memory_handler::MemoryHandler;
-use crate::memory_path::MemoryPath;
 use crate::module::WrappedModule;
-use crate::persistable::Persistable;
 use crate::types::MemoryState;
 use crate::types::StandardBufSerializer;
 use crate::vm::VM;
-use crate::Error::{self, CommitError};
+use crate::Error;
 
 const DEFAULT_LIMIT: u64 = 65_536;
 const MAX_META_SIZE: usize = 65_536;
@@ -180,7 +178,9 @@ impl<'c> Session<'c> {
 
         if memory.state() == MemoryState::Uninitialized {
             // if current commit exists, use it as memory image
-            if let Some(commit_path) = self.path_to_current_commit(&mod_id) {
+            if let Some(commit_path) =
+                self.vm.current_module_commit_path(&mod_id)
+            {
                 let metadata = std::fs::metadata(commit_path.as_ref())
                     .expect("todo - metadata error handling");
                 memory
@@ -189,6 +189,9 @@ impl<'c> Session<'c> {
                 let (target_path, _) = self.vm.memory_path(&mod_id);
                 std::fs::copy(commit_path.as_ref(), target_path.as_ref())
                     .expect("commit and memory paths exist");
+                if commit_path.can_remove() {
+                    fs::remove_file(commit_path.as_ref()).expect("");
+                }
             }
         }
         memory.set_state(MemoryState::Initialized);
@@ -256,22 +259,16 @@ impl<'c> Session<'c> {
     pub fn commit(self) -> Result<CommitId, Error> {
         let mut session_commit = SessionCommit::new();
         self.memory_handler.with_every_module_id(|module_id, mem| {
-            let (source_path, _) = self.vm.memory_path(module_id);
-            let module_commit_id = ModuleCommitId::from_hash_of(mem)?;
-            let target_path =
-                self.vm.path_to_module_commit(module_id, &module_commit_id);
-            let last_commit_path =
-                self.vm.path_to_module_last_commit(module_id);
-            let last_commit_id_path =
-                self.vm.path_to_module_last_commit_id(module_id);
-            std::fs::copy(source_path.as_ref(), target_path.as_ref())
-                .map_err(CommitError)?;
-            std::fs::copy(source_path.as_ref(), last_commit_path.as_ref())
-                .map_err(CommitError)?;
-            module_commit_id.persist(last_commit_id_path)?;
-            self.vm.reset_root();
-            fs::remove_file(source_path.as_ref()).map_err(CommitError)?;
-            session_commit.add(module_id, &module_commit_id);
+            let module_commit_store =
+                ModuleCommitStore::new(self.vm.base_path(), *module_id);
+            let module_commit = module_commit_store.commit(mem)?;
+            let (memory_path, _) = self.vm.memory_path(module_id);
+            session_commit.add(
+                module_id,
+                &module_commit,
+                self.vm.get_bag_mut(module_id),
+                &memory_path,
+            )?;
             Ok(())
         })?;
         session_commit.calculate_id();
@@ -286,14 +283,6 @@ impl<'c> Session<'c> {
     ) -> Result<(), Error> {
         self.vm.restore_session(session_commit_id)?;
         Ok(())
-    }
-
-    fn path_to_current_commit(
-        &self,
-        module_id: &ModuleId,
-    ) -> Option<MemoryPath> {
-        let path = self.vm.path_to_module_last_commit(module_id);
-        Some(path).filter(|p| p.as_ref().exists())
     }
 
     pub(crate) fn register_debug<M: Into<String>>(&self, msg: M) {
@@ -341,6 +330,13 @@ impl<'c> Session<'c> {
 
     pub fn root(&mut self, refresh: bool) -> Result<[u8; 32], Error> {
         self.vm.root(refresh)
+    }
+
+    pub fn get_bag_size_info(
+        &self,
+        module_id: &ModuleId,
+    ) -> Result<BagSizeInfo, Error> {
+        self.vm.get_bag_size_info(module_id)
     }
 }
 

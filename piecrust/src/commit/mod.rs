@@ -4,18 +4,31 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
+mod commit_path;
+mod diff_data;
+mod module_commit;
+mod module_commit_bag;
+mod module_commit_store;
+
 use bytecheck::CheckBytes;
 use rkyv::{Archive, Deserialize, Serialize};
 
 use piecrust_uplink::ModuleId;
 
+use rand::Rng;
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::Path;
 
-use crate::error::Error::{self, PersistenceError, RestoreError, SessionError};
+use crate::error::Error::{self, PersistenceError, RestoreError};
 use crate::merkle::Merkle;
 use crate::persistable::Persistable;
+
+use crate::memory_path::MemoryPath;
+pub use commit_path::CommitPath;
+pub use module_commit::{ModuleCommit, ModuleCommitLike};
+pub use module_commit_bag::{BagSizeInfo, ModuleCommitBag};
+pub use module_commit_store::ModuleCommitStore;
 
 pub const COMMIT_ID_BYTES: usize = 32;
 
@@ -48,6 +61,10 @@ impl ModuleCommitId {
 
     pub const fn from_bytes(bytes: [u8; COMMIT_ID_BYTES]) -> Self {
         Self(bytes)
+    }
+
+    pub fn random() -> Self {
+        ModuleCommitId(rand::thread_rng().gen::<[u8; COMMIT_ID_BYTES]>())
     }
 
     pub const fn to_bytes(self) -> [u8; COMMIT_ID_BYTES] {
@@ -187,14 +204,14 @@ impl From<CommitId> for [u8; COMMIT_ID_BYTES] {
 #[derive(Debug, Archive, Serialize, Deserialize)]
 #[archive_attr(derive(CheckBytes, Debug))]
 pub struct SessionCommit {
-    ids: BTreeMap<ModuleId, ModuleCommitId>,
+    module_commit_ids: BTreeMap<ModuleId, ModuleCommitId>,
     id: CommitId,
 }
 
 impl SessionCommit {
     pub fn new() -> SessionCommit {
         SessionCommit {
-            ids: BTreeMap::new(),
+            module_commit_ids: BTreeMap::new(),
             id: CommitId::uninitialized(),
         }
     }
@@ -203,16 +220,33 @@ impl SessionCommit {
         self.id
     }
 
-    pub fn add(&mut self, module_id: &ModuleId, commit_id: &ModuleCommitId) {
-        self.ids.insert(*module_id, *commit_id);
+    pub fn add(
+        &mut self,
+        module_id: &ModuleId,
+        module_commit: &ModuleCommit,
+        bag: &mut ModuleCommitBag,
+        memory_path: &MemoryPath,
+    ) -> Result<(), Error> {
+        if !self.module_commit_ids.contains_key(module_id) {
+            self.module_commit_ids
+                .insert(*module_id, module_commit.id());
+        }
+        bag.save_module_commit(module_commit, memory_path)
     }
 
-    pub fn ids(&self) -> &BTreeMap<ModuleId, ModuleCommitId> {
-        &self.ids
+    pub fn module_commit_ids(&self) -> &BTreeMap<ModuleId, ModuleCommitId> {
+        &self.module_commit_ids
+    }
+
+    pub fn module_commit_ids_mut(
+        &mut self,
+    ) -> &mut BTreeMap<ModuleId, ModuleCommitId> {
+        &mut self.module_commit_ids
     }
 
     pub fn calculate_id(&mut self) {
-        let mut vec = Vec::from_iter(self.ids().values().cloned());
+        let mut vec =
+            Vec::from_iter(self.module_commit_ids().values().cloned());
         vec.sort();
         let root = Merkle::merkle(&mut vec).to_bytes();
         self.id = CommitId::from(root);
@@ -227,11 +261,19 @@ impl Default for SessionCommit {
 
 #[derive(Debug, Archive, Serialize, Deserialize)]
 #[archive_attr(derive(CheckBytes, Debug))]
-pub struct SessionCommits(BTreeMap<CommitId, SessionCommit>);
+pub struct SessionCommits {
+    commits: BTreeMap<CommitId, SessionCommit>,
+    current: CommitId,
+    bags: BTreeMap<ModuleId, ModuleCommitBag>,
+}
 
 impl SessionCommits {
-    pub fn new() -> SessionCommits {
-        SessionCommits(BTreeMap::new())
+    pub fn new() -> Self {
+        Self {
+            commits: BTreeMap::new(),
+            current: CommitId::uninitialized(),
+            bags: BTreeMap::new(),
+        }
     }
 
     pub fn from<P: AsRef<Path>>(path: P) -> Result<SessionCommits, Error> {
@@ -242,48 +284,63 @@ impl SessionCommits {
         }
     }
 
+    pub fn set_current(&mut self, current: &CommitId) {
+        self.current = *current;
+    }
+
     pub fn add(&mut self, session_commit: SessionCommit) {
-        self.0.insert(session_commit.commit_id(), session_commit);
+        self.current = session_commit.commit_id();
+        self.commits.insert(self.current, session_commit);
     }
 
     pub fn get_session_commit(
         &self,
         session_commit_id: &CommitId,
     ) -> Option<&SessionCommit> {
-        self.0.get(session_commit_id)
+        self.commits.get(session_commit_id)
     }
 
-    pub fn with_every_module_commit<F>(
-        &self,
+    pub fn get_session_commit_mut(
+        &mut self,
         session_commit_id: &CommitId,
-        closure: F,
-    ) -> Result<(), Error>
-    where
-        F: Fn(&ModuleId, &ModuleCommitId) -> Result<(), Error>,
-    {
-        match self.get_session_commit(session_commit_id) {
-            Some(session_commit) => {
-                for (module_id, module_commit_id) in session_commit.ids().iter()
-                {
-                    closure(module_id, module_commit_id)?;
-                }
-                Ok(())
-            }
-            None => Err(SessionError("unknown session commit id".into())),
-        }
+    ) -> Option<&mut SessionCommit> {
+        self.commits.get_mut(session_commit_id)
+    }
+
+    pub fn get_current_session_commit(&self) -> Option<&SessionCommit> {
+        self.commits.get(&self.current)
+    }
+
+    pub fn get_current_commit(&self) -> CommitId {
+        self.current
     }
 
     pub fn with_every_session_commit<F>(&self, mut closure: F)
     where
         F: FnMut(&SessionCommit),
     {
-        for (_commit_id, session_commit) in self.0.iter() {
+        for (_commit_id, session_commit) in self.commits.iter() {
             closure(session_commit);
         }
+    }
+
+    pub fn get_bag_mut(
+        &mut self,
+        module_id: &ModuleId,
+    ) -> &mut ModuleCommitBag {
+        if !self.bags.contains_key(module_id) {
+            self.bags.insert(*module_id, ModuleCommitBag::new());
+        }
+        self.bags.get_mut(module_id).unwrap()
+    }
+
+    pub fn get_bag(&self, module_id: &ModuleId) -> Option<&ModuleCommitBag> {
+        self.bags.get(module_id)
     }
 }
 
 impl Persistable for SessionCommits {}
+
 impl Default for SessionCommits {
     fn default() -> Self {
         Self::new()

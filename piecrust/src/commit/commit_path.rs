@@ -8,26 +8,34 @@ use crate::commit::ModuleCommitLike;
 use std::path::{Path, PathBuf};
 
 #[derive(Debug)]
-pub struct MemoryPath {
+pub struct CommitPath {
     path: PathBuf,
+    can_remove: bool,
 }
 
-impl MemoryPath {
-    pub fn new<P: AsRef<Path>>(path: P) -> Self
+impl CommitPath {
+    pub fn new<P: AsRef<Path>>(path: P, can_remove: bool) -> Self
     where
         P: Into<PathBuf>,
     {
-        MemoryPath { path: path.into() }
+        CommitPath {
+            path: path.into(),
+            can_remove,
+        }
+    }
+
+    pub fn can_remove(&self) -> bool {
+        self.can_remove
     }
 }
 
-impl AsRef<Path> for MemoryPath {
+impl AsRef<Path> for CommitPath {
     fn as_ref(&self) -> &Path {
         self.path.as_path()
     }
 }
 
-impl ModuleCommitLike for MemoryPath {
+impl ModuleCommitLike for CommitPath {
     fn path(&self) -> &PathBuf {
         &self.path
     }
