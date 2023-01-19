@@ -34,6 +34,7 @@ fn initialize_counter<P: AsRef<Path>>(
     );
 
     let commit_id = session.commit()?;
+    assert_eq!(commit_id.as_bytes(), vm.session().root(false)?);
     commit_id.persist(commit_id_file_path)?;
 
     vm.persist()
@@ -45,6 +46,7 @@ fn confirm_counter<P: AsRef<Path>>(
 ) -> Result<(), piecrust::Error> {
     let commit_id = CommitId::restore(commit_id_file_path)?;
     session.restore(&commit_id)?;
+    assert_eq!(commit_id.as_bytes(), session.root(false)?);
 
     let counter_bytecode = include_bytes!(
         "../../../../target/wasm32-unknown-unknown/release/counter.wasm"
