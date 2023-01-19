@@ -4,6 +4,9 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
+mod module_commit;
+mod module_commit_bag;
+
 use bytecheck::CheckBytes;
 use rkyv::{Archive, Deserialize, Serialize};
 
@@ -12,11 +15,13 @@ use piecrust_uplink::ModuleId;
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::Path;
+use rand::Rng;
 
 use crate::error::Error::{self, PersistenceError, RestoreError, SessionError};
 use crate::merkle::Merkle;
 use crate::persistable::Persistable;
 
+pub use module_commit::{ModuleCommit, ModuleCommitLike};
 pub const COMMIT_ID_BYTES: usize = 32;
 
 pub trait Hashable {
@@ -48,6 +53,12 @@ impl ModuleCommitId {
 
     pub const fn from_bytes(bytes: [u8; COMMIT_ID_BYTES]) -> Self {
         Self(bytes)
+    }
+
+    pub fn random() -> Self {
+        ModuleCommitId(
+            rand::thread_rng().gen::<[u8; COMMIT_ID_BYTES]>(),
+        )
     }
 
     pub const fn to_bytes(self) -> [u8; COMMIT_ID_BYTES] {

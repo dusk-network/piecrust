@@ -20,6 +20,7 @@ libc = { version = "^0.2", default-features = false }
 region = "3"
 tempfile = "3"
 thiserror = "1"
+rand = "0.8"
 
 [dev-dependencies]
 criterion = "0.4"

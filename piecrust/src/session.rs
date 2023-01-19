@@ -32,7 +32,7 @@ use crate::persistable::Persistable;
 use crate::types::MemoryState;
 use crate::types::StandardBufSerializer;
 use crate::vm::VM;
-use crate::Error::{self, CommitError};
+use crate::Error::{self, CommitError, PersistenceError};
 
 const DEFAULT_LIMIT: u64 = 65_536;
 const MAX_META_SIZE: usize = 65_536;
@@ -251,12 +251,12 @@ impl<'c> Session<'c> {
             let last_commit_id_path =
                 self.vm.path_to_module_last_commit_id(module_id);
             std::fs::copy(source_path.as_ref(), target_path.as_ref())
-                .map_err(CommitError)?;
+                .map_err(PersistenceError)?;
             std::fs::copy(source_path.as_ref(), last_commit_path.as_ref())
-                .map_err(CommitError)?;
+                .map_err(PersistenceError)?;
             module_commit_id.persist(last_commit_id_path)?;
             self.vm.reset_root();
-            fs::remove_file(source_path.as_ref()).map_err(CommitError)?;
+            fs::remove_file(source_path.as_ref()).map_err(PersistenceError)?;
             session_commit.add(module_id, &module_commit_id);
             Ok(())
         })?;

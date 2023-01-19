@@ -39,8 +39,8 @@ pub enum Error {
     CompositeSerializerError(Box<Compo>),
     #[error(transparent)]
     PersistenceError(std::io::Error),
-    #[error(transparent)]
-    CommitError(std::io::Error),
+    #[error("Commit error: {0}")]
+    CommitError(Cow<'static, str>),
     #[error(transparent)]
     RestoreError(std::io::Error),
     #[error("Session error: {0}")]

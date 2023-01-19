@@ -5,6 +5,7 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 use std::path::{Path, PathBuf};
+use crate::commit::ModuleCommitLike;
 
 #[derive(Debug)]
 pub struct MemoryPath {
@@ -23,5 +24,11 @@ impl MemoryPath {
 impl AsRef<Path> for MemoryPath {
     fn as_ref(&self) -> &Path {
         self.path.as_path()
+    }
+}
+
+impl ModuleCommitLike for MemoryPath {
+    fn path(&self) -> &PathBuf {
+        &self.path
     }
 }
