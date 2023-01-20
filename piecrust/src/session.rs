@@ -22,13 +22,12 @@ use rkyv::{
     Serialize,
 };
 
-use crate::commit::{CommitId, ModuleCommitId, SessionCommit, ModuleCommitObject};
+use crate::commit::{CommitId, SessionCommit, ModuleCommitObject};
 use crate::event::Event;
 use crate::instance::WrappedInstance;
 use crate::memory_handler::MemoryHandler;
 use crate::memory_path::MemoryPath;
 use crate::module::WrappedModule;
-use crate::persistable::Persistable;
 use crate::types::MemoryState;
 use crate::types::StandardBufSerializer;
 use crate::vm::VM;

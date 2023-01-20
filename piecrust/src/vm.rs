@@ -13,13 +13,13 @@ use tempfile::tempdir;
 
 use piecrust_uplink::ModuleId;
 
-use crate::commit::{CommitId, ModuleCommitId, SessionCommit, SessionCommits};
+use crate::commit::{CommitId, ModuleCommitId, ModuleCommitObject, SessionCommit, SessionCommits};
 use crate::memory_path::MemoryPath;
 use crate::persistable::Persistable;
 use crate::session::Session;
 use crate::types::MemoryState;
 use crate::util::{commit_id_to_name, module_id_to_name};
-use crate::Error::{self, PersistenceError, RestoreError};
+use crate::Error::{self, PersistenceError};
 
 const SESSION_COMMITS_FILENAME: &str = "commits";
 const LAST_COMMIT_POSTFIX: &str = "_last";
@@ -100,20 +100,6 @@ impl VM {
         )
     }
 
-    pub(crate) fn path_to_module_commit(
-        &self,
-        module_id: &ModuleId,
-        module_commit_id: &ModuleCommitId,
-    ) -> MemoryPath {
-        const SEPARATOR: char = '_';
-        let commit_id_name = &*commit_id_to_name(*module_commit_id);
-        let mut name = module_id_to_name(*module_id);
-        name.push(SEPARATOR);
-        name.push_str(commit_id_name);
-        let path = self.base_memory_path.join(name);
-        MemoryPath::new(path)
-    }
-
     pub(crate) fn path_to_module_last_commit(
         &self,
         module_id: &ModuleId,
@@ -155,19 +141,8 @@ impl VM {
         self.session_commits.with_every_module_commit(
             commit_id,
             |module_id, module_commit_id| {
-                let source_path =
-                    self.path_to_module_commit(module_id, module_commit_id);
-                let (target_path, _) = self.memory_path(module_id);
-                let last_commit_path =
-                    self.path_to_module_last_commit(module_id);
-                let last_commit_path_id =
-                    self.path_to_module_last_commit_id(module_id);
-                std::fs::copy(source_path.as_ref(), target_path.as_ref())
-                    .map_err(RestoreError)?;
-                std::fs::copy(source_path.as_ref(), last_commit_path.as_ref())
-                    .map_err(RestoreError)?;
-                module_commit_id.persist(last_commit_path_id)?;
-                Ok(())
+                let mco = ModuleCommitObject::new(self.base_path(), *module_id);
+                mco.restore(module_commit_id)
             },
         )
     }

@@ -9,7 +9,7 @@ use std::fs;
 
 use crate::commit::ModuleCommitId;
 use crate::memory_path::MemoryPath;
-use crate::Error::{self, PersistenceError};
+use crate::Error::{self, PersistenceError, RestoreError};
 use crate::util::{commit_id_to_name, module_id_to_name};
 use crate::ModuleId;
 use crate::persistable::Persistable;
@@ -43,6 +43,22 @@ impl ModuleCommitObject {
         module_commit_id.persist(last_commit_id_path)?;
         fs::remove_file(source_path.as_ref()).map_err(PersistenceError)?;
         Ok(module_commit_id)
+    }
+
+    pub fn restore(&self, module_commit_id: &ModuleCommitId) -> Result<(), Error> {
+        let source_path =
+            self.path_to_module_commit(&self.module_id, &module_commit_id);
+        let target_path = self.get_memory_path();
+        let last_commit_path =
+            self.path_to_module_last_commit(&self.module_id);
+        let last_commit_path_id =
+            self.path_to_module_last_commit_id(&self.module_id);
+        std::fs::copy(source_path.as_ref(), target_path.as_ref())
+            .map_err(RestoreError)?;
+        std::fs::copy(source_path.as_ref(), last_commit_path.as_ref())
+            .map_err(RestoreError)?;
+        module_commit_id.persist(last_commit_path_id)?;
+        Ok(())
     }
 
     fn get_memory_path(&self) -> MemoryPath {
