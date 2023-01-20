@@ -31,14 +31,12 @@ fn module_commit_id_to_name(module_commit_id: ModuleCommitId) -> String {
 }
 
 impl ModuleCommit {
-    /// Creates module snapshot with a given module snapshot id.
-    /// Memory path is only used as path pattern,
-    /// no contents are captured.
+    /// Creates module commit with a given module commit id.
     pub(crate) fn from_id(
         module_commit_id: ModuleCommitId,
-        memory_path: &MemoryPath,
+        path: &PathBuf,
     ) -> Result<Self, Error> {
-        let mut path = memory_path.as_ref().to_owned();
+        let mut path = path.to_owned();
         path.set_file_name(combine_module_commit_names(
             path.file_name()
                 .expect("filename exists")
@@ -78,7 +76,7 @@ impl ModuleCommit {
     }
 
     /// Captured the difference of memory path and the given base module
-    /// snapshot into 'this' module snapshot.
+    /// commit into 'this' module commit.
     pub(crate) fn capture_diff(
         &self,
         _base_commit: &ModuleCommit,
@@ -87,8 +85,8 @@ impl ModuleCommit {
         Ok(())
     }
 
-    /// Decompresses 'this' module snapshot as patch and patches a given module
-    /// snapshot. Result is written to a result module snapshot.
+    /// Decompresses 'this' module commit as patch and patches a given module
+    /// commit. Result is written to a result module commit.
     pub(crate) fn decompress_and_patch(
         &self,
         _commit_to_patch: &ModuleCommit,

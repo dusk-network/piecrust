@@ -6,6 +6,7 @@
 
 use crate::error::Error;
 use crate::commit::{ModuleCommit, ModuleCommitId};
+use crate::commit::module_commit::ModuleCommitLike;
 use crate::memory_path::MemoryPath;
 use crate::Error::CommitError;
 
@@ -14,7 +15,7 @@ pub struct ModuleCommitBag {
     // first module commit is always uncompressed
     ids: Vec<ModuleCommitId>,
     // we keep top uncompressed module commit
-    // to make saving module snapshots efficient
+    // to make saving module commits efficient
     top: ModuleCommitId,
 }
 
@@ -34,22 +35,22 @@ impl ModuleCommitBag {
         module_commit.capture(memory_path)?;
         self.ids.push(module_commit.id());
         if self.ids.len() == 1 {
-            // top is an uncompressed version of most recent snapshot
-            ModuleCommit::from_id(self.top, memory_path)?
+            // top is an uncompressed version of most recent commit
+            ModuleCommit::from_id(self.top, memory_path.path())?
                 .capture(memory_path)?;
             Ok(0)
         } else {
             let from_id = |module_commit_id| {
-                ModuleCommit::from_id(module_commit_id, memory_path)
+                ModuleCommit::from_id(module_commit_id, memory_path.path())
             };
             let top_commit = from_id(self.top)?;
             let accu_commit = from_id(ModuleCommitId::random())?;
             accu_commit.capture(module_commit)?;
-            // accu and snapshot are both uncompressed
-            // compressing snapshot against the top
+            // accu commit and module commit are both uncompressed
+            // compressing module_commit against the top
             module_commit.capture_diff(&top_commit, memory_path)?;
-            // snapshot is compressed but accu keeps the uncompressed copy
-            // top is an uncompressed version of most recent snapshot
+            // module commit is compressed but accu keeps the uncompressed copy
+            // top commit is an uncompressed version of most recent commit
             top_commit.capture(&accu_commit)?;
             Ok(self.ids.len() - 1)
         }
@@ -66,7 +67,7 @@ impl ModuleCommitBag {
         }
         let is_top = |index| (index + 1) == self.ids.len();
         let from_id = |module_commit_id| {
-            ModuleCommit::from_id(module_commit_id, memory_path)
+            ModuleCommit::from_id(module_commit_id, memory_path.path())
         };
         let final_commit = if module_commit_index == 0 {
             from_id(self.ids[0])?
