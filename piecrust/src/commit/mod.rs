@@ -23,6 +23,7 @@ use crate::merkle::Merkle;
 use crate::persistable::Persistable;
 
 pub use module_commit::{ModuleCommit, ModuleCommitLike};
+pub use module_commit_object::ModuleCommitObject;
 pub const COMMIT_ID_BYTES: usize = 32;
 
 pub trait Hashable {

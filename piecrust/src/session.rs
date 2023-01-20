@@ -22,7 +22,7 @@ use rkyv::{
     Serialize,
 };
 
-use crate::commit::{CommitId, ModuleCommitId, SessionCommit};
+use crate::commit::{CommitId, ModuleCommitId, SessionCommit, ModuleCommitObject};
 use crate::event::Event;
 use crate::instance::WrappedInstance;
 use crate::memory_handler::MemoryHandler;
@@ -242,21 +242,9 @@ impl<'c> Session<'c> {
     pub fn commit(self) -> Result<CommitId, Error> {
         let mut session_commit = SessionCommit::new();
         self.memory_handler.with_every_module_id(|module_id, mem| {
-            let (source_path, _) = self.vm.memory_path(module_id);
-            let module_commit_id = ModuleCommitId::from_hash_of(mem)?;
-            let target_path =
-                self.vm.path_to_module_commit(module_id, &module_commit_id);
-            let last_commit_path =
-                self.vm.path_to_module_last_commit(module_id);
-            let last_commit_id_path =
-                self.vm.path_to_module_last_commit_id(module_id);
-            std::fs::copy(source_path.as_ref(), target_path.as_ref())
-                .map_err(PersistenceError)?;
-            std::fs::copy(source_path.as_ref(), last_commit_path.as_ref())
-                .map_err(PersistenceError)?;
-            module_commit_id.persist(last_commit_id_path)?;
+            let mco = ModuleCommitObject::new(self.vm.base_path(), *module_id);
+            let module_commit_id = mco.commit(mem)?;
             self.vm.reset_root();
-            fs::remove_file(source_path.as_ref()).map_err(PersistenceError)?;
             session_commit.add(module_id, &module_commit_id);
             Ok(())
         })?;
