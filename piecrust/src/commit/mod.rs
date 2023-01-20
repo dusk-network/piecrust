@@ -5,7 +5,7 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 mod module_commit;
-mod module_commit_object;
+mod module_commit_store;
 mod module_commit_bag;
 
 use bytecheck::CheckBytes;
@@ -23,7 +23,7 @@ use crate::merkle::Merkle;
 use crate::persistable::Persistable;
 
 pub use module_commit::{ModuleCommit, ModuleCommitLike};
-pub use module_commit_object::ModuleCommitObject;
+pub use module_commit_store::ModuleCommitStore;
 pub const COMMIT_ID_BYTES: usize = 32;
 
 pub trait Hashable {

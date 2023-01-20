@@ -17,12 +17,12 @@ use crate::persistable::Persistable;
 const LAST_COMMIT_POSTFIX: &str = "_last";
 const LAST_COMMIT_ID_POSTFIX: &str = "_last_id";
 
-pub struct ModuleCommitObject {
+pub struct ModuleCommitStore {
     base_path: PathBuf,
     module_id: ModuleId,
 }
 
-impl ModuleCommitObject {
+impl ModuleCommitStore {
     pub fn new(base_path: PathBuf, module_id: ModuleId) -> Self {
         Self{ base_path, module_id }
     }
@@ -31,11 +31,11 @@ impl ModuleCommitObject {
         let source_path = self.get_memory_path();
         let module_commit_id = ModuleCommitId::from_hash_of(mem)?;
         let target_path =
-            self.path_to_module_commit(&self.module_id, &module_commit_id);
+            self.path_to_module_commit(&module_commit_id);
         let last_commit_path =
-            self.path_to_module_last_commit(&self.module_id);
+            self.path_to_module_last_commit();
         let last_commit_id_path =
-            self.path_to_module_last_commit_id(&self.module_id);
+            self.path_to_module_last_commit_id();
         std::fs::copy(source_path.as_ref(), target_path.as_ref())
             .map_err(PersistenceError)?;
         std::fs::copy(source_path.as_ref(), last_commit_path.as_ref())
@@ -45,14 +45,14 @@ impl ModuleCommitObject {
         Ok(module_commit_id)
     }
 
-    pub fn restore(&self, module_commit_id: &ModuleCommitId) -> Result<(), Error> {
+    pub fn reload(&self, module_commit_id: &ModuleCommitId) -> Result<(), Error> {
         let source_path =
-            self.path_to_module_commit(&self.module_id, &module_commit_id);
+            self.path_to_module_commit(&module_commit_id);
         let target_path = self.get_memory_path();
         let last_commit_path =
-            self.path_to_module_last_commit(&self.module_id);
+            self.path_to_module_last_commit();
         let last_commit_path_id =
-            self.path_to_module_last_commit_id(&self.module_id);
+            self.path_to_module_last_commit_id();
         std::fs::copy(source_path.as_ref(), target_path.as_ref())
             .map_err(RestoreError)?;
         std::fs::copy(source_path.as_ref(), last_commit_path.as_ref())
@@ -67,12 +67,11 @@ impl ModuleCommitObject {
 
     fn path_to_module_commit(
         &self,
-        module_id: &ModuleId,
         module_commit_id: &ModuleCommitId,
     ) -> MemoryPath {
         const SEPARATOR: char = '_';
         let commit_id_name = &*commit_id_to_name(*module_commit_id);
-        let mut name = module_id_to_name(*module_id);
+        let mut name = module_id_to_name(self.module_id);
         name.push(SEPARATOR);
         name.push_str(commit_id_name);
         let path = self.base_path.join(name);
@@ -81,16 +80,14 @@ impl ModuleCommitObject {
 
     fn path_to_module_last_commit(
         &self,
-        module_id: &ModuleId,
     ) -> MemoryPath {
-        self.path_to_module_with_postfix(module_id, LAST_COMMIT_POSTFIX)
+        self.path_to_module_with_postfix(&self.module_id, LAST_COMMIT_POSTFIX)
     }
 
     pub(crate) fn path_to_module_last_commit_id(
         &self,
-        module_id: &ModuleId,
     ) -> MemoryPath {
-        self.path_to_module_with_postfix(module_id, LAST_COMMIT_ID_POSTFIX)
+        self.path_to_module_with_postfix(&self.module_id, LAST_COMMIT_ID_POSTFIX)
     }
 
     fn path_to_module_with_postfix<P: AsRef<str>>(

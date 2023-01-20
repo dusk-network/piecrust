@@ -13,7 +13,7 @@ use tempfile::tempdir;
 
 use piecrust_uplink::ModuleId;
 
-use crate::commit::{CommitId, ModuleCommitId, ModuleCommitObject, SessionCommit, SessionCommits};
+use crate::commit::{CommitId, ModuleCommitId, ModuleCommitStore, SessionCommit, SessionCommits};
 use crate::memory_path::MemoryPath;
 use crate::persistable::Persistable;
 use crate::session::Session;
@@ -141,8 +141,8 @@ impl VM {
         self.session_commits.with_every_module_commit(
             commit_id,
             |module_id, module_commit_id| {
-                let mco = ModuleCommitObject::new(self.base_path(), *module_id);
-                mco.restore(module_commit_id)
+                let module_commit_store = ModuleCommitStore::new(self.base_path(), *module_id);
+                module_commit_store.reload(module_commit_id)
             },
         )
     }
