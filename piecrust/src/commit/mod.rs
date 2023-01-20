@@ -5,6 +5,7 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 mod module_commit;
+mod module_commit_object;
 mod module_commit_bag;
 
 use bytecheck::CheckBytes;
@@ -266,13 +267,13 @@ impl SessionCommits {
 
     pub fn with_every_module_commit<F>(
         &self,
-        session_commit_id: &CommitId,
+        commit_id: &CommitId,
         closure: F,
     ) -> Result<(), Error>
     where
         F: Fn(&ModuleId, &ModuleCommitId) -> Result<(), Error>,
     {
-        match self.get_session_commit(session_commit_id) {
+        match self.get_session_commit(commit_id) {
             Some(session_commit) => {
                 for (module_id, module_commit_id) in session_commit.ids().iter()
                 {

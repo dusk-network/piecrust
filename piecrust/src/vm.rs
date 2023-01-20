@@ -149,11 +149,11 @@ impl VM {
 
     pub(crate) fn restore_session(
         &mut self,
-        session_commit_id: &CommitId,
+        commit_id: &CommitId,
     ) -> Result<(), Error> {
         self.reset_root();
         self.session_commits.with_every_module_commit(
-            session_commit_id,
+            commit_id,
             |module_id, module_commit_id| {
                 let source_path =
                     self.path_to_module_commit(module_id, module_commit_id);
