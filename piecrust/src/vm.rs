@@ -18,7 +18,7 @@ use crate::memory_path::MemoryPath;
 use crate::persistable::Persistable;
 use crate::session::Session;
 use crate::types::MemoryState;
-use crate::util::{commit_id_to_name, module_id_to_name};
+use crate::util::module_id_to_name;
 use crate::Error::{self, PersistenceError};
 
 const SESSION_COMMITS_FILENAME: &str = "commits";
@@ -142,7 +142,7 @@ impl VM {
             commit_id,
             |module_id, module_commit_id| {
                 let module_commit_store = ModuleCommitStore::new(self.base_path(), *module_id);
-                module_commit_store.reload(module_commit_id)
+                module_commit_store.restore(module_commit_id)
             },
         )
     }

@@ -21,6 +21,8 @@ region = "3"
 tempfile = "3"
 thiserror = "1"
 rand = "0.8"
+qbsdiff = "1.4"
+zstd = "0.9"
 
 [dev-dependencies]
 criterion = "0.4"

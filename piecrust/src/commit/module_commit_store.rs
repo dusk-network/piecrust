@@ -45,7 +45,7 @@ impl ModuleCommitStore {
         Ok(module_commit_id)
     }
 
-    pub fn reload(&self, module_commit_id: &ModuleCommitId) -> Result<(), Error> {
+    pub fn restore(&self, module_commit_id: &ModuleCommitId) -> Result<(), Error> {
         let source_path =
             self.path_to_module_commit(&module_commit_id);
         let target_path = self.get_memory_path();

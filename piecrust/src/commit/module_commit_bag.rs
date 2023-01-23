@@ -36,12 +36,12 @@ impl ModuleCommitBag {
         self.ids.push(module_commit.id());
         if self.ids.len() == 1 {
             // top is an uncompressed version of most recent commit
-            ModuleCommit::from_id(self.top, memory_path.path())?
+            ModuleCommit::from_id_and_path(self.top, memory_path.path())?
                 .capture(memory_path)?;
             Ok(0)
         } else {
             let from_id = |module_commit_id| {
-                ModuleCommit::from_id(module_commit_id, memory_path.path())
+                ModuleCommit::from_id_and_path(module_commit_id, memory_path.path())
             };
             let top_commit = from_id(self.top)?;
             let accu_commit = from_id(ModuleCommitId::random())?;
@@ -67,7 +67,7 @@ impl ModuleCommitBag {
         }
         let is_top = |index| (index + 1) == self.ids.len();
         let from_id = |module_commit_id| {
-            ModuleCommit::from_id(module_commit_id, memory_path.path())
+            ModuleCommit::from_id_and_path(module_commit_id, memory_path.path())
         };
         let final_commit = if module_commit_index == 0 {
             from_id(self.ids[0])?

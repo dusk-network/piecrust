@@ -7,6 +7,7 @@
 mod module_commit;
 mod module_commit_store;
 mod module_commit_bag;
+mod diff_data;
 
 use bytecheck::CheckBytes;
 use rkyv::{Archive, Deserialize, Serialize};

@@ -9,7 +9,6 @@ use call_stack::{CallStack, StackElementView};
 
 use std::borrow::Cow;
 use std::collections::BTreeMap;
-use std::fs;
 use std::sync::Arc;
 
 use bytecheck::CheckBytes;
@@ -31,7 +30,7 @@ use crate::module::WrappedModule;
 use crate::types::MemoryState;
 use crate::types::StandardBufSerializer;
 use crate::vm::VM;
-use crate::Error::{self, CommitError, PersistenceError};
+use crate::Error;
 
 const DEFAULT_LIMIT: u64 = 65_536;
 const MAX_META_SIZE: usize = 65_536;
