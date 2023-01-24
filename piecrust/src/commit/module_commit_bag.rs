@@ -24,7 +24,7 @@ pub struct ModuleCommitBag {
 }
 
 impl ModuleCommitBag {
-    pub fn new(module_commit_id: &ModuleCommitId) -> Self {
+    pub fn new() -> Self {
         Self {
             ids: Vec::new(),
             top: ModuleCommitId::random(),
