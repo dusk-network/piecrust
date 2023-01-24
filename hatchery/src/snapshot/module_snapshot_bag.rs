@@ -59,14 +59,10 @@ impl ModuleSnapshotBag {
         source_module_snapshot_id: ModuleSnapshotId,
         memory_path: &MemoryPath,
     ) -> Result<(), Error> {
-        // let is_valid = |index| index < self.ids.len();
-        // if !is_valid(module_snapshot_index) {
-        //     return Err(SnapshotError("invalid snapshot index".into()));
-        // }
-        // let is_top = |index| (index + 1) == self.ids.len();
         let from_id = |module_snapshot_id| {
             ModuleSnapshot::from_id(module_snapshot_id, memory_path)
         };
+        let mut found = true;
         let final_snapshot = if source_module_snapshot_id == self.ids[0] {
             from_id(self.ids[0])?
         } else if source_module_snapshot_id == self.top {
@@ -74,17 +70,21 @@ impl ModuleSnapshotBag {
         } else {
             let accu_snapshot = from_id(ModuleSnapshotId::random())?;
             accu_snapshot.capture(&from_id(self.ids[0])?)?;
-            for i in 1..self.ids.len() {
-                let snapshot_id = self.ids[i];
-                let snapshot = from_id(snapshot_id)?;
+            for snapshot_id in self.ids.as_slice()[1..].iter() {
+                let snapshot = from_id(*snapshot_id)?;
                 snapshot
                     .decompress_and_patch(&accu_snapshot, &accu_snapshot)?;
-                if source_module_snapshot_id == snapshot_id {
+                found = source_module_snapshot_id == *snapshot_id;
+                if found {
                     break;
                 }
             }
             accu_snapshot
         };
-        final_snapshot.restore(memory_path)
+        if found {
+            final_snapshot.restore(memory_path)
+        } else {
+            Err(SnapshotError("Snapshot id not found".into()))
+        }
     }
 }
