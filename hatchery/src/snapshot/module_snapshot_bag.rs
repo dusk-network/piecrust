@@ -29,14 +29,14 @@ impl ModuleSnapshotBag {
         &mut self,
         module_snapshot: &ModuleSnapshot,
         memory_path: &MemoryPath,
-    ) -> Result<usize, Error> {
+    ) -> Result<(), Error> {
         module_snapshot.capture(memory_path)?;
         self.ids.push(module_snapshot.id());
         if self.ids.len() == 1 {
             // top is an uncompressed version of most recent snapshot
             ModuleSnapshot::from_id(self.top, memory_path)?
                 .capture(memory_path)?;
-            Ok(0)
+            Ok(())
         } else {
             let from_id = |module_snapshot_id| {
                 ModuleSnapshot::from_id(module_snapshot_id, memory_path)
@@ -50,34 +50,38 @@ impl ModuleSnapshotBag {
             // snapshot is compressed but accu keeps the uncompressed copy
             // top is an uncompressed version of most recent snapshot
             top_snapshot.capture(&accu_snapshot)?;
-            Ok(self.ids.len() - 1)
+            Ok(())
         }
     }
 
     pub(crate) fn restore_module_snapshot(
         &self,
-        module_snapshot_index: usize,
+        source_module_snapshot_id: ModuleSnapshotId,
         memory_path: &MemoryPath,
     ) -> Result<(), Error> {
-        let is_valid = |index| index < self.ids.len();
-        if !is_valid(module_snapshot_index) {
-            return Err(SnapshotError("invalid snapshot index".into()));
-        }
-        let is_top = |index| (index + 1) == self.ids.len();
+        // let is_valid = |index| index < self.ids.len();
+        // if !is_valid(module_snapshot_index) {
+        //     return Err(SnapshotError("invalid snapshot index".into()));
+        // }
+        // let is_top = |index| (index + 1) == self.ids.len();
         let from_id = |module_snapshot_id| {
             ModuleSnapshot::from_id(module_snapshot_id, memory_path)
         };
-        let final_snapshot = if module_snapshot_index == 0 {
+        let final_snapshot = if source_module_snapshot_id == self.ids[0] {
             from_id(self.ids[0])?
-        } else if is_top(module_snapshot_index) {
+        } else if source_module_snapshot_id == self.top {
             from_id(self.top)?
         } else {
             let accu_snapshot = from_id(ModuleSnapshotId::random())?;
             accu_snapshot.capture(&from_id(self.ids[0])?)?;
-            for i in 1..(module_snapshot_index + 1) {
-                let snapshot = from_id(self.ids[i])?;
+            for i in 1..self.ids.len() {
+                let snapshot_id = self.ids[i];
+                let snapshot = from_id(snapshot_id)?;
                 snapshot
                     .decompress_and_patch(&accu_snapshot, &accu_snapshot)?;
+                if source_module_snapshot_id == snapshot_id {
+                    break;
+                }
             }
             accu_snapshot
         };
