@@ -34,25 +34,22 @@ impl ModuleCommitBag {
     pub(crate) fn save_module_commit(
         &mut self,
         module_commit: &ModuleCommit,
-        memory_path: &MemoryPath,
     ) -> Result<(), Error> {
-        module_commit.capture(memory_path)?;
         self.ids.push(module_commit.id());
         if self.ids.len() == 1 {
             // top is an uncompressed version of most recent commit
-            ModuleCommit::from_id_and_path(self.top, memory_path.path())?
-                .capture(memory_path)?;
+            self.top = module_commit.id();
             Ok(())
         } else {
             let from_id = |module_commit_id| {
-                ModuleCommit::from_id_and_path(module_commit_id, memory_path.path())
+                ModuleCommit::from_id_and_path(module_commit_id, module_commit.path())
             };
             let top_commit = from_id(self.top)?;
             let accu_commit = from_id(ModuleCommitId::random())?;
             accu_commit.capture(module_commit)?;
             // accu commit and module commit are both uncompressed
             // compressing module_commit against the top
-            module_commit.capture_diff(&top_commit, memory_path)?;
+            module_commit.capture_diff(&top_commit, &MemoryPath::new(module_commit.path()))?;
             // module commit is compressed but accu keeps the uncompressed copy
             // top commit is an uncompressed version of most recent commit
             top_commit.capture(&accu_commit)?;

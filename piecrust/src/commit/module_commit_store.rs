@@ -7,15 +7,15 @@
 use std::path::PathBuf;
 use std::fs;
 
-use crate::commit::ModuleCommitId;
+use crate::commit::{ModuleCommit, ModuleCommitId, ModuleCommitLike};
 use crate::memory_path::MemoryPath;
 use crate::Error::{self, PersistenceError, RestoreError};
 use crate::util::{commit_id_to_name, module_id_to_name};
 use crate::ModuleId;
 use crate::persistable::Persistable;
 
-const LAST_COMMIT_POSTFIX: &str = "_last";
-const LAST_COMMIT_ID_POSTFIX: &str = "_last_id";
+// const LAST_COMMIT_POSTFIX: &str = "_last";
+// const LAST_COMMIT_ID_POSTFIX: &str = "_last_id";
 
 pub struct ModuleCommitStore {
     base_path: PathBuf,
@@ -27,37 +27,39 @@ impl ModuleCommitStore {
         Self{ base_path, module_id }
     }
 
-    pub fn commit(&self, mem: &[u8]) -> Result<ModuleCommitId, Error> {
+    pub fn commit(&self, mem: &[u8]) -> Result<ModuleCommit, Error> {
         let source_path = self.get_memory_path();
         let module_commit_id = ModuleCommitId::from_hash_of(mem)?;
         let target_path =
             self.path_to_module_commit(&module_commit_id);
-        let last_commit_path =
-            self.path_to_module_last_commit();
-        let last_commit_id_path =
-            self.path_to_module_last_commit_id();
+        // let last_commit_path =
+        //     self.path_to_module_last_commit();
+        // let last_commit_id_path =
+        //     self.path_to_module_last_commit_id();
         std::fs::copy(source_path.as_ref(), target_path.as_ref())
             .map_err(PersistenceError)?;
-        std::fs::copy(source_path.as_ref(), last_commit_path.as_ref())
-            .map_err(PersistenceError)?;
-        module_commit_id.persist(last_commit_id_path)?;
+        // std::fs::copy(source_path.as_ref(), last_commit_path.as_ref())
+        //     .map_err(PersistenceError)?;
+        // module_commit_id.persist(last_commit_id_path)?;
         fs::remove_file(source_path.as_ref()).map_err(PersistenceError)?;
-        Ok(module_commit_id)
+        let module_commit = ModuleCommit::from_id_and_path(module_commit_id, target_path.path())?;
+        Ok(module_commit)
     }
 
+    // todo remove this method
     pub fn restore(&self, module_commit_id: &ModuleCommitId) -> Result<(), Error> {
         let source_path =
             self.path_to_module_commit(&module_commit_id);
         let target_path = self.get_memory_path();
-        let last_commit_path =
-            self.path_to_module_last_commit();
-        let last_commit_path_id =
-            self.path_to_module_last_commit_id();
+        // let last_commit_path =
+        //     self.path_to_module_last_commit();
+        // let last_commit_path_id =
+        //     self.path_to_module_last_commit_id();
         std::fs::copy(source_path.as_ref(), target_path.as_ref())
             .map_err(RestoreError)?;
-        std::fs::copy(source_path.as_ref(), last_commit_path.as_ref())
-            .map_err(RestoreError)?;
-        module_commit_id.persist(last_commit_path_id)?;
+        // std::fs::copy(source_path.as_ref(), last_commit_path.as_ref())
+        //     .map_err(RestoreError)?;
+        // module_commit_id.persist(last_commit_path_id)?;
         Ok(())
     }
 
@@ -78,26 +80,26 @@ impl ModuleCommitStore {
         MemoryPath::new(path)
     }
 
-    fn path_to_module_last_commit(
-        &self,
-    ) -> MemoryPath {
-        self.path_to_module_with_postfix(&self.module_id, LAST_COMMIT_POSTFIX)
-    }
+    // fn path_to_module_last_commit(
+    //     &self,
+    // ) -> MemoryPath {
+    //     self.path_to_module_with_postfix(&self.module_id, LAST_COMMIT_POSTFIX)
+    // }
 
-    pub(crate) fn path_to_module_last_commit_id(
-        &self,
-    ) -> MemoryPath {
-        self.path_to_module_with_postfix(&self.module_id, LAST_COMMIT_ID_POSTFIX)
-    }
+    // pub(crate) fn path_to_module_last_commit_id(
+    //     &self,
+    // ) -> MemoryPath {
+    //     self.path_to_module_with_postfix(&self.module_id, LAST_COMMIT_ID_POSTFIX)
+    // }
 
-    fn path_to_module_with_postfix<P: AsRef<str>>(
-        &self,
-        module_id: &ModuleId,
-        postfix: P,
-    ) -> MemoryPath {
-        let mut name = module_id_to_name(*module_id);
-        name.push_str(postfix.as_ref());
-        let path = self.base_path.join(name);
-        MemoryPath::new(path)
-    }
+    // fn path_to_module_with_postfix<P: AsRef<str>>(
+    //     &self,
+    //     module_id: &ModuleId,
+    //     postfix: P,
+    // ) -> MemoryPath {
+    //     let mut name = module_id_to_name(*module_id);
+    //     name.push_str(postfix.as_ref());
+    //     let path = self.base_path.join(name);
+    //     MemoryPath::new(path)
+    // }
 }

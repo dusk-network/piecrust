@@ -140,9 +140,12 @@ impl VM {
         self.reset_root();
         self.session_commits.with_every_module_commit(
             commit_id,
-            |module_id, module_commit_id| {
+            |module_id, module_commit_data| {
                 let module_commit_store = ModuleCommitStore::new(self.base_path(), *module_id);
-                module_commit_store.restore(module_commit_id)
+                // module_commit_store.restore(&module_commit_data.id());
+                let (memory_path, _) = self.memory_path(&module_id);
+                module_commit_data.bag.restore_module_commit(*module_commit_data.id(), &memory_path);
+                Ok(())
             },
         )
     }
@@ -161,7 +164,7 @@ impl VM {
         self.session_commits
             .with_every_session_commit(|session_commit| {
                 for (module_id, _module_commit_id) in
-                    session_commit.ids().iter()
+                    session_commit.data().iter()
                 {
                     module_ids.insert(*module_id);
                 }

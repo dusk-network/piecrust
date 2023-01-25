@@ -25,6 +25,8 @@ use crate::persistable::Persistable;
 
 pub use module_commit::{ModuleCommit, ModuleCommitLike};
 pub use module_commit_store::ModuleCommitStore;
+use crate::commit::module_commit_bag::ModuleCommitBag;
+
 pub const COMMIT_ID_BYTES: usize = 32;
 
 pub trait Hashable {
@@ -200,15 +202,34 @@ impl From<CommitId> for [u8; COMMIT_ID_BYTES] {
 
 #[derive(Debug, Archive, Serialize, Deserialize)]
 #[archive_attr(derive(CheckBytes, Debug))]
+pub struct ModuleCommitData {
+    current_id: ModuleCommitId,
+    pub bag: ModuleCommitBag,  // todo remove pub
+}
+
+impl ModuleCommitData {
+    pub fn new() -> Self {
+        Self {
+            current_id: ModuleCommitId::uninitialized(),
+            bag: ModuleCommitBag::new()
+        }
+    }
+    pub fn id(&self) -> &ModuleCommitId {
+        &self.current_id
+    }
+}
+
+#[derive(Debug, Archive, Serialize, Deserialize)]
+#[archive_attr(derive(CheckBytes, Debug))]
 pub struct SessionCommit {
-    ids: BTreeMap<ModuleId, ModuleCommitId>,
+    data: BTreeMap<ModuleId, ModuleCommitData>,
     id: CommitId,
 }
 
 impl SessionCommit {
     pub fn new() -> SessionCommit {
         SessionCommit {
-            ids: BTreeMap::new(),
+            data: BTreeMap::new(),
             id: CommitId::uninitialized(),
         }
     }
@@ -217,16 +238,21 @@ impl SessionCommit {
         self.id
     }
 
-    pub fn add(&mut self, module_id: &ModuleId, commit_id: &ModuleCommitId) {
-        self.ids.insert(*module_id, *commit_id);
+    pub fn add(&mut self, module_id: &ModuleId, module_commit: &ModuleCommit) {
+        if !self.data.contains_key(module_id) {
+            self.data.insert(*module_id, ModuleCommitData::new());
+        }
+        let data = self.data.get_mut(module_id).unwrap();
+        data.current_id = module_commit.id();
+        data.bag.save_module_commit(module_commit);
     }
 
-    pub fn ids(&self) -> &BTreeMap<ModuleId, ModuleCommitId> {
-        &self.ids
+    pub fn data(&self) -> &BTreeMap<ModuleId, ModuleCommitData> {
+        &self.data
     }
 
     pub fn calculate_id(&mut self) {
-        let mut vec = Vec::from_iter(self.ids().values().cloned());
+        let mut vec = Vec::from_iter(self.data().values().map(|d| d.id()).cloned());
         vec.sort();
         let root = Merkle::merkle(&mut vec).to_bytes();
         self.id = CommitId::from(root);
@@ -273,13 +299,13 @@ impl SessionCommits {
         closure: F,
     ) -> Result<(), Error>
     where
-        F: Fn(&ModuleId, &ModuleCommitId) -> Result<(), Error>,
+        F: Fn(&ModuleId, &mut ModuleCommitData) -> Result<(), Error>,
     {
         match self.get_session_commit(commit_id) {
             Some(session_commit) => {
-                for (module_id, module_commit_id) in session_commit.ids().iter()
+                for (module_id, module_commit_data) in session_commit.data().iter_mut()
                 {
-                    closure(module_id, module_commit_id)?;
+                    closure(module_id, module_commit_data)?;
                 }
                 Ok(())
             }

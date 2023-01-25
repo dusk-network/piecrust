@@ -241,9 +241,9 @@ impl<'c> Session<'c> {
         let mut session_commit = SessionCommit::new();
         self.memory_handler.with_every_module_id(|module_id, mem| {
             let module_commit_store = ModuleCommitStore::new(self.vm.base_path(), *module_id);
-            let module_commit_id = module_commit_store.commit(mem)?;
+            let module_commit = module_commit_store.commit(mem)?;
             self.vm.reset_root();
-            session_commit.add(module_id, &module_commit_id);
+            session_commit.add(module_id, &module_commit);
             Ok(())
         })?;
         session_commit.calculate_id();
