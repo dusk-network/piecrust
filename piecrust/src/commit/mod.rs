@@ -251,6 +251,10 @@ impl SessionCommit {
         &self.data
     }
 
+    pub fn data_mut(&mut self) -> &mut BTreeMap<ModuleId, ModuleCommitData> {
+        &mut self.data
+    }
+
     pub fn calculate_id(&mut self) {
         let mut vec = Vec::from_iter(self.data().values().map(|d| d.id()).cloned());
         vec.sort();
@@ -293,17 +297,24 @@ impl SessionCommits {
         self.0.get(session_commit_id)
     }
 
+    pub fn get_session_commit_mut(
+        &mut self,
+        session_commit_id: &CommitId,
+    ) -> Option<&mut SessionCommit> {
+        self.0.get_mut(session_commit_id)
+    }
+
     pub fn with_every_module_commit<F>(
-        &self,
+        &mut self,
         commit_id: &CommitId,
         closure: F,
     ) -> Result<(), Error>
     where
         F: Fn(&ModuleId, &mut ModuleCommitData) -> Result<(), Error>,
     {
-        match self.get_session_commit(commit_id) {
+        match self.get_session_commit_mut(commit_id) {
             Some(session_commit) => {
-                for (module_id, module_commit_data) in session_commit.data().iter_mut()
+                for (module_id, module_commit_data) in session_commit.data_mut().iter_mut()
                 {
                     closure(module_id, module_commit_data)?;
                 }

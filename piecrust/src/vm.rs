@@ -138,12 +138,13 @@ impl VM {
         commit_id: &CommitId,
     ) -> Result<(), Error> {
         self.reset_root();
+        let base_path = self.base_path();
         self.session_commits.with_every_module_commit(
             commit_id,
             |module_id, module_commit_data| {
-                let module_commit_store = ModuleCommitStore::new(self.base_path(), *module_id);
+                // let module_commit_store = ModuleCommitStore::new(base_path.clone(), *module_id);
                 // module_commit_store.restore(&module_commit_data.id());
-                let (memory_path, _) = self.memory_path(&module_id);
+                let (memory_path, _) = Self::get_memory_path(&base_path, &module_id);
                 module_commit_data.bag.restore_module_commit(*module_commit_data.id(), &memory_path);
                 Ok(())
             },
@@ -174,7 +175,9 @@ impl VM {
             if let Ok(module_commit_id) =
                 ModuleCommitId::restore::<ModuleCommitId, MemoryPath>(path)
             {
-                session_commit.add(module_id, &module_commit_id)
+                let module_commit_store = ModuleCommitStore::new(self.base_path(), *module_id);
+                let module_commit = module_commit_store.restore(&module_commit_id)?;
+                session_commit.add(module_id, &module_commit)
             }
         }
         session_commit.calculate_id();

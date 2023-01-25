@@ -46,21 +46,11 @@ impl ModuleCommitStore {
         Ok(module_commit)
     }
 
-    // todo remove this method
-    pub fn restore(&self, module_commit_id: &ModuleCommitId) -> Result<(), Error> {
+    pub fn restore(&self, module_commit_id: &ModuleCommitId) -> Result<ModuleCommit, Error> {
         let source_path =
             self.path_to_module_commit(&module_commit_id);
-        let target_path = self.get_memory_path();
-        // let last_commit_path =
-        //     self.path_to_module_last_commit();
-        // let last_commit_path_id =
-        //     self.path_to_module_last_commit_id();
-        std::fs::copy(source_path.as_ref(), target_path.as_ref())
-            .map_err(RestoreError)?;
-        // std::fs::copy(source_path.as_ref(), last_commit_path.as_ref())
-        //     .map_err(RestoreError)?;
-        // module_commit_id.persist(last_commit_path_id)?;
-        Ok(())
+        let module_commit = ModuleCommit::from_id_and_path(*module_commit_id, source_path.path())?;
+        Ok(module_commit)
     }
 
     fn get_memory_path(&self) -> MemoryPath {
