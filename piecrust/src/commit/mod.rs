@@ -25,7 +25,7 @@ use crate::persistable::Persistable;
 
 pub use module_commit::{ModuleCommit, ModuleCommitLike};
 pub use module_commit_store::ModuleCommitStore;
-use crate::commit::module_commit_bag::ModuleCommitBag;
+pub use module_commit_bag::ModuleCommitBag;
 
 pub const COMMIT_ID_BYTES: usize = 32;
 
@@ -200,36 +200,36 @@ impl From<CommitId> for [u8; COMMIT_ID_BYTES] {
     }
 }
 
-#[derive(Debug, Archive, Serialize, Deserialize)]
-#[archive_attr(derive(CheckBytes, Debug))]
-pub struct ModuleCommitData {
-    current_id: ModuleCommitId,
-    pub bag: ModuleCommitBag,  // todo remove pub
-}
+// #[derive(Debug, Archive, Serialize, Deserialize)]
+// #[archive_attr(derive(CheckBytes, Debug))]
+// pub struct ModuleCommitData {
+//     current_id: ModuleCommitId,
+//     pub bag: ModuleCommitBag,  // todo remove pub
+// }
 
-impl ModuleCommitData {
-    pub fn new() -> Self {
-        Self {
-            current_id: ModuleCommitId::uninitialized(),
-            bag: ModuleCommitBag::new()
-        }
-    }
-    pub fn id(&self) -> &ModuleCommitId {
-        &self.current_id
-    }
-}
+// impl ModuleCommitData {
+//     pub fn new() -> Self {
+//         Self {
+//             current_id: ModuleCommitId::uninitialized(),
+//             bag: ModuleCommitBag::new()
+//         }
+//     }
+//     pub fn id(&self) -> &ModuleCommitId {
+//         &self.current_id
+//     }
+// }
 
 #[derive(Debug, Archive, Serialize, Deserialize)]
 #[archive_attr(derive(CheckBytes, Debug))]
 pub struct SessionCommit {
-    data: BTreeMap<ModuleId, ModuleCommitData>,
+    module_commit_ids: BTreeMap<ModuleId, ModuleCommitId>,
     id: CommitId,
 }
 
 impl SessionCommit {
     pub fn new() -> SessionCommit {
         SessionCommit {
-            data: BTreeMap::new(),
+            module_commit_ids: BTreeMap::new(),
             id: CommitId::uninitialized(),
         }
     }
@@ -238,26 +238,23 @@ impl SessionCommit {
         self.id
     }
 
-    pub fn add(&mut self, module_id: &ModuleId, module_commit: &ModuleCommit) {
-        if !self.data.contains_key(module_id) {
-            self.data.insert(*module_id, ModuleCommitData::new());
+    pub fn add(&mut self, module_id: &ModuleId, module_commit: &ModuleCommit, bag: &mut ModuleCommitBag) {
+        if !self.module_commit_ids.contains_key(module_id) {
+            self.module_commit_ids.insert(*module_id, module_commit.id());
         }
-        let data = self.data.get_mut(module_id).unwrap();
-        data.current_id = module_commit.id();
-        data.bag.save_module_commit(module_commit);
+        bag.save_module_commit(module_commit);
     }
 
-    pub fn data(&self) -> &BTreeMap<ModuleId, ModuleCommitData> {
-        &self.data
+    pub fn module_commit_ids(&self) -> &BTreeMap<ModuleId, ModuleCommitId> {
+        &self.module_commit_ids
     }
 
-    pub fn data_mut(&mut self) -> &mut BTreeMap<ModuleId, ModuleCommitData> {
-        &mut self.data
+    pub fn module_commit_ids_mut(&mut self) -> &mut BTreeMap<ModuleId, ModuleCommitId> {
+        &mut self.module_commit_ids
     }
 
     pub fn calculate_id(&mut self) {
-        println!("data={:?}", self.data);
-        let mut vec = Vec::from_iter(self.data().values().map(|d| d.id()).cloned());
+        let mut vec = Vec::from_iter(self.module_commit_ids().values().cloned());
         vec.sort();
         let root = Merkle::merkle(&mut vec).to_bytes();
         self.id = CommitId::from(root);
@@ -275,6 +272,7 @@ impl Default for SessionCommit {
 pub struct SessionCommits {
     commits: BTreeMap<CommitId, SessionCommit>,
     pub current: CommitId, // todo eliminate pub
+    bags: BTreeMap<ModuleId, ModuleCommitBag>
 }
 
 impl SessionCommits {
@@ -282,6 +280,7 @@ impl SessionCommits {
         Self {
             commits: BTreeMap::new(),
             current: CommitId::uninitialized(),
+            bags: BTreeMap::new(),
         }
     }
 
@@ -323,25 +322,25 @@ impl SessionCommits {
         self.current
     }
 
-    pub fn with_every_module_commit<F>(
-        &mut self,
-        commit_id: &CommitId,
-        closure: F,
-    ) -> Result<(), Error>
-    where
-        F: Fn(&ModuleId, &mut ModuleCommitData) -> Result<(), Error>,
-    {
-        match self.get_session_commit_mut(commit_id) {
-            Some(session_commit) => {
-                for (module_id, module_commit_data) in session_commit.data_mut().iter_mut()
-                {
-                    closure(module_id, module_commit_data)?;
-                }
-                Ok(())
-            }
-            None => Err(SessionError("unknown session commit id".into())),
-        }
-    }
+    // pub fn with_every_module_commit<F>(
+    //     &mut self,
+    //     commit_id: &CommitId,
+    //     mut closure: F,
+    // ) -> Result<(), Error>
+    // where
+    //     F: FnMut(&ModuleId, &ModuleCommitId, &mut ModuleCommitBag) -> Result<(), Error>,
+    // {
+    //     match self.get_session_commit_mut(commit_id) {
+    //         Some(session_commit) => {
+    //             for (module_id, module_commit_id) in session_commit.module_commit_ids.iter()
+    //             {
+    //                 closure(module_id, module_commit_id, self.get_bag(module_id))?;
+    //             }
+    //             Ok(())
+    //         }
+    //         None => Err(SessionError("unknown session commit id".into())),
+    //     }
+    // }
 
     pub fn with_every_session_commit<F>(&self, mut closure: F)
     where
@@ -350,6 +349,14 @@ impl SessionCommits {
         for (_commit_id, session_commit) in self.commits.iter() {
             closure(session_commit);
         }
+    }
+
+    pub fn get_bag(&mut self, module_id: &ModuleId) -> &mut ModuleCommitBag {
+        println!("get bag for module_id={:?}", module_id);
+        if !self.bags.contains_key(&module_id) {
+            self.bags.insert(*module_id, ModuleCommitBag::new());
+        }
+        self.bags.get_mut(module_id).unwrap()
     }
 }
 

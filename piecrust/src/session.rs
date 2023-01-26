@@ -247,7 +247,7 @@ impl<'c> Session<'c> {
             let module_commit_store = ModuleCommitStore::new(self.vm.base_path(), *module_id);
             let module_commit = module_commit_store.commit(mem)?;
             // self.vm.reset_root();
-            session_commit.add(module_id, &module_commit);
+            session_commit.add(module_id, &module_commit, self.vm.get_bag(module_id));
             Ok(())
         })?;
         session_commit.calculate_id();
@@ -265,11 +265,9 @@ impl<'c> Session<'c> {
     }
 
     fn path_to_current_commit(
-        &self,
+        &mut self,
         module_id: &ModuleId,
     ) -> Option<MemoryPath> {
-        // let path = self.vm.path_to_module_last_commit(module_id);
-        // Some(path).filter(|p| p.as_ref().exists())
         self.vm.module_last_commit_path_if_present(module_id)
     }
 

@@ -129,6 +129,7 @@ impl ModuleCommit {
             base_buffer.as_slice().len(),
             compressor.compress(&delta, COMPRESSION_LEVEL).unwrap(),
         );
+        println!("diff_data write to={:?} size={}", self.path(), diff_data.data().len());
         diff_data.write(self.path())?;
         Ok(())
     }
@@ -140,6 +141,7 @@ impl ModuleCommit {
         commit_to_patch: &ModuleCommit,
         result_commit: &dyn ModuleCommitLike,
     ) -> Result<(), Error> {
+        println!("diff_data read from={:?}", self.path());
         let diff_data = DiffData::read(self.path())?;
         let mut decompressor = zstd::block::Decompressor::new();
         let patch_data = std::io::Cursor::new(

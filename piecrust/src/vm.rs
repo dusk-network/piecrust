@@ -13,13 +13,13 @@ use tempfile::tempdir;
 
 use piecrust_uplink::ModuleId;
 
-use crate::commit::{CommitId, ModuleCommit, ModuleCommitLike, ModuleCommitId, ModuleCommitStore, SessionCommit, SessionCommits};
+use crate::commit::{CommitId, ModuleCommit, ModuleCommitBag, ModuleCommitLike, ModuleCommitId, ModuleCommitStore, SessionCommit, SessionCommits};
 use crate::memory_path::MemoryPath;
 use crate::persistable::Persistable;
 use crate::session::Session;
 use crate::types::MemoryState;
 use crate::util::module_id_to_name;
-use crate::Error::{self, PersistenceError};
+use crate::Error::{self, PersistenceError, SessionError};
 
 const SESSION_COMMITS_FILENAME: &str = "commits";
 const LAST_COMMIT_POSTFIX: &str = "_last";
@@ -101,14 +101,14 @@ impl VM {
     }
 
     pub(crate) fn module_last_commit_path_if_present(
-        &self,
+        &mut self,
         module_id: &ModuleId,
     ) -> Option<MemoryPath> {
         // self.path_to_module_with_postfix(module_id, LAST_COMMIT_POSTFIX)
-        if let Some(data) = self.session_commits.get_current_session_commit()?.data().get(module_id) {
+        if let Some(module_commit_id) = self.session_commits.get_current_session_commit()?.module_commit_ids().get(module_id) {
             let (memory_path, _) = self.memory_path(&module_id);
-            let module_commit = ModuleCommit::from_id_and_path(*data.id(), memory_path.path()).ok()?;
-            Some(MemoryPath::new(data.bag.restore_module_commit(module_commit).ok()?.path()))
+            let module_commit = ModuleCommit::from_id_and_path(*module_commit_id, memory_path.path()).ok()?;
+            Some(MemoryPath::new(self.get_bag(module_id).restore_module_commit(module_commit).ok()?.path()))
         } else {
             None
         }
@@ -145,19 +145,30 @@ impl VM {
         &mut self,
         commit_id: &CommitId,
     ) -> Result<(), Error> {
-        // self.reset_root();
         let base_path = self.base_path();
-        self.session_commits.with_every_module_commit(
-            commit_id,
-            |module_id, module_commit_data| {
-                let (memory_path, _) = Self::get_memory_path(&base_path, &module_id);
-                let module_commit = ModuleCommit::from_id_and_path(*module_commit_data.id(), memory_path.path())?;
-                let restored_commit = module_commit_data.bag.restore_module_commit(module_commit)?;
-                restored_commit.restore(&memory_path);
-                Ok(())
-            },
-        );
+
+        let mut pairs = Vec::<(ModuleId, ModuleCommitId)>::new();
+
+        {
+            let r = &mut self.session_commits.get_session_commit(commit_id);
+            if r.is_none() {
+                return Err(SessionError("unknown session commit id".into()))
+            }
+
+            let session_commit = r.unwrap();
+            for (module_id, module_commit_id) in session_commit.module_commit_ids().iter() {
+                pairs.push((*module_id, *module_commit_id))
+            }
+        }
         self.session_commits.current = *commit_id; // todo move it to session commits
+
+        for (module_id, module_commit_id) in pairs {
+            let (memory_path, _) = Self::get_memory_path(&base_path, &module_id);
+            let module_commit = ModuleCommit::from_id_and_path(module_commit_id, memory_path.path())?;
+            let restored_commit = &mut self.session_commits.get_bag(&module_id).restore_module_commit(module_commit)?;
+            restored_commit.restore(&memory_path);
+        }
+
         Ok(())
     }
 
@@ -173,6 +184,10 @@ impl VM {
     pub(crate) fn root(&mut self, _refresh: bool) -> Result<[u8; 32], Error> {
         let root = self.session_commits.get_current_commit().to_bytes();
         Ok(root)
+    }
+
+    pub(crate) fn get_bag(&mut self, module_id: &ModuleId) -> &mut ModuleCommitBag {
+        self.session_commits.get_bag(module_id)
     }
 }
 
