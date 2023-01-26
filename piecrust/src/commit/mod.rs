@@ -256,6 +256,7 @@ impl SessionCommit {
     }
 
     pub fn calculate_id(&mut self) {
+        println!("data={:?}", self.data);
         let mut vec = Vec::from_iter(self.data().values().map(|d| d.id()).cloned());
         vec.sort();
         let root = Merkle::merkle(&mut vec).to_bytes();
@@ -271,11 +272,17 @@ impl Default for SessionCommit {
 
 #[derive(Debug, Archive, Serialize, Deserialize)]
 #[archive_attr(derive(CheckBytes, Debug))]
-pub struct SessionCommits(BTreeMap<CommitId, SessionCommit>);
+pub struct SessionCommits {
+    commits: BTreeMap<CommitId, SessionCommit>,
+    pub current: CommitId, // todo eliminate pub
+}
 
 impl SessionCommits {
-    pub fn new() -> SessionCommits {
-        SessionCommits(BTreeMap::new())
+    pub fn new() -> Self {
+        Self {
+            commits: BTreeMap::new(),
+            current: CommitId::uninitialized(),
+        }
     }
 
     pub fn from<P: AsRef<Path>>(path: P) -> Result<SessionCommits, Error> {
@@ -287,21 +294,33 @@ impl SessionCommits {
     }
 
     pub fn add(&mut self, session_commit: SessionCommit) {
-        self.0.insert(session_commit.commit_id(), session_commit);
+        self.current = session_commit.commit_id();
+        self.commits.insert(self.current, session_commit);
     }
 
     pub fn get_session_commit(
         &self,
         session_commit_id: &CommitId,
     ) -> Option<&SessionCommit> {
-        self.0.get(session_commit_id)
+        self.commits.get(session_commit_id)
     }
 
     pub fn get_session_commit_mut(
         &mut self,
         session_commit_id: &CommitId,
     ) -> Option<&mut SessionCommit> {
-        self.0.get_mut(session_commit_id)
+        self.commits.get_mut(session_commit_id)
+    }
+
+    pub fn get_current_session_commit(
+        &self,
+    ) -> Option<&SessionCommit> {
+        println!("self.current={:?}", self.current);
+        self.commits.get(&self.current)
+    }
+
+    pub fn get_current_commit(&self) -> CommitId {
+        self.current
     }
 
     pub fn with_every_module_commit<F>(
@@ -328,13 +347,14 @@ impl SessionCommits {
     where
         F: FnMut(&SessionCommit),
     {
-        for (_commit_id, session_commit) in self.0.iter() {
+        for (_commit_id, session_commit) in self.commits.iter() {
             closure(session_commit);
         }
     }
 }
 
 impl Persistable for SessionCommits {}
+
 impl Default for SessionCommits {
     fn default() -> Self {
         Self::new()

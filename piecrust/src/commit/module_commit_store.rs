@@ -36,20 +36,22 @@ impl ModuleCommitStore {
         //     self.path_to_module_last_commit();
         // let last_commit_id_path =
         //     self.path_to_module_last_commit_id();
+        println!("committing: src mem path={:?}", source_path);
+        println!("committing: target path={:?}", target_path);
         std::fs::copy(source_path.as_ref(), target_path.as_ref())
             .map_err(PersistenceError)?;
         // std::fs::copy(source_path.as_ref(), last_commit_path.as_ref())
         //     .map_err(PersistenceError)?;
         // module_commit_id.persist(last_commit_id_path)?;
         fs::remove_file(source_path.as_ref()).map_err(PersistenceError)?;
-        let module_commit = ModuleCommit::from_id_and_path(module_commit_id, target_path.path())?;
+        let module_commit = ModuleCommit::from_id_and_path_direct(module_commit_id, target_path.path())?;
         Ok(module_commit)
     }
 
     pub fn restore(&self, module_commit_id: &ModuleCommitId) -> Result<ModuleCommit, Error> {
         let source_path =
             self.path_to_module_commit(&module_commit_id);
-        let module_commit = ModuleCommit::from_id_and_path(*module_commit_id, source_path.path())?;
+        let module_commit = ModuleCommit::from_id_and_path_direct(*module_commit_id, source_path.path())?;
         Ok(module_commit)
     }
 

@@ -93,12 +93,14 @@ fn modules_persistence() -> Result<(), Error> {
         Some(0x11)
     );
 
-    let _commit_1 = session.commit()?;
+    let commit_1 = session.commit()?;
+    vm.persist();
 
     let mut vm2 = VM::new(vm.base_path())?;
     let mut session2 = vm2.session();
     let id_1 = session2.deploy(module_bytecode!("counter"))?;
     let id_2 = session2.deploy(module_bytecode!("box"))?;
+    session2.restore(&commit_1);
 
     // check if both modules' state was restored
     assert_eq!(session2.query::<(), i64>(id_1, "read_value", &())?, 0xfd);

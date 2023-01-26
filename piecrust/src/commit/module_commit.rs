@@ -30,6 +30,7 @@ pub trait ModuleCommitLike {
     }
 }
 
+#[derive(Debug)]
 pub struct ModuleCommit {
     path: PathBuf,
     id: ModuleCommitId,
@@ -64,8 +65,19 @@ impl ModuleCommit {
                 .expect("filename is UTF8"),
             module_commit_id_to_name(module_commit_id),
         ));
+        println!("xx={:?}", path);
         Ok(ModuleCommit {
             path,
+            id: module_commit_id,
+        })
+    }
+
+    pub(crate) fn from_id_and_path_direct(
+        module_commit_id: ModuleCommitId,
+        path: &PathBuf,
+    ) -> Result<Self, Error> {
+        Ok(ModuleCommit {
+            path: path.clone(),
             id: module_commit_id,
         })
     }
