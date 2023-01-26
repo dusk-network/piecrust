@@ -104,16 +104,11 @@ impl VM {
         &self,
         module_id: &ModuleId,
     ) -> Option<MemoryPath> {
-        println!("module_last_commit_path_if_present for module_id={:?}", module_id);
-        println!("session commits={:?}", self.session_commits);
         // self.path_to_module_with_postfix(module_id, LAST_COMMIT_POSTFIX)
         if let Some(data) = self.session_commits.get_current_session_commit()?.data().get(module_id) {
             let (memory_path, _) = self.memory_path(&module_id);
             let module_commit = ModuleCommit::from_id_and_path(*data.id(), memory_path.path()).ok()?;
-            println!("module_commit={:?}", module_commit);
-            let r = data.bag.restore_module_commit2(module_commit);
-            println!("got here 001 r={:?}", r);
-            Some(MemoryPath::new(r.ok()?.path()))
+            Some(MemoryPath::new(data.bag.restore_module_commit(module_commit).ok()?.path()))
         } else {
             None
         }
@@ -155,10 +150,10 @@ impl VM {
         self.session_commits.with_every_module_commit(
             commit_id,
             |module_id, module_commit_data| {
-                // let module_commit_store = ModuleCommitStore::new(base_path.clone(), *module_id);
-                // module_commit_store.restore(&module_commit_data.id());
                 let (memory_path, _) = Self::get_memory_path(&base_path, &module_id);
-                module_commit_data.bag.restore_module_commit(*module_commit_data.id(), &memory_path);
+                let module_commit = ModuleCommit::from_id_and_path(*module_commit_data.id(), memory_path.path())?;
+                let restored_commit = module_commit_data.bag.restore_module_commit(module_commit)?;
+                restored_commit.restore(&memory_path);
                 Ok(())
             },
         );
@@ -174,62 +169,11 @@ impl VM {
         self.base_memory_path.to_path_buf()
     }
 
-    // pub(crate) fn get_current_vm_commit(&self) -> Result<&SessionCommit, Error> {
-        // let mut module_ids: HashSet<ModuleId> = HashSet::new();
-        // let mut session_commit = SessionCommit::new();
-        // println!("get_current_vm_commit session_commits={:?}", self.session_commits);
-        // self.session_commits
-        //     .with_every_session_commit(|session_commit| {
-        //         for (module_id, _module_commit_id) in
-        //             session_commit.data().iter()
-        //         {
-        //             println!("get_current_vm_commit inserting to module_ids={:?}", module_id);
-        //             module_ids.insert(*module_id);
-        //         }
-        //     });
-        // for module_id in module_ids.iter() {
-        //     let path = self.path_to_module_last_commit_id(module_id);
-        //     println!("get_current_vm_commit xxpath={:?}", path);
-        //     if let Ok(module_commit_id) =
-        //         ModuleCommitId::restore::<ModuleCommitId, MemoryPath>(path)
-        //     {
-        //         let module_commit_store = ModuleCommitStore::new(self.base_path(), *module_id);
-        //         let module_commit = module_commit_store.restore(&module_commit_id)?;
-        //         session_commit.add(module_id, &module_commit)
-        //     }
-        // }
-
-        // let mut session_commit = self.session_commits.get_current_session_commit();
-        // session_commit.calculate_id();
-        // println!("get_current_vm_commit returns session commit={:?}", session_commit);
-        // Ok(session_commit)
-    // }
-
     // todo eliminate refresh
     pub(crate) fn root(&mut self, _refresh: bool) -> Result<[u8; 32], Error> {
         let root = self.session_commits.get_current_commit().to_bytes();
         Ok(root)
-        // let current_root;
-        // {
-        //     current_root = self.root;
-        // }
-        // match current_root {
-        //     Some(r) if !refresh => Ok(r),
-        //     _ => {
-        //         let session_commit = self.get_current_vm_commit()?;
-        //         let root = session_commit.commit_id().to_bytes();
-        //         if refresh {
-        //             self.session_commits.add(session_commit);
-        //         }
-        //         self.root = Some(root);
-        //         Ok(root)
-        //     }
-        // }
     }
-
-    // pub(crate) fn reset_root(&mut self) {
-    //     self.root = None;
-    // }
 }
 
 #[derive(Default)]

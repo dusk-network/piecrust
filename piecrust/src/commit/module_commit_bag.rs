@@ -59,43 +59,6 @@ impl ModuleCommitBag {
 
     pub(crate) fn restore_module_commit(
         &self,
-        source_module_commit_id: ModuleCommitId,
-        memory_path: &MemoryPath,
-    ) -> Result<(), Error> {
-        let from_id = |module_commit_id| {
-            ModuleCommit::from_id_and_path(module_commit_id, memory_path.path())
-        };
-        let mut found = true;
-        let final_commit = if source_module_commit_id == self.ids[0] {
-            println!("restore_module_commit - case 0");
-            from_id(self.ids[0])?
-        } else if source_module_commit_id == self.top {
-            from_id(self.top)?
-        } else {
-            let accu_commit = from_id(ModuleCommitId::random())?;
-            accu_commit.capture(&from_id(self.ids[0])?)?;
-            for commit_id in self.ids.as_slice()[1..].iter() {
-                let commit = from_id(*commit_id)?;
-                commit
-                    .decompress_and_patch(&accu_commit, &accu_commit)?;
-                found = source_module_commit_id == *commit_id;
-                if found {
-                    break;
-                }
-            }
-            accu_commit
-        };
-        if found {
-            println!("restore_module_commit - final commit path={:?}", final_commit.path());
-            println!("restore_module_commit - mem path={:?}", memory_path);
-            final_commit.restore(memory_path)
-        } else {
-            Err(CommitError("Commit id not found".into()))
-        }
-    }
-
-    pub(crate) fn restore_module_commit2(
-        &self,
         source_module_commit: ModuleCommit,
     ) -> Result<ModuleCommit, Error> {
         let from_id = |module_commit_id| {

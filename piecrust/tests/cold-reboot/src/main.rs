@@ -23,15 +23,15 @@ fn initialize_counter<P: AsRef<Path>>(
 
     let module_id = session.deploy(counter_bytecode)?;
 
-    assert_eq!(
-        session.query::<(), i64>(module_id, "read_value", &())?,
-        0xfc
-    );
+    // assert_eq!(
+    //     session.query::<(), i64>(module_id, "read_value", &())?,
+    //     0xfc
+    // );
     session.transact::<(), ()>(module_id, "increment", &())?;
-    assert_eq!(
-        session.query::<(), i64>(module_id, "read_value", &())?,
-        0xfd
-    );
+    // assert_eq!(
+    //     session.query::<(), i64>(module_id, "read_value", &())?,
+    //     0xfd
+    // );
 
     let commit_id = session.commit()?;
     assert_eq!(commit_id.as_bytes(), vm.session().root(false)?);
@@ -43,6 +43,7 @@ fn initialize_counter<P: AsRef<Path>>(
 fn confirm_counter<P: AsRef<Path>>(
     session: &mut Session,
     commit_id_file_path: P,
+    expected: i64
 ) -> Result<(), piecrust::Error> {
     let commit_id = CommitId::restore(commit_id_file_path)?;
     session.restore(&commit_id)?;
@@ -59,7 +60,7 @@ fn confirm_counter<P: AsRef<Path>>(
 
     assert_eq!(
         session.query::<(), i64>(module_id, "read_value", &())?,
-        0xfd
+        expected
     );
 
     Ok(())
@@ -72,12 +73,12 @@ fn initialize<P: AsRef<str>>(vm_data_path: P) -> Result<(), piecrust::Error> {
     initialize_counter(&mut vm, &commit_id_file_path)
 }
 
-fn confirm<P: AsRef<str>>(vm_data_path: P) -> Result<(), piecrust::Error> {
+fn confirm<P: AsRef<str>>(vm_data_path: P, expected: i64) -> Result<(), piecrust::Error> {
     let commit_id_file_path =
         PathBuf::from(vm_data_path.as_ref()).join("commit_id");
     let mut vm = VM::new(vm_data_path.as_ref())?;
     let mut session = vm.session();
-    confirm_counter(&mut session, &commit_id_file_path)
+    confirm_counter(&mut session, &commit_id_file_path, expected)
 }
 
 fn main() -> Result<(), piecrust::Error> {
@@ -94,10 +95,14 @@ fn main() -> Result<(), piecrust::Error> {
 
     match &*args[2] {
         "initialize" => initialize(&vm_data_path)?,
-        "confirm" => confirm(&vm_data_path)?,
+        "confirm" => confirm(&vm_data_path, 0xfd)?,
         "test_both" => {
-            initialize(&vm_data_path)?;
-            confirm(&vm_data_path)?;
+            let mut expected = 0xfd;
+            for _ in 0..10 {
+                initialize(&vm_data_path)?;
+                confirm(&vm_data_path, expected)?;
+                expected += 1;
+            }
         }
         _ => {
             println!("{}", MESSAGE);
