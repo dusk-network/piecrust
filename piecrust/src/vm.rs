@@ -107,26 +107,25 @@ impl VM {
         &mut self,
         module_id: &ModuleId,
     ) -> (Option<CommitPath>, bool) {
-        let current_session_commit =
-            self.session_commits.get_current_session_commit();
-        let csc;
-        if current_session_commit.is_none() {
-            return (None, false);
-        } else {
-            csc = current_session_commit.unwrap();
-        }
-        if let Some(module_commit_id) = csc.module_commit_ids().get(module_id) {
-            let (memory_path, _) = self.memory_path(&module_id);
-            let module_commit_id = module_commit_id.clone();
-            let r = self.get_bag(module_id).restore_module_commit(
-                module_commit_id,
-                &memory_path,
-                false,
-            );
-            if r.is_err() {
-                (None, false)
+        if let Some(csc) = self.session_commits.get_current_session_commit() {
+            if let Some(module_commit_id) =
+                csc.module_commit_ids().get(module_id)
+            {
+                let (memory_path, _) = self.memory_path(module_id);
+                let module_commit_id = *module_commit_id;
+                let r = self.get_bag(module_id).restore_module_commit(
+                    module_commit_id,
+                    &memory_path,
+                    false,
+                );
+                if let Ok(rr) = r {
+                    // todo
+                    rr
+                } else {
+                    (None, false)
+                }
             } else {
-                r.unwrap()
+                (None, false)
             }
         } else {
             (None, false)

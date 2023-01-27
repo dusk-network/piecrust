@@ -136,3 +136,9 @@ impl ModuleCommitBag {
         }
     }
 }
+
+impl Default for ModuleCommitBag {
+    fn default() -> Self {
+        Self::new()
+    }
+}

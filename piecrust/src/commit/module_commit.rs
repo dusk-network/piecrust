@@ -7,7 +7,7 @@
 use qbsdiff::{Bsdiff, Bspatch};
 use std::fs::OpenOptions;
 use std::io::{Read, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use crate::commit::diff_data::DiffData;
 use crate::commit::{Hashable, ModuleCommitId};
@@ -73,10 +73,10 @@ impl ModuleCommit {
 
     pub(crate) fn from_id_and_path_direct(
         module_commit_id: ModuleCommitId,
-        path: &PathBuf,
+        path: &Path,
     ) -> Result<Self, Error> {
         Ok(ModuleCommit {
-            path: path.clone(),
+            path: path.to_path_buf(),
             id: module_commit_id,
         })
     }

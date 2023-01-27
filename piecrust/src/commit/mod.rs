@@ -361,7 +361,7 @@ impl SessionCommits {
     }
 
     pub fn get_bag(&mut self, module_id: &ModuleId) -> &mut ModuleCommitBag {
-        if !self.bags.contains_key(&module_id) {
+        if !self.bags.contains_key(module_id) {
             self.bags.insert(*module_id, ModuleCommitBag::new());
         }
         self.bags.get_mut(module_id).unwrap()
