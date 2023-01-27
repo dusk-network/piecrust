@@ -251,7 +251,7 @@ impl<'c> Session<'c> {
             let module_commit = module_commit_store.commit(mem)?;
             // self.vm.reset_root();
             let (memory_path, _) = self.vm.memory_path(module_id);
-            println!("committing module {:?}", module_id);
+            println!("committing module {module_id:?}");
             session_commit.add(
                 module_id,
                 &module_commit,
