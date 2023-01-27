@@ -105,7 +105,7 @@ impl ModuleCommitBag {
         };
         if found {
             if restore {
-                final_commit.restore(memory_path);
+                final_commit.restore(memory_path)?;
                 if can_remove {
                     fs::remove_file(final_commit.path()).map_err(PersistenceError)?;
                 }

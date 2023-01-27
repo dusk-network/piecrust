@@ -5,7 +5,7 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 use std::borrow::Cow;
-use std::collections::{BTreeMap, HashSet};
+use std::collections::BTreeMap;
 use std::fmt::{self, Debug, Formatter};
 use std::path::{Path, PathBuf};
 
@@ -13,7 +13,7 @@ use tempfile::tempdir;
 
 use piecrust_uplink::ModuleId;
 
-use crate::commit::{CommitId, ModuleCommit, ModuleCommitBag, ModuleCommitLike, ModuleCommitId, ModuleCommitStore, SessionCommit, SessionCommits, CommitPath};
+use crate::commit::{CommitId, ModuleCommitBag, ModuleCommitId, SessionCommit, SessionCommits, CommitPath};
 use crate::memory_path::MemoryPath;
 use crate::persistable::Persistable;
 use crate::session::Session;
@@ -22,8 +22,8 @@ use crate::util::module_id_to_name;
 use crate::Error::{self, PersistenceError, SessionError};
 
 const SESSION_COMMITS_FILENAME: &str = "commits";
-const LAST_COMMIT_POSTFIX: &str = "_last";
-const LAST_COMMIT_ID_POSTFIX: &str = "_last_id";
+// const LAST_COMMIT_POSTFIX: &str = "_last";
+// const LAST_COMMIT_ID_POSTFIX: &str = "_last_id";
 
 pub struct VM {
     host_queries: HostQueries,
@@ -125,23 +125,23 @@ impl VM {
         }
     }
 
-    pub(crate) fn path_to_module_last_commit_id(
-        &self,
-        module_id: &ModuleId,
-    ) -> MemoryPath {
-        self.path_to_module_with_postfix(module_id, LAST_COMMIT_ID_POSTFIX)
-    }
+    // pub(crate) fn path_to_module_last_commit_id(
+    //     &self,
+    //     module_id: &ModuleId,
+    // ) -> MemoryPath {
+    //     self.path_to_module_with_postfix(module_id, LAST_COMMIT_ID_POSTFIX)
+    // }
 
-    fn path_to_module_with_postfix<P: AsRef<str>>(
-        &self,
-        module_id: &ModuleId,
-        postfix: P,
-    ) -> MemoryPath {
-        let mut name = module_id_to_name(*module_id);
-        name.push_str(postfix.as_ref());
-        let path = self.base_memory_path.join(name);
-        MemoryPath::new(path)
-    }
+    // fn path_to_module_with_postfix<P: AsRef<str>>(
+    //     &self,
+    //     module_id: &ModuleId,
+    //     postfix: P,
+    // ) -> MemoryPath {
+    //     let mut name = module_id_to_name(*module_id);
+    //     name.push_str(postfix.as_ref());
+    //     let path = self.base_memory_path.join(name);
+    //     MemoryPath::new(path)
+    // }
 
     fn path_to_session_commits(&self) -> PathBuf {
         self.base_memory_path.join(SESSION_COMMITS_FILENAME)

@@ -26,7 +26,6 @@ use crate::commit::{CommitId, CommitPath, SessionCommit, ModuleCommitStore};
 use crate::event::Event;
 use crate::instance::WrappedInstance;
 use crate::memory_handler::MemoryHandler;
-use crate::memory_path::MemoryPath;
 use crate::module::WrappedModule;
 use crate::types::MemoryState;
 use crate::types::StandardBufSerializer;

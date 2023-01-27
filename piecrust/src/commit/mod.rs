@@ -20,7 +20,7 @@ use std::fs;
 use std::path::Path;
 use rand::Rng;
 
-use crate::error::Error::{self, PersistenceError, RestoreError, SessionError};
+use crate::error::Error::{self, PersistenceError, RestoreError};
 use crate::merkle::Merkle;
 use crate::persistable::Persistable;
 
