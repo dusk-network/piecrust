@@ -4,6 +4,8 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
+use std::fs;
+
 use bytecheck::CheckBytes;
 use rkyv::{Archive, Deserialize, Serialize};
 
@@ -11,7 +13,7 @@ use crate::error::Error;
 use crate::commit::{CommitPath, ModuleCommit, ModuleCommitId};
 use crate::commit::module_commit::ModuleCommitLike;
 use crate::memory_path::MemoryPath;
-use crate::Error::CommitError;
+use crate::Error::{CommitError, PersistenceError};
 
 #[derive(Debug, Archive, Serialize, Deserialize)]
 #[archive_attr(derive(CheckBytes, Debug))]
@@ -36,16 +38,14 @@ impl ModuleCommitBag {
         module_commit: &ModuleCommit,
         memory_path: &MemoryPath,
     ) -> Result<(), Error> {
-        println!("save_module_commit - pushing commit {:?} path={:?}", module_commit.id(), module_commit.path());
-        println!("save_module_commit - pushing commit memory path={:?} exists={}", memory_path.path(), memory_path.path().exists());
+        println!("save_module_commit - pushing commit path={:?}", module_commit.path());
         module_commit.capture(memory_path)?;
-        println!("save_module_commit -after capture");
         self.ids.push(module_commit.id());
         if self.ids.len() == 1 {
             // top is an uncompressed version of most recent commit
             ModuleCommit::from_id_and_path(self.top, memory_path.path())?
                 .capture(memory_path)?;
-            println!("save_module_commit - exit early - len={}", self.ids.len());
+            println!("save_module_commit - exit early - len={} ids={:?} top={:?}", self.ids.len(), self.ids, self.top);
             Ok(())
         } else {
             let from_id = |module_commit_id| {
@@ -53,6 +53,7 @@ impl ModuleCommitBag {
             };
             let top_commit = from_id(self.top)?;
             let accu_commit = from_id(ModuleCommitId::random())?;
+            println!("accu1={:?}", accu_commit.id());
             accu_commit.capture(module_commit)?;
             // accu and commit are both uncompressed
             // compressing commit against the top
@@ -60,7 +61,9 @@ impl ModuleCommitBag {
             // commit is compressed but accu keeps the uncompressed copy
             // top is an uncompressed version of most recent commit
             top_commit.capture(&accu_commit)?;
-            println!("save_module_commit - exit late - len={}", self.ids.len());
+            fs::remove_file(accu_commit.path()).map_err(PersistenceError)?;
+
+            println!("save_module_commit - exit late - len={} ids={:?} top={:?}", self.ids.len(), self.ids, self.top);
             Ok(())
         }
     }
@@ -85,6 +88,7 @@ impl ModuleCommitBag {
             from_id(self.top)?
         } else {
             let accu_commit = from_id(ModuleCommitId::random())?;
+            println!("accu2={:?} restore={}", accu_commit.id(), restore);
             accu_commit.capture(&from_id(self.ids[0])?)?;
             for commit_id in self.ids.as_slice()[1..].iter() {
                 let commit = from_id(*commit_id)?;

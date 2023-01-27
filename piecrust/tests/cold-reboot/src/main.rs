@@ -35,9 +35,35 @@ fn initialize_counter<P: AsRef<Path>>(
 
     let commit_id = session.commit()?;
     assert_eq!(commit_id.as_bytes(), vm.session().root(false)?);
-    commit_id.persist(commit_id_file_path)?;
+    commit_id.persist(commit_id_file_path.as_ref())?;
 
-    vm.persist()
+    vm.persist()?;
+
+    let mut session2 = vm.session();
+    let module_id = session2.deploy(counter_bytecode)?;
+    session2.transact::<(), ()>(module_id, "increment", &())?;
+    let commit_id2 = session2.commit()?;
+    assert_eq!(commit_id2.as_bytes(), vm.session().root(false)?);
+    commit_id2.persist(commit_id_file_path.as_ref())?;
+    vm.persist()?;
+
+    let mut session3 = vm.session();
+    let module_id = session3.deploy(counter_bytecode)?;
+    session3.transact::<(), ()>(module_id, "increment", &())?;
+    let commit_id3 = session3.commit()?;
+    assert_eq!(commit_id3.as_bytes(), vm.session().root(false)?);
+    commit_id3.persist(commit_id_file_path.as_ref())?;
+    vm.persist()?;
+
+    let mut session4 = vm.session();
+    let module_id = session4.deploy(counter_bytecode)?;
+    session4.transact::<(), ()>(module_id, "increment", &())?;
+    let commit_id4 = session4.commit()?;
+    assert_eq!(commit_id4.as_bytes(), vm.session().root(false)?);
+    commit_id4.persist(commit_id_file_path.as_ref())?;
+    vm.persist()?;
+
+    Ok(())
 }
 
 fn confirm_counter<P: AsRef<Path>>(
