@@ -9,7 +9,13 @@ extern crate core;
 use std::env;
 use std::path::{Path, PathBuf};
 
-use piecrust::{CommitId, Session, VM};
+use piecrust::{CommitId, ModuleId, Session, VM};
+
+const COUNTER_ID: ModuleId = {
+    let mut bytes = [0u8; 32];
+    bytes[0] = 99;
+    ModuleId::from_bytes(bytes)
+};
 
 fn initialize_counter<P: AsRef<Path>>(
     vm: &mut VM,
@@ -21,15 +27,15 @@ fn initialize_counter<P: AsRef<Path>>(
         "../../../../target/wasm32-unknown-unknown/release/counter.wasm"
     );
 
-    let module_id = session.deploy(counter_bytecode)?;
+    session.deploy_with_id(COUNTER_ID, counter_bytecode)?;
 
     assert_eq!(
-        session.query::<(), i64>(module_id, "read_value", &())?,
+        session.query::<(), i64>(COUNTER_ID, "read_value", &())?,
         0xfc
     );
-    session.transact::<(), ()>(module_id, "increment", &())?;
+    session.transact::<(), ()>(COUNTER_ID, "increment", &())?;
     assert_eq!(
-        session.query::<(), i64>(module_id, "read_value", &())?,
+        session.query::<(), i64>(COUNTER_ID, "read_value", &())?,
         0xfd
     );
 
@@ -48,17 +54,8 @@ fn confirm_counter<P: AsRef<Path>>(
     session.restore(&commit_id)?;
     assert_eq!(commit_id.as_bytes(), session.root(false)?);
 
-    let counter_bytecode = include_bytes!(
-        "../../../../target/wasm32-unknown-unknown/release/counter.wasm"
-    );
-
-    /*
-     * Note that module deployment does not change its state.
-     */
-    let module_id = session.deploy(counter_bytecode)?;
-
     assert_eq!(
-        session.query::<(), i64>(module_id, "read_value", &())?,
+        session.query::<(), i64>(COUNTER_ID, "read_value", &())?,
         0xfd
     );
 

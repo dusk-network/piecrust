@@ -42,7 +42,6 @@ unsafe impl<'c> Sync for Session<'c> {}
 
 pub struct Session<'c> {
     vm: &'c mut VM,
-    modules: BTreeMap<ModuleId, WrappedModule>,
     memory_handler: MemoryHandler,
     callstack: Arc<RwLock<CallStack>>,
     debug: Arc<RwLock<Vec<String>>>,
@@ -55,9 +54,9 @@ pub struct Session<'c> {
 impl<'c> Session<'c> {
     pub fn new(vm: &'c mut VM) -> Self {
         let base_path = vm.base_path();
+
         Session {
             vm,
-            modules: BTreeMap::default(),
             memory_handler: MemoryHandler::new(base_path),
             callstack: Arc::new(RwLock::new(CallStack::new())),
             debug: Arc::new(RwLock::new(vec![])),
@@ -80,13 +79,12 @@ impl<'c> Session<'c> {
         module_id: ModuleId,
         bytecode: &[u8],
     ) -> Result<(), Error> {
-        let module = WrappedModule::new(bytecode)?;
-        self.modules.insert(module_id, module);
+        self.vm.insert_module(module_id, bytecode)?;
         Ok(())
     }
 
     pub(crate) fn get_module(&self, id: ModuleId) -> &WrappedModule {
-        self.modules.get(&id).expect("invalid module")
+        self.vm.get_module(id)
     }
 
     pub fn query<Arg, Ret>(
