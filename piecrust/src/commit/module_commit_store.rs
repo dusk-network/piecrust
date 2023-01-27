@@ -43,7 +43,7 @@ impl ModuleCommitStore {
         // std::fs::copy(source_path.as_ref(), last_commit_path.as_ref())
         //     .map_err(PersistenceError)?;
         // module_commit_id.persist(last_commit_id_path)?;
-        fs::remove_file(source_path.as_ref()).map_err(PersistenceError)?;
+        // fs::remove_file(source_path.as_ref()).map_err(PersistenceError)?;
         let module_commit = ModuleCommit::from_id_and_path_direct(module_commit_id, target_path.path())?;
         Ok(module_commit)
     }

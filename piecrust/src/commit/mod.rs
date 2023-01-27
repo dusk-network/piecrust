@@ -8,6 +8,7 @@ mod module_commit;
 mod module_commit_store;
 mod module_commit_bag;
 mod diff_data;
+mod commit_path;
 
 use bytecheck::CheckBytes;
 use rkyv::{Archive, Deserialize, Serialize};
@@ -26,6 +27,8 @@ use crate::persistable::Persistable;
 pub use module_commit::{ModuleCommit, ModuleCommitLike};
 pub use module_commit_store::ModuleCommitStore;
 pub use module_commit_bag::ModuleCommitBag;
+pub use commit_path::CommitPath;
+use crate::memory_path::MemoryPath;
 
 pub const COMMIT_ID_BYTES: usize = 32;
 
@@ -238,11 +241,11 @@ impl SessionCommit {
         self.id
     }
 
-    pub fn add(&mut self, module_id: &ModuleId, module_commit: &ModuleCommit, bag: &mut ModuleCommitBag) {
+    pub fn add(&mut self, module_id: &ModuleId, module_commit: &ModuleCommit, bag: &mut ModuleCommitBag, memory_path: &MemoryPath) -> Result<(), Error> {
         if !self.module_commit_ids.contains_key(module_id) {
             self.module_commit_ids.insert(*module_id, module_commit.id());
         }
-        bag.save_module_commit(module_commit);
+        bag.save_module_commit(module_commit, memory_path)
     }
 
     pub fn module_commit_ids(&self) -> &BTreeMap<ModuleId, ModuleCommitId> {
@@ -352,7 +355,6 @@ impl SessionCommits {
     }
 
     pub fn get_bag(&mut self, module_id: &ModuleId) -> &mut ModuleCommitBag {
-        println!("get bag for module_id={:?}", module_id);
         if !self.bags.contains_key(&module_id) {
             self.bags.insert(*module_id, ModuleCommitBag::new());
         }

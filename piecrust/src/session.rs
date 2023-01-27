@@ -21,7 +21,7 @@ use rkyv::{
     Serialize,
 };
 
-use crate::commit::{CommitId, SessionCommit, ModuleCommitStore};
+use crate::commit::{CommitId, CommitPath, SessionCommit, ModuleCommitStore};
 use crate::event::Event;
 use crate::instance::WrappedInstance;
 use crate::memory_handler::MemoryHandler;
@@ -165,18 +165,14 @@ impl<'c> Session<'c> {
         if memory.state() == MemoryState::Uninitialized {
             // if current commit exists, use it as memory image
             if let Some(commit_path) = self.path_to_current_commit(&mod_id) {
-                println!("new_instance - path_to_current_commit returned={:?}", commit_path);
                 let metadata = std::fs::metadata(commit_path.as_ref())
                     .expect("todo - metadata error handling");
                 memory
                     .grow_to(metadata.len() as u32)
                     .expect("todo - grow error handling");
                 let (target_path, _) = self.vm.memory_path(&mod_id);
-                println!("new_instance - copy from={:?} to={:?}", commit_path, target_path);
                 std::fs::copy(commit_path.as_ref(), target_path.as_ref())
                     .expect("commit and memory paths exist");
-            } else {
-                println!("new_instance - path_to_current_commit returned None");
             }
         }
         memory.set_state(MemoryState::Initialized);
@@ -242,12 +238,15 @@ impl<'c> Session<'c> {
     }
 
     pub fn commit(self) -> Result<CommitId, Error> {
+        println!("committing session");
         let mut session_commit = SessionCommit::new();
         self.memory_handler.with_every_module_id(|module_id, mem| {
             let module_commit_store = ModuleCommitStore::new(self.vm.base_path(), *module_id);
             let module_commit = module_commit_store.commit(mem)?;
             // self.vm.reset_root();
-            session_commit.add(module_id, &module_commit, self.vm.get_bag(module_id));
+            let (memory_path, _) = self.vm.memory_path(module_id);
+            println!("committing module {:?}", module_id);
+            session_commit.add(module_id, &module_commit, self.vm.get_bag(module_id), &memory_path)?;
             Ok(())
         })?;
         session_commit.calculate_id();
@@ -267,7 +266,7 @@ impl<'c> Session<'c> {
     fn path_to_current_commit(
         &mut self,
         module_id: &ModuleId,
-    ) -> Option<MemoryPath> {
+    ) -> Option<CommitPath> {
         self.vm.module_last_commit_path_if_present(module_id)
     }
 
