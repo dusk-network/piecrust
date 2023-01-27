@@ -9,9 +9,9 @@ use std::fs;
 use bytecheck::CheckBytes;
 use rkyv::{Archive, Deserialize, Serialize};
 
-use crate::error::Error;
-use crate::commit::{CommitPath, ModuleCommit, ModuleCommitId};
 use crate::commit::module_commit::ModuleCommitLike;
+use crate::commit::{CommitPath, ModuleCommit, ModuleCommitId};
+use crate::error::Error;
 use crate::memory_path::MemoryPath;
 use crate::Error::{CommitError, PersistenceError};
 
@@ -38,18 +38,29 @@ impl ModuleCommitBag {
         module_commit: &ModuleCommit,
         memory_path: &MemoryPath,
     ) -> Result<(), Error> {
-        println!("save_module_commit - pushing commit path={:?}", module_commit.path());
+        println!(
+            "save_module_commit - pushing commit path={:?}",
+            module_commit.path()
+        );
         module_commit.capture(memory_path)?;
         self.ids.push(module_commit.id());
         if self.ids.len() == 1 {
             // top is an uncompressed version of most recent commit
             ModuleCommit::from_id_and_path(self.top, memory_path.path())?
                 .capture(memory_path)?;
-            println!("save_module_commit - exit early - len={} ids={:?} top={:?}", self.ids.len(), self.ids, self.top);
+            println!(
+                "save_module_commit - exit early - len={} ids={:?} top={:?}",
+                self.ids.len(),
+                self.ids,
+                self.top
+            );
             Ok(())
         } else {
             let from_id = |module_commit_id| {
-                ModuleCommit::from_id_and_path(module_commit_id, memory_path.path())
+                ModuleCommit::from_id_and_path(
+                    module_commit_id,
+                    memory_path.path(),
+                )
             };
             let top_commit = from_id(self.top)?;
             let accu_commit = from_id(ModuleCommitId::random())?;
@@ -63,7 +74,12 @@ impl ModuleCommitBag {
             top_commit.capture(&accu_commit)?;
             fs::remove_file(accu_commit.path()).map_err(PersistenceError)?;
 
-            println!("save_module_commit - exit late - len={} ids={:?} top={:?}", self.ids.len(), self.ids, self.top);
+            println!(
+                "save_module_commit - exit late - len={} ids={:?} top={:?}",
+                self.ids.len(),
+                self.ids,
+                self.top
+            );
             Ok(())
         }
     }
@@ -74,9 +90,13 @@ impl ModuleCommitBag {
         memory_path: &MemoryPath,
         restore: bool,
     ) -> Result<(Option<CommitPath>, bool), Error> {
-        println!("restore_module_commit - restoring commit {:?} len={}", source_module_commit_id, self.ids.len());
-        if self.ids.is_empty(){
-            return Ok((None, false))
+        println!(
+            "restore_module_commit - restoring commit {:?} len={}",
+            source_module_commit_id,
+            self.ids.len()
+        );
+        if self.ids.is_empty() {
+            return Ok((None, false));
         }
         let from_id = |module_commit_id| {
             ModuleCommit::from_id_and_path(module_commit_id, memory_path.path())
@@ -93,8 +113,7 @@ impl ModuleCommitBag {
             accu_commit.capture(&from_id(self.ids[0])?)?;
             for commit_id in self.ids.as_slice()[1..].iter() {
                 let commit = from_id(*commit_id)?;
-                commit
-                    .decompress_and_patch(&accu_commit, &accu_commit)?;
+                commit.decompress_and_patch(&accu_commit, &accu_commit)?;
                 found = source_module_commit_id == *commit_id;
                 if found {
                     break;
@@ -107,7 +126,8 @@ impl ModuleCommitBag {
             if restore {
                 final_commit.restore(memory_path)?;
                 if can_remove {
-                    fs::remove_file(final_commit.path()).map_err(PersistenceError)?;
+                    fs::remove_file(final_commit.path())
+                        .map_err(PersistenceError)?;
                 }
             }
             Ok((Some(CommitPath::new(final_commit.path())), can_remove))

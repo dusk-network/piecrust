@@ -4,31 +4,31 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-mod module_commit;
-mod module_commit_store;
-mod module_commit_bag;
-mod diff_data;
 mod commit_path;
+mod diff_data;
+mod module_commit;
+mod module_commit_bag;
+mod module_commit_store;
 
 use bytecheck::CheckBytes;
 use rkyv::{Archive, Deserialize, Serialize};
 
 use piecrust_uplink::ModuleId;
 
+use rand::Rng;
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::Path;
-use rand::Rng;
 
 use crate::error::Error::{self, PersistenceError, RestoreError};
 use crate::merkle::Merkle;
 use crate::persistable::Persistable;
 
-pub use module_commit::{ModuleCommit, ModuleCommitLike};
-pub use module_commit_store::ModuleCommitStore;
-pub use module_commit_bag::ModuleCommitBag;
-pub use commit_path::CommitPath;
 use crate::memory_path::MemoryPath;
+pub use commit_path::CommitPath;
+pub use module_commit::{ModuleCommit, ModuleCommitLike};
+pub use module_commit_bag::ModuleCommitBag;
+pub use module_commit_store::ModuleCommitStore;
 
 pub const COMMIT_ID_BYTES: usize = 32;
 
@@ -64,9 +64,7 @@ impl ModuleCommitId {
     }
 
     pub fn random() -> Self {
-        ModuleCommitId(
-            rand::thread_rng().gen::<[u8; COMMIT_ID_BYTES]>(),
-        )
+        ModuleCommitId(rand::thread_rng().gen::<[u8; COMMIT_ID_BYTES]>())
     }
 
     pub const fn to_bytes(self) -> [u8; COMMIT_ID_BYTES] {
@@ -241,9 +239,16 @@ impl SessionCommit {
         self.id
     }
 
-    pub fn add(&mut self, module_id: &ModuleId, module_commit: &ModuleCommit, bag: &mut ModuleCommitBag, memory_path: &MemoryPath) -> Result<(), Error> {
+    pub fn add(
+        &mut self,
+        module_id: &ModuleId,
+        module_commit: &ModuleCommit,
+        bag: &mut ModuleCommitBag,
+        memory_path: &MemoryPath,
+    ) -> Result<(), Error> {
         if !self.module_commit_ids.contains_key(module_id) {
-            self.module_commit_ids.insert(*module_id, module_commit.id());
+            self.module_commit_ids
+                .insert(*module_id, module_commit.id());
         }
         bag.save_module_commit(module_commit, memory_path)
     }
@@ -252,12 +257,15 @@ impl SessionCommit {
         &self.module_commit_ids
     }
 
-    pub fn module_commit_ids_mut(&mut self) -> &mut BTreeMap<ModuleId, ModuleCommitId> {
+    pub fn module_commit_ids_mut(
+        &mut self,
+    ) -> &mut BTreeMap<ModuleId, ModuleCommitId> {
         &mut self.module_commit_ids
     }
 
     pub fn calculate_id(&mut self) {
-        let mut vec = Vec::from_iter(self.module_commit_ids().values().cloned());
+        let mut vec =
+            Vec::from_iter(self.module_commit_ids().values().cloned());
         vec.sort();
         let root = Merkle::merkle(&mut vec).to_bytes();
         self.id = CommitId::from(root);
@@ -275,7 +283,7 @@ impl Default for SessionCommit {
 pub struct SessionCommits {
     commits: BTreeMap<CommitId, SessionCommit>,
     pub current: CommitId, // todo eliminate pub
-    bags: BTreeMap<ModuleId, ModuleCommitBag>
+    bags: BTreeMap<ModuleId, ModuleCommitBag>,
 }
 
 impl SessionCommits {
@@ -314,9 +322,7 @@ impl SessionCommits {
         self.commits.get_mut(session_commit_id)
     }
 
-    pub fn get_current_session_commit(
-        &self,
-    ) -> Option<&SessionCommit> {
+    pub fn get_current_session_commit(&self) -> Option<&SessionCommit> {
         println!("self.current={:?}", self.current);
         self.commits.get(&self.current)
     }
@@ -331,14 +337,14 @@ impl SessionCommits {
     //     mut closure: F,
     // ) -> Result<(), Error>
     // where
-    //     F: FnMut(&ModuleId, &ModuleCommitId, &mut ModuleCommitBag) -> Result<(), Error>,
-    // {
+    //     F: FnMut(&ModuleId, &ModuleCommitId, &mut ModuleCommitBag) ->
+    // Result<(), Error>, {
     //     match self.get_session_commit_mut(commit_id) {
     //         Some(session_commit) => {
-    //             for (module_id, module_commit_id) in session_commit.module_commit_ids.iter()
-    //             {
-    //                 closure(module_id, module_commit_id, self.get_bag(module_id))?;
-    //             }
+    //             for (module_id, module_commit_id) in
+    // session_commit.module_commit_ids.iter()             {
+    //                 closure(module_id, module_commit_id,
+    // self.get_bag(module_id))?;             }
     //             Ok(())
     //         }
     //         None => Err(SessionError("unknown session commit id".into())),

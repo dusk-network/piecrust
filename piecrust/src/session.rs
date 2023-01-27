@@ -9,8 +9,8 @@ use call_stack::{CallStack, StackElementView};
 
 use std::borrow::Cow;
 use std::collections::BTreeMap;
-use std::sync::Arc;
 use std::fs;
+use std::sync::Arc;
 
 use bytecheck::CheckBytes;
 use parking_lot::RwLock;
@@ -22,7 +22,7 @@ use rkyv::{
     Serialize,
 };
 
-use crate::commit::{CommitId, CommitPath, SessionCommit, ModuleCommitStore};
+use crate::commit::{CommitId, CommitPath, ModuleCommitStore, SessionCommit};
 use crate::event::Event;
 use crate::instance::WrappedInstance;
 use crate::memory_handler::MemoryHandler;
@@ -164,7 +164,9 @@ impl<'c> Session<'c> {
 
         if memory.state() == MemoryState::Uninitialized {
             // if current commit exists, use it as memory image
-            if let (Some(commit_path), can_remove) = self.path_to_current_commit(&mod_id) {
+            if let (Some(commit_path), can_remove) =
+                self.path_to_current_commit(&mod_id)
+            {
                 let metadata = std::fs::metadata(commit_path.as_ref())
                     .expect("todo - metadata error handling");
                 memory
@@ -174,8 +176,7 @@ impl<'c> Session<'c> {
                 std::fs::copy(commit_path.as_ref(), target_path.as_ref())
                     .expect("commit and memory paths exist");
                 if can_remove {
-                    fs::remove_file(commit_path.as_ref())
-                        .expect("");
+                    fs::remove_file(commit_path.as_ref()).expect("");
                 }
             }
         }
@@ -245,12 +246,18 @@ impl<'c> Session<'c> {
         println!("committing session");
         let mut session_commit = SessionCommit::new();
         self.memory_handler.with_every_module_id(|module_id, mem| {
-            let module_commit_store = ModuleCommitStore::new(self.vm.base_path(), *module_id);
+            let module_commit_store =
+                ModuleCommitStore::new(self.vm.base_path(), *module_id);
             let module_commit = module_commit_store.commit(mem)?;
             // self.vm.reset_root();
             let (memory_path, _) = self.vm.memory_path(module_id);
             println!("committing module {:?}", module_id);
-            session_commit.add(module_id, &module_commit, self.vm.get_bag(module_id), &memory_path)?;
+            session_commit.add(
+                module_id,
+                &module_commit,
+                self.vm.get_bag(module_id),
+                &memory_path,
+            )?;
             Ok(())
         })?;
         session_commit.calculate_id();

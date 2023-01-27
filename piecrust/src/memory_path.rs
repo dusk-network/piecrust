@@ -4,8 +4,8 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use std::path::{Path, PathBuf};
 use crate::commit::ModuleCommitLike;
+use std::path::{Path, PathBuf};
 
 #[derive(Debug)]
 pub struct MemoryPath {

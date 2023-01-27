@@ -4,16 +4,16 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use std::path::PathBuf;
+use qbsdiff::{Bsdiff, Bspatch};
 use std::fs::OpenOptions;
 use std::io::{Read, Write};
-use qbsdiff::{Bsdiff, Bspatch};
+use std::path::PathBuf;
 
-use crate::commit::{Hashable, ModuleCommitId};
 use crate::commit::diff_data::DiffData;
+use crate::commit::{Hashable, ModuleCommitId};
 use crate::memory_path::MemoryPath;
-use crate::Error::{self, PersistenceError};
 use crate::util::ByteArrayWrapper;
+use crate::Error::{self, PersistenceError};
 
 pub trait ModuleCommitLike {
     /// Module commit's file path
@@ -157,7 +157,7 @@ impl ModuleCommit {
             commit_to_patch.read()?.as_slice(),
             patch_data.into_inner().as_slice(),
         )
-            .map_err(PersistenceError)?;
+        .map_err(PersistenceError)?;
         let mut file = OpenOptions::new()
             .write(true)
             .create(true)

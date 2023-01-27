@@ -13,7 +13,10 @@ use tempfile::tempdir;
 
 use piecrust_uplink::ModuleId;
 
-use crate::commit::{CommitId, ModuleCommitBag, ModuleCommitId, SessionCommit, SessionCommits, CommitPath};
+use crate::commit::{
+    CommitId, CommitPath, ModuleCommitBag, ModuleCommitId, SessionCommit,
+    SessionCommits,
+};
 use crate::memory_path::MemoryPath;
 use crate::persistable::Persistable;
 use crate::session::Session;
@@ -104,17 +107,22 @@ impl VM {
         &mut self,
         module_id: &ModuleId,
     ) -> (Option<CommitPath>, bool) {
-        let current_session_commit = self.session_commits.get_current_session_commit();
+        let current_session_commit =
+            self.session_commits.get_current_session_commit();
         let csc;
-        if current_session_commit.is_none(){
-            return (None, false)
+        if current_session_commit.is_none() {
+            return (None, false);
         } else {
             csc = current_session_commit.unwrap();
         }
         if let Some(module_commit_id) = csc.module_commit_ids().get(module_id) {
             let (memory_path, _) = self.memory_path(&module_id);
             let module_commit_id = module_commit_id.clone();
-            let r = self.get_bag(module_id).restore_module_commit(module_commit_id, &memory_path, false);
+            let r = self.get_bag(module_id).restore_module_commit(
+                module_commit_id,
+                &memory_path,
+                false,
+            );
             if r.is_err() {
                 (None, false)
             } else {
@@ -163,20 +171,27 @@ impl VM {
         {
             let r = &mut self.session_commits.get_session_commit(commit_id);
             if r.is_none() {
-                return Err(SessionError("unknown session commit id".into()))
+                return Err(SessionError("unknown session commit id".into()));
             }
 
             let session_commit = r.unwrap();
-            for (module_id, module_commit_id) in session_commit.module_commit_ids().iter() {
+            for (module_id, module_commit_id) in
+                session_commit.module_commit_ids().iter()
+            {
                 pairs.push((*module_id, *module_commit_id))
             }
         }
         self.session_commits.current = *commit_id; // todo move it to session commits
 
         for (module_id, module_commit_id) in pairs {
-            let (memory_path, _) = Self::get_memory_path(&base_path, &module_id);
-            // let module_commit = ModuleCommit::from_id_and_path(module_commit_id, memory_path.path())?;
-            self.session_commits.get_bag(&module_id).restore_module_commit(module_commit_id, &memory_path, true)?;
+            let (memory_path, _) =
+                Self::get_memory_path(&base_path, &module_id);
+            // let module_commit =
+            // ModuleCommit::from_id_and_path(module_commit_id,
+            // memory_path.path())?;
+            self.session_commits
+                .get_bag(&module_id)
+                .restore_module_commit(module_commit_id, &memory_path, true)?;
         }
 
         Ok(())
@@ -196,7 +211,10 @@ impl VM {
         Ok(root)
     }
 
-    pub(crate) fn get_bag(&mut self, module_id: &ModuleId) -> &mut ModuleCommitBag {
+    pub(crate) fn get_bag(
+        &mut self,
+        module_id: &ModuleId,
+    ) -> &mut ModuleCommitBag {
         self.session_commits.get_bag(module_id)
     }
 }

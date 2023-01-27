@@ -4,8 +4,8 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use std::path::{Path, PathBuf};
 use crate::commit::ModuleCommitLike;
+use std::path::{Path, PathBuf};
 
 #[derive(Debug)]
 pub struct CommitPath {
@@ -14,8 +14,8 @@ pub struct CommitPath {
 
 impl CommitPath {
     pub fn new<P: AsRef<Path>>(path: P) -> Self
-        where
-            P: Into<PathBuf>,
+    where
+        P: Into<PathBuf>,
     {
         CommitPath { path: path.into() }
     }
