@@ -73,15 +73,16 @@ impl ModuleCommitBag {
         source_module_commit_id: ModuleCommitId,
         memory_path: &MemoryPath,
         restore: bool,
-    ) -> Result<Option<CommitPath>, Error> {
+    ) -> Result<(Option<CommitPath>, bool), Error> {
         println!("restore_module_commit - restoring commit {:?} len={}", source_module_commit_id, self.ids.len());
         if self.ids.is_empty(){
-            return Ok(None)
+            return Ok((None, false))
         }
         let from_id = |module_commit_id| {
             ModuleCommit::from_id_and_path(module_commit_id, memory_path.path())
         };
         let mut found = true;
+        let mut can_remove = false;
         let final_commit = if source_module_commit_id == self.ids[0] {
             from_id(self.ids[0])?
         } else if source_module_commit_id == self.top {
@@ -99,13 +100,17 @@ impl ModuleCommitBag {
                     break;
                 }
             }
+            can_remove = true;
             accu_commit
         };
         if found {
             if restore {
                 final_commit.restore(memory_path);
+                if can_remove {
+                    fs::remove_file(final_commit.path()).map_err(PersistenceError)?;
+                }
             }
-            Ok(Some(CommitPath::new(final_commit.path())))
+            Ok((Some(CommitPath::new(final_commit.path())), can_remove))
         } else {
             Err(CommitError("Commit id not found".into()))
         }

@@ -103,13 +103,25 @@ impl VM {
     pub(crate) fn module_last_commit_path_if_present(
         &mut self,
         module_id: &ModuleId,
-    ) -> Option<CommitPath> {
-        if let Some(module_commit_id) = self.session_commits.get_current_session_commit()?.module_commit_ids().get(module_id) {
+    ) -> (Option<CommitPath>, bool) {
+        let current_session_commit = self.session_commits.get_current_session_commit();
+        let csc;
+        if current_session_commit.is_none(){
+            return (None, false)
+        } else {
+            csc = current_session_commit.unwrap();
+        }
+        if let Some(module_commit_id) = csc.module_commit_ids().get(module_id) {
             let (memory_path, _) = self.memory_path(&module_id);
             let module_commit_id = module_commit_id.clone();
-            self.get_bag(module_id).restore_module_commit(module_commit_id, &memory_path, false).ok()?
+            let r = self.get_bag(module_id).restore_module_commit(module_commit_id, &memory_path, false);
+            if r.is_err() {
+                (None, false)
+            } else {
+                r.unwrap()
+            }
         } else {
-            None
+            (None, false)
         }
     }
 

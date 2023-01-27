@@ -10,6 +10,7 @@ use call_stack::{CallStack, StackElementView};
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::sync::Arc;
+use std::fs;
 
 use bytecheck::CheckBytes;
 use parking_lot::RwLock;
@@ -164,7 +165,7 @@ impl<'c> Session<'c> {
 
         if memory.state() == MemoryState::Uninitialized {
             // if current commit exists, use it as memory image
-            if let Some(commit_path) = self.path_to_current_commit(&mod_id) {
+            if let (Some(commit_path), can_remove) = self.path_to_current_commit(&mod_id) {
                 let metadata = std::fs::metadata(commit_path.as_ref())
                     .expect("todo - metadata error handling");
                 memory
@@ -173,6 +174,10 @@ impl<'c> Session<'c> {
                 let (target_path, _) = self.vm.memory_path(&mod_id);
                 std::fs::copy(commit_path.as_ref(), target_path.as_ref())
                     .expect("commit and memory paths exist");
+                if can_remove {
+                    fs::remove_file(commit_path.as_ref())
+                        .expect("");
+                }
             }
         }
         memory.set_state(MemoryState::Initialized);
@@ -266,7 +271,7 @@ impl<'c> Session<'c> {
     fn path_to_current_commit(
         &mut self,
         module_id: &ModuleId,
-    ) -> Option<CommitPath> {
+    ) -> (Option<CommitPath>, bool) {
         self.vm.module_last_commit_path_if_present(module_id)
     }
 
