@@ -5,9 +5,7 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 use bytecheck::CheckBytes;
-use rkyv::{
-    Archive, Deserialize, Serialize,
-};
+use rkyv::{Archive, Deserialize, Serialize};
 
 use crate::persistable::Persistable;
 
@@ -32,4 +30,4 @@ impl DiffData {
     }
 }
 
-impl Persistable for DiffData{}
+impl Persistable for DiffData {}

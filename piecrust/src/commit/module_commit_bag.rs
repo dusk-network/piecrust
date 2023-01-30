@@ -70,7 +70,6 @@ impl ModuleCommitBag {
         &self,
         source_module_commit_id: ModuleCommitId,
         memory_path: &MemoryPath,
-        restore: bool,
     ) -> Result<Option<CommitPath>, Error> {
         if self.ids.is_empty() {
             return Ok(None);
@@ -99,13 +98,6 @@ impl ModuleCommitBag {
             accu_commit
         };
         if found {
-            if restore {
-                final_commit.restore(memory_path)?;
-                if can_remove {
-                    fs::remove_file(final_commit.path())
-                        .map_err(PersistenceError)?;
-                }
-            }
             Ok(Some(CommitPath::new(final_commit.path(), can_remove)))
         } else {
             Err(CommitError("Commit id not found".into()))

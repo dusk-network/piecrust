@@ -38,14 +38,6 @@ impl ModuleCommitStore {
         Ok(module_commit)
     }
 
-    // pub fn restore(&self, module_commit_id: &ModuleCommitId) ->
-    // Result<ModuleCommit, Error> {     let source_path =
-    //         self.path_to_module_commit(&module_commit_id);
-    //     let module_commit =
-    // ModuleCommit::from_id_and_path_direct(*module_commit_id,
-    // source_path.path())?;     Ok(module_commit)
-    // }
-
     fn get_memory_path(&self) -> MemoryPath {
         MemoryPath::new(self.base_path.join(module_id_to_name(self.module_id)))
     }

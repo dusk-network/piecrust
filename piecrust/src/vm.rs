@@ -7,6 +7,7 @@
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::fmt::{self, Debug, Formatter};
+use std::fs;
 use std::path::{Path, PathBuf};
 
 use tempfile::tempdir;
@@ -14,8 +15,8 @@ use tempfile::tempdir;
 use piecrust_uplink::ModuleId;
 
 use crate::commit::{
-    CommitId, CommitPath, ModuleCommitBag, ModuleCommitId, SessionCommit,
-    SessionCommits,
+    CommitId, CommitPath, ModuleCommit, ModuleCommitBag, ModuleCommitId,
+    ModuleCommitLike, SessionCommit, SessionCommits,
 };
 use crate::memory_path::MemoryPath;
 use crate::persistable::Persistable;
@@ -25,14 +26,11 @@ use crate::util::module_id_to_name;
 use crate::Error::{self, PersistenceError, SessionError};
 
 const SESSION_COMMITS_FILENAME: &str = "commits";
-// const LAST_COMMIT_POSTFIX: &str = "_last";
-// const LAST_COMMIT_ID_POSTFIX: &str = "_last_id";
 
 pub struct VM {
     host_queries: HostQueries,
     base_memory_path: PathBuf,
     session_commits: SessionCommits,
-    // root: Option<[u8; 32]>,
 }
 
 impl VM {
@@ -48,7 +46,6 @@ impl VM {
             host_queries: HostQueries::default(),
             base_memory_path,
             session_commits,
-            // root: None,
         })
     }
 
@@ -60,7 +57,6 @@ impl VM {
                 .into(),
             host_queries: HostQueries::default(),
             session_commits: SessionCommits::new(),
-            // root: None,
         })
     }
 
@@ -114,7 +110,7 @@ impl VM {
         let (memory_path, _) = self.memory_path(module_id);
         let module_commit_id = *module_commit_id;
         self.get_bag(module_id)
-            .restore_module_commit(module_commit_id, &memory_path, false)
+            .restore_module_commit(module_commit_id, &memory_path)
             .ok()?
     }
 
@@ -136,7 +132,9 @@ impl VM {
             let session_commit = self
                 .session_commits
                 .get_session_commit(commit_id)
-                .ok_or(SessionError("unknown session commit id".into()))?;
+                .ok_or_else(|| {
+                    SessionError("unknown session commit id".into())
+                })?;
             for (module_id, module_commit_id) in
                 session_commit.module_commit_ids().iter()
             {
@@ -147,9 +145,21 @@ impl VM {
         for (module_id, module_commit_id) in pairs {
             let (memory_path, _) =
                 Self::get_memory_path(&base_path, &module_id);
-            self.session_commits
+            let restored = self
+                .session_commits
                 .get_bag(&module_id)
-                .restore_module_commit(module_commit_id, &memory_path, true)?;
+                .restore_module_commit(module_commit_id, &memory_path)?;
+            if let Some(commit_path) = restored {
+                let commit = ModuleCommit::from_id_and_path_direct(
+                    module_commit_id,
+                    commit_path.path(),
+                )?;
+                commit.restore(&memory_path)?;
+                if commit_path.can_remove() {
+                    fs::remove_file(commit_path.path())
+                        .map_err(PersistenceError)?;
+                }
+            }
         }
         Ok(())
     }
@@ -162,10 +172,8 @@ impl VM {
         self.base_memory_path.to_path_buf()
     }
 
-    // todo eliminate refresh
     pub(crate) fn root(&mut self, _refresh: bool) -> Result<[u8; 32], Error> {
-        let root = self.session_commits.get_current_commit().to_bytes();
-        Ok(root)
+        Ok(self.session_commits.get_current_commit().to_bytes())
     }
 
     pub(crate) fn get_bag(
