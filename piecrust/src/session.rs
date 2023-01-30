@@ -73,6 +73,10 @@ impl<'c> Session<'c> {
     /// If one needs to specify the ID, [`deploy_with_id`] is available.
     ///
     /// [`deploy_with_id`]: `Session::deploy_with_id`
+    // FIXME modules are currently deployed in `VM` scope, meaning they're made
+    //  available to sessions where they aren't technically deployed. This
+    //  should  be fixed on the re-structuring on disk.
+    //  https://github.com/dusk-network/piecrust/issues/145
     pub fn deploy(&mut self, bytecode: &[u8]) -> Result<ModuleId, Error> {
         let hash = blake3::hash(bytecode);
         let module_id = ModuleId::from_bytes(hash.into());
