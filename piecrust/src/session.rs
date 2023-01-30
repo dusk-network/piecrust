@@ -22,7 +22,7 @@ use rkyv::{
     Serialize,
 };
 
-use crate::commit::{CommitId, CommitPath, ModuleCommitStore, SessionCommit};
+use crate::commit::{CommitId, ModuleCommitStore, SessionCommit};
 use crate::event::Event;
 use crate::instance::WrappedInstance;
 use crate::memory_handler::MemoryHandler;
@@ -164,8 +164,8 @@ impl<'c> Session<'c> {
 
         if memory.state() == MemoryState::Uninitialized {
             // if current commit exists, use it as memory image
-            if let (Some(commit_path), can_remove) =
-                self.path_to_current_commit(&mod_id)
+            if let Some(commit_path) =
+                self.vm.current_module_commit_path(&mod_id)
             {
                 let metadata = std::fs::metadata(commit_path.as_ref())
                     .expect("todo - metadata error handling");
@@ -175,7 +175,7 @@ impl<'c> Session<'c> {
                 let (target_path, _) = self.vm.memory_path(&mod_id);
                 std::fs::copy(commit_path.as_ref(), target_path.as_ref())
                     .expect("commit and memory paths exist");
-                if can_remove {
+                if commit_path.can_remove() {
                     fs::remove_file(commit_path.as_ref()).expect("");
                 }
             }
@@ -243,7 +243,6 @@ impl<'c> Session<'c> {
     }
 
     pub fn commit(self) -> Result<CommitId, Error> {
-        println!("committing session");
         let mut session_commit = SessionCommit::new();
         self.memory_handler.with_every_module_id(|module_id, mem| {
             let module_commit_store =
@@ -251,7 +250,6 @@ impl<'c> Session<'c> {
             let module_commit = module_commit_store.commit(mem)?;
             // self.vm.reset_root();
             let (memory_path, _) = self.vm.memory_path(module_id);
-            println!("committing module {module_id:?}");
             session_commit.add(
                 module_id,
                 &module_commit,
@@ -272,13 +270,6 @@ impl<'c> Session<'c> {
     ) -> Result<(), Error> {
         self.vm.restore_session(session_commit_id)?;
         Ok(())
-    }
-
-    fn path_to_current_commit(
-        &mut self,
-        module_id: &ModuleId,
-    ) -> (Option<CommitPath>, bool) {
-        self.vm.module_last_commit_path_if_present(module_id)
     }
 
     pub(crate) fn register_debug<M: Into<String>>(&self, msg: M) {

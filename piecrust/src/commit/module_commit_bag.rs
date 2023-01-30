@@ -38,22 +38,12 @@ impl ModuleCommitBag {
         module_commit: &ModuleCommit,
         memory_path: &MemoryPath,
     ) -> Result<(), Error> {
-        println!(
-            "save_module_commit - pushing commit path={:?}",
-            module_commit.path()
-        );
         module_commit.capture(memory_path)?;
         self.ids.push(module_commit.id());
         if self.ids.len() == 1 {
             // top is an uncompressed version of most recent commit
             ModuleCommit::from_id_and_path(self.top, memory_path.path())?
                 .capture(memory_path)?;
-            println!(
-                "save_module_commit - exit early - len={} ids={:?} top={:?}",
-                self.ids.len(),
-                self.ids,
-                self.top
-            );
             Ok(())
         } else {
             let from_id = |module_commit_id| {
@@ -64,7 +54,6 @@ impl ModuleCommitBag {
             };
             let top_commit = from_id(self.top)?;
             let accu_commit = from_id(ModuleCommitId::random())?;
-            println!("accu1={:?}", accu_commit.id());
             accu_commit.capture(module_commit)?;
             // accu and commit are both uncompressed
             // compressing commit against the top
@@ -73,13 +62,6 @@ impl ModuleCommitBag {
             // top is an uncompressed version of most recent commit
             top_commit.capture(&accu_commit)?;
             fs::remove_file(accu_commit.path()).map_err(PersistenceError)?;
-
-            println!(
-                "save_module_commit - exit late - len={} ids={:?} top={:?}",
-                self.ids.len(),
-                self.ids,
-                self.top
-            );
             Ok(())
         }
     }
@@ -89,14 +71,9 @@ impl ModuleCommitBag {
         source_module_commit_id: ModuleCommitId,
         memory_path: &MemoryPath,
         restore: bool,
-    ) -> Result<(Option<CommitPath>, bool), Error> {
-        println!(
-            "restore_module_commit - restoring commit {:?} len={}",
-            source_module_commit_id,
-            self.ids.len()
-        );
+    ) -> Result<Option<CommitPath>, Error> {
         if self.ids.is_empty() {
-            return Ok((None, false));
+            return Ok(None);
         }
         let from_id = |module_commit_id| {
             ModuleCommit::from_id_and_path(module_commit_id, memory_path.path())
@@ -109,7 +86,6 @@ impl ModuleCommitBag {
             from_id(self.top)?
         } else {
             let accu_commit = from_id(ModuleCommitId::random())?;
-            println!("accu2={:?} restore={}", accu_commit.id(), restore);
             accu_commit.capture(&from_id(self.ids[0])?)?;
             for commit_id in self.ids.as_slice()[1..].iter() {
                 let commit = from_id(*commit_id)?;
@@ -130,7 +106,7 @@ impl ModuleCommitBag {
                         .map_err(PersistenceError)?;
                 }
             }
-            Ok((Some(CommitPath::new(final_commit.path())), can_remove))
+            Ok(Some(CommitPath::new(final_commit.path(), can_remove)))
         } else {
             Err(CommitError("Commit id not found".into()))
         }

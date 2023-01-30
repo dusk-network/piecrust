@@ -103,52 +103,20 @@ impl VM {
         )
     }
 
-    pub(crate) fn module_last_commit_path_if_present(
+    pub(crate) fn current_module_commit_path(
         &mut self,
         module_id: &ModuleId,
-    ) -> (Option<CommitPath>, bool) {
-        if let Some(csc) = self.session_commits.get_current_session_commit() {
-            if let Some(module_commit_id) =
-                csc.module_commit_ids().get(module_id)
-            {
-                let (memory_path, _) = self.memory_path(module_id);
-                let module_commit_id = *module_commit_id;
-                let r = self.get_bag(module_id).restore_module_commit(
-                    module_commit_id,
-                    &memory_path,
-                    false,
-                );
-                if let Ok(rr) = r {
-                    // todo
-                    rr
-                } else {
-                    (None, false)
-                }
-            } else {
-                (None, false)
-            }
-        } else {
-            (None, false)
-        }
+    ) -> Option<CommitPath> {
+        let current_session_commit =
+            self.session_commits.get_current_session_commit()?;
+        let module_commit_id =
+            current_session_commit.module_commit_ids().get(module_id)?;
+        let (memory_path, _) = self.memory_path(module_id);
+        let module_commit_id = *module_commit_id;
+        self.get_bag(module_id)
+            .restore_module_commit(module_commit_id, &memory_path, false)
+            .ok()?
     }
-
-    // pub(crate) fn path_to_module_last_commit_id(
-    //     &self,
-    //     module_id: &ModuleId,
-    // ) -> MemoryPath {
-    //     self.path_to_module_with_postfix(module_id, LAST_COMMIT_ID_POSTFIX)
-    // }
-
-    // fn path_to_module_with_postfix<P: AsRef<str>>(
-    //     &self,
-    //     module_id: &ModuleId,
-    //     postfix: P,
-    // ) -> MemoryPath {
-    //     let mut name = module_id_to_name(*module_id);
-    //     name.push_str(postfix.as_ref());
-    //     let path = self.base_memory_path.join(name);
-    //     MemoryPath::new(path)
-    // }
 
     fn path_to_session_commits(&self) -> PathBuf {
         self.base_memory_path.join(SESSION_COMMITS_FILENAME)

@@ -323,7 +323,6 @@ impl SessionCommits {
     }
 
     pub fn get_current_session_commit(&self) -> Option<&SessionCommit> {
-        println!("self.current={:?}", self.current);
         self.commits.get(&self.current)
     }
 

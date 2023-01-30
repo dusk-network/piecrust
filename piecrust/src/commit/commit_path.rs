@@ -10,14 +10,22 @@ use std::path::{Path, PathBuf};
 #[derive(Debug)]
 pub struct CommitPath {
     path: PathBuf,
+    can_remove: bool,
 }
 
 impl CommitPath {
-    pub fn new<P: AsRef<Path>>(path: P) -> Self
+    pub fn new<P: AsRef<Path>>(path: P, can_remove: bool) -> Self
     where
         P: Into<PathBuf>,
     {
-        CommitPath { path: path.into() }
+        CommitPath {
+            path: path.into(),
+            can_remove,
+        }
+    }
+
+    pub fn can_remove(&self) -> bool {
+        self.can_remove
     }
 }
 
