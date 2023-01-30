@@ -126,41 +126,31 @@ impl VM {
         self.session_commits.add(session_commit);
     }
 
-    // todo move it to session commits
     pub(crate) fn restore_session(
         &mut self,
         commit_id: &CommitId,
     ) -> Result<(), Error> {
         let base_path = self.base_path();
-
         let mut pairs = Vec::<(ModuleId, ModuleCommitId)>::new();
-
         {
-            let r = &mut self.session_commits.get_session_commit(commit_id);
-            if r.is_none() {
-                return Err(SessionError("unknown session commit id".into()));
-            }
-
-            let session_commit = r.unwrap();
+            let session_commit = self
+                .session_commits
+                .get_session_commit(commit_id)
+                .ok_or(SessionError("unknown session commit id".into()))?;
             for (module_id, module_commit_id) in
                 session_commit.module_commit_ids().iter()
             {
                 pairs.push((*module_id, *module_commit_id))
             }
         }
-        self.session_commits.current = *commit_id; // todo move it to session commits
-
+        self.session_commits.set_current(commit_id);
         for (module_id, module_commit_id) in pairs {
             let (memory_path, _) =
                 Self::get_memory_path(&base_path, &module_id);
-            // let module_commit =
-            // ModuleCommit::from_id_and_path(module_commit_id,
-            // memory_path.path())?;
             self.session_commits
                 .get_bag(&module_id)
                 .restore_module_commit(module_commit_id, &memory_path, true)?;
         }
-
         Ok(())
     }
 

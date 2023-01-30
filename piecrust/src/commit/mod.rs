@@ -303,6 +303,10 @@ impl SessionCommits {
         }
     }
 
+    pub fn set_current(&mut self, current: &CommitId) {
+        self.current = *current;
+    }
+
     pub fn add(&mut self, session_commit: SessionCommit) {
         self.current = session_commit.commit_id();
         self.commits.insert(self.current, session_commit);
@@ -329,26 +333,6 @@ impl SessionCommits {
     pub fn get_current_commit(&self) -> CommitId {
         self.current
     }
-
-    // pub fn with_every_module_commit<F>(
-    //     &mut self,
-    //     commit_id: &CommitId,
-    //     mut closure: F,
-    // ) -> Result<(), Error>
-    // where
-    //     F: FnMut(&ModuleId, &ModuleCommitId, &mut ModuleCommitBag) ->
-    // Result<(), Error>, {
-    //     match self.get_session_commit_mut(commit_id) {
-    //         Some(session_commit) => {
-    //             for (module_id, module_commit_id) in
-    // session_commit.module_commit_ids.iter()             {
-    //                 closure(module_id, module_commit_id,
-    // self.get_bag(module_id))?;             }
-    //             Ok(())
-    //         }
-    //         None => Err(SessionError("unknown session commit id".into())),
-    //     }
-    // }
 
     pub fn with_every_session_commit<F>(&self, mut closure: F)
     where
