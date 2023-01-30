@@ -263,7 +263,7 @@ impl Default for SessionCommit {
 #[archive_attr(derive(CheckBytes, Debug))]
 pub struct SessionCommits {
     commits: BTreeMap<CommitId, SessionCommit>,
-    pub current: CommitId, // todo eliminate pub
+    current: CommitId,
     bags: BTreeMap<ModuleId, ModuleCommitBag>,
 }
 
