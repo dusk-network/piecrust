@@ -14,6 +14,7 @@ use crate::commit::{Hashable, ModuleCommitId};
 use crate::memory_path::MemoryPath;
 use crate::util::ByteArrayWrapper;
 use crate::Error::{self, PersistenceError};
+use crate::persistable::Persistable;
 
 pub trait ModuleCommitLike {
     /// Module commit's file path
@@ -128,7 +129,7 @@ impl ModuleCommit {
             base_buffer.as_slice().len(),
             compressor.compress(&delta, COMPRESSION_LEVEL).unwrap(),
         );
-        diff_data.write(self.path())?;
+        diff_data.persist(self.path())?;
         Ok(())
     }
 
@@ -139,7 +140,7 @@ impl ModuleCommit {
         commit_to_patch: &ModuleCommit,
         result_commit: &dyn ModuleCommitLike,
     ) -> Result<(), Error> {
-        let diff_data = DiffData::read(self.path())?;
+        let diff_data: DiffData = DiffData::restore(self.path())?;
         let mut decompressor = zstd::block::Decompressor::new();
         let patch_data = std::io::Cursor::new(
             decompressor

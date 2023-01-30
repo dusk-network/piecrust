@@ -201,25 +201,6 @@ impl From<CommitId> for [u8; COMMIT_ID_BYTES] {
     }
 }
 
-// #[derive(Debug, Archive, Serialize, Deserialize)]
-// #[archive_attr(derive(CheckBytes, Debug))]
-// pub struct ModuleCommitData {
-//     current_id: ModuleCommitId,
-//     pub bag: ModuleCommitBag,  // todo remove pub
-// }
-
-// impl ModuleCommitData {
-//     pub fn new() -> Self {
-//         Self {
-//             current_id: ModuleCommitId::uninitialized(),
-//             bag: ModuleCommitBag::new()
-//         }
-//     }
-//     pub fn id(&self) -> &ModuleCommitId {
-//         &self.current_id
-//     }
-// }
-
 #[derive(Debug, Archive, Serialize, Deserialize)]
 #[archive_attr(derive(CheckBytes, Debug))]
 pub struct SessionCommit {
