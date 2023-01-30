@@ -7,12 +7,12 @@
 use std::borrow::Cow;
 use std::collections::{BTreeMap, HashSet};
 use std::fmt::{self, Debug, Formatter};
+use std::fs;
 use std::path::{Path, PathBuf};
-use std::{fs, io};
 
 use tempfile::tempdir;
 
-use piecrust_uplink::{ModuleId, MODULE_ID_BYTES};
+use piecrust_uplink::ModuleId;
 
 use crate::commit::{CommitId, ModuleCommitId, SessionCommit, SessionCommits};
 use crate::memory_path::MemoryPath;
@@ -20,82 +20,13 @@ use crate::module::WrappedModule;
 use crate::persistable::Persistable;
 use crate::session::Session;
 use crate::types::MemoryState;
-use crate::util::{commit_id_to_name, module_id_to_name};
+use crate::util::{commit_id_to_name, module_id_to_name, read_modules};
 use crate::Error::{self, PersistenceError, RestoreError};
 
 const SESSION_COMMITS_FILENAME: &str = "commits";
 const LAST_COMMIT_POSTFIX: &str = "_last";
 const LAST_COMMIT_ID_POSTFIX: &str = "_last_id";
-const MODULES_DIR: &str = "modules";
-
-/// Parse a module ID and the file from the given `path`.
-///
-/// # Panics
-/// If the given path doesn't have a final component, or that final component is
-/// not valid UTF-8.
-fn module_from_path<P: AsRef<Path>>(
-    path: P,
-) -> Result<(ModuleId, WrappedModule), Error> {
-    let path = path.as_ref();
-
-    let fname = path
-        .file_name()
-        .expect("The path must have a final component")
-        .to_str()
-        .expect("The final path component should be valid UTF-8");
-
-    let module_id_bytes = hex::decode(fname).ok().ok_or_else(|| {
-        PersistenceError(io::Error::new(
-            io::ErrorKind::InvalidData,
-            "Invalid hex in file name",
-        ))
-    })?;
-
-    if module_id_bytes.len() != MODULE_ID_BYTES {
-        return Err(PersistenceError(io::Error::new(
-            io::ErrorKind::InvalidData,
-            format!(
-                "Expected file name of length {MODULE_ID_BYTES}, found {}",
-                module_id_bytes.len()
-            ),
-        )));
-    }
-
-    let mut bytes = [0u8; MODULE_ID_BYTES];
-    bytes.copy_from_slice(&module_id_bytes);
-
-    let module_id = ModuleId::from_bytes(bytes);
-
-    let bytecode = fs::read(path).map_err(PersistenceError)?;
-    let module = WrappedModule::new(&bytecode)?;
-
-    Ok((module_id, module))
-}
-
-fn read_modules<P: AsRef<Path>>(
-    base_path: P,
-) -> Result<BTreeMap<ModuleId, WrappedModule>, Error> {
-    let modules_dir = base_path.as_ref().join(MODULES_DIR);
-    let mut modules = BTreeMap::new();
-
-    // If the directory doesn't exist, then there are no modules
-    if !modules_dir.exists() {
-        return Ok(modules);
-    }
-
-    for entry in fs::read_dir(modules_dir).map_err(PersistenceError)? {
-        let entry = entry.map_err(PersistenceError)?;
-        let entry_path = entry.path();
-
-        // Only read if it is a file, otherwise simply ignore
-        if entry_path.is_file() {
-            let (module_id, module) = module_from_path(entry_path)?;
-            modules.insert(module_id, module);
-        }
-    }
-
-    Ok(modules)
-}
+pub(crate) const MODULES_DIR: &str = "modules";
 
 pub struct VM {
     host_queries: HostQueries,
