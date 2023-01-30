@@ -67,13 +67,25 @@ impl<'c> Session<'c> {
         }
     }
 
+    /// Deploy a module, returning its `ModuleId`. The ID is computed using a
+    /// `blake3` hash of the bytecode.
+    ///
+    /// If one needs to specify the ID, [`deploy_with_id`] is available.
+    ///
+    /// [`deploy_with_id`]: `Session::deploy_with_id`
     pub fn deploy(&mut self, bytecode: &[u8]) -> Result<ModuleId, Error> {
         let hash = blake3::hash(bytecode);
-        let module_id = ModuleId::from(<[u8; 32]>::from(hash));
+        let module_id = ModuleId::from_bytes(hash.into());
         self.deploy_with_id(module_id, bytecode)?;
         Ok(module_id)
     }
 
+    /// Deploy a module with the given ID.
+    ///
+    /// If one would like to *not* specify the `ModuleId`, [`deploy`] is
+    /// available.
+    ///
+    /// [`deploy`]: `Session::deploy`
     pub fn deploy_with_id(
         &mut self,
         module_id: ModuleId,
