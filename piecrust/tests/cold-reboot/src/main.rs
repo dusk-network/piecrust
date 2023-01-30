@@ -23,45 +23,13 @@ fn initialize_counter<P: AsRef<Path>>(
 
     let module_id = session.deploy(counter_bytecode)?;
 
-    // assert_eq!(
-    //     session.query::<(), i64>(module_id, "read_value", &())?,
-    //     0xfc
-    // );
     session.transact::<(), ()>(module_id, "increment", &())?;
-    // assert_eq!(
-    //     session.query::<(), i64>(module_id, "read_value", &())?,
-    //     0xfd
-    // );
 
     let commit_id = session.commit()?;
     assert_eq!(commit_id.as_bytes(), vm.session().root(false)?);
     commit_id.persist(commit_id_file_path.as_ref())?;
 
     vm.persist()?;
-
-    // let mut session2 = vm.session();
-    // let module_id = session2.deploy(counter_bytecode)?;
-    // session2.transact::<(), ()>(module_id, "increment", &())?;
-    // let commit_id2 = session2.commit()?;
-    // assert_eq!(commit_id2.as_bytes(), vm.session().root(false)?);
-    // commit_id2.persist(commit_id_file_path.as_ref())?;
-    // vm.persist()?;
-    //
-    // let mut session3 = vm.session();
-    // let module_id = session3.deploy(counter_bytecode)?;
-    // session3.transact::<(), ()>(module_id, "increment", &())?;
-    // let commit_id3 = session3.commit()?;
-    // assert_eq!(commit_id3.as_bytes(), vm.session().root(false)?);
-    // commit_id3.persist(commit_id_file_path.as_ref())?;
-    // vm.persist()?;
-    //
-    // let mut session4 = vm.session();
-    // let module_id = session4.deploy(counter_bytecode)?;
-    // session4.transact::<(), ()>(module_id, "increment", &())?;
-    // let commit_id4 = session4.commit()?;
-    // assert_eq!(commit_id4.as_bytes(), vm.session().root(false)?);
-    // commit_id4.persist(commit_id_file_path.as_ref())?;
-    // vm.persist()?;
 
     Ok(())
 }
@@ -88,6 +56,18 @@ fn confirm_counter<P: AsRef<Path>>(
         session.query::<(), i64>(module_id, "read_value", &())?,
         expected
     );
+
+    /*
+     * Make sure that diffing and compression work.
+     */
+    let bag_size_info = session.get_bag_size_info(&module_id)?;
+    let l = bag_size_info.id_sizes.len();
+    assert!(l > 0);
+    for i in 1..l {
+        assert!(bag_size_info.id_sizes[i] < 500)
+    }
+    assert!(bag_size_info.id_sizes[0] > 200000);
+    assert!(bag_size_info.top_size > 200000);
 
     Ok(())
 }

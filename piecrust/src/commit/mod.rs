@@ -27,7 +27,7 @@ use crate::persistable::Persistable;
 use crate::memory_path::MemoryPath;
 pub use commit_path::CommitPath;
 pub use module_commit::{ModuleCommit, ModuleCommitLike};
-pub use module_commit_bag::ModuleCommitBag;
+pub use module_commit_bag::{BagSizeInfo, ModuleCommitBag};
 pub use module_commit_store::ModuleCommitStore;
 
 pub const COMMIT_ID_BYTES: usize = 32;
@@ -324,11 +324,18 @@ impl SessionCommits {
         }
     }
 
-    pub fn get_bag(&mut self, module_id: &ModuleId) -> &mut ModuleCommitBag {
+    pub fn get_bag_mut(
+        &mut self,
+        module_id: &ModuleId,
+    ) -> &mut ModuleCommitBag {
         if !self.bags.contains_key(module_id) {
             self.bags.insert(*module_id, ModuleCommitBag::new());
         }
         self.bags.get_mut(module_id).unwrap()
+    }
+
+    pub fn get_bag(&self, module_id: &ModuleId) -> Option<&ModuleCommitBag> {
+        self.bags.get(module_id)
     }
 }
 

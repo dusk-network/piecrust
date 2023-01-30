@@ -15,8 +15,8 @@ use tempfile::tempdir;
 use piecrust_uplink::ModuleId;
 
 use crate::commit::{
-    CommitId, CommitPath, ModuleCommit, ModuleCommitBag, ModuleCommitId,
-    ModuleCommitLike, SessionCommit, SessionCommits,
+    BagSizeInfo, CommitId, CommitPath, ModuleCommit, ModuleCommitBag,
+    ModuleCommitId, ModuleCommitLike, SessionCommit, SessionCommits,
 };
 use crate::memory_path::MemoryPath;
 use crate::persistable::Persistable;
@@ -109,7 +109,7 @@ impl VM {
             current_session_commit.module_commit_ids().get(module_id)?;
         let (memory_path, _) = self.memory_path(module_id);
         let module_commit_id = *module_commit_id;
-        self.get_bag(module_id)
+        self.get_bag_mut(module_id)
             .restore_module_commit(module_commit_id, &memory_path)
             .ok()?
     }
@@ -147,7 +147,7 @@ impl VM {
                 Self::get_memory_path(&base_path, &module_id);
             let restored = self
                 .session_commits
-                .get_bag(&module_id)
+                .get_bag_mut(&module_id)
                 .restore_module_commit(module_commit_id, &memory_path)?;
             if let Some(commit_path) = restored {
                 let commit = ModuleCommit::from_id_and_path_direct(
@@ -176,11 +176,26 @@ impl VM {
         Ok(self.session_commits.get_current_commit().to_bytes())
     }
 
-    pub(crate) fn get_bag(
+    pub(crate) fn get_bag_mut(
         &mut self,
         module_id: &ModuleId,
     ) -> &mut ModuleCommitBag {
+        self.session_commits.get_bag_mut(module_id)
+    }
+
+    pub(crate) fn get_bag(
+        &self,
+        module_id: &ModuleId,
+    ) -> Option<&ModuleCommitBag> {
         self.session_commits.get_bag(module_id)
+    }
+
+    pub(crate) fn get_bag_size_info(
+        &self,
+        module_id: &ModuleId,
+    ) -> Result<BagSizeInfo, Error> {
+        let (memory_path, _) = self.memory_path(module_id);
+        self.get_bag(module_id).expect("module bag found").get_bag_size_info(&memory_path)
     }
 }
 

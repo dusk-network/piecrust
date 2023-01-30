@@ -15,6 +15,21 @@ use crate::error::Error;
 use crate::memory_path::MemoryPath;
 use crate::Error::{CommitError, PersistenceError};
 
+#[derive(Debug)]
+pub struct BagSizeInfo {
+    pub id_sizes: Vec<u64>,
+    pub top_size: u64,
+}
+
+impl BagSizeInfo {
+    pub fn new() -> Self {
+        Self {
+            id_sizes: Vec::new(),
+            top_size: 0u64,
+        }
+    }
+}
+
 #[derive(Debug, Archive, Serialize, Deserialize)]
 #[archive_attr(derive(CheckBytes, Debug))]
 pub struct ModuleCommitBag {
@@ -102,6 +117,25 @@ impl ModuleCommitBag {
         } else {
             Err(CommitError("Commit id not found".into()))
         }
+    }
+
+    pub(crate) fn get_bag_size_info(
+        &self,
+        memory_path: &MemoryPath,
+    ) -> Result<BagSizeInfo, Error> {
+        fn get_size(id: &ModuleCommitId, memory_path: &MemoryPath) -> Result<u64, Error> {
+            let module_commit =
+                ModuleCommit::from_id_and_path(*id, memory_path.path())?;
+            let metadata = std::fs::metadata(module_commit.path())
+                .expect("metadata obtained");
+            Ok(metadata.len())
+        }
+        let mut bag_size_info = BagSizeInfo::new();
+        for id in self.ids.iter() {
+            bag_size_info.id_sizes.push(get_size(&id, memory_path)?);
+        }
+        bag_size_info.top_size = get_size(&self.top, memory_path)?;
+        Ok(bag_size_info)
     }
 }
 
