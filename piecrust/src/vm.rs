@@ -37,6 +37,8 @@ pub struct VM {
 }
 
 impl VM {
+    /// Creates a new virtual machine, reading the given directory for existing
+    /// commits and bytecode.
     pub fn new<P: AsRef<Path>>(path: P) -> Result<Self, Error>
     where
         P: Into<PathBuf>,
@@ -56,6 +58,7 @@ impl VM {
         })
     }
 
+    /// Creates a new virtual machine in using a temporary directory.
     pub fn ephemeral() -> Result<Self, Error> {
         Ok(Self {
             base_memory_path: tempdir()
