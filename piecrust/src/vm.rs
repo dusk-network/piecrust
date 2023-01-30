@@ -7,6 +7,7 @@
 use std::borrow::Cow;
 use std::collections::{BTreeMap, HashSet};
 use std::fmt::{self, Debug, Formatter};
+use std::fs;
 use std::path::{Path, PathBuf};
 
 use tempfile::tempdir;
@@ -15,24 +16,29 @@ use piecrust_uplink::ModuleId;
 
 use crate::commit::{CommitId, ModuleCommitId, SessionCommit, SessionCommits};
 use crate::memory_path::MemoryPath;
+use crate::module::WrappedModule;
 use crate::persistable::Persistable;
 use crate::session::Session;
 use crate::types::MemoryState;
-use crate::util::{commit_id_to_name, module_id_to_name};
+use crate::util::{commit_id_to_name, module_id_to_name, read_modules};
 use crate::Error::{self, PersistenceError, RestoreError};
 
 const SESSION_COMMITS_FILENAME: &str = "commits";
 const LAST_COMMIT_POSTFIX: &str = "_last";
 const LAST_COMMIT_ID_POSTFIX: &str = "_last_id";
+pub(crate) const MODULES_DIR: &str = "modules";
 
 pub struct VM {
     host_queries: HostQueries,
     base_memory_path: PathBuf,
     session_commits: SessionCommits,
     root: Option<[u8; 32]>,
+    modules: BTreeMap<ModuleId, WrappedModule>,
 }
 
 impl VM {
+    /// Creates a new virtual machine, reading the given directory for existing
+    /// commits and bytecode.
     pub fn new<P: AsRef<Path>>(path: P) -> Result<Self, Error>
     where
         P: Into<PathBuf>,
@@ -41,14 +47,18 @@ impl VM {
         let session_commits = SessionCommits::from(
             base_memory_path.join(SESSION_COMMITS_FILENAME),
         )?;
+        let modules = read_modules(&base_memory_path)?;
+
         Ok(Self {
             host_queries: HostQueries::default(),
             base_memory_path,
             session_commits,
             root: None,
+            modules,
         })
     }
 
+    /// Creates a new virtual machine in using a temporary directory.
     pub fn ephemeral() -> Result<Self, Error> {
         Ok(Self {
             base_memory_path: tempdir()
@@ -58,6 +68,7 @@ impl VM {
             host_queries: HostQueries::default(),
             session_commits: SessionCommits::new(),
             root: None,
+            modules: BTreeMap::default(),
         })
     }
 
@@ -81,6 +92,28 @@ impl VM {
 
     pub fn session(&mut self) -> Session {
         Session::new(self)
+    }
+
+    pub(crate) fn get_module(&self, id: ModuleId) -> &WrappedModule {
+        self.modules.get(&id).expect("invalid module")
+    }
+
+    pub(crate) fn insert_module(
+        &mut self,
+        module_id: ModuleId,
+        bytecode: &[u8],
+    ) -> Result<(), Error> {
+        let modules_dir = self.base_memory_path.join(MODULES_DIR);
+
+        let module = WrappedModule::new(bytecode)?;
+        self.modules.insert(module_id, module);
+
+        fs::create_dir_all(&modules_dir).map_err(PersistenceError)?;
+        let module_hex = hex::encode(module_id.as_bytes());
+        let module_path = modules_dir.join(module_hex);
+        fs::write(module_path, bytecode).map_err(PersistenceError)?;
+
+        Ok(())
     }
 
     pub(crate) fn memory_path(
@@ -162,9 +195,9 @@ impl VM {
                     self.path_to_module_last_commit(module_id);
                 let last_commit_path_id =
                     self.path_to_module_last_commit_id(module_id);
-                std::fs::copy(source_path.as_ref(), target_path.as_ref())
+                fs::copy(source_path.as_ref(), target_path.as_ref())
                     .map_err(RestoreError)?;
-                std::fs::copy(source_path.as_ref(), last_commit_path.as_ref())
+                fs::copy(source_path.as_ref(), last_commit_path.as_ref())
                     .map_err(RestoreError)?;
                 module_commit_id.persist(last_commit_path_id)?;
                 Ok(())
