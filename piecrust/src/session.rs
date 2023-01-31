@@ -52,6 +52,7 @@ pub struct Session<'c> {
 impl<'c> Session<'c> {
     pub fn new(vm: &'c mut VM) -> Self {
         let base_path = vm.base_path();
+
         Session {
             vm,
             memory_handler: MemoryHandler::new(base_path),
