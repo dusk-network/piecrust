@@ -40,7 +40,6 @@ unsafe impl<'c> Sync for Session<'c> {}
 
 pub struct Session<'c> {
     vm: &'c mut VM,
-    modules: BTreeMap<ModuleId, WrappedModule>,
     memory_handler: MemoryHandler,
     callstack: Arc<RwLock<CallStack>>,
     debug: Arc<RwLock<Vec<String>>>,
@@ -55,7 +54,6 @@ impl<'c> Session<'c> {
         let base_path = vm.base_path();
         Session {
             vm,
-            modules: BTreeMap::default(),
             memory_handler: MemoryHandler::new(base_path),
             callstack: Arc::new(RwLock::new(CallStack::new())),
             debug: Arc::new(RwLock::new(vec![])),
@@ -66,25 +64,40 @@ impl<'c> Session<'c> {
         }
     }
 
+    /// Deploy a module, returning its `ModuleId`. The ID is computed using a
+    /// `blake3` hash of the bytecode.
+    ///
+    /// If one needs to specify the ID, [`deploy_with_id`] is available.
+    ///
+    /// [`deploy_with_id`]: `Session::deploy_with_id`
+    // FIXME modules are currently deployed in `VM` scope, meaning they're made
+    //  available to sessions where they aren't technically deployed. This
+    //  should  be fixed on the re-structuring on disk.
+    //  https://github.com/dusk-network/piecrust/issues/145
     pub fn deploy(&mut self, bytecode: &[u8]) -> Result<ModuleId, Error> {
         let hash = blake3::hash(bytecode);
-        let module_id = ModuleId::from(<[u8; 32]>::from(hash));
+        let module_id = ModuleId::from_bytes(hash.into());
         self.deploy_with_id(module_id, bytecode)?;
         Ok(module_id)
     }
 
+    /// Deploy a module with the given ID.
+    ///
+    /// If one would like to *not* specify the `ModuleId`, [`deploy`] is
+    /// available.
+    ///
+    /// [`deploy`]: `Session::deploy`
     pub fn deploy_with_id(
         &mut self,
         module_id: ModuleId,
         bytecode: &[u8],
     ) -> Result<(), Error> {
-        let module = WrappedModule::new(bytecode)?;
-        self.modules.insert(module_id, module);
+        self.vm.insert_module(module_id, bytecode)?;
         Ok(())
     }
 
     pub(crate) fn get_module(&self, id: ModuleId) -> &WrappedModule {
-        self.modules.get(&id).expect("invalid module")
+        self.vm.get_module(id)
     }
 
     pub fn query<Arg, Ret>(
@@ -248,7 +261,6 @@ impl<'c> Session<'c> {
             let module_commit_store =
                 ModuleCommitStore::new(self.vm.base_path(), *module_id);
             let module_commit = module_commit_store.commit(mem)?;
-            // self.vm.reset_root();
             let (memory_path, _) = self.vm.memory_path(module_id);
             session_commit.add(
                 module_id,

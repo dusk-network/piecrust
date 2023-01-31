@@ -17,16 +17,24 @@ use crate::Error::{CommitError, PersistenceError};
 
 #[derive(Debug)]
 pub struct BagSizeInfo {
-    pub id_sizes: Vec<u64>,
-    pub top_size: u64,
+    commit_sizes: Vec<u64>,
+    top_commit_size: u64,
 }
 
 impl BagSizeInfo {
     pub fn new() -> Self {
         Self {
-            id_sizes: Vec::new(),
-            top_size: 0u64,
+            commit_sizes: Vec::new(),
+            top_commit_size: 0u64,
         }
+    }
+
+    pub fn commit_sizes(&self) -> &Vec<u64> {
+        &self.commit_sizes
+    }
+    
+    pub fn top_commit_size(&self) -> u64 {
+        self.top_commit_size
     }
 }
 
@@ -132,9 +140,9 @@ impl ModuleCommitBag {
         }
         let mut bag_size_info = BagSizeInfo::new();
         for id in self.ids.iter() {
-            bag_size_info.id_sizes.push(get_size(&id, memory_path)?);
+            bag_size_info.commit_sizes.push(get_size(&id, memory_path)?);
         }
-        bag_size_info.top_size = get_size(&self.top, memory_path)?;
+        bag_size_info.top_commit_size = get_size(&self.top, memory_path)?;
         Ok(bag_size_info)
     }
 }
