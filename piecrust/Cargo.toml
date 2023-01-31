@@ -24,7 +24,6 @@ rand = "0.8"
 qbsdiff = "1.4"
 zstd = "0.9"
 hex = "0.4"
-hex = "0.4"
 
 [dev-dependencies]
 criterion = "0.4"
