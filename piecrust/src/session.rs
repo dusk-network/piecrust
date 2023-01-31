@@ -331,7 +331,10 @@ impl<'c> Session<'c> {
         self.vm.root(refresh)
     }
 
-    pub fn get_bag_size_info(&self, module_id: &ModuleId) -> Result<BagSizeInfo, Error> {
+    pub fn get_bag_size_info(
+        &self,
+        module_id: &ModuleId,
+    ) -> Result<BagSizeInfo, Error> {
         self.vm.get_bag_size_info(module_id)
     }
 }

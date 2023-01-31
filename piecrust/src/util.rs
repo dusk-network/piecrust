@@ -4,14 +4,14 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use std::collections::BTreeMap;
-use std::path::Path;
-use std::{fs, io};
-use piecrust_uplink::{ModuleId, MODULE_ID_BYTES};
 use crate::commit::{Hashable, ModuleCommitId};
 use crate::module::WrappedModule;
 use crate::vm::MODULES_DIR;
 use crate::Error::{self, PersistenceError};
+use piecrust_uplink::{ModuleId, MODULE_ID_BYTES};
+use std::collections::BTreeMap;
+use std::path::Path;
+use std::{fs, io};
 
 pub fn module_id_to_name(module_id: ModuleId) -> String {
     format!("{}", ByteArrayWrapper(module_id.as_bytes()))

@@ -221,7 +221,9 @@ impl VM {
         module_id: &ModuleId,
     ) -> Result<BagSizeInfo, Error> {
         let (memory_path, _) = self.memory_path(module_id);
-        self.get_bag(module_id).expect("module bag found").get_bag_size_info(&memory_path)
+        self.get_bag(module_id)
+            .expect("module bag found")
+            .get_bag_size_info(&memory_path)
     }
 }
 

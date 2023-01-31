@@ -32,9 +32,15 @@ impl BagSizeInfo {
     pub fn commit_sizes(&self) -> &Vec<u64> {
         &self.commit_sizes
     }
-    
+
     pub fn top_commit_size(&self) -> u64 {
         self.top_commit_size
+    }
+}
+
+impl Default for BagSizeInfo {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -131,7 +137,10 @@ impl ModuleCommitBag {
         &self,
         memory_path: &MemoryPath,
     ) -> Result<BagSizeInfo, Error> {
-        fn get_size(id: &ModuleCommitId, memory_path: &MemoryPath) -> Result<u64, Error> {
+        fn get_size(
+            id: &ModuleCommitId,
+            memory_path: &MemoryPath,
+        ) -> Result<u64, Error> {
             let module_commit =
                 ModuleCommit::from_id_and_path(*id, memory_path.path())?;
             let metadata = std::fs::metadata(module_commit.path())
@@ -140,7 +149,7 @@ impl ModuleCommitBag {
         }
         let mut bag_size_info = BagSizeInfo::new();
         for id in self.ids.iter() {
-            bag_size_info.commit_sizes.push(get_size(&id, memory_path)?);
+            bag_size_info.commit_sizes.push(get_size(id, memory_path)?);
         }
         bag_size_info.top_commit_size = get_size(&self.top, memory_path)?;
         Ok(bag_size_info)
