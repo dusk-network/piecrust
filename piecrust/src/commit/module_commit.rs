@@ -12,7 +12,6 @@ use std::path::{Path, PathBuf};
 use crate::commit::diff_data::DiffData;
 use crate::commit::{Hashable, ModuleCommitId};
 use crate::memory_path::MemoryPath;
-use crate::persistable::Persistable;
 use crate::util::ByteArrayWrapper;
 use crate::Error::{self, PersistenceError};
 
