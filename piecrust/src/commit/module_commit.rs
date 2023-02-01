@@ -6,8 +6,9 @@
 
 use qbsdiff::{Bsdiff, Bspatch};
 use std::fs::OpenOptions;
-use std::io::{Read, Write};
+use std::io::{Cursor, Read, Write};
 use std::path::{Path, PathBuf};
+use zstd::block::Decompressor;
 
 use crate::commit::diff_data::DiffData;
 use crate::commit::{Hashable, ModuleCommitId};
@@ -134,30 +135,14 @@ impl ModuleCommit {
 
     /// Decompresses 'this' module commit as patch and patches a given module
     /// commit. Result is written to a result module commit.
-    pub(crate) fn decompress_and_patch(
+    pub(crate) fn decompress_and_patch_last(
         &self,
-        commit_to_patch: &ModuleCommit,
+        previous_patched: &[u8],
         result_commit: &dyn ModuleCommitLike,
+        decompressor: &mut Decompressor,
     ) -> Result<(), Error> {
-        let diff_data: DiffData = DiffData::restore(self.path())?;
-        let mut decompressor = zstd::block::Decompressor::new();
-        let patch_data = std::io::Cursor::new(
-            decompressor
-                .decompress(diff_data.data(), diff_data.original_len())
-                .map_err(PersistenceError)?,
-        );
-        fn bspatch(source: &[u8], patch: &[u8]) -> std::io::Result<Vec<u8>> {
-            let patcher = Bspatch::new(patch)?;
-            let mut target =
-                Vec::with_capacity(patcher.hint_target_size() as usize);
-            patcher.apply(source, std::io::Cursor::new(&mut target))?;
-            Ok(target)
-        }
-        let patched = bspatch(
-            commit_to_patch.read()?.as_slice(),
-            patch_data.into_inner().as_slice(),
-        )
-        .map_err(PersistenceError)?;
+        let patched =
+            self.decompress_and_patch(previous_patched, decompressor)?;
         let mut file = OpenOptions::new()
             .write(true)
             .create(true)
@@ -167,6 +152,37 @@ impl ModuleCommit {
         file.write_all(patched.as_slice())
             .map_err(PersistenceError)?;
         Ok(())
+    }
+    pub(crate) fn decompress_and_patch(
+        &self,
+        previous_patched: &[u8],
+        decompressor: &mut Decompressor,
+    ) -> Result<Vec<u8>, Error> {
+        let diff_data: DiffData = DiffData::restore(self.path())?;
+        let patch_data = std::io::Cursor::new(
+            decompressor
+                .decompress(diff_data.data(), diff_data.original_len())
+                .map_err(PersistenceError)?,
+        );
+        let patched = ModuleCommit::patch(patch_data, previous_patched)?;
+        Ok(patched)
+    }
+    pub(crate) fn patch(
+        patch_data: Cursor<Vec<u8>>,
+        vector_to_patch: &[u8],
+    ) -> Result<Vec<u8>, Error> {
+        fn bspatch(source: &[u8], patch: &[u8]) -> std::io::Result<Vec<u8>> {
+            let patcher =
+                Bspatch::new(patch)?.buffer_size(4096).delta_min(1024);
+            let mut target =
+                Vec::with_capacity(patcher.hint_target_size() as usize);
+            patcher.apply(source, std::io::Cursor::new(&mut target))?;
+            Ok(target)
+        }
+        let patched =
+            bspatch(vector_to_patch, patch_data.into_inner().as_slice())
+                .map_err(PersistenceError)?;
+        Ok(patched)
     }
 }
 
