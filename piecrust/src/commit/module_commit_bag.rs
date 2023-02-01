@@ -106,11 +106,8 @@ impl ModuleCommitBag {
         let from_id = |module_commit_id| {
             ModuleCommit::from_id_and_path(module_commit_id, memory_path.path())
         };
-        let mut count = 0;
         let mut found = true;
         let mut can_remove = false;
-        let mut previous_patched: Vec<u8> = Vec::<u8>::new();
-        let mut decompressor = zstd::block::Decompressor::new();
         let final_commit = if source_module_commit_id == self.ids[0] {
             from_id(self.ids[0])?
         } else if source_module_commit_id == self.top {
@@ -118,9 +115,11 @@ impl ModuleCommitBag {
         } else {
             let accu_commit = from_id(ModuleCommitId::random())?;
             accu_commit.capture(&from_id(self.ids[0])?)?;
-            for commit_id in self.ids.as_slice()[1..].iter() {
-                let is_first = count == 0;
-                let is_last = (count + 2) == (self.ids.len());
+            let mut previous_patched: Vec<u8> = Vec::<u8>::new();
+            let mut decompressor = zstd::block::Decompressor::new();
+            for (i, commit_id) in self.ids.as_slice()[1..].iter().enumerate() {
+                let is_first = i == 0;
+                let is_last = (i + 2) == (self.ids.len());
                 let commit = from_id(*commit_id)?;
                 if is_first {
                     previous_patched = accu_commit.read()?;
@@ -137,7 +136,6 @@ impl ModuleCommitBag {
                         &mut decompressor,
                     )?;
                 }
-                count += 1;
                 found = source_module_commit_id == *commit_id;
                 if found {
                     break;
