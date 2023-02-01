@@ -67,5 +67,4 @@ impl DiffData {
         composite.serialize_value(self).unwrap();
         Ok(())
     }
-
 }
