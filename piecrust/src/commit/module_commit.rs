@@ -153,6 +153,9 @@ impl ModuleCommit {
             .map_err(PersistenceError)?;
         Ok(())
     }
+
+    /// Decompresses 'this' module commit as patch and patches a given module
+    /// commit. Result is passed back as a return parameter.
     pub(crate) fn decompress_and_patch(
         &self,
         previous_patched: &[u8],
@@ -167,7 +170,8 @@ impl ModuleCommit {
         let patched = ModuleCommit::patch(patch_data, previous_patched)?;
         Ok(patched)
     }
-    pub(crate) fn patch(
+
+    fn patch(
         patch_data: Cursor<Vec<u8>>,
         vector_to_patch: &[u8],
     ) -> Result<Vec<u8>, Error> {
