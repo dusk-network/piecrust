@@ -15,6 +15,8 @@ use crate::commit::{Hashable, ModuleCommitId};
 use crate::memory_path::MemoryPath;
 use crate::util::ByteArrayWrapper;
 use crate::Error::{self, PersistenceError};
+use std::time::{Duration, Instant};
+
 
 pub trait ModuleCommitLike {
     /// Module commit's file path
@@ -35,6 +37,7 @@ pub trait ModuleCommitLike {
 pub struct ModuleCommit {
     path: PathBuf,
     id: ModuleCommitId,
+    pub patch_duration: Duration,
 }
 
 fn combine_module_commit_names(
@@ -69,6 +72,7 @@ impl ModuleCommit {
         Ok(ModuleCommit {
             path,
             id: module_commit_id,
+            patch_duration: Duration::from_millis(0),
         })
     }
 
@@ -79,6 +83,7 @@ impl ModuleCommit {
         Ok(ModuleCommit {
             path: path.to_path_buf(),
             id: module_commit_id,
+            patch_duration: Duration::from_millis(0),
         })
     }
 
@@ -136,7 +141,7 @@ impl ModuleCommit {
     /// Decompresses 'this' module commit as patch and patches a given module
     /// commit. Result is written to a result module commit.
     pub(crate) fn decompress_and_patch_last(
-        &self,
+        &mut self,
         previous_patched: &[u8],
         result_commit: &dyn ModuleCommitLike,
         decompressor: &mut Decompressor,
@@ -157,7 +162,7 @@ impl ModuleCommit {
     /// Decompresses 'this' module commit as patch and patches a given module
     /// commit. Result is passed back as a return parameter.
     pub(crate) fn decompress_and_patch(
-        &self,
+        &mut self,
         previous_patched: &[u8],
         decompressor: &mut Decompressor,
     ) -> Result<Vec<u8>, Error> {
@@ -167,24 +172,30 @@ impl ModuleCommit {
                 .decompress(diff_data.data(), diff_data.original_len())
                 .map_err(PersistenceError)?,
         );
-        let patched = ModuleCommit::patch(patch_data, previous_patched)?;
+        // let now = Instant::now();
+        let patched = self.patch(patch_data, previous_patched)?;
+        // self.patch_duration = now.elapsed();
         Ok(patched)
     }
 
     fn patch(
+        &mut self,
         patch_data: Cursor<Vec<u8>>,
         vector_to_patch: &[u8],
     ) -> Result<Vec<u8>, Error> {
-        fn bspatch(source: &[u8], patch: &[u8]) -> std::io::Result<Vec<u8>> {
+        fn bspatch(slf: &mut ModuleCommit, source: &[u8], patch: &[u8]) -> std::io::Result<Vec<u8>> {
             let patcher =
                 Bspatch::new(patch)?.buffer_size(4096).delta_min(1024);
             let mut target =
                 Vec::with_capacity(patcher.hint_target_size() as usize);
+            // println!("source={} hint={}", source.len(), patcher.hint_target_size());
+            let now = Instant::now();
             patcher.apply(source, std::io::Cursor::new(&mut target))?;
+            slf.patch_duration = now.elapsed();
             Ok(target)
         }
         let patched =
-            bspatch(vector_to_patch, patch_data.into_inner().as_slice())
+            bspatch(self, vector_to_patch, patch_data.into_inner().as_slice())
                 .map_err(PersistenceError)?;
         Ok(patched)
     }

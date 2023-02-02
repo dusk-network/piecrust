@@ -5,6 +5,7 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 use std::fs;
+use std::ops::Add;
 
 use bytecheck::CheckBytes;
 use rkyv::{Archive, Deserialize, Serialize};
@@ -103,9 +104,13 @@ impl ModuleCommitBag {
         if self.ids.is_empty() {
             return Ok(None);
         }
+        use std::time::{Duration,Instant};
+        let now = Instant::now();
+        let mut patch_duration = Duration::from_millis(0);
         let from_id = |module_commit_id| {
             ModuleCommit::from_id_and_path(module_commit_id, memory_path.path())
         };
+        let mut count = 0;
         let mut found = true;
         let mut can_remove = false;
         let final_commit = if source_module_commit_id == self.ids[0] {
@@ -120,7 +125,7 @@ impl ModuleCommitBag {
             for (i, commit_id) in self.ids.as_slice()[1..].iter().enumerate() {
                 let is_first = i == 0;
                 let is_last = (i + 2) == (self.ids.len());
-                let commit = from_id(*commit_id)?;
+                let mut commit = from_id(*commit_id)?;
                 if is_first {
                     previous_patched = accu_commit.read()?;
                 }
@@ -136,6 +141,8 @@ impl ModuleCommitBag {
                         &mut decompressor,
                     )?;
                 }
+                patch_duration = patch_duration.add(commit.patch_duration);
+                count += 1;
                 found = source_module_commit_id == *commit_id;
                 if found {
                     break;
@@ -144,6 +151,9 @@ impl ModuleCommitBag {
             can_remove = true;
             accu_commit
         };
+        let total_duration = now.elapsed();
+        let percent = if total_duration.as_micros() == 0 {0} else {patch_duration.as_micros()*100/ total_duration.as_micros()};
+        println!("restore of {} took {:?} including patch={:?} %={}", count, total_duration, patch_duration, percent);
         if found {
             Ok(Some(CommitPath::new(final_commit.path(), can_remove)))
         } else {

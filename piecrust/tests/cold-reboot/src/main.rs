@@ -103,7 +103,7 @@ fn main() -> Result<(), piecrust::Error> {
         "confirm" => confirm(&vm_data_path, 0xfd)?,
         "test_both" => {
             let mut expected = 0xfd;
-            for _ in 0..10 {
+            for _ in 0..200 {
                 initialize(&vm_data_path)?;
                 confirm(&vm_data_path, expected)?;
                 expected += 1;
