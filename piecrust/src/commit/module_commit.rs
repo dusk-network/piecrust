@@ -4,7 +4,9 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use qbsdiff::{Bsdiff, Bspatch};
+// use qbsdiff::{Bsdiff, Bspatch};
+use bsdiff::diff::diff;
+use bsdiff::patch::patch;
 use std::fs::OpenOptions;
 use std::io::{Cursor, Read, Write};
 use std::path::{Path, PathBuf};
@@ -14,7 +16,7 @@ use crate::commit::diff_data::DiffData;
 use crate::commit::{Hashable, ModuleCommitId};
 use crate::memory_path::MemoryPath;
 use crate::util::ByteArrayWrapper;
-use crate::Error::{self, PersistenceError};
+use crate::Error::{self, PersistenceError, PersistenceError1, PersistenceError2, PersistenceError3, PersistenceError4, PersistenceError5, PersistenceError6, PersistenceError7};
 use std::time::{Duration, Instant};
 
 
@@ -94,7 +96,7 @@ impl ModuleCommit {
         commit: &dyn ModuleCommitLike,
     ) -> Result<(), Error> {
         std::fs::copy(commit.path(), self.path().as_path())
-            .map_err(PersistenceError)?;
+            .map_err(PersistenceError7)?;
         Ok(())
     }
 
@@ -104,7 +106,7 @@ impl ModuleCommit {
         memory_path: &MemoryPath,
     ) -> Result<(), Error> {
         std::fs::copy(self.path().as_path(), memory_path.path())
-            .map_err(PersistenceError)?;
+            .map_err(PersistenceError6)?;
         Ok(())
     }
 
@@ -124,15 +126,18 @@ impl ModuleCommit {
         let base_buffer = base_commit.read()?;
         fn bsdiff(source: &[u8], target: &[u8]) -> std::io::Result<Vec<u8>> {
             let mut patch = Vec::new();
-            Bsdiff::new(source, target)
-                .compare(std::io::Cursor::new(&mut patch))?;
+            // Bsdiff::new(source, target)
+            //     .compare(std::io::Cursor::new(&mut patch))?;
+            diff(source, target, &mut patch)?;
             Ok(patch)
         }
         let delta = bsdiff(base_buffer.as_slice(), memory_buffer.as_slice())
             .map_err(PersistenceError)?;
         let diff_data = DiffData::new(
             base_buffer.as_slice().len(),
-            compressor.compress(&delta, COMPRESSION_LEVEL).unwrap(),
+            compressor.compress(&delta, COMPRESSION_LEVEL)
+                .map_err(PersistenceError5)?,
+            delta.len(),
         );
         diff_data.persist(self.path())?;
         Ok(())
@@ -153,9 +158,9 @@ impl ModuleCommit {
             .create(true)
             .truncate(true)
             .open(result_commit.path())
-            .map_err(PersistenceError)?;
+            .map_err(PersistenceError4)?;
         file.write_all(patched.as_slice())
-            .map_err(PersistenceError)?;
+            .map_err(PersistenceError3)?;
         Ok(())
     }
 
@@ -167,36 +172,37 @@ impl ModuleCommit {
         decompressor: &mut Decompressor,
     ) -> Result<Vec<u8>, Error> {
         let diff_data: DiffData = DiffData::restore(self.path())?;
-        let patch_data = std::io::Cursor::new(
+        let mut patch_data = std::io::Cursor::new(
             decompressor
-                .decompress(diff_data.data(), diff_data.original_len())
-                .map_err(PersistenceError)?,
+                .decompress(diff_data.data(), diff_data.uncompressed_size)
+                .map_err(PersistenceError2)?,
         );
-        // let now = Instant::now();
-        let patched = self.patch(patch_data, previous_patched)?;
-        // self.patch_duration = now.elapsed();
+        let patched = self.patch(&mut patch_data, previous_patched, diff_data.original_len())?;
         Ok(patched)
     }
 
     fn patch(
         &mut self,
-        patch_data: Cursor<Vec<u8>>,
+        patch_data: &mut Cursor<Vec<u8>>,
         vector_to_patch: &[u8],
+        sz: usize
     ) -> Result<Vec<u8>, Error> {
-        fn bspatch(slf: &mut ModuleCommit, source: &[u8], patch: &[u8]) -> std::io::Result<Vec<u8>> {
-            let patcher =
-                Bspatch::new(patch)?.buffer_size(4096).delta_min(1024);
-            let mut target =
-                Vec::with_capacity(patcher.hint_target_size() as usize);
-            // println!("source={} hint={}", source.len(), patcher.hint_target_size());
+        fn bspatch(slf: &mut ModuleCommit, source: &[u8], patch_data: &mut Cursor<Vec<u8>>, sz: usize) -> std::io::Result<Vec<u8>> {
             let now = Instant::now();
-            patcher.apply(source, std::io::Cursor::new(&mut target))?;
+            // let patcher =
+            //     Bspatch::new(patch)?.buffer_size(4096).delta_min(1024);
+            // let mut target =
+            //     Vec::with_capacity(patcher.hint_target_size() as usize);
+            // println!("source={} hint={}", source.len(), patcher.hint_target_size());
+            // patcher.apply(source, std::io::Cursor::new(&mut target))?;
+            let mut target = vec![0u8; sz];
+            patch(source, patch_data, target.as_mut_slice())?;
             slf.patch_duration = now.elapsed();
             Ok(target)
         }
         let patched =
-            bspatch(self, vector_to_patch, patch_data.into_inner().as_slice())
-                .map_err(PersistenceError)?;
+            bspatch(self, vector_to_patch, patch_data, sz)
+                .map_err(PersistenceError1)?;
         Ok(patched)
     }
 }
