@@ -4,7 +4,8 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use qbsdiff::{Bsdiff, Bspatch};
+use bsdiff::diff::diff;
+use bsdiff::patch::patch;
 use std::fs::OpenOptions;
 use std::io::{Cursor, Read, Write};
 use std::path::{Path, PathBuf};
@@ -119,15 +120,17 @@ impl ModuleCommit {
         let base_buffer = base_commit.read()?;
         fn bsdiff(source: &[u8], target: &[u8]) -> std::io::Result<Vec<u8>> {
             let mut patch = Vec::new();
-            Bsdiff::new(source, target)
-                .compare(std::io::Cursor::new(&mut patch))?;
+            diff(source, target, &mut patch)?;
             Ok(patch)
         }
         let delta = bsdiff(base_buffer.as_slice(), memory_buffer.as_slice())
             .map_err(PersistenceError)?;
         let diff_data = DiffData::new(
             base_buffer.as_slice().len(),
-            compressor.compress(&delta, COMPRESSION_LEVEL).unwrap(),
+            compressor
+                .compress(&delta, COMPRESSION_LEVEL)
+                .map_err(PersistenceError)?,
+            delta.len(),
         );
         diff_data.persist(self.path())?;
         Ok(())
@@ -162,30 +165,35 @@ impl ModuleCommit {
         decompressor: &mut Decompressor,
     ) -> Result<Vec<u8>, Error> {
         let diff_data: DiffData = DiffData::restore(self.path())?;
-        let patch_data = std::io::Cursor::new(
+        let mut patch_data = std::io::Cursor::new(
             decompressor
-                .decompress(diff_data.data(), diff_data.original_len())
+                .decompress(diff_data.data(), diff_data.uncompressed_size())
                 .map_err(PersistenceError)?,
         );
-        let patched = ModuleCommit::patch(patch_data, previous_patched)?;
+        let patched = Self::patch(
+            &mut patch_data,
+            previous_patched,
+            diff_data.original_len(),
+        )?;
         Ok(patched)
     }
 
     fn patch(
-        patch_data: Cursor<Vec<u8>>,
+        patch_data: &mut Cursor<Vec<u8>>,
         vector_to_patch: &[u8],
+        target_size: usize,
     ) -> Result<Vec<u8>, Error> {
-        fn bspatch(source: &[u8], patch: &[u8]) -> std::io::Result<Vec<u8>> {
-            let patcher =
-                Bspatch::new(patch)?.buffer_size(4096).delta_min(1024);
-            let mut target =
-                Vec::with_capacity(patcher.hint_target_size() as usize);
-            patcher.apply(source, std::io::Cursor::new(&mut target))?;
+        fn bspatch(
+            source: &[u8],
+            patch_data: &mut Cursor<Vec<u8>>,
+            target_size: usize,
+        ) -> std::io::Result<Vec<u8>> {
+            let mut target = vec![0u8; target_size];
+            patch(source, patch_data, target.as_mut_slice())?;
             Ok(target)
         }
-        let patched =
-            bspatch(vector_to_patch, patch_data.into_inner().as_slice())
-                .map_err(PersistenceError)?;
+        let patched = bspatch(vector_to_patch, patch_data, target_size)
+            .map_err(PersistenceError)?;
         Ok(patched)
     }
 }
