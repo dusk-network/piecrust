@@ -10,7 +10,8 @@ use std::env;
 use std::path::{Path, PathBuf};
 
 use piecrust::{CommitId, ModuleId, Session, VM};
-
+const DIFFED_COMPRESSED_SIZE_THRESHOLD: u64 = 500;
+const UNCOMPRESSED_SIZE_THRESHOLD: u64 = 200000;
 const COUNTER_ID: ModuleId = {
     let mut bytes = [0u8; 32];
     bytes[0] = 99;
@@ -29,35 +30,43 @@ fn initialize_counter<P: AsRef<Path>>(
 
     session.deploy_with_id(COUNTER_ID, counter_bytecode)?;
 
-    assert_eq!(
-        session.query::<(), i64>(COUNTER_ID, "read_value", &())?,
-        0xfc
-    );
     session.transact::<(), ()>(COUNTER_ID, "increment", &())?;
-    assert_eq!(
-        session.query::<(), i64>(COUNTER_ID, "read_value", &())?,
-        0xfd
-    );
 
     let commit_id = session.commit()?;
     assert_eq!(commit_id.as_bytes(), vm.session().root(false)?);
     commit_id.persist(commit_id_file_path)?;
 
     vm.persist()
+
 }
 
 fn confirm_counter<P: AsRef<Path>>(
     session: &mut Session,
     commit_id_file_path: P,
+    expected: i64
 ) -> Result<(), piecrust::Error> {
     let commit_id = CommitId::restore(commit_id_file_path)?;
     session.restore(&commit_id)?;
     assert_eq!(commit_id.as_bytes(), session.root(false)?);
 
+
+
     assert_eq!(
         session.query::<(), i64>(COUNTER_ID, "read_value", &())?,
-        0xfd
+        expected
     );
+
+    /*
+     * Make sure that diffing and compression work.
+     */
+    let bag_size_info = session.get_bag_size_info(&COUNTER_ID)?;
+    let l = bag_size_info.commit_sizes().len();
+    assert!(l > 0);
+    for i in 1..l {
+        assert!(bag_size_info.commit_sizes()[i] < DIFFED_COMPRESSED_SIZE_THRESHOLD)
+    }
+    assert!(bag_size_info.commit_sizes()[0] > UNCOMPRESSED_SIZE_THRESHOLD);
+    assert!(bag_size_info.top_commit_size() > UNCOMPRESSED_SIZE_THRESHOLD);
 
     Ok(())
 }
@@ -69,12 +78,12 @@ fn initialize<P: AsRef<str>>(vm_data_path: P) -> Result<(), piecrust::Error> {
     initialize_counter(&mut vm, &commit_id_file_path)
 }
 
-fn confirm<P: AsRef<str>>(vm_data_path: P) -> Result<(), piecrust::Error> {
+fn confirm<P: AsRef<str>>(vm_data_path: P, expected: i64) -> Result<(), piecrust::Error> {
     let commit_id_file_path =
         PathBuf::from(vm_data_path.as_ref()).join("commit_id");
     let mut vm = VM::new(vm_data_path.as_ref())?;
     let mut session = vm.session();
-    confirm_counter(&mut session, &commit_id_file_path)
+    confirm_counter(&mut session, &commit_id_file_path, expected)
 }
 
 fn main() -> Result<(), piecrust::Error> {
@@ -91,10 +100,14 @@ fn main() -> Result<(), piecrust::Error> {
 
     match &*args[2] {
         "initialize" => initialize(&vm_data_path)?,
-        "confirm" => confirm(&vm_data_path)?,
+        "confirm" => confirm(&vm_data_path, 0xfd)?,
         "test_both" => {
-            initialize(&vm_data_path)?;
-            confirm(&vm_data_path)?;
+            let mut expected = 0xfd;
+            for _ in 0..10 {
+                initialize(&vm_data_path)?;
+                confirm(&vm_data_path, expected)?;
+                expected += 1;
+            }
         }
         _ => {
             println!("{}", MESSAGE);
