@@ -1,9 +1,9 @@
-use std::fs::OpenOptions;
+use std::fs::{File, OpenOptions};
 use std::io;
 use std::path::Path;
 use std::sync::Arc;
 
-use memmap2::{MmapMut, MmapOptions};
+use memmap2::{Mmap, MmapMut, MmapOptions};
 use parking_lot::{ReentrantMutex, ReentrantMutexGuard};
 
 const PAGE_SIZE: usize = 65536;
@@ -24,11 +24,33 @@ impl Memory {
     }
 
     pub(crate) fn from_file<P: AsRef<Path>>(path: P) -> io::Result<Self> {
-        let file = OpenOptions::new().read(true).write(true).open(&path)?;
+        let file = OpenOptions::new().read(true).write(true).open(path)?;
         // SAFETY: memory files will be opened with write permissions, but only
         // for the purpose of creating this mmap. If any other process mutates
         // the file in any way, the code will break.
         let mmap = unsafe { MmapOptions::new().map_copy(&file)? };
+        Ok(Self {
+            mmap: Arc::new(ReentrantMutex::new(mmap)),
+        })
+    }
+
+    pub(crate) fn from_file_and_diff<P: AsRef<Path>>(
+        path: P,
+        diff_path: P,
+    ) -> io::Result<Self> {
+        let file = OpenOptions::new().read(true).write(true).open(path)?;
+        let diff_file = File::open(diff_path)?;
+
+        // SAFETY: memory files will be opened with write permissions, but only
+        // for the purpose of creating this mmap. If any other process mutates
+        // the file in any way, the code will break.
+        let mut mmap = unsafe { MmapOptions::new().map_copy(&file)? };
+
+        let mmap_old = unsafe { Mmap::map(&file)? };
+        let diff_mmap = unsafe { Mmap::map(&diff_file)? };
+
+        bsdiff::patch::patch(&mmap_old, &mut diff_mmap.as_ref(), &mut mmap)?;
+
         Ok(Self {
             mmap: Arc::new(ReentrantMutex::new(mmap)),
         })
