@@ -4,6 +4,7 @@ use std::ops::Deref;
 use std::path::Path;
 use std::sync::Arc;
 
+use flate2::read::DeflateDecoder;
 use memmap2::{Mmap, MmapMut, MmapOptions};
 use parking_lot::{ReentrantMutex, ReentrantMutexGuard};
 
@@ -48,9 +49,9 @@ impl Memory {
         let mut mmap = unsafe { MmapOptions::new().map_copy(&file)? };
 
         let mmap_old = unsafe { Mmap::map(&file)? };
-        let diff_mmap = unsafe { Mmap::map(&diff_file)? };
+        let mut decoder = DeflateDecoder::new(diff_file);
 
-        bsdiff::patch::patch(&mmap_old, &mut diff_mmap.as_ref(), &mut mmap)?;
+        bsdiff::patch::patch(&mmap_old, &mut decoder, &mut mmap)?;
 
         Ok(Self {
             mmap: Arc::new(ReentrantMutex::new(mmap)),

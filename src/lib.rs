@@ -13,6 +13,9 @@ use std::{fs, io, mem, thread};
 pub use bytecode::Bytecode;
 pub use memory::Memory;
 
+use flate2::write::DeflateEncoder;
+use flate2::Compression;
+
 const ROOT_LEN: usize = 32;
 const MODULE_ID_LEN: usize = 32;
 
@@ -474,12 +477,17 @@ fn write_commit_inner<P: AsRef<Path>>(
                             .with_extension(DIFF_EXTENSION);
 
                         let base_memory = Memory::from_file(base_memory_path)?;
-                        let mut memory_diff = File::create(memory_diff_path)?;
+                        let memory_diff = File::create(memory_diff_path)?;
+
+                        let mut encoder = DeflateEncoder::new(
+                            memory_diff,
+                            Compression::default(),
+                        );
 
                         bsdiff::diff::diff(
                             base_memory.lock().as_ref(),
                             memory.lock().as_ref(),
-                            &mut memory_diff,
+                            &mut encoder,
                         )?;
 
                         commit_diff_modules.insert(module);
