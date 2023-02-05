@@ -46,14 +46,10 @@ fn main() -> io::Result<()> {
 
     let _ = session.deploy(BYTECODE_3)?;
 
-    let (bytecode_1, _) = session.module(module_1_id)?.expect(
-        "module should be present, since it was already deployed before",
-    );
     let (bytecode_2, _) = session.module(module_2_id)?.expect(
         "module should be present, since it was already deployed before",
     );
 
-    assert_eq!(BYTECODE_1, bytecode_1.as_ref());
     assert_eq!(BYTECODE_2, bytecode_2.as_ref());
 
     let root = session.commit()?;

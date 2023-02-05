@@ -460,7 +460,19 @@ fn write_commit_inner<P: AsRef<Path>>(
                 let base_memory_path = base_memory_dir.join(&module_hex);
 
                 fs::hard_link(base_bytecode_path, bytecode_path)?;
-                fs::hard_link(base_memory_path, memory_path)?;
+                fs::hard_link(&base_memory_path, &memory_path)?;
+
+                // If there is a diff of this memory in the base module, and it
+                // hasn't been touched in this commit, link it as well.
+                if base_commit.diffs.contains(module)
+                    && !modules.contains_key(module)
+                {
+                    let base_diff_path =
+                        base_memory_path.with_extension(DIFF_EXTENSION);
+                    let diff_path = memory_path.with_extension(DIFF_EXTENSION);
+
+                    fs::hard_link(base_diff_path, diff_path)?;
+                }
 
                 commit_modules.insert(*module);
             }
