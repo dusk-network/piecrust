@@ -1,5 +1,6 @@
 use std::fs::{File, OpenOptions};
 use std::io;
+use std::ops::Deref;
 use std::path::Path;
 use std::sync::Arc;
 
@@ -66,8 +67,10 @@ pub struct MemoryGuard<'a> {
     mmap: ReentrantMutexGuard<'a, MmapMut>,
 }
 
-impl<'a> AsRef<[u8]> for MemoryGuard<'a> {
-    fn as_ref(&self) -> &[u8] {
+impl<'a> Deref for MemoryGuard<'a> {
+    type Target = [u8];
+
+    fn deref(&self) -> &Self::Target {
         &self.mmap
     }
 }

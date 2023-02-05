@@ -43,6 +43,8 @@ impl ModuleStore {
     pub fn new<P: AsRef<Path>>(dir: P) -> io::Result<Self> {
         let root_dir = dir.as_ref();
 
+        fs::create_dir_all(root_dir)?;
+
         let (call, calls) = mpsc::channel();
         let commits = read_all_commits(root_dir)?;
 
@@ -463,24 +465,35 @@ fn write_commit_inner<P: AsRef<Path>>(
             for (module, (bytecode, memory)) in modules {
                 let module_hex = hex::encode(module);
 
-                let bytecode_path = bytecode_dir.join(&module_hex);
+                match base_commit.modules.contains(&module) {
+                    true => {
+                        let base_memory_path =
+                            base_memory_dir.join(&module_hex);
+                        let memory_diff_path = memory_dir
+                            .join(&module_hex)
+                            .with_extension(DIFF_EXTENSION);
 
-                let base_memory_path = base_memory_dir.join(&module_hex);
-                let memory_diff_path =
-                    memory_dir.join(&module_hex).with_extension(DIFF_EXTENSION);
+                        let base_memory = Memory::from_file(base_memory_path)?;
+                        let mut memory_diff = File::create(memory_diff_path)?;
 
-                fs::write(bytecode_path, &bytecode)?;
+                        bsdiff::diff::diff(
+                            base_memory.lock().as_ref(),
+                            memory.lock().as_ref(),
+                            &mut memory_diff,
+                        )?;
 
-                let base_memory = Memory::from_file(base_memory_path)?;
-                let mut memory_diff = File::create(memory_diff_path)?;
+                        commit_diff_modules.insert(module);
+                    }
+                    false => {
+                        let bytecode_path = bytecode_dir.join(&module_hex);
+                        let memory_path = memory_dir.join(&module_hex);
 
-                bsdiff::diff::diff(
-                    base_memory.lock().as_ref(),
-                    memory.lock().as_ref(),
-                    &mut memory_diff,
-                )?;
+                        fs::write(bytecode_path, &bytecode)?;
+                        fs::write(memory_path, memory.lock().as_ref())?;
 
-                commit_diff_modules.insert(module);
+                        commit_modules.insert(module);
+                    }
+                }
             }
         }
     }
@@ -502,14 +515,14 @@ where
     let size = iter.len();
 
     let mut leaves = Vec::with_capacity(size);
-    for ((module, (bytecode, memory)), root) in iter.zip(&mut leaves) {
+    for (module, (bytecode, memory)) in iter {
         let mut hasher = blake3::Hasher::new();
 
         hasher.update(module);
         hasher.update(bytecode.as_ref());
         hasher.update(memory.lock().as_ref());
 
-        *root = Root::from(hasher.finalize());
+        leaves.push(Root::from(hasher.finalize()));
     }
 
     while leaves.len() > 1 {
