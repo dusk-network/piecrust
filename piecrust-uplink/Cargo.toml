@@ -3,7 +3,7 @@ name = "piecrust-uplink"
 description = """
 Build smart contracts directly on top of Dusk's `piecrust` virtual machine.\
 """
-categories = ["wasm", "no-std", "cryptography.categories.cryptocurrencies"]
+categories = ["wasm", "no-std", "cryptography::cryptocurrencies"]
 keywords = ["virtual", "machine", "smart", "contract", "wasm"]
 
 repository = "https://github.com/dusk-network/piecrust"
