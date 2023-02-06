@@ -1,10 +1,19 @@
 [package]
 name = "piecrust"
-version = "0.1.0"
+description = """
+Dusk's virtual machine for running WASM smart contracts.\
+"""
+categories = ["wasm", "no-std", "cryptography::cryptocurrencies"]
+keywords = ["virtual", "machine", "smart", "contract", "wasm"]
+
+repository = "https://github.com/dusk-network/piecrust"
+version = "0.1.0-alpha"
+
 edition = "2021"
+license = "MPL-2.0"
 
 [dependencies]
-piecrust-uplink = { path = "../piecrust-uplink" }
+piecrust-uplink = { version = "0.1.0-alpha", path = "../piecrust-uplink" }
 
 wasmer = "3.1"
 wasmer-vm = "3.1"
