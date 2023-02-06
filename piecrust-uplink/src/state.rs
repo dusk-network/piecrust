@@ -4,7 +4,6 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use bytecheck::CheckBytes;
 use rkyv::{
     archived_root,
     ser::serializers::{BufferScratch, BufferSerializer, CompositeSerializer},
@@ -13,7 +12,7 @@ use rkyv::{
 };
 
 use crate::{
-    RawQuery, RawResult, RawTransaction, StandardBufSerializer,
+    ModuleError, RawQuery, RawResult, RawTransaction, StandardBufSerializer,
     SCRATCH_BUF_BYTES,
 };
 
@@ -67,13 +66,6 @@ mod ext {
 
 use crate::ModuleId;
 use core::ops::{Deref, DerefMut};
-
-#[derive(Debug, Archive, Serialize, Deserialize)]
-#[archive_attr(derive(CheckBytes))]
-pub enum ModuleError {
-    Panic,
-    OutOfGas,
-}
 
 pub struct State<S> {
     inner: S,

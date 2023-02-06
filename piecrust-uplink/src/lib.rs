@@ -9,33 +9,42 @@
 
 extern crate alloc;
 
-mod snap;
-
-pub use snap::snap;
-
-mod state;
-pub use state::{
-    caller, height, host_data, host_query, limit, query, query_raw, spent,
-    ModuleError, State,
-};
-
-mod helpers;
-pub use helpers::*;
-
-mod ops;
-pub use ops::*;
-
-mod types;
-pub use types::*;
-
-pub mod bufwriter;
-pub mod debug;
-
 /// How many bytes to use for scratch space when serializing
 pub const SCRATCH_BUF_BYTES: usize = 64;
 
 /// The size of the argument buffer in bytes
 pub const ARGBUF_LEN: usize = 64 * 1024;
+
+#[cfg(not(feature = "std"))]
+mod snap;
+#[cfg(not(feature = "std"))]
+pub use snap::snap;
+
+#[cfg(not(feature = "std"))]
+mod state;
+#[cfg(not(feature = "std"))]
+pub use state::{
+    caller, height, host_data, host_query, limit, query, query_raw, spent,
+    State,
+};
+
+#[cfg(not(feature = "std"))]
+mod helpers;
+#[cfg(not(feature = "std"))]
+pub use helpers::*;
+
+#[cfg(not(feature = "std"))]
+mod ops;
+#[cfg(not(feature = "std"))]
+pub use ops::*;
+
+mod types;
+pub use types::*;
+
+#[cfg(not(feature = "std"))]
+pub mod bufwriter;
+#[cfg(not(feature = "std"))]
+pub mod debug;
 
 #[cfg(not(feature = "std"))]
 mod handlers;

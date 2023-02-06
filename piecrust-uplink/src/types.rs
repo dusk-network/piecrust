@@ -22,6 +22,13 @@ pub type StandardBufSerializer<'a> = CompositeSerializer<
 
 pub const MODULE_ID_BYTES: usize = 32;
 
+#[derive(Debug, Archive, Serialize, Deserialize)]
+#[archive_attr(derive(CheckBytes))]
+pub enum ModuleError {
+    Panic,
+    OutOfGas,
+}
+
 #[derive(
     PartialEq,
     Eq,
