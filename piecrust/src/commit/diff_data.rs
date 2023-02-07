@@ -21,31 +21,18 @@ use std::path::Path;
 #[archive_attr(derive(CheckBytes, Debug))]
 pub(crate) struct DiffData {
     original_len: usize,
-    uncompressed_size: usize,
     data: Vec<u8>,
 }
 
 const DIFF_DATA_SCRATCH_SIZE: usize = 64;
 
 impl DiffData {
-    pub fn new(
-        original_len: usize,
-        data: Vec<u8>,
-        uncompressed_size: usize,
-    ) -> Self {
-        Self {
-            original_len,
-            data,
-            uncompressed_size,
-        }
+    pub fn new(original_len: usize, data: Vec<u8>) -> Self {
+        Self { original_len, data }
     }
 
     pub fn original_len(&self) -> usize {
         self.original_len
-    }
-
-    pub fn uncompressed_size(&self) -> usize {
-        self.uncompressed_size
     }
 
     pub fn data(&self) -> &[u8] {
