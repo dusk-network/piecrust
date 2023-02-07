@@ -9,7 +9,9 @@ use bsdiff::patch::patch;
 use std::fs::OpenOptions;
 use std::io::{Cursor, Read, Write};
 use std::path::{Path, PathBuf};
-use zstd::bulk::{Compressor, Decompressor};
+// use zstd::bulk::{Compressor, Decompressor};
+use zstd::block::Decompressor;
+
 
 use crate::commit::diff_data::DiffData;
 use crate::commit::{Hashable, ModuleCommitId};
@@ -115,8 +117,9 @@ impl ModuleCommit {
         base_commit: &ModuleCommit,
         memory_path: &MemoryPath,
     ) -> Result<(), Error> {
-        let mut compressor =
-            Compressor::new(COMPRESSION_LEVEL).map_err(PersistenceError)?;
+        // let mut compressor =
+        //     Compressor::new(COMPRESSION_LEVEL).map_err(PersistenceError)?;
+        let mut compressor = zstd::block::Compressor::new();
         let memory_buffer = memory_path.read()?;
         let base_buffer = base_commit.read()?;
         fn bsdiff(source: &[u8], target: &[u8]) -> std::io::Result<Vec<u8>> {
@@ -128,7 +131,11 @@ impl ModuleCommit {
             .map_err(PersistenceError)?;
         let diff_data = DiffData::new(
             base_buffer.as_slice().len(),
-            compressor.compress(&delta).map_err(PersistenceError)?,
+            compressor
+                .compress(&delta, COMPRESSION_LEVEL)
+                .map_err(PersistenceError)?,
+
+            // compressor.compress(&delta).map_err(PersistenceError)?,
             delta.len(),
         );
         diff_data.persist(self.path())?;
