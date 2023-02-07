@@ -118,7 +118,7 @@ impl ModuleCommitBag {
             accu_commit.capture(&from_id(self.ids[0])?)?;
             let mut previous_patched: Vec<u8> = Vec::<u8>::new();
             let mut decompressor =
-               Decompressor::new().map_err(PersistenceError)?;
+                Decompressor::new().map_err(PersistenceError)?;
             for (i, commit_id) in self.ids.as_slice()[1..].iter().enumerate() {
                 let is_first = i == 0;
                 let is_last = (i + 2) == (self.ids.len());
@@ -164,7 +164,7 @@ impl ModuleCommitBag {
             let module_commit =
                 ModuleCommit::from_id_and_path(*id, memory_path.path())?;
             let metadata =
-               fs::metadata(module_commit.path()).expect("metadata obtained");
+                fs::metadata(module_commit.path()).expect("metadata obtained");
             Ok(metadata.len())
         }
         let mut bag_size_info = BagSizeInfo::new();

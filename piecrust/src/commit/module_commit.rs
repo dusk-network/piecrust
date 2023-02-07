@@ -10,7 +10,6 @@ use std::io::{Cursor, Read, Write};
 use std::path::{Path, PathBuf};
 use zstd::bulk::{Compressor, Decompressor};
 
-
 use crate::commit::diff_data::DiffData;
 use crate::commit::{Hashable, ModuleCommitId};
 use crate::memory_path::MemoryPath;
@@ -119,32 +118,14 @@ impl ModuleCommit {
             Compressor::new(COMPRESSION_LEVEL).map_err(PersistenceError)?;
         let memory_buffer = memory_path.read()?;
         let base_buffer = base_commit.read()?;
-        println!("gx here 001");
         fn bsdiff(source: &[u8], target: &[u8]) -> std::io::Result<Vec<u8>> {
             let mut patch = Vec::new();
             Bsdiff::new(source, target)
                 .compare(std::io::Cursor::new(&mut patch))?;
             Ok(patch)
         }
-        println!("gx here 002 {} {}", base_buffer.as_slice().len(), memory_buffer.as_slice().len());
-        let mut count = 0;
-        let mut count_zeroes = 0;
-        let mut v = Vec::new();
-        for i in 0..base_buffer.as_slice().len() {
-            if i < memory_buffer.as_slice().len() {
-                if base_buffer.as_slice()[i] != memory_buffer.as_slice()[i] {
-                    count += 1;
-                    v.push((i, base_buffer.as_slice()[i], memory_buffer.as_slice()[i]));
-                }
-                if base_buffer.as_slice()[i] == 0 {
-                    count_zeroes += 1;
-                }
-            }
-        }
-        println!("count={} list={:?} zeroes={}", count, v, count_zeroes);
         let delta = bsdiff(base_buffer.as_slice(), memory_buffer.as_slice())
             .map_err(PersistenceError)?;
-        println!("gx here 003");
         let diff_data = DiffData::new(
             base_buffer.as_slice().len(),
             compressor.compress(&delta).map_err(PersistenceError)?,
@@ -205,7 +186,7 @@ impl ModuleCommit {
         }
         let patched =
             bspatch(vector_to_patch, patch_data.into_inner().as_slice())
-            .map_err(PersistenceError)?;
+                .map_err(PersistenceError)?;
         Ok(patched)
     }
 }

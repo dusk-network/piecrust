@@ -33,7 +33,6 @@ impl DiffData {
 
     pub fn original_len(&self) -> usize {
         self.original_len
-
     }
 
     pub fn data(&self) -> &[u8] {
