@@ -8,8 +8,7 @@ use qbsdiff::{Bsdiff, Bspatch};
 use std::fs::OpenOptions;
 use std::io::{Cursor, Read, Write};
 use std::path::{Path, PathBuf};
-// use zstd::bulk::{Compressor, Decompressor};
-use zstd::block::Decompressor;
+use zstd::bulk::{Compressor, Decompressor};
 
 
 use crate::commit::diff_data::DiffData;
@@ -116,9 +115,8 @@ impl ModuleCommit {
         base_commit: &ModuleCommit,
         memory_path: &MemoryPath,
     ) -> Result<(), Error> {
-        // let mut compressor =
-        //     Compressor::new(COMPRESSION_LEVEL).map_err(PersistenceError)?;
-        let mut compressor = zstd::block::Compressor::new();
+        let mut compressor =
+            Compressor::new(COMPRESSION_LEVEL).map_err(PersistenceError)?;
         let memory_buffer = memory_path.read()?;
         let base_buffer = base_commit.read()?;
         println!("gx here 001");
@@ -149,11 +147,7 @@ impl ModuleCommit {
         println!("gx here 003");
         let diff_data = DiffData::new(
             base_buffer.as_slice().len(),
-            compressor
-                .compress(&delta, COMPRESSION_LEVEL)
-                .map_err(PersistenceError)?,
-
-            // compressor.compress(&delta).map_err(PersistenceError)?,
+            compressor.compress(&delta).map_err(PersistenceError)?,
         );
         diff_data.persist(self.path())?;
         Ok(())
