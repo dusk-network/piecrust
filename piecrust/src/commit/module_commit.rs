@@ -122,13 +122,31 @@ impl ModuleCommit {
         let mut compressor = zstd::block::Compressor::new();
         let memory_buffer = memory_path.read()?;
         let base_buffer = base_commit.read()?;
+        println!("gx here 001");
         fn bsdiff(source: &[u8], target: &[u8]) -> std::io::Result<Vec<u8>> {
             let mut patch = Vec::new();
             diff(source, target, &mut patch)?;
             Ok(patch)
         }
+        println!("gx here 002 {} {}", base_buffer.as_slice().len(), memory_buffer.as_slice().len());
+        let mut count = 0;
+        let mut count_zeroes = 0;
+        let mut v = Vec::new();
+        for i in 0..base_buffer.as_slice().len() {
+            if i < memory_buffer.as_slice().len() {
+                if base_buffer.as_slice()[i] != memory_buffer.as_slice()[i] {
+                    count += 1;
+                    v.push((i, base_buffer.as_slice()[i], memory_buffer.as_slice()[i]));
+                }
+                if base_buffer.as_slice()[i] == 0 {
+                    count_zeroes += 1;
+                }
+            }
+        }
+        println!("count={} list={:?} zeroes={}", count, v, count_zeroes);
         let delta = bsdiff(base_buffer.as_slice(), memory_buffer.as_slice())
             .map_err(PersistenceError)?;
+        println!("gx here 003");
         let diff_data = DiffData::new(
             base_buffer.as_slice().len(),
             compressor
