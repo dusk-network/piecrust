@@ -337,6 +337,10 @@ impl SessionCommits {
     pub fn get_bag(&self, module_id: &ModuleId) -> Option<&ModuleCommitBag> {
         self.bags.get(module_id)
     }
+
+    pub fn is_empty(&self) -> bool {
+        self.commits.is_empty()
+    }
 }
 
 impl Persistable for SessionCommits {}

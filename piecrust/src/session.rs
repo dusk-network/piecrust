@@ -113,6 +113,7 @@ impl<'c> Session<'c> {
         Ret::Archived: Deserialize<Ret, Infallible>
             + for<'b> CheckBytes<DefaultValidator<'b>>,
     {
+        println!("piecrust query: {} root={}", method_name, hex::encode(self.root(true)?));
         let instance = self.push_callstack(id, self.limit).instance;
 
         let ret = {
@@ -143,6 +144,7 @@ impl<'c> Session<'c> {
         Ret::Archived: Deserialize<Ret, Infallible>
             + for<'b> CheckBytes<DefaultValidator<'b>>,
     {
+        println!("piecrust transact: {}", method_name);
         let instance = self.push_callstack(id, self.limit).instance;
 
         let ret = {
@@ -258,6 +260,7 @@ impl<'c> Session<'c> {
 
     pub fn commit(self) -> Result<CommitId, Error> {
         let mut session_commit = SessionCommit::new();
+        let mut num_modules = 0;
         self.memory_handler.with_every_module_id(|module_id, mem| {
             let module_commit_store =
                 ModuleCommitStore::new(self.vm.base_path(), *module_id);
@@ -269,11 +272,15 @@ impl<'c> Session<'c> {
                 self.vm.get_bag_mut(module_id),
                 &memory_path,
             )?;
+            self.vm.reset_root();
+            num_modules += 1;
             Ok(())
         })?;
         session_commit.calculate_id();
         let session_commit_id = session_commit.commit_id();
         self.vm.add_session_commit(session_commit);
+        println!("session: commit root={} num_modules={}", hex::encode(session_commit_id.to_bytes()), num_modules);
+        // self.vm.set_root(session_commit_id.to_bytes());
         Ok(session_commit_id)
     }
 
@@ -281,6 +288,7 @@ impl<'c> Session<'c> {
         &mut self,
         session_commit_id: &CommitId,
     ) -> Result<(), Error> {
+        println!("session: restore root={}", hex::encode(session_commit_id.to_bytes()));
         self.vm.restore_session(session_commit_id)?;
         Ok(())
     }

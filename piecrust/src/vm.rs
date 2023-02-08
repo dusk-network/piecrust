@@ -25,6 +25,7 @@ use crate::session::Session;
 use crate::types::MemoryState;
 use crate::util::{module_id_to_name, read_modules};
 use crate::Error::{self, PersistenceError, SessionError};
+use crate::merkle::Merkle;
 
 const SESSION_COMMITS_FILENAME: &str = "commits";
 pub(crate) const MODULES_DIR: &str = "modules";
@@ -33,6 +34,7 @@ pub struct VM {
     host_queries: HostQueries,
     base_memory_path: PathBuf,
     session_commits: SessionCommits,
+    root: Option<[u8; 32]>,
     modules: BTreeMap<ModuleId, WrappedModule>,
 }
 
@@ -52,6 +54,7 @@ impl VM {
             host_queries: HostQueries::default(),
             base_memory_path,
             session_commits,
+            root: None,
             modules,
         })
     }
@@ -65,6 +68,7 @@ impl VM {
                 .into(),
             host_queries: HostQueries::default(),
             session_commits: SessionCommits::new(),
+            root: None,
             modules: BTreeMap::default(),
         })
     }
@@ -152,6 +156,7 @@ impl VM {
         &mut self,
         commit_id: &CommitId,
     ) -> Result<(), Error> {
+        self.reset_root();
         let base_path = self.base_path();
         let mut pairs = Vec::<(ModuleId, ModuleCommitId)>::new();
         {
@@ -191,6 +196,7 @@ impl VM {
     }
 
     pub fn persist(&self) -> Result<(), Error> {
+        println!("vm: persist");
         self.session_commits.persist(self.path_to_session_commits())
     }
 
@@ -198,9 +204,64 @@ impl VM {
         self.base_memory_path.to_path_buf()
     }
 
-    pub(crate) fn root(&mut self, _refresh: bool) -> Result<[u8; 32], Error> {
-        Ok(self.session_commits.get_current_commit().to_bytes())
+    pub(crate) fn get_current_root(&mut self) -> Result<[u8; 32], Error> {
+        let mut module_id_commit_id_map: BTreeMap<ModuleId, ModuleCommitId> = BTreeMap::new();
+
+        // todo - for modules not in the current one module commit id should be clearly specified
+        self.session_commits
+            .with_every_session_commit(|session_commit| {
+                for (module_id, module_commit_id) in
+                    session_commit.module_commit_ids().iter()
+                {
+                    module_id_commit_id_map.insert(*module_id, *module_commit_id);
+                }
+            });
+
+        // overwrite with the current ones
+        if let Some(current_session_commit) = self.session_commits.get_current_session_commit(){
+            for (module_id, module_commit_id) in current_session_commit.module_commit_ids().iter() {
+                module_id_commit_id_map.insert(*module_id, *module_commit_id);
+            }
+        }
+
+        let mut vec= Vec::new();
+        for (_, module_commit_id) in module_id_commit_id_map.iter() {
+            vec.push(*module_commit_id)
+        }
+
+        vec.sort();
+        let root = Merkle::merkle(&mut vec).to_bytes(); // todo: refactor it somewhere else
+        println!("Piecrust root: {} ({} module(s)) real={}", hex::encode(root), vec.len(), module_id_commit_id_map.len());
+        Ok(root)
     }
+
+    pub(crate) fn root(&mut self, refresh: bool) -> Result<[u8; 32], Error> {
+        println!("root called with refresh={}", refresh);
+        let current_root;
+        {
+            current_root = self.root;
+        }
+        match current_root {
+            Some(r) if !refresh => {
+                println!("vm: root1 = {}", hex::encode(r));
+                Ok(r)
+            },
+            _ => {
+                let root = self.get_current_root()?;
+                println!("vm: root2 = {}", hex::encode(root));
+                self.root = Some(root);
+                Ok(root)
+            }
+        }
+    }
+
+    pub(crate) fn reset_root(&mut self) {
+        self.root = None;
+    }
+
+    // pub(crate) fn set_root(&mut self, root: [u8; 32]) {
+    //     self.root = Some(root);
+    // }
 
     pub(crate) fn get_bag_mut(
         &mut self,

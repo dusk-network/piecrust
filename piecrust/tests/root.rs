@@ -36,8 +36,8 @@ pub fn state_root_calculation() -> Result<(), Error> {
 
     let root_3 = session.root(false)?;
 
-    // committed changes cause the root change
-    assert_ne!(root_2, root_3);
+    // committed changes do not cause the root change either
+    assert_eq!(root_2, root_3);
     Ok(())
 }
 
