@@ -2,6 +2,7 @@
 
 mod bytecode;
 mod memory;
+mod mmap;
 
 use std::collections::btree_map::Entry::*;
 use std::collections::{BTreeMap, BTreeSet};
@@ -435,7 +436,7 @@ fn write_commit_inner<P: AsRef<Path>>(
                 let memory_path = memory_dir.join(&module_hex);
 
                 fs::write(bytecode_path, &bytecode)?;
-                fs::write(memory_path, memory.lock().as_ref())?;
+                fs::write(memory_path, &memory.read())?;
 
                 commit_modules.insert(module);
             }
@@ -497,8 +498,8 @@ fn write_commit_inner<P: AsRef<Path>>(
                         );
 
                         bsdiff::diff::diff(
-                            base_memory.lock().as_ref(),
-                            memory.lock().as_ref(),
+                            &base_memory.read(),
+                            &memory.read(),
                             &mut encoder,
                         )?;
 
@@ -509,7 +510,7 @@ fn write_commit_inner<P: AsRef<Path>>(
                         let memory_path = memory_dir.join(&module_hex);
 
                         fs::write(bytecode_path, &bytecode)?;
-                        fs::write(memory_path, memory.lock().as_ref())?;
+                        fs::write(memory_path, memory.read())?;
 
                         commit_modules.insert(module);
                     }
@@ -540,7 +541,7 @@ where
 
         hasher.update(module);
         hasher.update(bytecode.as_ref());
-        hasher.update(memory.lock().as_ref());
+        hasher.update(&memory.read());
 
         leaves.push(Root::from(hasher.finalize()));
     }
