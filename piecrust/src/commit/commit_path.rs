@@ -24,6 +24,16 @@ impl CommitPath {
         }
     }
 
+    pub fn from<P: AsRef<Path>>(path: P) -> Self
+    where
+        P: Into<PathBuf>,
+    {
+        CommitPath {
+            path: path.into(),
+            can_remove: true,
+        }
+    }
+
     pub fn can_remove(&self) -> bool {
         self.can_remove
     }

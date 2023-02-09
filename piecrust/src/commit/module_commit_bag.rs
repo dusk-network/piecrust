@@ -68,6 +68,10 @@ impl ModuleCommitBag {
         module_commit: &ModuleCommit,
         memory_path: &MemoryPath,
     ) -> Result<(), Error> {
+        println!("save_module_commit {:?} id={}", module_commit.path(), hex::encode(module_commit.id().to_bytes()));
+        if self.ids.contains(&module_commit.id()) {
+            println!("xconflict: {}", hex::encode(module_commit.id().to_bytes()));
+        }
         module_commit.capture(memory_path)?;
         self.ids.push(module_commit.id());
         if self.ids.len() == 1 {
@@ -101,7 +105,9 @@ impl ModuleCommitBag {
         source_module_commit_id: ModuleCommitId,
         memory_path: &MemoryPath,
     ) -> Result<Option<CommitPath>, Error> {
+        println!("restore_module_commit {}", hex::encode(source_module_commit_id.to_bytes()));
         if self.ids.is_empty() {
+            println!("hjk0");
             return Ok(None);
         }
         let from_id = |module_commit_id| {
@@ -110,8 +116,10 @@ impl ModuleCommitBag {
         let mut found = true;
         let mut can_remove = false;
         let final_commit = if source_module_commit_id == self.ids[0] {
+            println!("hjk1");
             from_id(self.ids[0])?
         } else if source_module_commit_id == self.top {
+            println!("hjk2");
             from_id(self.top)?
         } else {
             let accu_commit = from_id(ModuleCommitId::random())?;
@@ -127,22 +135,26 @@ impl ModuleCommitBag {
                     previous_patched = accu_commit.read()?;
                 }
                 if is_last {
+                    println!("hjk3");
                     commit.decompress_and_patch_last(
                         previous_patched.as_slice(),
                         &accu_commit,
                         &mut decompressor,
                     )?;
                 } else {
+                    println!("hjk4");
                     previous_patched = commit.decompress_and_patch(
                         previous_patched.as_slice(),
                         &mut decompressor,
                     )?;
                 }
+                println!("hjk5");
                 found = source_module_commit_id == *commit_id;
                 if found {
                     break;
                 }
             }
+            println!("hjk6");
             can_remove = true;
             accu_commit
         };
