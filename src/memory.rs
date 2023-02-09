@@ -6,6 +6,7 @@ use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use flate2::read::DeflateDecoder;
 
+use crate::diff::patch;
 use crate::mmap::{Mmap, MmapMut};
 
 /// WASM memory belonging to a given module during a given session.
@@ -39,7 +40,7 @@ impl Memory {
         let diff_file = File::open(diff_path)?;
         let mut decoder = DeflateDecoder::new(diff_file);
 
-        bsdiff::patch::patch(&mmap_old, &mut decoder, &mut mmap)?;
+        patch(&mmap_old, &mut decoder, &mut mmap)?;
 
         Ok(Self {
             mmap: Arc::new(RwLock::new(mmap)),

@@ -1,6 +1,7 @@
 //! A library for dealing with memories in trees.
 
 mod bytecode;
+mod diff;
 mod memory;
 mod mmap;
 
@@ -11,11 +12,12 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 use std::{fs, io, mem, thread};
 
-pub use bytecode::Bytecode;
-pub use memory::Memory;
-
 use flate2::write::DeflateEncoder;
 use flate2::Compression;
+
+pub use bytecode::Bytecode;
+use diff::diff;
+pub use memory::Memory;
 
 const ROOT_LEN: usize = 32;
 const MODULE_ID_LEN: usize = 32;
@@ -497,7 +499,7 @@ fn write_commit_inner<P: AsRef<Path>>(
                             Compression::default(),
                         );
 
-                        bsdiff::diff::diff(
+                        diff(
                             &base_memory.read(),
                             &memory.read(),
                             &mut encoder,
