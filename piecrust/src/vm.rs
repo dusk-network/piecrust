@@ -19,13 +19,13 @@ use crate::commit::{
     ModuleCommitId, ModuleCommitLike, SessionCommit, SessionCommits,
 };
 use crate::memory_path::MemoryPath;
+use crate::merkle::Merkle;
 use crate::module::WrappedModule;
 use crate::persistable::Persistable;
 use crate::session::Session;
 use crate::types::MemoryState;
 use crate::util::{module_id_to_name, read_modules};
 use crate::Error::{self, PersistenceError, SessionError};
-use crate::merkle::Merkle;
 
 const SESSION_COMMITS_FILENAME: &str = "commits";
 pub(crate) const MODULES_DIR: &str = "modules";
@@ -139,18 +139,20 @@ impl VM {
             current_session_commit.module_commit_ids().get(module_id)?;
         let (memory_path, _) = self.memory_path(module_id);
         let module_commit_id = *module_commit_id;
-        let bag = self.get_bag_mut(module_id);
-        let r = bag.restore_module_commit(module_commit_id, &memory_path);
-        println!("xyz6={:?}", r);
-        r.ok()?
+        self.get_bag_mut(module_id)
+            .restore_module_commit(module_commit_id, &memory_path)
+            .ok()?
     }
 
     fn path_to_session_commits(&self) -> PathBuf {
         self.base_memory_path.join(SESSION_COMMITS_FILENAME)
     }
 
-    pub(crate) fn add_session_commit(&mut self, session_commit: SessionCommit) -> CommitId {
-        self.session_commits.add(session_commit)
+    pub(crate) fn add_session_commit(
+        &mut self,
+        session_commit: SessionCommit,
+    ) -> CommitId {
+        self.session_commits.add_and_set_current(session_commit)
     }
 
     pub(crate) fn restore_session(
@@ -197,7 +199,6 @@ impl VM {
     }
 
     pub fn persist(&self) -> Result<(), Error> {
-        println!("vm: persist");
         self.session_commits.persist(self.path_to_session_commits())
     }
 
@@ -206,33 +207,30 @@ impl VM {
     }
 
     pub(crate) fn get_current_root(&mut self) -> Result<[u8; 32], Error> {
-        let mut vec= Vec::new();
-        if let Some(current_session_commit) = self.session_commits.get_current_session_commit(){
-            for (_module_id, module_commit_id) in current_session_commit.module_commit_ids().iter() {
+        let mut vec = Vec::new();
+        if let Some(current_session_commit) =
+            self.session_commits.get_current_session_commit()
+        {
+            for (_module_id, module_commit_id) in
+                current_session_commit.module_commit_ids().iter()
+            {
                 vec.push(*module_commit_id)
             }
         }
         vec.sort();
         let root = Merkle::merkle(&mut vec).to_bytes(); // todo: refactor it somewhere else
-        println!("Piecrust root: {} ({} module(s))", hex::encode(root), vec.len());
         Ok(root)
     }
 
     pub(crate) fn root(&mut self, refresh: bool) -> Result<[u8; 32], Error> {
-        println!("root called with refresh={}", refresh);
-        println!("base path={:?}", self.base_memory_path);
         let current_root;
         {
             current_root = self.root;
         }
         match current_root {
-            Some(r) if !refresh => {
-                println!("vm: root1 = {}", hex::encode(r));
-                Ok(r)
-            },
+            Some(r) if !refresh => Ok(r),
             _ => {
                 let root = self.get_current_root()?;
-                println!("vm: root2 = {}", hex::encode(root));
                 self.root = Some(root);
                 Ok(root)
             }
@@ -242,10 +240,6 @@ impl VM {
     pub(crate) fn reset_root(&mut self) {
         self.root = None;
     }
-
-    // pub(crate) fn set_root(&mut self, root: [u8; 32]) {
-    //     self.root = Some(root);
-    // }
 
     pub(crate) fn get_bag_mut(
         &mut self,

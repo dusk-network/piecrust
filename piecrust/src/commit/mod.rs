@@ -294,21 +294,31 @@ impl SessionCommits {
         self.current = *current;
     }
 
-    pub fn add(&mut self, mut session_commit: SessionCommit) -> CommitId {
-        if let Some(current_session_commit) = self.get_current_session_commit() {
-            let mut session_commit_changed = false;
-            for (module_id, module_commit_id) in current_session_commit.module_commit_ids() {
+    pub fn add_and_set_current(
+        &mut self,
+        mut session_commit: SessionCommit,
+    ) -> CommitId {
+        // if previous current session commit contains module
+        // for which the new session commit does not have an image
+        // (meaning: the module has not been active in the closing session)
+        // then enrich the image for it in the new current session commit
+        // from the previous session commit and recalculate the id
+        if let Some(current_session_commit) = self.get_current_session_commit()
+        {
+            let mut enriched = false;
+            for (module_id, module_commit_id) in
+                current_session_commit.module_commit_ids()
+            {
                 if !session_commit.module_commit_ids().contains_key(module_id) {
                     session_commit.add_entry(module_id, module_commit_id);
-                    session_commit_changed = true;
+                    enriched = true;
                 }
             }
-            if session_commit_changed {
+            if enriched {
                 session_commit.calculate_id();
             }
         }
         self.current = session_commit.commit_id();
-        println!("inserted session commit with {} modules", session_commit.module_commit_ids.len());
         self.commits.insert(self.current, session_commit);
         self.current
     }
@@ -349,7 +359,6 @@ impl SessionCommits {
         module_id: &ModuleId,
     ) -> &mut ModuleCommitBag {
         if !self.bags.contains_key(module_id) {
-            println!("no bag for {}", hex::encode(module_id.to_bytes()));
             self.bags.insert(*module_id, ModuleCommitBag::new());
         }
         self.bags.get_mut(module_id).unwrap()
@@ -357,10 +366,6 @@ impl SessionCommits {
 
     pub fn get_bag(&self, module_id: &ModuleId) -> Option<&ModuleCommitBag> {
         self.bags.get(module_id)
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.commits.is_empty()
     }
 }
 

@@ -4,6 +4,9 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
+use std::cmp::max;
+use std::collections::btree_map::Entry::{Occupied, Vacant};
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 
 use bytecheck::CheckBytes;
@@ -53,6 +56,8 @@ pub struct ModuleCommitBag {
     // we keep top uncompressed module commit
     // to make saving module commits efficient
     top: ModuleCommitId,
+    // positions of ids
+    ids_pos: BTreeMap<ModuleCommitId, BTreeSet<usize>>,
 }
 
 impl ModuleCommitBag {
@@ -60,6 +65,7 @@ impl ModuleCommitBag {
         Self {
             ids: Vec::new(),
             top: ModuleCommitId::random(),
+            ids_pos: BTreeMap::new(),
         }
     }
 
@@ -68,11 +74,8 @@ impl ModuleCommitBag {
         module_commit: &ModuleCommit,
         memory_path: &MemoryPath,
     ) -> Result<(), Error> {
-        println!("save_module_commit {:?} id={}", module_commit.path(), hex::encode(module_commit.id().to_bytes()));
-        if self.ids.contains(&module_commit.id()) {
-            println!("xconflict: {}", hex::encode(module_commit.id().to_bytes()));
-        }
         module_commit.capture(memory_path)?;
+        self.add_id_position(&module_commit.id(), self.ids.len());
         self.ids.push(module_commit.id());
         if self.ids.len() == 1 {
             // top is an uncompressed version of most recent commit
@@ -91,7 +94,11 @@ impl ModuleCommitBag {
             accu_commit.capture(module_commit)?;
             // accu and commit are both uncompressed
             // compressing commit against the top
-            module_commit.capture_diff(&top_commit, memory_path)?;
+            module_commit.capture_diff(
+                &top_commit,
+                memory_path,
+                self.diff_postfix(&module_commit.id()),
+            )?;
             // commit is compressed but accu keeps the uncompressed copy
             // top is an uncompressed version of most recent commit
             top_commit.capture(&accu_commit)?;
@@ -105,9 +112,7 @@ impl ModuleCommitBag {
         source_module_commit_id: ModuleCommitId,
         memory_path: &MemoryPath,
     ) -> Result<Option<CommitPath>, Error> {
-        println!("restore_module_commit {}", hex::encode(source_module_commit_id.to_bytes()));
         if self.ids.is_empty() {
-            println!("hjk0");
             return Ok(None);
         }
         let from_id = |module_commit_id| {
@@ -116,10 +121,8 @@ impl ModuleCommitBag {
         let mut found = true;
         let mut can_remove = false;
         let final_commit = if source_module_commit_id == self.ids[0] {
-            println!("hjk1");
             from_id(self.ids[0])?
         } else if source_module_commit_id == self.top {
-            println!("hjk2");
             from_id(self.top)?
         } else {
             let accu_commit = from_id(ModuleCommitId::random())?;
@@ -134,27 +137,26 @@ impl ModuleCommitBag {
                 if is_first {
                     previous_patched = accu_commit.read()?;
                 }
+                let diff_commit = commit
+                    .apply_postfix(self.diff_postfix_at(i + 1, commit_id));
                 if is_last {
-                    println!("hjk3");
-                    commit.decompress_and_patch_last(
+                    diff_commit.decompress_and_patch_last(
                         previous_patched.as_slice(),
                         &accu_commit,
                         &mut decompressor,
                     )?;
                 } else {
-                    println!("hjk4");
-                    previous_patched = commit.decompress_and_patch(
+                    previous_patched = diff_commit.decompress_and_patch(
                         previous_patched.as_slice(),
                         &mut decompressor,
                     )?;
                 }
-                println!("hjk5");
-                found = source_module_commit_id == *commit_id;
+                found = source_module_commit_id == *commit_id
+                    && !self.present_at_higher_position(i + 2, commit_id);
                 if found {
                     break;
                 }
             }
-            println!("hjk6");
             can_remove = true;
             accu_commit
         };
@@ -185,6 +187,55 @@ impl ModuleCommitBag {
         }
         bag_size_info.top_commit_size = get_size(&self.top, memory_path)?;
         Ok(bag_size_info)
+    }
+
+    fn diff_postfix(&self, module_commit_id: &ModuleCommitId) -> u32 {
+        max(1, self.position_set(module_commit_id).len() as u32) - 1
+    }
+
+    fn diff_postfix_at(
+        &self,
+        pos: usize,
+        module_commit_id: &ModuleCommitId,
+    ) -> u32 {
+        self.position_set(module_commit_id)
+            .iter()
+            .filter(|e| **e < pos)
+            .count() as u32
+    }
+
+    fn present_at_higher_position(
+        &self,
+        pos: usize,
+        module_commit_id: &ModuleCommitId,
+    ) -> bool {
+        self.position_set(module_commit_id)
+            .iter()
+            .any(|p| *p >= pos)
+    }
+
+    fn position_set(
+        &self,
+        module_commit_id: &ModuleCommitId,
+    ) -> &BTreeSet<usize> {
+        self.ids_pos
+            .get(module_commit_id)
+            .expect("Positions set for module commit id should exist")
+    }
+
+    fn add_id_position(
+        &mut self,
+        module_commit_id: &ModuleCommitId,
+        pos: usize,
+    ) {
+        match self.ids_pos.entry(*module_commit_id) {
+            Occupied(entry) => {
+                entry.into_mut().insert(pos);
+            }
+            Vacant(entry) => {
+                entry.insert(BTreeSet::from([pos]));
+            }
+        };
     }
 }
 

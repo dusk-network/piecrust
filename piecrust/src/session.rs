@@ -113,7 +113,6 @@ impl<'c> Session<'c> {
         Ret::Archived: Deserialize<Ret, Infallible>
             + for<'b> CheckBytes<DefaultValidator<'b>>,
     {
-        println!("piecrust query: {} mod_id={} root={}", method_name, hex::encode(id.to_bytes()), hex::encode(self.root(true)?));
         let instance = self.push_callstack(id, self.limit).instance;
 
         let ret = {
@@ -144,7 +143,6 @@ impl<'c> Session<'c> {
         Ret::Archived: Deserialize<Ret, Infallible>
             + for<'b> CheckBytes<DefaultValidator<'b>>,
     {
-        println!("piecrust transact: {} mod_id={}", method_name, hex::encode(id.to_bytes()));
         let instance = self.push_callstack(id, self.limit).instance;
 
         let ret = {
@@ -185,7 +183,6 @@ impl<'c> Session<'c> {
             {
                 let metadata = std::fs::metadata(commit_path.as_ref())
                     .expect("todo - metadata error handling");
-                println!("new instance commit path size={} for module id={}", metadata.len(), hex::encode(mod_id.to_bytes()));
                 memory
                     .grow_to(metadata.len() as u32)
                     .expect("todo - grow error handling");
@@ -195,8 +192,6 @@ impl<'c> Session<'c> {
                 if commit_path.can_remove() {
                     fs::remove_file(commit_path.as_ref()).expect("");
                 }
-            } else {
-                println!("new instance for module id={}", hex::encode(mod_id.to_bytes()));
             }
         }
         memory.set_state(MemoryState::Initialized);
@@ -265,7 +260,11 @@ impl<'c> Session<'c> {
         let mut session_commit = SessionCommit::new();
         let mut num_modules = 0;
         self.memory_handler.with_every_module_id(|module_id, mem| {
-            let module_commit = ModuleCommit::from_memory(mem, self.vm.base_path(), *module_id)?;
+            let module_commit = ModuleCommit::from_memory(
+                mem,
+                self.vm.base_path(),
+                *module_id,
+            )?;
             let (memory_path, _) = self.vm.memory_path(module_id);
             session_commit.add(
                 module_id,
@@ -278,9 +277,7 @@ impl<'c> Session<'c> {
             Ok(())
         })?;
         session_commit.calculate_id();
-        // let session_commit_id = session_commit.commit_id();
         let session_commit_id = self.vm.add_session_commit(session_commit);
-        println!("session: commit root={} num_modules={}", hex::encode(session_commit_id.to_bytes()), num_modules);
         Ok(session_commit_id)
     }
 
@@ -288,7 +285,6 @@ impl<'c> Session<'c> {
         &mut self,
         session_commit_id: &CommitId,
     ) -> Result<(), Error> {
-        println!("session: restore root={}", hex::encode(session_commit_id.to_bytes()));
         self.vm.restore_session(session_commit_id)?;
         Ok(())
     }

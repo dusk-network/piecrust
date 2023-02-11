@@ -4,17 +4,17 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
+use piecrust_uplink::ModuleId;
 use qbsdiff::{Bsdiff, Bspatch};
 use std::fs::OpenOptions;
 use std::io::{Cursor, Read, Write};
 use std::path::{Path, PathBuf};
 use zstd::bulk::{Compressor, Decompressor};
-use piecrust_uplink::ModuleId;
 
 use crate::commit::diff_data::DiffData;
 use crate::commit::{CommitPath, Hashable, ModuleCommitId};
 use crate::memory_path::MemoryPath;
-use crate::util::{ByteArrayWrapper, commit_id_to_name, module_id_to_name};
+use crate::util::{commit_id_to_name, module_id_to_name, ByteArrayWrapper};
 use crate::Error::{self, PersistenceError};
 
 pub trait ModuleCommitLike {
@@ -52,14 +52,29 @@ fn module_commit_id_to_name(module_commit_id: ModuleCommitId) -> String {
 const COMPRESSION_LEVEL: i32 = 11;
 
 impl ModuleCommit {
-    pub fn from_memory(mem: &[u8], base_path: PathBuf, module_id: ModuleId) -> Result<ModuleCommit, Error> {
+    pub fn from_memory(
+        mem: &[u8],
+        base_path: PathBuf,
+        module_id: ModuleId,
+    ) -> Result<ModuleCommit, Error> {
         let module_commit_id = ModuleCommitId::from_hash_of(mem)?;
-        let target_path = Self::path_to_module_commit(base_path, module_id, &module_commit_id);
+        let target_path = Self::path_to_module_commit(
+            base_path,
+            module_id,
+            &module_commit_id,
+        );
         let module_commit = ModuleCommit::from_id_and_path_direct(
             module_commit_id,
             target_path.path(),
         )?;
         Ok(module_commit)
+    }
+
+    pub fn apply_postfix(&self, postfix_number: u32) -> Self {
+        ModuleCommit {
+            path: Self::append_postfix(&self.path, postfix_number),
+            id: self.id,
+        }
     }
 
     /// Creates module commit with a given module commit id.
@@ -113,7 +128,6 @@ impl ModuleCommit {
         &self,
         commit: &dyn ModuleCommitLike,
     ) -> Result<(), Error> {
-        println!("capturing {:?} to {:?}", commit.path(), self.path().as_path());
         std::fs::copy(commit.path(), self.path().as_path())
             .map_err(PersistenceError)?;
         Ok(())
@@ -124,7 +138,6 @@ impl ModuleCommit {
         &self,
         memory_path: &MemoryPath,
     ) -> Result<(), Error> {
-        println!("restoring {:?} to mem", self.path().as_path());
         std::fs::copy(self.path().as_path(), memory_path.path())
             .map_err(PersistenceError)?;
         Ok(())
@@ -140,6 +153,7 @@ impl ModuleCommit {
         &self,
         base_commit: &ModuleCommit,
         memory_path: &MemoryPath,
+        postfix: u32,
     ) -> Result<(), Error> {
         let mut compressor =
             Compressor::new(COMPRESSION_LEVEL).map_err(PersistenceError)?;
@@ -157,9 +171,23 @@ impl ModuleCommit {
             base_buffer.as_slice().len(),
             compressor.compress(&delta).map_err(PersistenceError)?,
         );
-        println!("persisting diff data of {:?} and mem to {:?}", base_commit.path(), self.path());
-        diff_data.persist(self.path())?;
+        let diff_path = Self::append_postfix(&self.path, postfix);
+        diff_data.persist(diff_path)?;
         Ok(())
+    }
+
+    fn append_postfix(path: &Path, postfix_number: u32) -> PathBuf {
+        let postfix = postfix_number.to_string();
+
+        let mut path = path.to_path_buf();
+        path.set_file_name(combine_module_commit_names(
+            path.file_name()
+                .expect("filename exists")
+                .to_str()
+                .expect("filename is UTF8"),
+            postfix,
+        ));
+        path
     }
 
     /// Decompresses 'this' module commit as patch and patches a given module
@@ -190,14 +218,12 @@ impl ModuleCommit {
         previous_patched: &[u8],
         decompressor: &mut Decompressor,
     ) -> Result<Vec<u8>, Error> {
-        println!("hkj20 restoring diff data from {:?}", self.path());
         let diff_data: DiffData = DiffData::restore(self.path())?;
         let patch_data = std::io::Cursor::new(
             decompressor
                 .decompress(diff_data.data(), diff_data.original_len())
                 .map_err(PersistenceError)?,
         );
-        println!("hkj21 diff data size={} original_len={} patch_data={}", diff_data.data().len(), diff_data.original_len(), patch_data.get_ref().len());
         let patched = ModuleCommit::patch(patch_data, previous_patched)?;
         Ok(patched)
     }
@@ -206,22 +232,17 @@ impl ModuleCommit {
         patch_data: Cursor<Vec<u8>>,
         vector_to_patch: &[u8],
     ) -> Result<Vec<u8>, Error> {
-        println!("hjk10");
         fn bspatch(source: &[u8], patch: &[u8]) -> std::io::Result<Vec<u8>> {
             let patcher =
                 Bspatch::new(patch)?.buffer_size(4096).delta_min(1024);
             let mut target =
                 Vec::with_capacity(patcher.hint_target_size() as usize);
-            println!("hjk13 hint={} source_size={}, patch_size={}", patcher.hint_target_size(), source.len(), patch.len());
             patcher.apply(source, std::io::Cursor::new(&mut target))?;
-            println!("hjk14");
             Ok(target)
         }
-        println!("hjk11");
         let patched =
             bspatch(vector_to_patch, patch_data.into_inner().as_slice())
                 .map_err(PersistenceError)?;
-        println!("hjk12");
         Ok(patched)
     }
 }
