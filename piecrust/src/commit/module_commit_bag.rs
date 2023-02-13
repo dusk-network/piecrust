@@ -138,7 +138,7 @@ impl ModuleCommitBag {
                     previous_patched = accu_commit.read()?;
                 }
                 let diff_commit = commit
-                    .apply_postfix(self.diff_postfix_at(i + 1, commit_id));
+                    .clone_with_postfix(self.diff_postfix_at(i + 1, commit_id));
                 if is_last {
                     diff_commit.decompress_and_patch_last(
                         previous_patched.as_slice(),
@@ -189,19 +189,19 @@ impl ModuleCommitBag {
         Ok(bag_size_info)
     }
 
-    fn diff_postfix(&self, module_commit_id: &ModuleCommitId) -> u32 {
-        max(1, self.position_set(module_commit_id).len() as u32) - 1
+    fn diff_postfix(&self, module_commit_id: &ModuleCommitId) -> usize {
+        max(1, self.position_set(module_commit_id).len()) - 1
     }
 
     fn diff_postfix_at(
         &self,
         pos: usize,
         module_commit_id: &ModuleCommitId,
-    ) -> u32 {
+    ) -> usize {
         self.position_set(module_commit_id)
             .iter()
             .filter(|e| **e < pos)
-            .count() as u32
+            .count()
     }
 
     fn present_at_higher_position(

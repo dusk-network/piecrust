@@ -70,9 +70,9 @@ impl ModuleCommit {
         Ok(module_commit)
     }
 
-    pub fn apply_postfix(&self, postfix_number: u32) -> Self {
+    pub fn clone_with_postfix(&self, postfix: usize) -> Self {
         ModuleCommit {
-            path: Self::append_postfix(&self.path, postfix_number),
+            path: Self::append_postfix(&self.path, postfix),
             id: self.id,
         }
     }
@@ -153,7 +153,7 @@ impl ModuleCommit {
         &self,
         base_commit: &ModuleCommit,
         memory_path: &MemoryPath,
-        postfix: u32,
+        postfix: usize,
     ) -> Result<(), Error> {
         let mut compressor =
             Compressor::new(COMPRESSION_LEVEL).map_err(PersistenceError)?;
@@ -176,9 +176,8 @@ impl ModuleCommit {
         Ok(())
     }
 
-    fn append_postfix(path: &Path, postfix_number: u32) -> PathBuf {
-        let postfix = postfix_number.to_string();
-
+    fn append_postfix(path: &Path, postfix: usize) -> PathBuf {
+        let postfix = postfix.to_string();
         let mut path = path.to_path_buf();
         path.set_file_name(combine_module_commit_names(
             path.file_name()

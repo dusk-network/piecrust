@@ -258,7 +258,6 @@ impl<'c> Session<'c> {
 
     pub fn commit(self) -> Result<CommitId, Error> {
         let mut session_commit = SessionCommit::new();
-        let mut num_modules = 0;
         self.memory_handler.with_every_module_id(|module_id, mem| {
             let module_commit = ModuleCommit::from_memory(
                 mem,
@@ -273,7 +272,6 @@ impl<'c> Session<'c> {
                 &memory_path,
             )?;
             self.vm.reset_root();
-            num_modules += 1;
             Ok(())
         })?;
         session_commit.calculate_id();
