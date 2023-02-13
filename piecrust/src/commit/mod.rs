@@ -302,7 +302,8 @@ impl SessionCommits {
         // for which the new session commit does not have an image
         // (meaning: the module has not been active in the closing session)
         // then enrich the image for it in the new current session commit
-        // from the previous session commit and recalculate the id
+        // by taking the image from the previous session commit and
+        // recalculate the id
         if let Some(current_session_commit) = self.get_current_session_commit()
         {
             let mut enriched = false;

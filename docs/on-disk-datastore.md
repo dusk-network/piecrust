@@ -129,3 +129,43 @@ In addition, there is also a per VM (global) commits store which keeps the follo
 - current session commit id
 - historic session commits
 - database of per-module ordered commit collections - global per-module collections of module states kept in as compressed deltas of subsequent commits. Only first and last commit states are kept uncompressed, all the intermediate states are compressed.
+
+
+
+## Diffing - Deltas of Commits
+
+Multiple commits are kept on disk in a compressed form. All commits except for the first (base) commit 
+and the current commit are kept as compressed deltas against the previous commit (which will also be kept as delta
+except for the first one). This leads to a chain of decompressions required when accessing a historic commit. 
+An exception is the current commit, which is stored in uncompressed form, to allow for quick commits. 
+In other words, commits are always performed in time O(1) yet restore operations may be slower 
+because of the need for multiple chained decompressions.
+Initial measurements indicate that to restore a commit when there are 200 commits present in the chain
+takes around 1.67 seconds per module. Since session commits are collections of module commits,
+restore performance is dependent on the number of modules.
+Note that nothing is stored upon commit for modules that have not been active during the committed session, yet
+restore will recover memory images of all modules that have been historically active.
+
+Compressed deltas are stored in a similar way to full commits, yet they have an ordinal number appended
+to them so that an example folder looks as follows:
+
+```
+/tmp/001:
+589824 Feb 13 15:23 0100000000000000000000000000000000000000000000000000000000000000
+327680 Feb 13 15:22 0100000000000000000000000000000000000000000000000000000000000000_E651BB6F2F3C2B4E13731EABFF750DFD9E3C8D57DCE2E59C66C7DB8A9B9D3F7E
+ 10132 Feb 13 15:22 0100000000000000000000000000000000000000000000000000000000000000_8A88E5D1819EE34EA0FD4BF6ED4E2752C290E852E82683E7EDF03710C56F9ACA_0
+   156 Feb 13 15:23 0100000000000000000000000000000000000000000000000000000000000000_8A88E5D1819EE34EA0FD4BF6ED4E2752C290E852E82683E7EDF03710C56F9ACA_1
+589824 Feb 13 15:23 0100000000000000000000000000000000000000000000000000000000000000_F1B5A3B5C4BF745EDA2FD552BE1F288C2FAE5B0A6E4C8528C334F150FE96E39E
+327680 Feb 13 15:23 0200000000000000000000000000000000000000000000000000000000000000
+262144 Feb 13 15:22 0200000000000000000000000000000000000000000000000000000000000000_E0B6CB2E08FDF46272F64BA637486C4FE2AF212CFFEC6E302C4FFAFF6D23FAB6
+   180 Feb 13 15:22 0200000000000000000000000000000000000000000000000000000000000000_7185C75BD9CBD45301E9B1D6D9B5AD0F63E08B638FA387822CB99146B4E74AD7_0
+   180 Feb 13 15:23 0200000000000000000000000000000000000000000000000000000000000000_7185C75BD9CBD45301E9B1D6D9B5AD0F63E08B638FA387822CB99146B4E74AD7_1
+  2136 Feb 13 15:22 0200000000000000000000000000000000000000000000000000000000000000_F5D8C72CDA46DE6304B317AB34D21D27D0AF579680C1776B9639D5D5E522F0F4_0
+   172 Feb 13 15:23 0200000000000000000000000000000000000000000000000000000000000000_F5D8C72CDA46DE6304B317AB34D21D27D0AF579680C1776B9639D5D5E522F0F4_1
+327680 Feb 13 15:23 0200000000000000000000000000000000000000000000000000000000000000_10BB44EC62B192F96A1ED1A0165F82159E7FF3497B35245C55277A2C0CC0C451
+```
+
+Postfixes for compressed delta files are needed for the case when module commit ids happen to be not unique. 
+This should rarely happen, the above example is not typical, and in normal case only prefixes `_0` should occur.
+Nevertheless, prefixes are necessary if deltas happen to have the same id in order to prevent them from
+overwriting each other. 
