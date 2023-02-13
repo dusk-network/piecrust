@@ -102,7 +102,9 @@ impl ModuleCommitBag {
             // commit is compressed but accu keeps the uncompressed copy
             // top is an uncompressed version of most recent commit
             top_commit.capture(&accu_commit)?;
-            fs::remove_file(accu_commit.path()).map_err(PersistenceError)?;
+            for path in [accu_commit.path(), module_commit.path()] {
+                fs::remove_file(path).map_err(PersistenceError)?;
+            }
             Ok(())
         }
     }
