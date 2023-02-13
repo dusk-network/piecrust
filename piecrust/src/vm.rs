@@ -206,7 +206,7 @@ impl VM {
         self.base_memory_path.to_path_buf()
     }
 
-    pub(crate) fn get_current_root(&mut self) -> Result<[u8; 32], Error> {
+    pub(crate) fn compute_current_root(&self) -> Result<[u8; 32], Error> {
         let mut vec = Vec::new();
         if let Some(current_session_commit) =
             self.session_commits.get_current_session_commit()
@@ -218,8 +218,7 @@ impl VM {
             }
         }
         vec.sort();
-        let root = Merkle::merkle(&mut vec).to_bytes(); // todo: refactor it somewhere else
-        Ok(root)
+        Ok(Merkle::merkle(&mut vec).to_bytes())
     }
 
     pub(crate) fn root(&mut self, refresh: bool) -> Result<[u8; 32], Error> {
@@ -230,15 +229,18 @@ impl VM {
         match current_root {
             Some(r) if !refresh => Ok(r),
             _ => {
-                let root = self.get_current_root()?;
-                self.root = Some(root);
-                Ok(root)
+                self.set_root(self.compute_current_root()?);
+                Ok(self.root.expect("root should exist"))
             }
         }
     }
 
     pub(crate) fn reset_root(&mut self) {
         self.root = None;
+    }
+
+    pub(crate) fn set_root(&mut self, root: [u8; 32]) {
+        self.root = Some(root);
     }
 
     pub(crate) fn get_bag_mut(
