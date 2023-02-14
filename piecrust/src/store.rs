@@ -289,7 +289,7 @@ struct Commit {
 enum Call {
     Commit {
         modules: BTreeMap<ModuleId, (Bytecode, Memory)>,
-        base: Option<Root>,
+        base: Option<(Root, Commit)>,
         replier: mpsc::SyncSender<io::Result<(Root, Commit)>>,
     },
     CommitDelete {
@@ -398,17 +398,17 @@ fn sync_loop<P: AsRef<Path>>(
 fn write_commit<P: AsRef<Path>>(
     root_dir: P,
     commits: &mut BTreeMap<Root, Commit>,
-    base: Option<Root>,
+    base: Option<(Root, Commit)>,
     modules: BTreeMap<ModuleId, (Bytecode, Memory)>,
 ) -> io::Result<(Root, Commit)> {
     let root_dir = root_dir.as_ref();
 
-    let root = compute_root(&modules);
+    let root = compute_root(root_dir, &base, &modules)?;
     let root_hex = hex::encode(root);
 
     let commit_dir = root_dir.join(root_hex);
 
-    match write_commit_inner(root_dir, &commit_dir, commits, base, modules) {
+    match write_commit_inner(root_dir, &commit_dir, base, modules) {
         Ok(commit) => {
             commits.insert(root, commit.clone());
             Ok((root, commit))
@@ -424,8 +424,7 @@ fn write_commit<P: AsRef<Path>>(
 fn write_commit_inner<P: AsRef<Path>>(
     root_dir: P,
     commit_dir: P,
-    commits: &BTreeMap<Root, Commit>,
-    base: Option<Root>,
+    base: Option<(Root, Commit)>,
     modules: BTreeMap<ModuleId, (Bytecode, Memory)>,
 ) -> io::Result<Commit> {
     let root_dir = root_dir.as_ref();
@@ -454,10 +453,7 @@ fn write_commit_inner<P: AsRef<Path>>(
                 commit_modules.insert(module);
             }
         }
-        Some(base) => {
-            let base_commit =
-                commits.get(&base).expect("Parent commit must be in map");
-
+        Some((base, base_commit)) => {
             let base_hex = hex::encode(base);
             let base_dir = root_dir.join(base_hex);
 
@@ -538,17 +534,27 @@ fn write_commit_inner<P: AsRef<Path>>(
     })
 }
 
-/// Arrange the given memories in a tree, and compute the root hash of that
-/// tree.
-fn compute_root<'a, I>(modules: I) -> Root
+/// Compute the root of the state.
+///
+/// The root is computed by arranging all existing modules in order of their
+/// module ID, and computing a hash of the module ID, the bytecode, and the
+/// current state of the memory. These hashes then form the leaves of the tree
+/// whose root is then computed.
+fn compute_root<'a, P, I>(
+    root_dir: P,
+    base: &Option<(Root, Commit)>,
+    modules: I,
+) -> io::Result<Root>
 where
+    P: AsRef<Path>,
     I: IntoIterator<Item = (&'a ModuleId, &'a (Bytecode, Memory))>,
-    I::IntoIter: ExactSizeIterator,
 {
+    let root_dir = root_dir.as_ref();
     let iter = modules.into_iter();
-    let size = iter.len();
 
-    let mut leaves = Vec::with_capacity(size);
+    let mut leaves_map = BTreeMap::new();
+
+    // Compute the hashes of changed memories
     for (module, (bytecode, memory)) in iter {
         let mut hasher = blake3::Hasher::new();
 
@@ -556,8 +562,49 @@ where
         hasher.update(bytecode.as_ref());
         hasher.update(&memory.read());
 
-        leaves.push(Root::from(hasher.finalize()));
+        leaves_map.insert(*module, Root::from(hasher.finalize()));
     }
+
+    // Compute the hashes of *un*changed memories
+    if let Some((base, base_commit)) = base {
+        let base_hex = hex::encode(base);
+        let base_dir = root_dir.join(base_hex);
+
+        let bytecode_dir = base_dir.join(BYTECODE_DIR);
+        let memory_dir = base_dir.join(MEMORY_DIR);
+
+        for module in &base_commit.modules {
+            if !leaves_map.contains_key(module) {
+                let module_hex = hex::encode(module);
+
+                let bytecode_path = bytecode_dir.join(&module_hex);
+                let memory_path = memory_dir.join(module_hex);
+
+                let bytecode = Bytecode::from_file(bytecode_path)?;
+                let memory = match base_commit.diffs.contains(module) {
+                    true => Memory::from_file(memory_path)?,
+                    false => {
+                        let module_diff_path =
+                            memory_path.with_extension(DIFF_EXTENSION);
+                        Memory::from_file_and_diff(
+                            memory_path,
+                            module_diff_path,
+                        )?
+                    }
+                };
+
+                let mut hasher = blake3::Hasher::new();
+
+                hasher.update(module.as_bytes());
+                hasher.update(bytecode.as_ref());
+                hasher.update(&memory.read());
+
+                leaves_map.insert(*module, Root::from(hasher.finalize()));
+            }
+        }
+    }
+
+    let mut leaves: Vec<Root> = leaves_map.into_values().collect();
 
     while leaves.len() > 1 {
         leaves = leaves
@@ -575,7 +622,7 @@ where
             .collect();
     }
 
-    leaves[0]
+    Ok(leaves[0])
 }
 
 /// Delete the given commit's directory.
@@ -616,8 +663,8 @@ impl ModuleSession {
     /// calling this function.
     ///
     /// [`module`]: ModuleSession::module
-    pub fn root(&self) -> Root {
-        compute_root(&self.modules)
+    pub fn root(&self) -> io::Result<Root> {
+        compute_root(&self.root_dir, &self.base, &self.modules)
     }
 
     /// Commits the given session to disk, consuming the session and adding it
@@ -651,7 +698,7 @@ impl ModuleSession {
         slef.call
             .send(Call::Commit {
                 modules,
-                base: base.map(|p| p.0),
+                base,
                 replier,
             })
             .expect("The receiver should never drop before sending");

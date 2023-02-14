@@ -9,6 +9,7 @@ use call_stack::{CallStack, StackElementView};
 
 use std::borrow::Cow;
 use std::collections::BTreeMap;
+use std::io;
 use std::sync::Arc;
 
 use bytecheck::CheckBytes;
@@ -157,7 +158,7 @@ impl Session {
         ret
     }
 
-    pub fn root(&self) -> [u8; 32] {
+    pub fn root(&self) -> io::Result<[u8; 32]> {
         self.module_session.root()
     }
 
