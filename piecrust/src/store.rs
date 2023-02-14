@@ -27,11 +27,11 @@ pub use memory::Memory;
 use piecrust_uplink::ModuleId;
 
 const ROOT_LEN: usize = 32;
-const MODULE_ID_LEN: usize = 32;
 
 const BYTECODE_DIR: &str = "bytecode";
 const MEMORY_DIR: &str = "memory";
 const DIFF_EXTENSION: &str = "diff";
+const MERKLE_FILE: &str = "merkle";
 
 type Root = [u8; ROOT_LEN];
 
@@ -196,93 +196,64 @@ fn root_from_dir<P: AsRef<Path>>(dir: P) -> io::Result<Root> {
 fn commit_from_dir<P: AsRef<Path>>(dir: P) -> io::Result<Commit> {
     let dir = dir.as_ref();
 
-    let mut bytecode = BTreeSet::new();
+    let merkle_path = dir.join(MERKLE_FILE);
 
-    let bytecode_dir = dir.join(BYTECODE_DIR);
-    for bytecode_entry in fs::read_dir(bytecode_dir)? {
-        let entry = bytecode_entry?;
-        let module = module_id_from_path(entry.path())?;
-        bytecode.insert(module);
-    }
-
-    let mut memory = BTreeSet::new();
+    let modules = merkle_from_path(merkle_path)?;
     let mut diffs = BTreeSet::new();
 
+    let bytecode_dir = dir.join(BYTECODE_DIR);
     let memory_dir = dir.join(MEMORY_DIR);
-    for memory_entry in fs::read_dir(memory_dir)? {
-        let entry = memory_entry?;
-        let mut entry_path = entry.path();
 
-        // If the file has an extension and it is DIFF_EXTENSION, it's a diff.
-        // If the file has an extension, but it is *not* DIFF_EXTENSION just
-        // ignore the file.
-        if let Some(extension) = entry_path.extension() {
-            if extension == DIFF_EXTENSION {
-                entry_path.set_extension("");
-                let module = module_id_from_path(entry_path)?;
-                diffs.insert(module);
-            }
-            continue;
-        }
+    for module in modules.keys() {
+        let module_hex = hex::encode(module);
 
-        let module = module_id_from_path(entry.path())?;
-        memory.insert(module);
-    }
-
-    // Ensure all diffs are of modules that exist
-    for module in &diffs {
-        if !memory.contains(module) {
-            let module_hex = hex::encode(module);
+        // Check that all modules in the merkle file have a corresponding
+        // bytecode and memory.
+        let bytecode_path = bytecode_dir.join(&module_hex);
+        if !bytecode_path.is_file() {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
-                format!("Non-existing module for diff {module_hex}"),
+                format!("Non-existing bytecode for module: {module_hex}"),
             ));
+        }
+
+        let memory_path = memory_dir.join(&module_hex);
+        if !memory_path.is_file() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("Non-existing memory for module: {module_hex}"),
+            ));
+        }
+
+        // If there is a diff file for a given module, register it in the map.
+        let diff_path = memory_path.with_extension(DIFF_EXTENSION);
+        if diff_path.is_file() {
+            diffs.insert(*module);
         }
     }
 
-    if bytecode != memory {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            format!("Inconsistent commit directory: {dir:?}"),
-        ));
-    }
-
-    let modules = bytecode;
     Ok(Commit { modules, diffs })
 }
 
-fn module_id_from_path<P: AsRef<Path>>(path: P) -> io::Result<ModuleId> {
+fn merkle_from_path<P: AsRef<Path>>(
+    path: P,
+) -> io::Result<BTreeMap<ModuleId, Root>> {
     let path = path.as_ref();
-    let path_name = path.file_name().unwrap().to_str().ok_or_else(|| {
+
+    let modules_bytes = fs::read(path)?;
+    let modules = rkyv::from_bytes(&modules_bytes).map_err(|err| {
         io::Error::new(
             io::ErrorKind::InvalidData,
-            format!("File name \"{path:?}\" is invalid UTF-8"),
+            format!("Invalid merkle file \"{path:?}\": {err}"),
         )
     })?;
 
-    let path_name_bytes = hex::decode(path_name).map_err(|err| {
-        io::Error::new(
-            io::ErrorKind::InvalidData,
-            format!("File name \"{path_name}\" is invalid hex: {err}"),
-        )
-    })?;
-
-    if path_name_bytes.len() != ROOT_LEN {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            format!("Expected file name \"{path_name}\" to be of size {MODULE_ID_LEN}, was {}", path_name_bytes.len())
-        ));
-    }
-
-    let mut module = [0u8; MODULE_ID_LEN];
-    module.copy_from_slice(&path_name_bytes);
-
-    Ok(ModuleId::from_bytes(module))
+    Ok(modules)
 }
 
 #[derive(Clone)]
 struct Commit {
-    modules: BTreeSet<ModuleId>,
+    modules: BTreeMap<ModuleId, Root>,
     diffs: BTreeSet<ModuleId>,
 }
 
@@ -399,16 +370,28 @@ fn write_commit<P: AsRef<Path>>(
     root_dir: P,
     commits: &mut BTreeMap<Root, Commit>,
     base: Option<(Root, Commit)>,
-    modules: BTreeMap<ModuleId, (Bytecode, Memory)>,
+    commit_modules: BTreeMap<ModuleId, (Bytecode, Memory)>,
 ) -> io::Result<(Root, Commit)> {
     let root_dir = root_dir.as_ref();
 
-    let root = compute_root(root_dir, &base, &modules)?;
+    let (root, modules) = compute_root(&base, &commit_modules);
     let root_hex = hex::encode(root);
 
     let commit_dir = root_dir.join(root_hex);
 
-    match write_commit_inner(root_dir, &commit_dir, base, modules) {
+    // Don't write the commit if it already exists on disk. This may happen if
+    // the same transactions on the same base commit for example.
+    if let Some(commit) = commits.get(&root) {
+        return Ok((root, commit.clone()));
+    }
+
+    match write_commit_inner(
+        root_dir,
+        &commit_dir,
+        base,
+        modules,
+        commit_modules,
+    ) {
         Ok(commit) => {
             commits.insert(root, commit.clone());
             Ok((root, commit))
@@ -425,7 +408,8 @@ fn write_commit_inner<P: AsRef<Path>>(
     root_dir: P,
     commit_dir: P,
     base: Option<(Root, Commit)>,
-    modules: BTreeMap<ModuleId, (Bytecode, Memory)>,
+    modules: BTreeMap<ModuleId, Root>,
+    commit_modules: BTreeMap<ModuleId, (Bytecode, Memory)>,
 ) -> io::Result<Commit> {
     let root_dir = root_dir.as_ref();
     let commit_dir = commit_dir.as_ref();
@@ -436,12 +420,11 @@ fn write_commit_inner<P: AsRef<Path>>(
     let memory_dir = commit_dir.join(MEMORY_DIR);
     fs::create_dir_all(&memory_dir)?;
 
-    let mut commit_modules = BTreeSet::new();
-    let mut commit_diff_modules = BTreeSet::new();
+    let mut diffs = BTreeSet::new();
 
     match base {
         None => {
-            for (module, (bytecode, memory)) in modules {
+            for (module, (bytecode, memory)) in commit_modules {
                 let module_hex = hex::encode(module);
 
                 let bytecode_path = bytecode_dir.join(&module_hex);
@@ -449,8 +432,6 @@ fn write_commit_inner<P: AsRef<Path>>(
 
                 fs::write(bytecode_path, &bytecode)?;
                 fs::write(memory_path, &memory.read())?;
-
-                commit_modules.insert(module);
             }
         }
         Some((base, base_commit)) => {
@@ -460,7 +441,7 @@ fn write_commit_inner<P: AsRef<Path>>(
             let base_bytecode_dir = base_dir.join(BYTECODE_DIR);
             let base_memory_dir = base_dir.join(MEMORY_DIR);
 
-            for module in &base_commit.modules {
+            for module in base_commit.modules.keys() {
                 let module_hex = hex::encode(module);
 
                 let bytecode_path = bytecode_dir.join(&module_hex);
@@ -475,7 +456,7 @@ fn write_commit_inner<P: AsRef<Path>>(
                 // If there is a diff of this memory in the base module, and it
                 // hasn't been touched in this commit, link it as well.
                 if base_commit.diffs.contains(module)
-                    && !modules.contains_key(module)
+                    && !commit_modules.contains_key(module)
                 {
                     let base_diff_path =
                         base_memory_path.with_extension(DIFF_EXTENSION);
@@ -483,14 +464,12 @@ fn write_commit_inner<P: AsRef<Path>>(
 
                     fs::hard_link(base_diff_path, diff_path)?;
                 }
-
-                commit_modules.insert(*module);
             }
 
-            for (module, (bytecode, memory)) in modules {
+            for (module, (bytecode, memory)) in commit_modules {
                 let module_hex = hex::encode(module);
 
-                match base_commit.modules.contains(&module) {
+                match base_commit.modules.contains_key(&module) {
                     true => {
                         let base_memory_path =
                             base_memory_dir.join(&module_hex);
@@ -512,7 +491,7 @@ fn write_commit_inner<P: AsRef<Path>>(
                             &mut encoder,
                         )?;
 
-                        commit_diff_modules.insert(module);
+                        diffs.insert(module);
                     }
                     false => {
                         let bytecode_path = bytecode_dir.join(&module_hex);
@@ -520,18 +499,24 @@ fn write_commit_inner<P: AsRef<Path>>(
 
                         fs::write(bytecode_path, &bytecode)?;
                         fs::write(memory_path, memory.read())?;
-
-                        commit_modules.insert(module);
                     }
                 }
             }
         }
     }
 
-    Ok(Commit {
-        modules: commit_modules,
-        diffs: commit_diff_modules,
-    })
+    let merkle_path = commit_dir.join(MERKLE_FILE);
+    let merkle_bytes = rkyv::to_bytes::<_, 128>(&modules)
+        .map_err(|err| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("Failed serializing merkle file: {err}"),
+            )
+        })?
+        .to_vec();
+    fs::write(merkle_path, merkle_bytes)?;
+
+    Ok(Commit { modules, diffs })
 }
 
 /// Compute the root of the state.
@@ -540,71 +525,34 @@ fn write_commit_inner<P: AsRef<Path>>(
 /// module ID, and computing a hash of the module ID, the bytecode, and the
 /// current state of the memory. These hashes then form the leaves of the tree
 /// whose root is then computed.
-fn compute_root<'a, P, I>(
-    root_dir: P,
+fn compute_root<'a, I>(
     base: &Option<(Root, Commit)>,
     modules: I,
-) -> io::Result<Root>
+) -> (Root, BTreeMap<ModuleId, Root>)
 where
-    P: AsRef<Path>,
     I: IntoIterator<Item = (&'a ModuleId, &'a (Bytecode, Memory))>,
 {
-    let root_dir = root_dir.as_ref();
     let iter = modules.into_iter();
 
     let mut leaves_map = BTreeMap::new();
 
     // Compute the hashes of changed memories
-    for (module, (bytecode, memory)) in iter {
+    for (module, (_, memory)) in iter {
         let mut hasher = blake3::Hasher::new();
-
-        hasher.update(module.as_bytes());
-        hasher.update(bytecode.as_ref());
         hasher.update(&memory.read());
-
         leaves_map.insert(*module, Root::from(hasher.finalize()));
     }
 
-    // Compute the hashes of *un*changed memories
-    if let Some((base, base_commit)) = base {
-        let base_hex = hex::encode(base);
-        let base_dir = root_dir.join(base_hex);
-
-        let bytecode_dir = base_dir.join(BYTECODE_DIR);
-        let memory_dir = base_dir.join(MEMORY_DIR);
-
-        for module in &base_commit.modules {
+    // Store the hashes of *un*changed memories
+    if let Some((_, base_commit)) = base {
+        for (module, root) in &base_commit.modules {
             if !leaves_map.contains_key(module) {
-                let module_hex = hex::encode(module);
-
-                let bytecode_path = bytecode_dir.join(&module_hex);
-                let memory_path = memory_dir.join(module_hex);
-
-                let bytecode = Bytecode::from_file(bytecode_path)?;
-                let memory = match base_commit.diffs.contains(module) {
-                    true => Memory::from_file(memory_path)?,
-                    false => {
-                        let module_diff_path =
-                            memory_path.with_extension(DIFF_EXTENSION);
-                        Memory::from_file_and_diff(
-                            memory_path,
-                            module_diff_path,
-                        )?
-                    }
-                };
-
-                let mut hasher = blake3::Hasher::new();
-
-                hasher.update(module.as_bytes());
-                hasher.update(bytecode.as_ref());
-                hasher.update(&memory.read());
-
-                leaves_map.insert(*module, Root::from(hasher.finalize()));
+                leaves_map.insert(*module, *root);
             }
         }
     }
 
-    let mut leaves: Vec<Root> = leaves_map.into_values().collect();
+    let mut leaves: Vec<Root> = leaves_map.clone().into_values().collect();
 
     while leaves.len() > 1 {
         leaves = leaves
@@ -622,7 +570,7 @@ where
             .collect();
     }
 
-    Ok(leaves[0])
+    (leaves[0], leaves_map)
 }
 
 /// Delete the given commit's directory.
@@ -663,8 +611,9 @@ impl ModuleSession {
     /// calling this function.
     ///
     /// [`module`]: ModuleSession::module
-    pub fn root(&self) -> io::Result<Root> {
-        compute_root(&self.root_dir, &self.base, &self.modules)
+    pub fn root(&self) -> Root {
+        let (root, _) = compute_root(&self.base, &self.modules);
+        root
     }
 
     /// Commits the given session to disk, consuming the session and adding it
@@ -686,7 +635,7 @@ impl ModuleSession {
             (
                 *root,
                 Commit {
-                    modules: BTreeSet::new(),
+                    modules: BTreeMap::new(),
                     diffs: BTreeSet::new(),
                 },
             )
@@ -727,7 +676,7 @@ impl ModuleSession {
             Vacant(entry) => match &self.base {
                 None => Ok(None),
                 Some((base, base_commit)) => {
-                    match base_commit.modules.contains(&module) {
+                    match base_commit.modules.contains_key(&module) {
                         true => {
                             let base_hex = hex::encode(base);
                             let base_dir = self.root_dir.join(base_hex);
@@ -803,7 +752,7 @@ impl ModuleSession {
         }
 
         if let Some((base, base_commit)) = &self.base {
-            if base_commit.modules.contains(&module_id) {
+            if base_commit.modules.contains_key(&module_id) {
                 let module_hex = hex::encode(module_id);
                 let base_hex = hex::encode(base);
                 return Err(io::Error::new(
