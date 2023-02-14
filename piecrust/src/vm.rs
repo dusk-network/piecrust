@@ -19,6 +19,7 @@ use crate::commit::{
     ModuleCommitId, ModuleCommitLike, SessionCommit, SessionCommits,
 };
 use crate::memory_path::MemoryPath;
+use crate::merkle::Merkle;
 use crate::module::WrappedModule;
 use crate::persistable::Persistable;
 use crate::session::Session;
@@ -33,6 +34,7 @@ pub struct VM {
     host_queries: HostQueries,
     base_memory_path: PathBuf,
     session_commits: SessionCommits,
+    root: Option<[u8; 32]>,
     modules: BTreeMap<ModuleId, WrappedModule>,
 }
 
@@ -52,6 +54,7 @@ impl VM {
             host_queries: HostQueries::default(),
             base_memory_path,
             session_commits,
+            root: None,
             modules,
         })
     }
@@ -65,6 +68,7 @@ impl VM {
                 .into(),
             host_queries: HostQueries::default(),
             session_commits: SessionCommits::new(),
+            root: None,
             modules: BTreeMap::default(),
         })
     }
@@ -144,14 +148,18 @@ impl VM {
         self.base_memory_path.join(SESSION_COMMITS_FILENAME)
     }
 
-    pub(crate) fn add_session_commit(&mut self, session_commit: SessionCommit) {
-        self.session_commits.add(session_commit);
+    pub(crate) fn add_session_commit(
+        &mut self,
+        session_commit: SessionCommit,
+    ) -> CommitId {
+        self.session_commits.add_and_set_current(session_commit)
     }
 
     pub(crate) fn restore_session(
         &mut self,
         commit_id: &CommitId,
     ) -> Result<(), Error> {
+        self.reset_root();
         let base_path = self.base_path();
         let mut pairs = Vec::<(ModuleId, ModuleCommitId)>::new();
         {
@@ -198,8 +206,41 @@ impl VM {
         self.base_memory_path.to_path_buf()
     }
 
-    pub(crate) fn root(&mut self, _refresh: bool) -> Result<[u8; 32], Error> {
-        Ok(self.session_commits.get_current_commit().to_bytes())
+    pub(crate) fn compute_current_root(&self) -> Result<[u8; 32], Error> {
+        let mut vec = Vec::new();
+        if let Some(current_session_commit) =
+            self.session_commits.get_current_session_commit()
+        {
+            for (_module_id, module_commit_id) in
+                current_session_commit.module_commit_ids().iter()
+            {
+                vec.push(*module_commit_id)
+            }
+        }
+        vec.sort();
+        Ok(Merkle::merkle(&mut vec).to_bytes())
+    }
+
+    pub(crate) fn root(&mut self, refresh: bool) -> Result<[u8; 32], Error> {
+        let current_root;
+        {
+            current_root = self.root;
+        }
+        match current_root {
+            Some(r) if !refresh => Ok(r),
+            _ => {
+                self.set_root(self.compute_current_root()?);
+                Ok(self.root.expect("root should exist"))
+            }
+        }
+    }
+
+    pub(crate) fn reset_root(&mut self) {
+        self.root = None;
+    }
+
+    pub(crate) fn set_root(&mut self, root: [u8; 32]) {
+        self.root = Some(root);
     }
 
     pub(crate) fn get_bag_mut(

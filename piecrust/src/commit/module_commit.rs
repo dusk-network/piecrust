@@ -4,6 +4,7 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
+use piecrust_uplink::ModuleId;
 use qbsdiff::{Bsdiff, Bspatch};
 use std::fs::OpenOptions;
 use std::io::{Cursor, Read, Write};
@@ -11,9 +12,9 @@ use std::path::{Path, PathBuf};
 use zstd::bulk::{Compressor, Decompressor};
 
 use crate::commit::diff_data::DiffData;
-use crate::commit::{Hashable, ModuleCommitId};
+use crate::commit::{CommitPath, Hashable, ModuleCommitId};
 use crate::memory_path::MemoryPath;
-use crate::util::ByteArrayWrapper;
+use crate::util::{commit_id_to_name, module_id_to_name, ByteArrayWrapper};
 use crate::Error::{self, PersistenceError};
 
 pub trait ModuleCommitLike {
@@ -51,6 +52,31 @@ fn module_commit_id_to_name(module_commit_id: ModuleCommitId) -> String {
 const COMPRESSION_LEVEL: i32 = 11;
 
 impl ModuleCommit {
+    pub fn from_memory(
+        mem: &[u8],
+        base_path: PathBuf,
+        module_id: ModuleId,
+    ) -> Result<ModuleCommit, Error> {
+        let module_commit_id = ModuleCommitId::from_hash_of(mem)?;
+        let target_path = Self::path_to_module_commit(
+            base_path,
+            module_id,
+            &module_commit_id,
+        );
+        let module_commit = ModuleCommit::from_id_and_path_direct(
+            module_commit_id,
+            target_path.path(),
+        )?;
+        Ok(module_commit)
+    }
+
+    pub fn clone_with_postfix(&self, postfix: usize) -> Self {
+        ModuleCommit {
+            path: Self::append_postfix(&self.path, postfix),
+            id: self.id,
+        }
+    }
+
     /// Creates module commit with a given module commit id.
     /// Filename for module commit is a concatenation of
     /// a given path filename and a given module commit id.
@@ -80,6 +106,20 @@ impl ModuleCommit {
             path: path.to_path_buf(),
             id: module_commit_id,
         })
+    }
+
+    fn path_to_module_commit(
+        base_path: PathBuf,
+        module_id: ModuleId,
+        module_commit_id: &ModuleCommitId,
+    ) -> CommitPath {
+        const SEPARATOR: char = '_';
+        let commit_id_name = &*commit_id_to_name(*module_commit_id);
+        let mut name = module_id_to_name(module_id);
+        name.push(SEPARATOR);
+        name.push_str(commit_id_name);
+        let path = base_path.join(name);
+        CommitPath::from(path)
     }
 
     /// Captures contents of a given module commit into 'this' module
@@ -113,6 +153,7 @@ impl ModuleCommit {
         &self,
         base_commit: &ModuleCommit,
         memory_path: &MemoryPath,
+        postfix: usize,
     ) -> Result<(), Error> {
         let mut compressor =
             Compressor::new(COMPRESSION_LEVEL).map_err(PersistenceError)?;
@@ -130,8 +171,22 @@ impl ModuleCommit {
             base_buffer.as_slice().len(),
             compressor.compress(&delta).map_err(PersistenceError)?,
         );
-        diff_data.persist(self.path())?;
+        let diff_path = Self::append_postfix(&self.path, postfix);
+        diff_data.persist(diff_path)?;
         Ok(())
+    }
+
+    fn append_postfix(path: &Path, postfix: usize) -> PathBuf {
+        let postfix = postfix.to_string();
+        let mut path = path.to_path_buf();
+        path.set_file_name(combine_module_commit_names(
+            path.file_name()
+                .expect("filename exists")
+                .to_str()
+                .expect("filename is UTF8"),
+            postfix,
+        ));
+        path
     }
 
     /// Decompresses 'this' module commit as patch and patches a given module

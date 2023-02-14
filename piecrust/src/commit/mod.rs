@@ -8,7 +8,6 @@ mod commit_path;
 mod diff_data;
 mod module_commit;
 mod module_commit_bag;
-mod module_commit_store;
 
 use bytecheck::CheckBytes;
 use rkyv::{Archive, Deserialize, Serialize};
@@ -28,7 +27,6 @@ use crate::memory_path::MemoryPath;
 pub use commit_path::CommitPath;
 pub use module_commit::{ModuleCommit, ModuleCommitLike};
 pub use module_commit_bag::{BagSizeInfo, ModuleCommitBag};
-pub use module_commit_store::ModuleCommitStore;
 
 pub const COMMIT_ID_BYTES: usize = 32;
 
@@ -234,6 +232,14 @@ impl SessionCommit {
         bag.save_module_commit(module_commit, memory_path)
     }
 
+    pub fn add_entry(
+        &mut self,
+        module_id: &ModuleId,
+        module_commit_id: &ModuleCommitId,
+    ) {
+        self.module_commit_ids.insert(*module_id, *module_commit_id);
+    }
+
     pub fn module_commit_ids(&self) -> &BTreeMap<ModuleId, ModuleCommitId> {
         &self.module_commit_ids
     }
@@ -288,9 +294,34 @@ impl SessionCommits {
         self.current = *current;
     }
 
-    pub fn add(&mut self, session_commit: SessionCommit) {
+    pub fn add_and_set_current(
+        &mut self,
+        mut session_commit: SessionCommit,
+    ) -> CommitId {
+        // if previous current session commit contains module
+        // for which the new session commit does not have an image
+        // (meaning: the module has not been active in the closing session)
+        // then enrich the image for it in the new current session commit
+        // by taking the image from the previous session commit and
+        // recalculate the id
+        if let Some(current_session_commit) = self.get_current_session_commit()
+        {
+            let mut enriched = false;
+            for (module_id, module_commit_id) in
+                current_session_commit.module_commit_ids()
+            {
+                if !session_commit.module_commit_ids().contains_key(module_id) {
+                    session_commit.add_entry(module_id, module_commit_id);
+                    enriched = true;
+                }
+            }
+            if enriched {
+                session_commit.calculate_id();
+            }
+        }
         self.current = session_commit.commit_id();
         self.commits.insert(self.current, session_commit);
+        self.current
     }
 
     pub fn get_session_commit(

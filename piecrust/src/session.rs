@@ -22,7 +22,7 @@ use rkyv::{
     Serialize,
 };
 
-use crate::commit::{BagSizeInfo, CommitId, ModuleCommitStore, SessionCommit};
+use crate::commit::{BagSizeInfo, CommitId, ModuleCommit, SessionCommit};
 use crate::event::Event;
 use crate::instance::WrappedInstance;
 use crate::memory_handler::MemoryHandler;
@@ -259,9 +259,11 @@ impl<'c> Session<'c> {
     pub fn commit(self) -> Result<CommitId, Error> {
         let mut session_commit = SessionCommit::new();
         self.memory_handler.with_every_module_id(|module_id, mem| {
-            let module_commit_store =
-                ModuleCommitStore::new(self.vm.base_path(), *module_id);
-            let module_commit = module_commit_store.commit(mem)?;
+            let module_commit = ModuleCommit::from_memory(
+                mem,
+                self.vm.base_path(),
+                *module_id,
+            )?;
             let (memory_path, _) = self.vm.memory_path(module_id);
             session_commit.add(
                 module_id,
@@ -269,11 +271,11 @@ impl<'c> Session<'c> {
                 self.vm.get_bag_mut(module_id),
                 &memory_path,
             )?;
+            self.vm.reset_root();
             Ok(())
         })?;
         session_commit.calculate_id();
-        let session_commit_id = session_commit.commit_id();
-        self.vm.add_session_commit(session_commit);
+        let session_commit_id = self.vm.add_session_commit(session_commit);
         Ok(session_commit_id)
     }
 
