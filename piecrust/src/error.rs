@@ -47,8 +47,6 @@ pub enum Error {
     SessionError(Cow<'static, str>),
     #[error(transparent)]
     MemorySetupError(std::io::Error),
-    #[error(transparent)]
-    RegionError(region::Error),
     #[error("ValidationError")]
     ValidationError,
     #[error("OutOfPoints")]

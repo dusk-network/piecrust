@@ -6,12 +6,10 @@
 
 extern crate core;
 
-use std::env;
 use std::path::{Path, PathBuf};
+use std::{env, fs};
 
-use piecrust::{CommitId, ModuleId, Session, VM};
-const DIFFED_COMPRESSED_SIZE_THRESHOLD: u64 = 500;
-const UNCOMPRESSED_SIZE_THRESHOLD: u64 = 200000;
+use piecrust::{ModuleId, VM};
 const COUNTER_ID: ModuleId = {
     let mut bytes = [0u8; 32];
     bytes[0] = 99;
@@ -19,54 +17,43 @@ const COUNTER_ID: ModuleId = {
 };
 
 fn initialize_counter<P: AsRef<Path>>(
-    vm: &mut VM,
+    vm: &VM,
     commit_id_file_path: P,
 ) -> Result<(), piecrust::Error> {
-    let mut session = vm.session();
+    let mut session = vm.genesis_session();
 
     let counter_bytecode = include_bytes!(
         "../../../../target/wasm32-unknown-unknown/release/counter.wasm"
     );
 
     session.deploy_with_id(COUNTER_ID, counter_bytecode)?;
-
     session.transact::<(), ()>(COUNTER_ID, "increment", &())?;
 
-    let commit_id = session.commit()?;
-    assert_eq!(commit_id.as_bytes(), vm.session().root(false)?);
-    commit_id.persist(commit_id_file_path)?;
+    let commit_root = session.commit()?;
+    fs::write(commit_id_file_path, commit_root)
+        .expect("writing commit root should succeed");
 
-    vm.persist()
-
+    Ok(())
 }
 
 fn confirm_counter<P: AsRef<Path>>(
-    session: &mut Session,
+    vm: &VM,
     commit_id_file_path: P,
-    expected: i64
 ) -> Result<(), piecrust::Error> {
-    let commit_id = CommitId::restore(commit_id_file_path)?;
-    session.restore(&commit_id)?;
-    assert_eq!(commit_id.as_bytes(), session.root(false)?);
+    let mut commit_root = [0u8; 32];
 
+    let commit_root_bytes = fs::read(commit_id_file_path)
+        .expect("Reading commit root should succeed");
+    commit_root.copy_from_slice(&commit_root_bytes);
 
+    let mut session = vm
+        .session(commit_root)
+        .expect("Instantiating session from given root should succeed");
 
     assert_eq!(
         session.query::<(), i64>(COUNTER_ID, "read_value", &())?,
-        expected
+        0xfd
     );
-
-    /*
-     * Make sure that diffing and compression work.
-     */
-    let bag_size_info = session.get_bag_size_info(&COUNTER_ID)?;
-    let l = bag_size_info.commit_sizes().len();
-    assert!(l > 0);
-    for i in 1..l {
-        assert!(bag_size_info.commit_sizes()[i] < DIFFED_COMPRESSED_SIZE_THRESHOLD)
-    }
-    assert!(bag_size_info.commit_sizes()[0] > UNCOMPRESSED_SIZE_THRESHOLD);
-    assert!(bag_size_info.top_commit_size() > UNCOMPRESSED_SIZE_THRESHOLD);
 
     Ok(())
 }
@@ -74,16 +61,15 @@ fn confirm_counter<P: AsRef<Path>>(
 fn initialize<P: AsRef<str>>(vm_data_path: P) -> Result<(), piecrust::Error> {
     let commit_id_file_path =
         PathBuf::from(vm_data_path.as_ref()).join("commit_id");
-    let mut vm = VM::new(vm_data_path.as_ref())?;
-    initialize_counter(&mut vm, &commit_id_file_path)
+    let vm = VM::new(vm_data_path.as_ref())?;
+    initialize_counter(&vm, &commit_id_file_path)
 }
 
-fn confirm<P: AsRef<str>>(vm_data_path: P, expected: i64) -> Result<(), piecrust::Error> {
+fn confirm<P: AsRef<str>>(vm_data_path: P) -> Result<(), piecrust::Error> {
     let commit_id_file_path =
         PathBuf::from(vm_data_path.as_ref()).join("commit_id");
-    let mut vm = VM::new(vm_data_path.as_ref())?;
-    let mut session = vm.session();
-    confirm_counter(&mut session, &commit_id_file_path, expected)
+    let vm = VM::new(vm_data_path.as_ref())?;
+    confirm_counter(&vm, &commit_id_file_path)
 }
 
 fn main() -> Result<(), piecrust::Error> {
@@ -100,13 +86,11 @@ fn main() -> Result<(), piecrust::Error> {
 
     match &*args[2] {
         "initialize" => initialize(&vm_data_path)?,
-        "confirm" => confirm(&vm_data_path, 0xfd)?,
+        "confirm" => confirm(&vm_data_path)?,
         "test_both" => {
-            let mut expected = 0xfd;
+            initialize(&vm_data_path)?;
             for _ in 0..10 {
-                initialize(&vm_data_path)?;
-                confirm(&vm_data_path, expected)?;
-                expected += 1;
+                confirm(&vm_data_path)?;
             }
         }
         _ => {

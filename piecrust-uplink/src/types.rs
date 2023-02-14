@@ -71,6 +71,18 @@ impl From<[u8; MODULE_ID_BYTES]> for ModuleId {
     }
 }
 
+impl AsRef<[u8]> for ModuleId {
+    fn as_ref(&self) -> &[u8] {
+        self.as_bytes()
+    }
+}
+
+impl AsMut<[u8]> for ModuleId {
+    fn as_mut(&mut self) -> &mut [u8] {
+        self.as_bytes_mut()
+    }
+}
+
 impl core::fmt::Debug for ModuleId {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         if f.alternate() {

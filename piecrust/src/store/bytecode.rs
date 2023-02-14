@@ -2,7 +2,7 @@ use std::io;
 use std::path::Path;
 use std::sync::Arc;
 
-use crate::mmap::Mmap;
+use crate::store::mmap::Mmap;
 
 /// WASM bytecode belonging to a given module.
 #[derive(Debug, Clone)]

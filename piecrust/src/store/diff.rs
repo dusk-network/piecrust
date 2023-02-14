@@ -4,7 +4,7 @@ use std::io::{Read, Write};
 use bsdiff::diff::diff as bsdiff_diff;
 use bsdiff::patch::patch as bsdiff_patch;
 
-use crate::mmap::MmapMut;
+use crate::store::mmap::MmapMut;
 
 /// Compute the diff between an `old` and a `new` buffer, and write it to thee
 /// given writer. The length of new buffer is written first, in the form of a

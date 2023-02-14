@@ -4,16 +4,18 @@ use std::ops::{Deref, DerefMut};
 use std::os::fd::AsRawFd;
 use std::path::Path;
 use std::ptr;
+use std::ptr::NonNull;
 use std::{io, slice};
 
 use libc::{
-    MAP_ANONYMOUS, MAP_FAILED, MAP_FIXED, MAP_PRIVATE, MAP_SHARED, PROT_READ,
-    PROT_WRITE,
+    MAP_ANONYMOUS, MAP_FAILED, MAP_FIXED, MAP_PRIVATE, PROT_READ, PROT_WRITE,
 };
 use tempfile::tempfile;
+use wasmer_types::{MemoryError, MemoryStyle, MemoryType, Pages};
+use wasmer_vm::{LinearMemory, VMMemoryDefinition};
 
 const WASM_PAGE_SIZE: usize = 65_536;
-const WASM_MIN_PAGES: usize = 2;
+const WASM_MIN_PAGES: usize = 4;
 const WASM_MAX_PAGES: usize = 65_536;
 
 /// The size of the address space reserved for a memory.
@@ -132,7 +134,7 @@ impl Mmap {
             ptr::null_mut(),
             len,
             PROT_READ,
-            MAP_SHARED,
+            MAP_PRIVATE,
             fd,
         )?))
     }
@@ -251,55 +253,45 @@ impl AsMut<[u8]> for MmapMut {
     }
 }
 
-#[cfg(feature = "wasmer")]
-mod wasmer {
-    use super::*;
-
-    use std::ptr::NonNull;
-
-    use wasmer_types::{MemoryError, MemoryStyle, MemoryType, Pages};
-    use wasmer_vm::{LinearMemory, VMMemoryDefinition};
-
-    impl MmapMut {
-        pub fn ty(&self) -> MemoryType {
-            MemoryType {
-                minimum: Pages(WASM_MIN_PAGES as u32),
-                maximum: Some(Pages(WASM_MAX_PAGES as u32)),
-                shared: false,
-            }
+impl MmapMut {
+    pub fn ty(&self) -> MemoryType {
+        MemoryType {
+            minimum: Pages(WASM_MIN_PAGES as u32),
+            maximum: Some(Pages(WASM_MAX_PAGES as u32)),
+            shared: false,
         }
+    }
 
-        pub fn size(&self) -> Pages {
-            Pages((self.len() / WASM_PAGE_SIZE) as u32)
+    pub fn size(&self) -> Pages {
+        Pages((self.len() / WASM_PAGE_SIZE) as u32)
+    }
+
+    pub fn style(&self) -> MemoryStyle {
+        MemoryStyle::Dynamic {
+            offset_guard_size: 0,
         }
+    }
 
-        pub fn style(&self) -> MemoryStyle {
-            MemoryStyle::Dynamic {
-                offset_guard_size: 0,
-            }
-        }
+    pub fn grow(&mut self, delta: Pages) -> Result<Pages, MemoryError> {
+        let current_size = self.size();
+        let pages = current_size + delta;
 
-        pub fn grow(&mut self, delta: Pages) -> Result<Pages, MemoryError> {
-            let current_size = self.size();
-            let pages = current_size + delta;
+        self.grow_by(pages.0 as usize * WASM_PAGE_SIZE)
+            .map_err(|_| MemoryError::CouldNotGrow {
+                current: current_size,
+                attempted_delta: delta,
+            })?;
 
-            self.grow_by(pages.0 as usize * WASM_PAGE_SIZE)
-                .map_err(|_| MemoryError::CouldNotGrow {
-                    current: current_size,
-                    attempted_delta: delta,
-                })?;
+        Ok(pages)
+    }
 
-            Ok(pages)
-        }
+    pub fn vmmemory(&self) -> NonNull<VMMemoryDefinition> {
+        let inner = &self.0 as *const MmapInner;
+        NonNull::new(inner as *mut VMMemoryDefinition).unwrap()
+    }
 
-        pub fn vmmemory(&self) -> NonNull<VMMemoryDefinition> {
-            let inner = &self.0 as *const MmapInner;
-            NonNull::new(inner as *mut VMMemoryDefinition).unwrap()
-        }
-
-        pub fn try_clone(&self) -> Option<Box<dyn LinearMemory + 'static>> {
-            None
-        }
+    pub fn try_clone(&self) -> Option<Box<dyn LinearMemory + 'static>> {
+        None
     }
 }
 
@@ -309,10 +301,8 @@ mod tests {
 
     use super::*;
 
-    // This path must not contain `..` since the tests are run from the manifest
-    // directory.
-    const BYTES_PATH: &str = "assets/mmap";
-    const BYTES: &[u8] = include_bytes!("../assets/mmap");
+    const BYTES_PATH: &str = "../assets/mmap";
+    const BYTES: &[u8] = include_bytes!("../../../assets/mmap");
 
     #[test]
     fn anonymous() -> io::Result<()> {

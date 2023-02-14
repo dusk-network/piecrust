@@ -6,23 +6,16 @@
 
 #[macro_use]
 mod bytecode_macro;
-mod commit;
 mod error;
 mod event;
 mod imports;
 mod instance;
-mod linear;
-mod memory_handler;
-mod memory_path;
-mod merkle;
 mod module;
-mod persistable;
 mod session;
+mod store;
 mod types;
-mod util;
 mod vm;
 
-pub use commit::CommitId;
 pub use error::Error;
 pub use session::Session;
 pub use vm::{HostQuery, VM};

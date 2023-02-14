@@ -1,3 +1,9 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+//
+// Copyright (c) DUSK NETWORK. All rights reserved.
+
 //! A library for dealing with memories in trees.
 
 mod bytecode;
@@ -18,6 +24,7 @@ use flate2::Compression;
 pub use bytecode::Bytecode;
 use diff::diff;
 pub use memory::Memory;
+use piecrust_uplink::ModuleId;
 
 const ROOT_LEN: usize = 32;
 const MODULE_ID_LEN: usize = 32;
@@ -27,7 +34,6 @@ const MEMORY_DIR: &str = "memory";
 const DIFF_EXTENSION: &str = "diff";
 
 type Root = [u8; ROOT_LEN];
-type ModuleId = [u8; MODULE_ID_LEN];
 
 /// A store for all module commits.
 pub struct ModuleStore {
@@ -71,14 +77,14 @@ impl ModuleStore {
     pub fn session(&self, base: Root) -> io::Result<ModuleSession> {
         let (replier, receiver) = mpsc::sync_channel(1);
 
-        self.call.send(Call::SessionHold { base, replier }).expect(
+        self.call.send(Call::CommitHold { base, replier }).expect(
             "The receiver should never be dropped while there are senders",
         );
 
         let base_commit = receiver
             .recv()
             .expect("The sender in the loop should never be dropped without responding", )
-            .ok_or(io::Error::new(
+            .ok_or_else(|| io::Error::new(
                 io::ErrorKind::InvalidInput,
                 format!("No such base commit: {}", hex::encode(base)),
             ))?;
@@ -140,8 +146,10 @@ fn read_all_commits<P: AsRef<Path>>(
 
     for entry in fs::read_dir(root_dir)? {
         let entry = entry?;
-        let (root, commit) = read_commit(entry.path())?;
-        commits.insert(root, commit);
+        if entry.path().is_dir() {
+            let (root, commit) = read_commit(entry.path())?;
+            commits.insert(root, commit);
+        }
     }
 
     Ok(commits)
@@ -158,10 +166,12 @@ fn read_commit<P: AsRef<Path>>(commit_dir: P) -> io::Result<(Root, Commit)> {
 
 fn root_from_dir<P: AsRef<Path>>(dir: P) -> io::Result<Root> {
     let dir = dir.as_ref();
-    let dir_name = dir.file_name().unwrap().to_str().ok_or(io::Error::new(
-        io::ErrorKind::InvalidData,
-        format!("Directory name \"{dir:?}\" is invalid UTF-8"),
-    ))?;
+    let dir_name = dir.file_name().unwrap().to_str().ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("Directory name \"{dir:?}\" is invalid UTF-8"),
+        )
+    })?;
 
     let dir_name_bytes = hex::decode(dir_name).map_err(|err| {
         io::Error::new(
@@ -243,11 +253,12 @@ fn commit_from_dir<P: AsRef<Path>>(dir: P) -> io::Result<Commit> {
 
 fn module_id_from_path<P: AsRef<Path>>(path: P) -> io::Result<ModuleId> {
     let path = path.as_ref();
-    let path_name =
-        path.file_name().unwrap().to_str().ok_or(io::Error::new(
+    let path_name = path.file_name().unwrap().to_str().ok_or_else(|| {
+        io::Error::new(
             io::ErrorKind::InvalidData,
             format!("File name \"{path:?}\" is invalid UTF-8"),
-        ))?;
+        )
+    })?;
 
     let path_name_bytes = hex::decode(path_name).map_err(|err| {
         io::Error::new(
@@ -266,7 +277,7 @@ fn module_id_from_path<P: AsRef<Path>>(path: P) -> io::Result<ModuleId> {
     let mut module = [0u8; MODULE_ID_LEN];
     module.copy_from_slice(&path_name_bytes);
 
-    Ok(module)
+    Ok(ModuleId::from_bytes(module))
 }
 
 #[derive(Clone)]
@@ -285,7 +296,7 @@ enum Call {
         commit: Root,
         replier: mpsc::SyncSender<io::Result<()>>,
     },
-    SessionHold {
+    CommitHold {
         base: Root,
         replier: mpsc::SyncSender<Option<Commit>>,
     },
@@ -336,7 +347,7 @@ fn sync_loop<P: AsRef<Path>>(
             }
             // Increment the hold count of a commit to prevent it from deletion
             // on a `Call::CommitDelete`.
-            Call::SessionHold {
+            Call::CommitHold {
                 base,
                 replier,
             } => {
@@ -541,7 +552,7 @@ where
     for (module, (bytecode, memory)) in iter {
         let mut hasher = blake3::Hasher::new();
 
-        hasher.update(module);
+        hasher.update(module.as_bytes());
         hasher.update(bytecode.as_ref());
         hasher.update(&memory.read());
 
@@ -720,7 +731,7 @@ impl ModuleSession {
         let bytes = bytecode.as_ref();
         let hash = blake3::hash(bytes);
 
-        let module_id = hash.into();
+        let module_id = ModuleId::from_bytes(hash.into());
         self.deploy_with_id(module_id, bytes)?;
 
         Ok(module_id)
@@ -735,7 +746,7 @@ impl ModuleSession {
         &mut self,
         module_id: ModuleId,
         bytecode: B,
-    ) -> io::Result<ModuleId> {
+    ) -> io::Result<()> {
         if self.modules.contains_key(&module_id) {
             let module_hex = hex::encode(module_id);
             return Err(io::Error::new(
@@ -760,7 +771,7 @@ impl ModuleSession {
 
         self.modules.insert(module_id, (bytecode, memory));
 
-        Ok(module_id)
+        Ok(())
     }
 }
 

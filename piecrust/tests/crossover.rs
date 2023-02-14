@@ -8,9 +8,9 @@ use piecrust::{module_bytecode, Error, RawTransaction, VM};
 
 #[test]
 fn crossover() -> Result<(), Error> {
-    let mut vm = VM::ephemeral()?;
+    let vm = VM::ephemeral()?;
 
-    let mut session = vm.session();
+    let mut session = vm.genesis_session();
 
     let contract_id = session.deploy(module_bytecode!("crossover"))?;
 

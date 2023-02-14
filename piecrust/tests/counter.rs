@@ -8,9 +8,9 @@ use piecrust::{module_bytecode, Error, VM};
 
 #[test]
 fn counter_read_simple() -> Result<(), Error> {
-    let mut vm = VM::ephemeral()?;
+    let vm = VM::ephemeral()?;
 
-    let mut session = vm.session();
+    let mut session = vm.genesis_session();
 
     let id = session.deploy(module_bytecode!("counter"))?;
 
@@ -21,9 +21,9 @@ fn counter_read_simple() -> Result<(), Error> {
 
 #[test]
 fn counter_read_write_simple() -> Result<(), Error> {
-    let mut vm = VM::ephemeral()?;
+    let vm = VM::ephemeral()?;
 
-    let mut session = vm.session();
+    let mut session = vm.genesis_session();
 
     let id = session.deploy(module_bytecode!("counter"))?;
 

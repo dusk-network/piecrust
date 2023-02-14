@@ -15,7 +15,7 @@ pub struct WrappedModule {
 }
 
 impl WrappedModule {
-    pub fn new(bytecode: &[u8]) -> Result<Self, Error> {
+    pub fn new<B: AsRef<[u8]>>(bytecode: B) -> Result<Self, Error> {
         let store = Store::new_store();
 
         let module = wasmer::Module::new(&store, bytecode)?;

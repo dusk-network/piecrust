@@ -9,9 +9,9 @@ use piecrust_uplink::{ModuleId, RawQuery, RawResult, RawTransaction};
 
 #[test]
 pub fn cc_read_counter() -> Result<(), Error> {
-    let mut vm = VM::ephemeral()?;
+    let vm = VM::ephemeral()?;
 
-    let mut session = vm.session();
+    let mut session = vm.genesis_session();
 
     let counter_id = session.deploy(module_bytecode!("counter"))?;
 
@@ -31,9 +31,9 @@ pub fn cc_read_counter() -> Result<(), Error> {
 
 #[test]
 pub fn cc_direct() -> Result<(), Error> {
-    let mut vm = VM::ephemeral()?;
+    let vm = VM::ephemeral()?;
 
-    let mut session = vm.session();
+    let mut session = vm.genesis_session();
 
     let counter_id = session.deploy(module_bytecode!("counter"))?;
 
@@ -63,9 +63,9 @@ pub fn cc_direct() -> Result<(), Error> {
 
 #[test]
 pub fn cc_passthrough() -> Result<(), Error> {
-    let mut vm = VM::ephemeral()?;
+    let vm = VM::ephemeral()?;
 
-    let mut session = vm.session();
+    let mut session = vm.genesis_session();
 
     let center_id = session.deploy(module_bytecode!("callcenter"))?;
 
@@ -80,9 +80,9 @@ pub fn cc_passthrough() -> Result<(), Error> {
 
 #[test]
 pub fn cc_delegated_read() -> Result<(), Error> {
-    let mut vm = VM::ephemeral()?;
+    let vm = VM::ephemeral()?;
 
-    let mut session = vm.session();
+    let mut session = vm.genesis_session();
 
     let counter_id = session.deploy(module_bytecode!("counter"))?;
     let center_id = session.deploy(module_bytecode!("callcenter"))?;
@@ -105,13 +105,13 @@ pub fn cc_delegated_read() -> Result<(), Error> {
 
 #[test]
 pub fn cc_delegated_write() -> Result<(), Error> {
-    let mut vm = VM::ephemeral()?;
+    let vm = VM::ephemeral()?;
 
     // increment through delegated transaction
 
     let rt = RawTransaction::new("increment", ());
 
-    let mut session = vm.session();
+    let mut session = vm.genesis_session();
     let counter_id = session.deploy(module_bytecode!("counter"))?;
     let center_id = session.deploy(module_bytecode!("callcenter"))?;
 
@@ -126,9 +126,9 @@ pub fn cc_delegated_write() -> Result<(), Error> {
 
 #[test]
 pub fn cc_self() -> Result<(), Error> {
-    let mut vm = VM::ephemeral()?;
+    let vm = VM::ephemeral()?;
 
-    let mut session = vm.session();
+    let mut session = vm.genesis_session();
 
     let center_id = session.deploy(module_bytecode!("callcenter"))?;
 
@@ -142,9 +142,9 @@ pub fn cc_self() -> Result<(), Error> {
 
 #[test]
 pub fn cc_caller() -> Result<(), Error> {
-    let mut vm = VM::ephemeral()?;
+    let vm = VM::ephemeral()?;
 
-    let mut session = vm.session();
+    let mut session = vm.genesis_session();
 
     let center_id = session.deploy(module_bytecode!("callcenter"))?;
 
@@ -156,9 +156,9 @@ pub fn cc_caller() -> Result<(), Error> {
 
 #[test]
 pub fn cc_caller_uninit() -> Result<(), Error> {
-    let mut vm = VM::ephemeral()?;
+    let vm = VM::ephemeral()?;
 
-    let mut session = vm.session();
+    let mut session = vm.genesis_session();
 
     let center_id = session.deploy(module_bytecode!("callcenter"))?;
 
@@ -170,9 +170,9 @@ pub fn cc_caller_uninit() -> Result<(), Error> {
 
 #[test]
 pub fn cc_self_id() -> Result<(), Error> {
-    let mut vm = VM::ephemeral()?;
+    let vm = VM::ephemeral()?;
 
-    let mut session = vm.session();
+    let mut session = vm.genesis_session();
 
     let center_id = session.deploy(module_bytecode!("callcenter"))?;
 

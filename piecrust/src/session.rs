@@ -9,7 +9,6 @@ use call_stack::{CallStack, StackElementView};
 
 use std::borrow::Cow;
 use std::collections::BTreeMap;
-use std::fs;
 use std::sync::Arc;
 
 use bytecheck::CheckBytes;
@@ -22,44 +21,44 @@ use rkyv::{
     Serialize,
 };
 
-use crate::commit::{BagSizeInfo, CommitId, ModuleCommit, SessionCommit};
 use crate::event::Event;
 use crate::instance::WrappedInstance;
-use crate::memory_handler::MemoryHandler;
 use crate::module::WrappedModule;
-use crate::types::MemoryState;
+use crate::store::ModuleSession;
 use crate::types::StandardBufSerializer;
-use crate::vm::VM;
+use crate::vm::HostQueries;
 use crate::Error;
+use crate::Error::PersistenceError;
 
 const DEFAULT_LIMIT: u64 = 65_536;
 const MAX_META_SIZE: usize = 65_536;
 
-unsafe impl<'c> Send for Session<'c> {}
-unsafe impl<'c> Sync for Session<'c> {}
+unsafe impl Send for Session {}
+unsafe impl Sync for Session {}
 
-pub struct Session<'c> {
-    vm: &'c mut VM,
-    memory_handler: MemoryHandler,
+pub struct Session {
     callstack: Arc<RwLock<CallStack>>,
     debug: Arc<RwLock<Vec<String>>>,
     events: Arc<RwLock<Vec<Event>>>,
     data: Arc<RwLock<HostData>>,
+    module_session: ModuleSession,
+    host_queries: HostQueries,
     limit: u64,
     spent: u64,
 }
 
-impl<'c> Session<'c> {
-    pub fn new(vm: &'c mut VM) -> Self {
-        let base_path = vm.base_path();
-
+impl Session {
+    pub(crate) fn new(
+        module_session: ModuleSession,
+        host_queries: HostQueries,
+    ) -> Self {
         Session {
-            vm,
-            memory_handler: MemoryHandler::new(base_path),
             callstack: Arc::new(RwLock::new(CallStack::new())),
             debug: Arc::new(RwLock::new(vec![])),
             events: Arc::new(RwLock::new(vec![])),
             data: Arc::new(RwLock::new(HostData::new())),
+            module_session,
+            host_queries,
             limit: DEFAULT_LIMIT,
             spent: 0,
         }
@@ -71,14 +70,12 @@ impl<'c> Session<'c> {
     /// If one needs to specify the ID, [`deploy_with_id`] is available.
     ///
     /// [`deploy_with_id`]: `Session::deploy_with_id`
-    // FIXME modules are currently deployed in `VM` scope, meaning they're made
-    //  available to sessions where they aren't technically deployed. This
-    //  should  be fixed on the re-structuring on disk.
-    //  https://github.com/dusk-network/piecrust/issues/145
     pub fn deploy(&mut self, bytecode: &[u8]) -> Result<ModuleId, Error> {
-        let hash = blake3::hash(bytecode);
-        let module_id = ModuleId::from_bytes(hash.into());
-        self.deploy_with_id(module_id, bytecode)?;
+        let module_id = self
+            .module_session
+            .deploy(bytecode)
+            .map_err(PersistenceError)?;
+
         Ok(module_id)
     }
 
@@ -93,12 +90,10 @@ impl<'c> Session<'c> {
         module_id: ModuleId,
         bytecode: &[u8],
     ) -> Result<(), Error> {
-        self.vm.insert_module(module_id, bytecode)?;
+        self.module_session
+            .deploy_with_id(module_id, bytecode)
+            .map_err(PersistenceError)?;
         Ok(())
-    }
-
-    pub(crate) fn get_module(&self, id: ModuleId) -> &WrappedModule {
-        self.vm.get_module(id)
     }
 
     pub fn query<Arg, Ret>(
@@ -113,7 +108,7 @@ impl<'c> Session<'c> {
         Ret::Archived: Deserialize<Ret, Infallible>
             + for<'b> CheckBytes<DefaultValidator<'b>>,
     {
-        let instance = self.push_callstack(id, self.limit).instance;
+        let instance = self.push_callstack(id, self.limit)?.instance;
 
         let ret = {
             let arg_len = instance.write_to_arg_buffer(arg)?;
@@ -143,7 +138,7 @@ impl<'c> Session<'c> {
         Ret::Archived: Deserialize<Ret, Infallible>
             + for<'b> CheckBytes<DefaultValidator<'b>>,
     {
-        let instance = self.push_callstack(id, self.limit).instance;
+        let instance = self.push_callstack(id, self.limit)?.instance;
 
         let ret = {
             let arg_len = instance.write_to_arg_buffer(arg)?;
@@ -162,40 +157,29 @@ impl<'c> Session<'c> {
         ret
     }
 
+    pub fn root(&self) -> [u8; 32] {
+        self.module_session.root()
+    }
+
     pub(crate) fn push_event(&mut self, event: Event) {
         let mut events = self.events.write();
         events.push(event);
     }
 
-    fn new_instance(&mut self, mod_id: ModuleId) -> WrappedInstance {
-        let mut memory = self
-            .memory_handler
-            .get_memory(mod_id)
-            .expect("memory available");
+    fn new_instance(
+        &mut self,
+        module_id: ModuleId,
+    ) -> Result<WrappedInstance, Error> {
+        let (bytecode, memory) = self
+            .module_session
+            .module(module_id)
+            .map_err(PersistenceError)?
+            .expect("Module should exist");
 
-        let wrapped = WrappedInstance::new(memory.clone(), self, mod_id)
-            .expect("todo, error handling");
+        let module = WrappedModule::new(&bytecode)?;
+        let instance = WrappedInstance::new(self, module_id, module, memory)?;
 
-        if memory.state() == MemoryState::Uninitialized {
-            // if current commit exists, use it as memory image
-            if let Some(commit_path) =
-                self.vm.current_module_commit_path(&mod_id)
-            {
-                let metadata = std::fs::metadata(commit_path.as_ref())
-                    .expect("todo - metadata error handling");
-                memory
-                    .grow_to(metadata.len() as u32)
-                    .expect("todo - grow error handling");
-                let (target_path, _) = self.vm.memory_path(&mod_id);
-                std::fs::copy(commit_path.as_ref(), target_path.as_ref())
-                    .expect("commit and memory paths exist");
-                if commit_path.can_remove() {
-                    fs::remove_file(commit_path.as_ref()).expect("");
-                }
-            }
-        }
-        memory.set_state(MemoryState::Initialized);
-        wrapped
+        Ok(instance)
     }
 
     pub(crate) fn host_query(
@@ -204,7 +188,7 @@ impl<'c> Session<'c> {
         buf: &mut [u8],
         arg_len: u32,
     ) -> Option<u32> {
-        self.vm.host_query(name, buf, arg_len)
+        self.host_queries.call(name, buf, arg_len)
     }
 
     /// Sets the point limit for the next call to `query` or `transact`.
@@ -228,7 +212,7 @@ impl<'c> Session<'c> {
         &mut self,
         module_id: ModuleId,
         limit: u64,
-    ) -> StackElementView<'b> {
+    ) -> Result<StackElementView<'b>, Error> {
         let s = self.callstack.write();
         let instance = s.instance(&module_id);
 
@@ -240,15 +224,15 @@ impl<'c> Session<'c> {
                 s.push(module_id, limit);
             }
             None => {
-                let instance = self.new_instance(module_id);
+                let instance = self.new_instance(module_id)?;
                 let mut s = self.callstack.write();
                 s.push_instance(module_id, limit, instance);
             }
         }
 
         let s = self.callstack.write();
-        s.nth_from_top(0)
-            .expect("We just pushed an element to the stack")
+        Ok(s.nth_from_top(0)
+            .expect("We just pushed an element to the stack"))
     }
 
     pub(crate) fn pop_callstack(&self) {
@@ -256,35 +240,8 @@ impl<'c> Session<'c> {
         s.pop();
     }
 
-    pub fn commit(self) -> Result<CommitId, Error> {
-        let mut session_commit = SessionCommit::new();
-        self.memory_handler.with_every_module_id(|module_id, mem| {
-            let module_commit = ModuleCommit::from_memory(
-                mem,
-                self.vm.base_path(),
-                *module_id,
-            )?;
-            let (memory_path, _) = self.vm.memory_path(module_id);
-            session_commit.add(
-                module_id,
-                &module_commit,
-                self.vm.get_bag_mut(module_id),
-                &memory_path,
-            )?;
-            self.vm.reset_root();
-            Ok(())
-        })?;
-        session_commit.calculate_id();
-        let session_commit_id = self.vm.add_session_commit(session_commit);
-        Ok(session_commit_id)
-    }
-
-    pub fn restore(
-        &mut self,
-        session_commit_id: &CommitId,
-    ) -> Result<(), Error> {
-        self.vm.restore_session(session_commit_id)?;
-        Ok(())
+    pub fn commit(self) -> Result<[u8; 32], Error> {
+        self.module_session.commit().map_err(PersistenceError)
     }
 
     pub(crate) fn register_debug<M: Into<String>>(&self, msg: M) {
@@ -328,17 +285,6 @@ impl<'c> Session<'c> {
 
         let data = buf[..pos].to_vec();
         host_data.insert(name, data);
-    }
-
-    pub fn root(&mut self, refresh: bool) -> Result<[u8; 32], Error> {
-        self.vm.root(refresh)
-    }
-
-    pub fn get_bag_size_info(
-        &self,
-        module_id: &ModuleId,
-    ) -> Result<BagSizeInfo, Error> {
-        self.vm.get_bag_size_info(module_id)
     }
 }
 

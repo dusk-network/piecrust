@@ -8,9 +8,9 @@ use piecrust::{module_bytecode, Error, VM};
 
 #[test]
 pub fn points_get_used() -> Result<(), Error> {
-    let mut vm = VM::ephemeral()?;
+    let vm = VM::ephemeral()?;
 
-    let mut session = vm.session();
+    let mut session = vm.genesis_session();
 
     let counter_id = session.deploy(module_bytecode!("counter"))?;
     let center_id = session.deploy(module_bytecode!("callcenter"))?;
@@ -28,9 +28,9 @@ pub fn points_get_used() -> Result<(), Error> {
 
 #[test]
 pub fn fails_with_out_of_points() -> Result<(), Error> {
-    let mut vm = VM::ephemeral()?;
+    let vm = VM::ephemeral()?;
 
-    let mut session = vm.session();
+    let mut session = vm.genesis_session();
 
     let counter_id = session.deploy(module_bytecode!("counter"))?;
 
@@ -47,11 +47,11 @@ pub fn fails_with_out_of_points() -> Result<(), Error> {
 
 #[test]
 pub fn limit_and_spent() -> Result<(), Error> {
-    let mut vm = VM::ephemeral()?;
+    let vm = VM::ephemeral()?;
 
     const LIMIT: u64 = 10000;
 
-    let mut session = vm.session();
+    let mut session = vm.genesis_session();
 
     let spender_id = session.deploy(module_bytecode!("spender"))?;
 
