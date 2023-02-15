@@ -1,8 +1,8 @@
 use std::io;
 use std::io::{Read, Write};
 
-use bsdiff::diff::diff as bsdiff_diff;
-use bsdiff::patch::patch as bsdiff_patch;
+use qbsdiff::bsdiff::Bsdiff;
+use qbsdiff::bspatch::Bspatch;
 
 use crate::store::mmap::MmapMut;
 
@@ -13,13 +13,13 @@ pub fn diff<T: Write>(
     old: &[u8],
     new: &[u8],
     writer: &mut T,
-) -> io::Result<()> {
+) -> io::Result<u64> {
     let new_len = new.len() as u64;
     let new_len_bytes = new_len.to_le_bytes();
 
     writer.write_all(&new_len_bytes)?;
 
-    bsdiff_diff(old, new, writer)
+    Bsdiff::new(old, new).compare(writer)
 }
 
 /// Patches the given `mmap` with the given `patch` on top of the `old`
@@ -29,17 +29,22 @@ pub fn patch<T: Read>(
     old: &[u8],
     patch: &mut T,
     mmap: &mut MmapMut,
-) -> io::Result<()> {
+) -> io::Result<u64> {
     let mut new_len_bytes = [0u8; 8];
 
     patch.read_exact(&mut new_len_bytes)?;
     let new_len = u64::from_le_bytes(new_len_bytes) as usize;
 
     let delta = new_len - mmap.len();
-
     if delta > 0 {
         mmap.grow_by(delta)?;
     }
 
-    bsdiff_patch(old, patch, mmap)
+    // This reads the whole patch into memory. It might cause a problem in the
+    // future if diffs are too large. We should consider *not* compressing diffs
+    // if this is the case.
+    let mut patch_bytes = Vec::new();
+    patch.read_to_end(&mut patch_bytes)?;
+
+    Bspatch::new(&patch_bytes)?.apply(old, mmap.as_bytes_mut())
 }

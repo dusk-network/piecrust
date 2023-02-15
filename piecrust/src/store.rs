@@ -128,6 +128,11 @@ impl ModuleStore {
         self.sync_loop.thread()
     }
 
+    /// Return the path to the VM directory.
+    pub fn root_dir(&self) -> &Path {
+        &self.root_dir
+    }
+
     fn session_with_base(&self, base: Option<(Root, Commit)>) -> ModuleSession {
         ModuleSession {
             modules: BTreeMap::new(),

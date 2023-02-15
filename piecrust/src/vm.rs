@@ -58,9 +58,9 @@ impl VM {
         self.host_queries.insert(name, query);
     }
 
-    pub fn session(&self, root: [u8; 32]) -> Result<Session, Error> {
+    pub fn session(&self, base: [u8; 32]) -> Result<Session, Error> {
         let module_session =
-            self.store.session(root).map_err(PersistenceError)?;
+            self.store.session(base).map_err(PersistenceError)?;
         Ok(Session::new(module_session, self.host_queries.clone()))
     }
 
@@ -71,6 +71,11 @@ impl VM {
 
     pub fn delete_commit(&self, root: [u8; 32]) -> Result<(), Error> {
         self.store.delete_commit(root).map_err(PersistenceError)
+    }
+
+    /// Return the root directory of the virtual machine.
+    pub fn root_dir(&self) -> &Path {
+        self.store.root_dir()
     }
 
     pub fn sync_loop_thread(&self) -> &thread::Thread {
