@@ -37,6 +37,7 @@ unsafe impl Sync for MmapInner {}
 struct MmapInner {
     ptr: *mut libc::c_void,
     len: usize,
+    mmap_len: usize,
 }
 
 impl MmapInner {
@@ -44,13 +45,15 @@ impl MmapInner {
     fn map(
         addr: *mut libc::c_void,
         len: usize,
+        mmap_len: usize,
         prot: libc::c_int,
         flags: libc::c_int,
         fd: libc::c_int,
     ) -> io::Result<Self> {
         Ok(Self {
-            ptr: Self::_mmap(addr, prot, flags, fd)?,
+            ptr: Self::_mmap(addr, mmap_len, prot, flags, fd)?,
             len,
+            mmap_len,
         })
     }
 
@@ -58,11 +61,12 @@ impl MmapInner {
     fn remap(
         &mut self,
         len: usize,
+        mmap_len: usize,
         prot: libc::c_int,
         flags: libc::c_int,
         fd: libc::c_int,
     ) -> io::Result<()> {
-        self.ptr = Self::_mmap(self.ptr, prot, flags, fd)?;
+        self.ptr = Self::_mmap(self.ptr, mmap_len, prot, flags, fd)?;
         self.len = len;
 
         Ok(())
@@ -71,12 +75,13 @@ impl MmapInner {
     /// Raw mmap call.
     fn _mmap(
         addr: *mut libc::c_void,
+        len: usize,
         prot: libc::c_int,
         flags: libc::c_int,
         fd: libc::c_int,
     ) -> io::Result<*mut libc::c_void> {
         unsafe {
-            let ptr = libc::mmap(addr, MMAP_SIZE, prot, flags, fd, 0);
+            let ptr = libc::mmap(addr, len, prot, flags, fd, 0);
             if ptr == MAP_FAILED {
                 return Err(io::Error::last_os_error());
             }
@@ -101,7 +106,7 @@ impl MmapInner {
 impl Drop for MmapInner {
     fn drop(&mut self) {
         unsafe {
-            libc::munmap(self.ptr, MMAP_SIZE);
+            libc::munmap(self.ptr, self.mmap_len);
         }
     }
 }
@@ -119,6 +124,7 @@ impl Mmap {
 
         let mut inner = MmapInner::map(
             ptr::null_mut(),
+            len,
             len,
             PROT_READ | PROT_WRITE,
             MAP_PRIVATE | MAP_ANONYMOUS,
@@ -138,6 +144,7 @@ impl Mmap {
 
         Ok(Self(MmapInner::map(
             ptr::null_mut(),
+            len,
             len,
             PROT_READ,
             MAP_PRIVATE,
@@ -180,6 +187,7 @@ impl MmapMut {
         Ok(Self(MmapInner::map(
             ptr::null_mut(),
             file_len,
+            MMAP_SIZE,
             PROT_READ | PROT_WRITE,
             MAP_PRIVATE,
             fd,
@@ -196,6 +204,7 @@ impl MmapMut {
         Ok(Self(MmapInner::map(
             ptr::null_mut(),
             file_len,
+            MMAP_SIZE,
             PROT_READ | PROT_WRITE,
             MAP_PRIVATE,
             fd,
@@ -214,6 +223,7 @@ impl MmapMut {
 
         self.0.remap(
             file_len,
+            MMAP_SIZE,
             PROT_READ | PROT_WRITE,
             MAP_PRIVATE | MAP_FIXED,
             fd,
