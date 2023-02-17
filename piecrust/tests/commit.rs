@@ -164,13 +164,17 @@ fn concurrent_sessions() -> Result<(), Error> {
 
     let root = session.commit()?;
 
+    let commits = vm.commits();
+    assert_eq!(commits.len(), 1, "There should only be one commit");
+    assert_eq!(commits[0], root, "The commit should be the received root");
+
     // spawn different threads incrementing different times and committing
     const THREAD_NUM: usize = 6;
     let mut threads = Vec::with_capacity(THREAD_NUM);
     for n in 0..THREAD_NUM {
         let session = vm.session(root)?;
         threads.push(thread::spawn(move || {
-            increment_counter_and_commit(session, counter, n)
+            increment_counter_and_commit(session, counter, n + 1)
         }));
     }
 
@@ -187,6 +191,13 @@ fn concurrent_sessions() -> Result<(), Error> {
     roots.dedup();
 
     assert_eq!(num_commits, roots.len(), "Commits should all be different");
+
+    let commits = vm.commits();
+    assert_eq!(
+        commits.len(),
+        THREAD_NUM + 1,
+        "There should be the genesis commit plus the ones just made"
+    );
 
     // start sessions with all the commits and do lots of increments just to
     // waste time
@@ -217,6 +228,13 @@ fn concurrent_sessions() -> Result<(), Error> {
     roots.dedup();
 
     assert_eq!(num_commits, roots.len(), "Commits should all be different");
+
+    let commits = vm.commits();
+    assert_eq!(
+        commits.len(),
+        THREAD_NUM + 1,
+        "The deleted commits should not be returned"
+    );
 
     Ok(())
 }

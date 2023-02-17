@@ -75,19 +75,14 @@ impl ModuleStore {
     ///
     /// Errors if the given base commit does not exist in the store.
     pub fn session(&self, base: Root) -> io::Result<ModuleSession> {
-        let (replier, receiver) = mpsc::sync_channel(1);
-
-        self.call.send(Call::CommitHold { base, replier }).expect(
-            "The receiver should never be dropped while there are senders",
-        );
-
-        let base_commit = receiver
-            .recv()
-            .expect("The sender in the loop should never be dropped without responding", )
-            .ok_or_else(|| io::Error::new(
-                io::ErrorKind::InvalidInput,
-                format!("No such base commit: {}", hex::encode(base)),
-            ))?;
+        let base_commit = self
+            .call_with_replier(|replier| Call::CommitHold { base, replier })
+            .ok_or_else(|| {
+                io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    format!("No such base commit: {}", hex::encode(base)),
+                )
+            })?;
 
         Ok(self.session_with_base(Some((base, base_commit))))
     }
@@ -101,6 +96,11 @@ impl ModuleStore {
         self.session_with_base(None)
     }
 
+    /// Returns the roots of the commits that are currently in the store.
+    pub fn commits(&self) -> Vec<Root> {
+        self.call_with_replier(|replier| Call::GetCommits { replier })
+    }
+
     /// Deletes a given `commit` from the store.
     ///
     /// If a `ModuleSession` is currently using the given commit as a base, the
@@ -109,17 +109,7 @@ impl ModuleStore {
     ///
     /// It will block until the operation is completed.
     pub fn delete_commit(&self, commit: Root) -> io::Result<()> {
-        let (replier, receiver) = mpsc::sync_channel(1);
-
-        self.call
-            .send(Call::CommitDelete { commit, replier })
-            .expect(
-                "The receiver should never be dropped while there are senders",
-            );
-
-        receiver.recv().expect(
-            "The sender in the loop should never be dropped without responding",
-        )
+        self.call_with_replier(|replier| Call::CommitDelete { commit, replier })
     }
 
     /// Return the handle to the thread running the store's synchronization
@@ -131,6 +121,21 @@ impl ModuleStore {
     /// Return the path to the VM directory.
     pub fn root_dir(&self) -> &Path {
         &self.root_dir
+    }
+
+    fn call_with_replier<T, F>(&self, closure: F) -> T
+    where
+        F: Fn(mpsc::SyncSender<T>) -> Call,
+    {
+        let (replier, receiver) = mpsc::sync_channel(1);
+
+        self.call.send(closure(replier)).expect(
+            "The receiver should never be dropped while there are senders",
+        );
+
+        receiver
+            .recv()
+            .expect("The sender should never be dropped without responding")
     }
 
     fn session_with_base(&self, base: Option<(Root, Commit)>) -> ModuleSession {
@@ -268,6 +273,9 @@ enum Call {
         base: Option<(Root, Commit)>,
         replier: mpsc::SyncSender<io::Result<(Root, Commit)>>,
     },
+    GetCommits {
+        replier: mpsc::SyncSender<Vec<Root>>,
+    },
     CommitDelete {
         commit: Root,
         replier: mpsc::SyncSender<io::Result<()>>,
@@ -301,6 +309,11 @@ fn sync_loop<P: AsRef<Path>>(
                 let io_result = write_commit(root_dir, &mut commits, base, modules);
                 let _ = replier.send(io_result);
             }
+            Call::GetCommits {
+                replier
+            } => {
+                let _ = replier.send(commits.keys().copied().collect());
+            }
             // Delete a commit from disk. If the commit is currently in use - as
             // in it is held by at least one session using `Call::SessionHold` -
             // queue it for deletion once no session is holding it.
@@ -319,6 +332,7 @@ fn sync_loop<P: AsRef<Path>>(
                 }
 
                 let io_result = delete_commit_dir(root_dir, root);
+                commits.remove(&root);
                 let _ = replier.send(io_result);
             }
             // Increment the hold count of a commit to prevent it from deletion
@@ -360,6 +374,7 @@ fn sync_loop<P: AsRef<Path>>(
                                 for replier in entry.remove() {
                                     let io_result =
                                         delete_commit_dir(root_dir, base);
+                                    commits.remove(&base);
                                     let _ = replier.send(io_result);
                                 }
                             }

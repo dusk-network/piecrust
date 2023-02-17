@@ -69,6 +69,11 @@ impl VM {
         Session::new(module_session, self.host_queries.clone())
     }
 
+    /// Return all the existing commits on disk.
+    pub fn commits(&self) -> Vec<[u8; 32]> {
+        self.store.commits()
+    }
+
     pub fn delete_commit(&self, root: [u8; 32]) -> Result<(), Error> {
         self.store.delete_commit(root).map_err(PersistenceError)
     }
