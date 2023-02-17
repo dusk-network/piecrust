@@ -74,6 +74,27 @@ impl VM {
         self.store.commits()
     }
 
+    /// Remove the diff files from a commit by applying them to the base memory,
+    /// and writing it back to disk.
+    ///
+    /// # Errors
+    ///
+    /// If this function fails, it may be due to any number of reasons:
+    ///
+    /// - [`remove_file`] may fail
+    /// - [`write`] may fail
+    ///
+    /// Failing may result in a corrupted commit, and the user is encouraged to
+    /// call [`delete_commit`].
+    ///
+    /// [`remove_file`]: fs::remove_file
+    /// [`write`]: fs::write
+    /// [`delete_commit`]: VM::delete_commit
+    pub fn squash_commit(&self, root: [u8; 32]) -> Result<(), Error> {
+        self.store.squash_commit(root).map_err(PersistenceError)
+    }
+
+    /// Deletes the given commit from disk.
     pub fn delete_commit(&self, root: [u8; 32]) -> Result<(), Error> {
         self.store.delete_commit(root).map_err(PersistenceError)
     }

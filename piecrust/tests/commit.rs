@@ -238,3 +238,33 @@ fn concurrent_sessions() -> Result<(), Error> {
 
     Ok(())
 }
+
+#[test]
+fn squashing() -> Result<(), Error> {
+    let vm = VM::ephemeral()?;
+
+    let mut session = vm.genesis_session();
+    let counter = session.deploy(module_bytecode!("counter"))?;
+
+    assert_eq!(session.query::<(), i64>(counter, "read_value", &())?, 0xfc);
+
+    let genesis_root = session.commit()?;
+
+    let session = vm.session(genesis_root)?;
+    let root_1 = increment_counter_and_commit(session, counter, 2)?;
+
+    let session = vm.session(root_1)?;
+    let root_2 = increment_counter_and_commit(session, counter, 2)?;
+
+    vm.squash_commit(root_1)?;
+
+    let session = vm.session(root_1)?;
+    let root_3 = increment_counter_and_commit(session, counter, 2)?;
+
+    assert_eq!(
+        root_2, root_3,
+        "Squashed commit should produce the same state"
+    );
+
+    Ok(())
+}

@@ -101,6 +101,18 @@ impl ModuleStore {
         self.call_with_replier(|replier| Call::GetCommits { replier })
     }
 
+    /// Remove the diff files from a commit by applying them to the base memory,
+    /// and writing it back to disk.
+    pub fn squash_commit(&self, commit: Root) -> io::Result<()> {
+        self.call_with_replier(|replier| Call::CommitSquash { commit, replier })
+            .ok_or_else(|| {
+                io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    format!("No such commit: {}", hex::encode(commit)),
+                )
+            })?
+    }
+
     /// Deletes a given `commit` from the store.
     ///
     /// If a `ModuleSession` is currently using the given commit as a base, the
@@ -125,7 +137,7 @@ impl ModuleStore {
 
     fn call_with_replier<T, F>(&self, closure: F) -> T
     where
-        F: Fn(mpsc::SyncSender<T>) -> Call,
+        F: FnOnce(mpsc::SyncSender<T>) -> Call,
     {
         let (replier, receiver) = mpsc::sync_channel(1);
 
@@ -280,6 +292,10 @@ enum Call {
         commit: Root,
         replier: mpsc::SyncSender<io::Result<()>>,
     },
+    CommitSquash {
+        commit: Root,
+        replier: mpsc::SyncSender<Option<io::Result<()>>>,
+    },
     CommitHold {
         base: Root,
         replier: mpsc::SyncSender<Option<Commit>>,
@@ -295,8 +311,10 @@ fn sync_loop<P: AsRef<Path>>(
     let root_dir = root_dir.as_ref();
 
     let mut sessions = BTreeMap::new();
-    let mut delete_bag = BTreeMap::new();
     let mut commits = commits;
+
+    let mut squash_bag = BTreeMap::new();
+    let mut delete_bag = BTreeMap::new();
 
     for call in calls {
         match call {
@@ -309,6 +327,7 @@ fn sync_loop<P: AsRef<Path>>(
                 let io_result = write_commit(root_dir, &mut commits, base, modules);
                 let _ = replier.send(io_result);
             }
+            // Copy all commits and send them back to the caller.
             Call::GetCommits {
                 replier
             } => {
@@ -334,6 +353,37 @@ fn sync_loop<P: AsRef<Path>>(
                 let io_result = delete_commit_dir(root_dir, root);
                 commits.remove(&root);
                 let _ = replier.send(io_result);
+            }
+            // Squashing a commit on disk. If the commit is currently in use - as
+            // in it is held by at least one session using `Call::SessionHold` -
+            // queue it for squashing once no session is holding it.
+            Call::CommitSquash {
+                commit: root,
+                replier,
+            } => {
+                match commits.get_mut(&root) {
+                    None => {
+                        let _ = replier.send(None);
+                    }
+                    Some(commit) => {
+                        if sessions.contains_key(&root) {
+                            match squash_bag.entry(root) {
+                                Vacant(entry) => {
+                                    entry.insert(vec![replier]);
+                                }
+                                Occupied(mut entry) => {
+                                    entry.get_mut().push(replier);
+                                }
+                            }
+
+                            continue;
+                        }
+
+                        let io_result = squash_commit(root_dir, root, commit);
+                        commit.diffs.clear();
+                        let _ = replier.send(Some(io_result));
+                    }
+                }
             }
             // Increment the hold count of a commit to prevent it from deletion
             // on a `Call::CommitDelete`.
@@ -368,6 +418,7 @@ fn sync_loop<P: AsRef<Path>>(
                     if *entry.get() == 0 {
                         entry.remove();
 
+                        // Try all deletions first
                         match delete_bag.entry(base) {
                             Vacant(_) => {}
                             Occupied(entry) => {
@@ -376,6 +427,27 @@ fn sync_loop<P: AsRef<Path>>(
                                         delete_commit_dir(root_dir, base);
                                     commits.remove(&base);
                                     let _ = replier.send(io_result);
+                                }
+                            }
+                        }
+
+                        // Try all squashes second
+                        match squash_bag.entry(base) {
+                            Vacant(_) => {}
+                            Occupied(entry) => {
+                                match commits.get_mut(&base) {
+                                    None => {
+                                        for replier in entry.remove() {
+                                            let _ = replier.send(None);
+                                        }
+                                    }
+                                    Some(commit) => {
+                                        for replier in entry.remove() {
+                                            let io_result = squash_commit(root_dir, base, commit);
+                                            commit.diffs.clear();
+                                            let _ = replier.send(Some(io_result));
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -601,6 +673,37 @@ fn delete_commit_dir<P: AsRef<Path>>(
     let root = hex::encode(root);
     let commit_dir = root_dir.as_ref().join(root);
     fs::remove_dir_all(commit_dir)
+}
+
+/// Squash the given commit.
+fn squash_commit<P: AsRef<Path>>(
+    root_dir: P,
+    root: Root,
+    commit: &mut Commit,
+) -> io::Result<()> {
+    let root_dir = root_dir.as_ref();
+
+    let root_hex = hex::encode(root);
+
+    let commit_dir = root_dir.join(root_hex);
+
+    let memory_dir = commit_dir.join(MEMORY_DIR);
+
+    for module in &commit.diffs {
+        let module_hex = hex::encode(module);
+        let memory_path = memory_dir.join(module_hex);
+        let memory_diff_path = memory_path.with_extension(DIFF_EXTENSION);
+
+        let memory =
+            Memory::from_file_and_diff(&memory_path, &memory_diff_path)?;
+
+        fs::remove_file(&memory_path)?;
+        fs::remove_file(memory_diff_path)?;
+
+        fs::write(memory_path, memory.read())?;
+    }
+
+    Ok(())
 }
 
 /// The representation of a session with a [`ModuleStore`].
