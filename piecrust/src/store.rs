@@ -555,6 +555,7 @@ fn write_commit_inner<P: AsRef<Path>>(
                     let diff_path = memory_path.with_extension(DIFF_EXTENSION);
 
                     fs::hard_link(base_diff_path, diff_path)?;
+                    diffs.insert(*module);
                 }
             }
 
