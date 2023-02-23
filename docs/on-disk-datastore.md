@@ -20,7 +20,7 @@ and, the directory will contain the following files:
         memory/   # Module memories
             module_1
             module_2
-        merkle    # Module memory hashes
+        index    # Module memory hashes
 ```
 
 ### Another Commit
@@ -42,7 +42,7 @@ The directory will then look like this:
         memory/
             module_1
             module_2
-        merkle
+        index
     root_2/
         bytecode/
             module_1 # Hard link
@@ -53,7 +53,7 @@ The directory will then look like this:
             module_1.diff # Delta
             module_2 # Hard link
             module_3
-        merkle
+        index
 ```
 
 To save space on disk, the `module_1.diff` file is a compressed delta between
@@ -82,7 +82,7 @@ When we commit yet another session, make some change additional commit files are
             module_1.diff
             module_2
             module_3
-        merkle
+        index
     root_3/
         bytecode/
             module_1
@@ -94,12 +94,12 @@ When we commit yet another session, make some change additional commit files are
             module_2
             module_2.diff
             module_3
-        merkle
+        index
 ```
 
-### Merkle File
+### Index File
 
-The `merkle` file in all commit directories contains a map of all existing
+The `index` file in all commit directories contains a map of all existing
 modules to their respective memory hashes. This is handy for avoiding IO
 operations when computing the root of the state.
 

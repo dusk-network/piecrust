@@ -31,7 +31,7 @@ const ROOT_LEN: usize = 32;
 const BYTECODE_DIR: &str = "bytecode";
 const MEMORY_DIR: &str = "memory";
 const DIFF_EXTENSION: &str = "diff";
-const MERKLE_FILE: &str = "merkle";
+const INDEX_FILE: &str = "index";
 
 type Root = [u8; ROOT_LEN];
 
@@ -218,9 +218,9 @@ fn root_from_dir<P: AsRef<Path>>(dir: P) -> io::Result<Root> {
 fn commit_from_dir<P: AsRef<Path>>(dir: P) -> io::Result<Commit> {
     let dir = dir.as_ref();
 
-    let merkle_path = dir.join(MERKLE_FILE);
+    let index_path = dir.join(INDEX_FILE);
 
-    let modules = merkle_from_path(merkle_path)?;
+    let modules = index_from_path(index_path)?;
     let mut diffs = BTreeSet::new();
 
     let bytecode_dir = dir.join(BYTECODE_DIR);
@@ -229,7 +229,7 @@ fn commit_from_dir<P: AsRef<Path>>(dir: P) -> io::Result<Commit> {
     for module in modules.keys() {
         let module_hex = hex::encode(module);
 
-        // Check that all modules in the merkle file have a corresponding
+        // Check that all modules in the index file have a corresponding
         // bytecode and memory.
         let bytecode_path = bytecode_dir.join(&module_hex);
         if !bytecode_path.is_file() {
@@ -257,7 +257,7 @@ fn commit_from_dir<P: AsRef<Path>>(dir: P) -> io::Result<Commit> {
     Ok(Commit { modules, diffs })
 }
 
-fn merkle_from_path<P: AsRef<Path>>(
+fn index_from_path<P: AsRef<Path>>(
     path: P,
 ) -> io::Result<BTreeMap<ModuleId, Root>> {
     let path = path.as_ref();
@@ -266,7 +266,7 @@ fn merkle_from_path<P: AsRef<Path>>(
     let modules = rkyv::from_bytes(&modules_bytes).map_err(|err| {
         io::Error::new(
             io::ErrorKind::InvalidData,
-            format!("Invalid merkle file \"{path:?}\": {err}"),
+            format!("Invalid index file \"{path:?}\": {err}"),
         )
     })?;
 
@@ -598,16 +598,16 @@ fn write_commit_inner<P: AsRef<Path>>(
         }
     }
 
-    let merkle_path = commit_dir.join(MERKLE_FILE);
-    let merkle_bytes = rkyv::to_bytes::<_, 128>(&modules)
+    let index_path = commit_dir.join(INDEX_FILE);
+    let index_bytes = rkyv::to_bytes::<_, 128>(&modules)
         .map_err(|err| {
             io::Error::new(
                 io::ErrorKind::InvalidData,
-                format!("Failed serializing merkle file: {err}"),
+                format!("Failed serializing index file: {err}"),
             )
         })?
         .to_vec();
-    fs::write(merkle_path, merkle_bytes)?;
+    fs::write(index_path, index_bytes)?;
 
     Ok(Commit { modules, diffs })
 }
