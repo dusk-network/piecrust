@@ -138,8 +138,8 @@ impl ModuleStore {
     }
 
     fn call_with_replier<T, F>(&self, closure: F) -> T
-    where
-        F: FnOnce(mpsc::SyncSender<T>) -> Call,
+        where
+            F: FnOnce(mpsc::SyncSender<T>) -> Call,
     {
         let (replier, receiver) = mpsc::sync_channel(1);
 
@@ -202,7 +202,7 @@ fn root_from_dir<P: AsRef<Path>>(dir: P) -> io::Result<Root> {
     if dir_name_bytes.len() != ROOT_LEN {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
-            format!("Expected directory name \"{dir_name}\" to be of size {ROOT_LEN}, was {}", dir_name_bytes.len())
+            format!("Expected directory name \"{dir_name}\" to be of size {ROOT_LEN}, was {}", dir_name_bytes.len()),
         ));
     }
 
@@ -609,60 +609,6 @@ fn write_commit_inner<P: AsRef<Path>>(
     Ok(Commit { modules, diffs })
 }
 
-/// Compute the root of the state.
-///
-/// The root is computed by arranging all existing modules in order of their
-/// module ID, and computing a hash of the module ID, the bytecode, and the
-/// current state of the memory. These hashes then form the leaves of the tree
-/// whose root is then computed.
-fn compute_root<'a, I>(
-    base: &Option<(Root, Commit)>,
-    modules: I,
-) -> (Root, BTreeMap<ModuleId, Root>)
-where
-    I: IntoIterator<Item = (&'a ModuleId, &'a (Bytecode, Memory))>,
-{
-    let iter = modules.into_iter();
-
-    let mut leaves_map = BTreeMap::new();
-
-    // Compute the hashes of changed memories
-    for (module, (_, memory)) in iter {
-        let mut hasher = blake3::Hasher::new();
-        hasher.update(&memory.read());
-        leaves_map.insert(*module, Root::from(hasher.finalize()));
-    }
-
-    // Store the hashes of *un*changed memories
-    if let Some((_, base_commit)) = base {
-        for (module, root) in &base_commit.modules {
-            if !leaves_map.contains_key(module) {
-                leaves_map.insert(*module, *root);
-            }
-        }
-    }
-
-    let mut leaves: Vec<Root> = leaves_map.clone().into_values().collect();
-
-    while leaves.len() > 1 {
-        leaves = leaves
-            .chunks(2)
-            .map(|chunk| {
-                let mut hasher = blake3::Hasher::new();
-
-                hasher.update(&chunk[0]);
-                if chunk.len() > 1 {
-                    hasher.update(&chunk[1]);
-                }
-
-                Root::from(hasher.finalize())
-            })
-            .collect();
-    }
-
-    (leaves[0], leaves_map)
-}
-
 /// Delete the given commit's directory.
 fn delete_commit_dir<P: AsRef<Path>>(
     root_dir: P,
@@ -702,4 +648,95 @@ fn squash_commit<P: AsRef<Path>>(
     }
 
     Ok(())
+}
+
+/// Compute the root of the state.
+///
+/// The root is computed by arranging all existing modules in order of their
+/// module ID, and computing a hash of the module ID, the bytecode, and the
+/// current state of the memory. These hashes then form the leaves of the tree
+/// whose root is then computed.
+fn compute_root<'a, I>(
+    base: &Option<(Root, Commit)>,
+    modules: I,
+) -> (Root, BTreeMap<ModuleId, Root>)
+    where
+        I: IntoIterator<Item=(&'a ModuleId, &'a (Bytecode, Memory))>,
+{
+    let iter = modules.into_iter();
+
+    let mut leaves_map = BTreeMap::new();
+
+    // Compute the hashes of changed memories
+    for (module, (_, memory)) in iter {
+        let mut hasher = blake3::Hasher::new();
+        hasher.update(&memory.read());
+        leaves_map.insert(*module, Root::from(hasher.finalize()));
+    }
+
+    // Store the hashes of *un*changed memories
+    if let Some((_, base_commit)) = base {
+        for (module, root) in &base_commit.modules {
+            if !leaves_map.contains_key(module) {
+                leaves_map.insert(*module, *root);
+            }
+        }
+    }
+
+    let leaves = leaves_map.clone().into_values().collect();
+    let root = compute_merkle_root(leaves);
+
+    (root, leaves_map)
+}
+
+fn compute_merkle_root(mut leaves: Vec<Root>) -> Root {
+    while leaves.len() > 1 {
+        leaves = leaves
+            .chunks(2)
+            .map(|chunk| {
+                let mut hasher = blake3::Hasher::new();
+
+                hasher.update(&chunk[0]);
+                if chunk.len() == 2 {
+                    hasher.update(&chunk[1]);
+                }
+
+                Root::from(hasher.finalize())
+            })
+            .collect();
+    }
+
+    leaves[0]
+}
+
+#[cfg(test)]
+mod tests {
+    use blake3::Hasher;
+    use crate::store::{compute_merkle_root, Root};
+
+    #[test]
+    fn merkle() {
+        let leaf_1 = [1; 32];
+        let leaf_2 = [2; 32];
+        let leaf_3 = [3; 32];
+
+        let mut hasher = Hasher::new();
+        hasher.update(&leaf_1);
+        hasher.update(&leaf_2);
+        let leaf_12 = Root::from(hasher.finalize());
+
+        // An unpaired leaf should also be hashed
+        let mut hasher = Hasher::new();
+        hasher.update(&leaf_3);
+        let leaf_33 = Root::from(hasher.finalize());
+
+        let mut hasher = Hasher::new();
+        hasher.update(&leaf_12);
+        hasher.update(&leaf_33);
+        let expected_root = Root::from(hasher.finalize());
+
+        let root = compute_merkle_root(vec![leaf_1, leaf_2, leaf_3]);
+
+        assert_eq!(expected_root, root);
+    }
 }
