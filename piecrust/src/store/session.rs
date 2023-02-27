@@ -4,15 +4,18 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use std::collections::{BTreeMap, BTreeSet};
-use std::{io, mem};
 use std::collections::btree_map::Entry::{Occupied, Vacant};
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::sync::mpsc;
+use std::{io, mem};
 
 use piecrust_uplink::ModuleId;
 
-use crate::store::{Bytecode, BYTECODE_DIR, Call, Commit, compute_root, DIFF_EXTENSION, Memory, MEMORY_DIR, Root};
+use crate::store::{
+    compute_root, Bytecode, Call, Commit, Memory, Root, BYTECODE_DIR,
+    DIFF_EXTENSION, MEMORY_DIR,
+};
 
 /// The representation of a session with a [`ModuleStore`].
 ///
@@ -33,7 +36,11 @@ pub struct ModuleSession {
 }
 
 impl ModuleSession {
-    pub(crate) fn new<P: AsRef<Path>>(root_dir: P, base: Option<(Root, Commit)>, call: mpsc::Sender<Call>) -> Self {
+    pub(crate) fn new<P: AsRef<Path>>(
+        root_dir: P,
+        base: Option<(Root, Commit)>,
+        call: mpsc::Sender<Call>,
+    ) -> Self {
         Self {
             modules: BTreeMap::new(),
             base,

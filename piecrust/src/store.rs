@@ -25,8 +25,8 @@ use flate2::Compression;
 pub use bytecode::Bytecode;
 use diff::diff;
 pub use memory::Memory;
-pub use session::ModuleSession;
 use piecrust_uplink::ModuleId;
+pub use session::ModuleSession;
 
 const ROOT_LEN: usize = 32;
 
@@ -138,8 +138,8 @@ impl ModuleStore {
     }
 
     fn call_with_replier<T, F>(&self, closure: F) -> T
-        where
-            F: FnOnce(mpsc::SyncSender<T>) -> Call,
+    where
+        F: FnOnce(mpsc::SyncSender<T>) -> Call,
     {
         let (replier, receiver) = mpsc::sync_channel(1);
 
@@ -660,8 +660,8 @@ fn compute_root<'a, I>(
     base: &Option<(Root, Commit)>,
     modules: I,
 ) -> (Root, BTreeMap<ModuleId, Root>)
-    where
-        I: IntoIterator<Item=(&'a ModuleId, &'a (Bytecode, Memory))>,
+where
+    I: IntoIterator<Item = (&'a ModuleId, &'a (Bytecode, Memory))>,
 {
     let iter = modules.into_iter();
 
@@ -711,8 +711,8 @@ fn compute_merkle_root(mut leaves: Vec<Root>) -> Root {
 
 #[cfg(test)]
 mod tests {
-    use blake3::Hasher;
     use crate::store::{compute_merkle_root, Root};
+    use blake3::Hasher;
 
     #[test]
     fn merkle() {
