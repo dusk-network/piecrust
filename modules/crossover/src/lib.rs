@@ -10,7 +10,7 @@
 #![feature(core_intrinsics, lang_items, arbitrary_self_types)]
 
 use piecrust_uplink as uplink;
-use uplink::{ModuleId, RawTransaction, State};
+use uplink::{ModuleId, State};
 
 /// Struct that describes the state of the crossover module
 pub struct Crossover {
@@ -21,10 +21,59 @@ pub struct Crossover {
 #[no_mangle]
 static SELF_ID: ModuleId = ModuleId::uninitialized();
 
+const INITIAL_VALUE: i32 = 0;
+
 /// State of the crossover module
-static mut STATE: State<Crossover> = State::new(Crossover { crossover: 7 });
+static mut STATE: State<Crossover> = State::new(Crossover {
+    crossover: INITIAL_VALUE,
+});
 
 impl Crossover {
+    // Calls another contract - which is assumed to be another crossover
+    // contract - with the "set_and_panic" call.
+    //
+    // The other contract will first set their state, call this contract to set
+    // the crossover, and then panic.
+    //
+    // We then proceed to query the contract, and return true if both contract's
+    // states were unchanged. Before returning, the contract's state is set to
+    // the new `value`.
+    pub fn call_panicking_and_set(
+        self: &mut State<Self>,
+        module: ModuleId,
+        value: i32,
+    ) -> bool {
+        uplink::debug!("Calling panicking module {module:?}");
+        self.transact::<_, ()>(module, "set_call_and_panic", &value)
+            .unwrap_err();
+
+        let self_is_initial = self.crossover == INITIAL_VALUE;
+
+        uplink::debug!("Querying module {module:?} for their state");
+        let other_crossover =
+            uplink::query::<_, i32>(module, "crossover", &value).unwrap();
+        let other_is_initial = other_crossover == INITIAL_VALUE;
+
+        self.set_crossover(value);
+
+        self_is_initial && other_is_initial
+    }
+
+    // Sets the crossover to a new `value`, calls the calling contract - which
+    // is assumed to be another crossover contract - with "set_crossover" and
+    // panics afterwards.
+    pub fn set_call_and_panic(self: &mut State<Self>, value: i32) {
+        self.set_crossover(value);
+
+        let caller = uplink::caller();
+        uplink::debug!("calling back {caller:?}");
+        self.transact::<_, ()>(caller, "set_crossover", &value)
+            .unwrap();
+
+        uplink::debug!("panicking after setting the crossover");
+        panic!("OH NOES");
+    }
+
     /// Return crossover value
     pub fn crossover(&self) -> i32 {
         self.crossover
@@ -33,54 +82,9 @@ impl Crossover {
     /// Update crossover and return old value
     pub fn set_crossover(&mut self, to: i32) -> i32 {
         let old_val = self.crossover;
-        uplink::debug!(
-            "setting crossover from {:?} to {:?}",
-            self.crossover,
-            to
-        );
+        uplink::debug!("setting crossover from {old_val} to {to}");
         self.crossover = to;
         old_val
-    }
-
-    /// Test `set_crossover` functionality through a host transaction
-    pub fn self_call_test_a(self: &mut State<Self>, update: i32) -> i32 {
-        let old_value = self.crossover;
-        let callee = uplink::self_id();
-        self.transact::<_, i32>(callee, "set_crossover", &update)
-            .unwrap();
-
-        assert_eq!(self.crossover, update);
-        old_value
-    }
-
-    /// Test `set_crossover` functionality through a host raw transaction
-    pub fn self_call_test_b(
-        self: &mut State<Self>,
-        target: ModuleId,
-        raw_transaction: RawTransaction,
-    ) -> i32 {
-        let co = self.crossover;
-        self.set_crossover(co * 2);
-        self.transact_raw(target, &raw_transaction).unwrap();
-        self.crossover
-    }
-
-    /// Update crossover and panic
-    pub fn update_and_panic(&mut self, new_value: i32) {
-        let old_value = self.crossover;
-        let callee = uplink::self_id();
-
-        // What should self.crossover be in this case?
-
-        // A: we live with inconsistencies and communicate them.
-        // B: we update self, which then should be passed to the transaction
-
-        let q = uplink::query::<_, i32>(callee, "crossover", &new_value);
-
-        match q {
-            Ok(old) if old == old_value => panic!("OH NOES"),
-            _ => (),
-        }
     }
 }
 
@@ -96,16 +100,16 @@ unsafe fn set_crossover(arg_len: u32) -> u32 {
     uplink::wrap_transaction(arg_len, |arg: i32| STATE.set_crossover(arg))
 }
 
-/// Expose `Crossover::self_call_test_a()` to the host
+/// Expose `Crossover::call_panicking_and_set()` to the host
 #[no_mangle]
-unsafe fn self_call_test_a(arg_len: u32) -> u32 {
-    uplink::wrap_transaction(arg_len, |arg: i32| STATE.self_call_test_a(arg))
+unsafe fn call_panicking_and_set(arg_len: u32) -> u32 {
+    uplink::wrap_transaction(arg_len, |(module, value)| {
+        STATE.call_panicking_and_set(module, value)
+    })
 }
 
-/// Expose `Crossover::self_call_test_b()` to the host
+/// Expose `Crossover::set_call_and_panic()` to the host
 #[no_mangle]
-unsafe fn self_call_test_b(arg_len: u32) -> u32 {
-    uplink::wrap_transaction(arg_len, |(target, transaction)| {
-        STATE.self_call_test_b(target, transaction)
-    })
+unsafe fn set_call_and_panic(arg_len: u32) -> u32 {
+    uplink::wrap_transaction(arg_len, |value| STATE.set_call_and_panic(value))
 }
