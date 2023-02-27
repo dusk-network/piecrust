@@ -13,9 +13,3 @@ pub type StandardBufSerializer<'a> = CompositeSerializer<
     BufferSerializer<&'a mut [u8]>,
     BufferScratch<&'a mut [u8; SCRATCH_BUF_BYTES]>,
 >;
-
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub enum MemoryState {
-    Uninitialized,
-    Initialized,
-}

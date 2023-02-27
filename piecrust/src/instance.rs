@@ -5,11 +5,13 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 use std::ops::{Deref, DerefMut};
+use std::ptr::NonNull;
 use std::sync::Arc;
 
 use bytecheck::CheckBytes;
 use colored::*;
 use piecrust_uplink as uplink;
+use piecrust_uplink::MODULE_ID_BYTES;
 use rkyv::{
     check_archived_root,
     ser::{
@@ -27,12 +29,16 @@ use wasmer_middlewares::metering::{
     get_remaining_points, set_remaining_points, MeteringPoints,
 };
 use wasmer_middlewares::Metering;
-use wasmer_vm::VMMemory;
+use wasmer_types::{
+    MemoryError, MemoryStyle, MemoryType, TableStyle, TableType,
+};
+use wasmer_vm::{LinearMemory, VMMemory, VMTable, VMTableDefinition};
 
 use crate::event::Event;
 use crate::imports::DefaultImports;
-use crate::linear::{Linear, MEMORY_PAGES};
+use crate::module::WrappedModule;
 use crate::session::Session;
+use crate::store::Memory;
 use crate::types::StandardBufSerializer;
 use crate::Error;
 
@@ -46,11 +52,11 @@ pub struct WrappedInstance {
 
 pub(crate) struct Env {
     self_id: ModuleId,
-    session: &'static mut Session<'static>,
+    session: &'static mut Session,
 }
 
 impl Deref for Env {
-    type Target = Session<'static>;
+    type Target = Session;
 
     fn deref(&self) -> &Self::Target {
         self.session
@@ -125,15 +131,16 @@ impl Store {
 
 impl WrappedInstance {
     pub fn new(
-        memory: Linear,
         session: &mut Session,
-        id: ModuleId,
+        module_id: ModuleId,
+        module: WrappedModule,
+        memory: Memory,
     ) -> Result<Self, Error> {
         let tunables = InstanceTunables::new(memory.clone());
         let mut store = Store::new_store_with_tunables(tunables);
 
         let env = Env {
-            self_id: id,
+            self_id: module_id,
             /// # Safety
             /// Wasmer API requires that Env has a static lifetime.
             /// We can safely assume that Env won't outlive session
@@ -148,11 +155,9 @@ impl WrappedInstance {
         };
 
         let imports = DefaultImports::default(&mut store, env);
-        let wrap = session.get_module(id);
-        let module_bytes = wrap.as_bytes();
 
         let module =
-            unsafe { wasmer::Module::deserialize(&store, module_bytes)? };
+            unsafe { wasmer::Module::deserialize(&store, module.as_bytes())? };
 
         let instance = wasmer::Instance::new(&mut store, &module, &imports)?;
 
@@ -175,8 +180,10 @@ impl WrappedInstance {
             };
 
         // write self id into memory.
-
-        memory.write_self_id(self_id_ofs, id);
+        let mut memory_guard = memory.write();
+        let bytes = memory_guard.as_bytes_mut();
+        bytes[self_id_ofs..self_id_ofs + MODULE_ID_BYTES]
+            .copy_from_slice(module_id.as_bytes());
 
         let wrapped = WrappedInstance {
             store,
@@ -263,8 +270,7 @@ impl WrappedInstance {
             let mut sbuf = [0u8; SCRATCH_BUF_BYTES];
             let scratch = BufferScratch::new(&mut sbuf);
             let ser = BufferSerializer::new(abuf);
-            let mut ser =
-                CompositeSerializer::new(ser, scratch, rkyv::Infallible);
+            let mut ser = CompositeSerializer::new(ser, scratch, Infallible);
 
             ser.serialize_value(value)?;
 
@@ -375,75 +381,67 @@ fn map_call_err(instance: &mut WrappedInstance, err: RuntimeError) -> Error {
 }
 
 pub struct InstanceTunables {
-    memory: Linear,
+    memory: Memory,
 }
 
 impl InstanceTunables {
-    pub fn new(memory: Linear) -> Self {
+    pub fn new(memory: Memory) -> Self {
         InstanceTunables { memory }
     }
 }
 
 impl Tunables for InstanceTunables {
-    fn memory_style(
-        &self,
-        _memory: &wasmer::MemoryType,
-    ) -> wasmer_vm::MemoryStyle {
-        wasmer_vm::MemoryStyle::Static {
-            bound: wasmer::Pages::from(MEMORY_PAGES as u32),
-            offset_guard_size: 0,
-        }
+    fn memory_style(&self, _memory: &MemoryType) -> MemoryStyle {
+        self.memory.style()
     }
 
-    fn table_style(&self, _table: &wasmer::TableType) -> wasmer_vm::TableStyle {
-        wasmer_vm::TableStyle::CallerChecksSignature
+    fn table_style(&self, _table: &TableType) -> TableStyle {
+        TableStyle::CallerChecksSignature
     }
 
     fn create_host_memory(
         &self,
-        _ty: &wasmer::MemoryType,
-        _style: &wasmer_vm::MemoryStyle,
-    ) -> Result<wasmer_vm::VMMemory, wasmer_vm::MemoryError> {
+        _ty: &MemoryType,
+        _style: &MemoryStyle,
+    ) -> Result<VMMemory, MemoryError> {
         Ok(VMMemory::from_custom(self.memory.clone()))
     }
 
     unsafe fn create_vm_memory(
         &self,
-        _ty: &wasmer::MemoryType,
-        _style: &wasmer_vm::MemoryStyle,
-        vm_definition_location: std::ptr::NonNull<
-            wasmer_vm::VMMemoryDefinition,
-        >,
-    ) -> Result<wasmer_vm::VMMemory, wasmer_vm::MemoryError> {
+        _ty: &MemoryType,
+        _style: &MemoryStyle,
+        vm_definition_location: NonNull<wasmer_vm::VMMemoryDefinition>,
+    ) -> Result<VMMemory, MemoryError> {
         // now, it's important to update vm_definition_location with the memory
         // information!
         let mut ptr = vm_definition_location;
         let md = ptr.as_mut();
 
-        let mem = self.memory.clone();
+        let memory = self.memory.clone();
 
-        *md = mem.definition();
+        *md = *memory.vmmemory().as_ptr();
 
-        Ok(mem.into())
+        Ok(memory.into())
     }
 
     /// Create a table owned by the host given a [`TableType`] and a
     /// [`TableStyle`].
     fn create_host_table(
         &self,
-        ty: &wasmer::TableType,
-        style: &wasmer_vm::TableStyle,
-    ) -> Result<wasmer_vm::VMTable, String> {
-        wasmer_vm::VMTable::new(ty, style)
+        ty: &TableType,
+        style: &TableStyle,
+    ) -> Result<VMTable, String> {
+        VMTable::new(ty, style)
     }
 
     unsafe fn create_vm_table(
         &self,
-        ty: &wasmer::TableType,
-        style: &wasmer_vm::TableStyle,
-        vm_definition_location: std::ptr::NonNull<wasmer_vm::VMTableDefinition>,
-    ) -> Result<wasmer_vm::VMTable, String> {
-        wasmer_vm::VMTable::from_definition(ty, style, vm_definition_location)
+        ty: &TableType,
+        style: &TableStyle,
+        vm_definition_location: NonNull<VMTableDefinition>,
+    ) -> Result<VMTable, String> {
+        VMTable::from_definition(ty, style, vm_definition_location)
     }
 }
 

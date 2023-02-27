@@ -8,9 +8,9 @@ use piecrust::{module_bytecode, Error, VM};
 
 #[test]
 pub fn vector_push_pop() -> Result<(), Error> {
-    let mut vm = VM::ephemeral()?;
+    let vm = VM::ephemeral()?;
 
-    let mut session = vm.session();
+    let mut session = vm.genesis_session();
 
     let id = session.deploy(module_bytecode!("vector"))?;
 

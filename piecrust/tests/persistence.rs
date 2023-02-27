@@ -8,13 +8,16 @@ use piecrust::{module_bytecode, Error, VM};
 
 #[test]
 fn session_commits_persistence() -> Result<(), Error> {
-    let mut vm = VM::ephemeral()?;
+    let vm = VM::ephemeral()?;
+
+    let id_1;
+    let id_2;
 
     let commit_1;
     {
-        let mut session = vm.session();
-        let id_1 = session.deploy(module_bytecode!("counter"))?;
-        let id_2 = session.deploy(module_bytecode!("box"))?;
+        let mut session = vm.genesis_session();
+        id_1 = session.deploy(module_bytecode!("counter"))?;
+        id_2 = session.deploy(module_bytecode!("box"))?;
 
         session.transact::<(), ()>(id_1, "increment", &())?;
         session.transact::<i16, ()>(id_2, "set", &0x11)?;
@@ -28,9 +31,7 @@ fn session_commits_persistence() -> Result<(), Error> {
 
     let commit_2;
     {
-        let mut session = vm.session();
-        let id_1 = session.deploy(module_bytecode!("counter"))?;
-        let id_2 = session.deploy(module_bytecode!("box"))?;
+        let mut session = vm.session(commit_1)?;
 
         session.transact::<(), ()>(id_1, "increment", &())?;
         session.transact::<i16, ()>(id_2, "set", &0x12)?;
@@ -42,15 +43,9 @@ fn session_commits_persistence() -> Result<(), Error> {
         commit_2 = session.commit()?;
     }
 
-    vm.persist()?;
-
     {
-        let mut vm2 = VM::new(vm.base_path())?;
-        let mut session = vm2.session();
-        let id_1 = session.deploy(module_bytecode!("counter"))?;
-        let id_2 = session.deploy(module_bytecode!("box"))?;
-
-        session.restore(&commit_1)?;
+        let vm2 = VM::new(vm.root_dir())?;
+        let mut session = vm2.session(commit_1)?;
 
         // check if both modules' state was restored
         assert_eq!(session.query::<(), i64>(id_1, "read_value", &())?, 0xfd);
@@ -61,12 +56,8 @@ fn session_commits_persistence() -> Result<(), Error> {
     }
 
     {
-        let mut vm3 = VM::new(vm.base_path())?;
-        let mut session = vm3.session();
-        let id_1 = session.deploy(module_bytecode!("counter"))?;
-        let id_2 = session.deploy(module_bytecode!("box"))?;
-
-        session.restore(&commit_2)?;
+        let vm3 = VM::new(vm.root_dir())?;
+        let mut session = vm3.session(commit_2)?;
 
         // check if both modules' state was restored
         assert_eq!(session.query::<(), i64>(id_1, "read_value", &())?, 0xfe);
@@ -80,8 +71,8 @@ fn session_commits_persistence() -> Result<(), Error> {
 
 #[test]
 fn modules_persistence() -> Result<(), Error> {
-    let mut vm = VM::ephemeral()?;
-    let mut session = vm.session();
+    let vm = VM::ephemeral()?;
+    let mut session = vm.genesis_session();
     let id_1 = session.deploy(module_bytecode!("counter"))?;
     let id_2 = session.deploy(module_bytecode!("box"))?;
 
@@ -94,13 +85,9 @@ fn modules_persistence() -> Result<(), Error> {
     );
 
     let commit_1 = session.commit()?;
-    vm.persist()?;
 
-    let mut vm2 = VM::new(vm.base_path())?;
-    let mut session2 = vm2.session();
-    let id_1 = session2.deploy(module_bytecode!("counter"))?;
-    let id_2 = session2.deploy(module_bytecode!("box"))?;
-    session2.restore(&commit_1)?;
+    let vm2 = VM::new(vm.root_dir())?;
+    let mut session2 = vm2.session(commit_1)?;
 
     // check if both modules' state was restored
     assert_eq!(session2.query::<(), i64>(id_1, "read_value", &())?, 0xfd);

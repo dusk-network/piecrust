@@ -22,7 +22,7 @@ pub fn host_hash() -> Result<(), Error> {
     let mut vm = VM::ephemeral()?;
     vm.register_host_query("hash", hash);
 
-    let mut session = vm.session();
+    let mut session = vm.genesis_session();
 
     let id = session.deploy(module_bytecode!("host"))?;
 

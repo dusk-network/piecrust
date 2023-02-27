@@ -8,9 +8,9 @@ use piecrust::{module_bytecode, Error, VM};
 
 #[test]
 pub fn vm_center_events() -> Result<(), Error> {
-    let mut vm = VM::ephemeral()?;
+    let vm = VM::ephemeral()?;
 
-    let mut session = vm.session();
+    let mut session = vm.genesis_session();
 
     let eventer_id = session.deploy(module_bytecode!("eventer"))?;
 

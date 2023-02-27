@@ -25,13 +25,12 @@ rkyv = { version = "0.7", features = ["size_32", "validation"] }
 parking_lot = "0.12"
 blake3 = "1"
 colored = "2"
-libc = { version = "^0.2", default-features = false }
-region = "3"
+libc = "0.2"
 tempfile = "3"
 thiserror = "1"
 rand = "0.8"
 qbsdiff = "1.4"
-zstd = "0.12"
+flate2 = "1.0"
 hex = "0.4"
 
 [dev-dependencies]
