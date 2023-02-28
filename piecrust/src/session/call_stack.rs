@@ -4,12 +4,11 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use crate::instance::WrappedInstance;
-use std::collections::btree_map::Entry;
-
-use std::collections::BTreeMap;
+use std::collections::btree_map::{BTreeMap, Entry};
 
 use piecrust_uplink::ModuleId;
+
+use crate::instance::WrappedInstance;
 
 #[derive(Debug, Default)]
 pub struct CallStack {

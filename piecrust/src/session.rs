@@ -5,7 +5,6 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 pub mod call_stack;
-use call_stack::{CallStack, StackElementView};
 
 use std::borrow::Cow;
 use std::collections::BTreeMap;
@@ -30,6 +29,8 @@ use crate::vm::HostQueries;
 use crate::Error;
 use crate::Error::PersistenceError;
 
+use call_stack::{CallStack, StackElementView};
+
 const DEFAULT_LIMIT: u64 = 65_536;
 const MAX_META_SIZE: usize = 65_536;
 
@@ -40,9 +41,11 @@ pub struct Session {
     callstack: Arc<RwLock<CallStack>>,
     debug: Arc<RwLock<Vec<String>>>,
     events: Arc<RwLock<Vec<Event>>>,
-    data: Arc<RwLock<HostData>>,
+    data: Arc<RwLock<Metadata>>,
+
     module_session: ModuleSession,
     host_queries: HostQueries,
+
     limit: u64,
     spent: u64,
 }
@@ -56,7 +59,7 @@ impl Session {
             callstack: Arc::new(RwLock::new(CallStack::new())),
             debug: Arc::new(RwLock::new(vec![])),
             events: Arc::new(RwLock::new(vec![])),
-            data: Arc::new(RwLock::new(HostData::new())),
+            data: Arc::new(RwLock::new(Metadata::new())),
             module_session,
             host_queries,
             limit: DEFAULT_LIMIT,
@@ -288,11 +291,12 @@ impl Session {
     }
 }
 
-struct HostData {
+#[derive(Debug)]
+pub struct Metadata {
     data: BTreeMap<Cow<'static, str>, Vec<u8>>,
 }
 
-impl HostData {
+impl Metadata {
     fn new() -> Self {
         Self {
             data: BTreeMap::new(),
