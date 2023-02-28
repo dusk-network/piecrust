@@ -8,10 +8,8 @@ pub mod call_stack;
 
 use std::borrow::Cow;
 use std::collections::BTreeMap;
-use std::sync::Arc;
 
 use bytecheck::CheckBytes;
-use parking_lot::RwLock;
 use piecrust_uplink::{ModuleId, SCRATCH_BUF_BYTES};
 use rkyv::ser::serializers::{BufferScratch, BufferSerializer};
 use rkyv::ser::Serializer;
@@ -38,10 +36,10 @@ unsafe impl Send for Session {}
 unsafe impl Sync for Session {}
 
 pub struct Session {
-    callstack: Arc<RwLock<CallStack>>,
-    debug: Arc<RwLock<Vec<String>>>,
-    events: Arc<RwLock<Vec<Event>>>,
-    data: Arc<RwLock<Metadata>>,
+    callstack: CallStack,
+    debug: Vec<String>,
+    events: Vec<Event>,
+    data: Metadata,
 
     module_session: ModuleSession,
     host_queries: HostQueries,
@@ -56,10 +54,10 @@ impl Session {
         host_queries: HostQueries,
     ) -> Self {
         Session {
-            callstack: Arc::new(RwLock::new(CallStack::new())),
-            debug: Arc::new(RwLock::new(vec![])),
-            events: Arc::new(RwLock::new(vec![])),
-            data: Arc::new(RwLock::new(Metadata::new())),
+            callstack: CallStack::new(),
+            debug: vec![],
+            events: vec![],
+            data: Metadata::new(),
             module_session,
             host_queries,
             limit: DEFAULT_LIMIT,
@@ -165,8 +163,7 @@ impl Session {
     }
 
     pub(crate) fn push_event(&mut self, event: Event) {
-        let mut events = self.events.write();
-        events.push(event);
+        self.events.push(event);
     }
 
     fn new_instance(
@@ -207,8 +204,7 @@ impl Session {
         &self,
         n: usize,
     ) -> Option<StackElementView<'a>> {
-        let stack = self.callstack.read();
-        stack.nth_from_top(n)
+        self.callstack.nth_from_top(n)
     }
 
     pub(crate) fn push_callstack<'b>(
@@ -216,55 +212,49 @@ impl Session {
         module_id: ModuleId,
         limit: u64,
     ) -> Result<StackElementView<'b>, Error> {
-        let s = self.callstack.write();
-        let instance = s.instance(&module_id);
-
-        drop(s);
+        let instance = self.callstack.instance(&module_id);
 
         match instance {
             Some(_) => {
-                let mut s = self.callstack.write();
-                s.push(module_id, limit);
+                self.callstack.push(module_id, limit);
             }
             None => {
                 let instance = self.new_instance(module_id)?;
-                let mut s = self.callstack.write();
-                s.push_instance(module_id, limit, instance);
+                self.callstack.push_instance(module_id, limit, instance);
             }
         }
 
-        let s = self.callstack.write();
-        Ok(s.nth_from_top(0)
+        Ok(self
+            .callstack
+            .nth_from_top(0)
             .expect("We just pushed an element to the stack"))
     }
 
-    pub(crate) fn pop_callstack(&self) {
-        let mut s = self.callstack.write();
-        s.pop();
+    pub(crate) fn pop_callstack(&mut self) {
+        self.callstack.pop();
     }
 
     pub fn commit(self) -> Result<[u8; 32], Error> {
         self.module_session.commit().map_err(PersistenceError)
     }
 
-    pub(crate) fn register_debug<M: Into<String>>(&self, msg: M) {
-        self.debug.write().push(msg.into());
+    pub(crate) fn register_debug<M: Into<String>>(&mut self, msg: M) {
+        self.debug.push(msg.into());
     }
 
-    pub fn take_events(&self) -> Vec<Event> {
-        core::mem::take(&mut *self.events.write())
+    pub fn take_events(&mut self) -> Vec<Event> {
+        core::mem::take(&mut self.events)
     }
 
     pub fn with_debug<C, R>(&self, c: C) -> R
     where
         C: FnOnce(&[String]) -> R,
     {
-        c(&self.debug.read())
+        c(&self.debug)
     }
 
     pub fn meta(&self, name: &str) -> Option<Vec<u8>> {
-        let host_data = self.data.read();
-        host_data.get(name)
+        self.data.get(name)
     }
 
     pub fn set_meta<S, V>(&mut self, name: S, value: V)
@@ -272,8 +262,6 @@ impl Session {
         S: Into<Cow<'static, str>>,
         V: for<'a> Serialize<StandardBufSerializer<'a>>,
     {
-        let mut host_data = self.data.write();
-
         let mut buf = [0u8; MAX_META_SIZE];
         let mut sbuf = [0u8; SCRATCH_BUF_BYTES];
 
@@ -287,7 +275,7 @@ impl Session {
         let pos = serializer.pos();
 
         let data = buf[..pos].to_vec();
-        host_data.insert(name, data);
+        self.data.insert(name, data);
     }
 }
 

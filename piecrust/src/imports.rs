@@ -222,8 +222,8 @@ fn emit(mut fenv: FunctionEnvMut<Env>, arg_len: u32) {
     env.emit(arg_len)
 }
 
-fn host_debug(fenv: FunctionEnvMut<Env>, msg_ofs: i32, msg_len: u32) {
-    let env = fenv.data();
+fn host_debug(mut fenv: FunctionEnvMut<Env>, msg_ofs: i32, msg_len: u32) {
+    let env = fenv.data_mut();
 
     env.self_instance().with_memory(|mem| {
         let slice = &mem[msg_ofs as usize..][..msg_len as usize];
