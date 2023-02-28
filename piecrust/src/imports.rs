@@ -7,7 +7,7 @@
 use wasmer::{imports, Function, FunctionEnv, FunctionEnvMut};
 
 use crate::Error;
-use piecrust_uplink::{ModuleId, ARGBUF_LEN};
+use piecrust_uplink::{ModuleError, ModuleId, ARGBUF_LEN};
 
 use crate::instance::Env;
 
@@ -42,6 +42,8 @@ fn caller(env: FunctionEnvMut<Env>) {
         .nth_from_top(1)
         .map_or(ModuleId::uninitialized(), |elem| elem.module_id);
 
+    println!("Caller Module ID: {:?}", mod_id);
+
     env.self_instance().with_arg_buffer(|arg| {
         arg[..std::mem::size_of::<ModuleId>()]
             .copy_from_slice(mod_id.as_bytes())
@@ -54,7 +56,7 @@ fn q(
     name_ofs: i32,
     name_len: u32,
     arg_len: u32,
-) -> Result<u32, Error> {
+) -> Result<i32, Error> {
     let env = fenv.data_mut();
 
     let instance = env.self_instance();
@@ -64,6 +66,17 @@ fn q(
         .get_remaining_points()
         .expect("there should be points remaining");
     let callee_limit = caller_remaining * POINT_PASS_PCT / 100;
+
+    // If an error is returned then we are in a re-execution, and should signal
+    // the module without executing the call.
+    env.increment_icc_height();
+    if let Some(err) = env.increment_icc_count() {
+        env.decrement_icc_height();
+        env.decrement_icc_count();
+        // Consume all gas given to the callee on an error
+        instance.set_remaining_points(caller_remaining - callee_limit);
+        return Ok(ModuleError::from(err).into());
+    }
 
     let (ret_len, callee_spent) = instance
         .with_memory_mut::<_, Result<_, Error>>(|memory| {
@@ -103,6 +116,7 @@ fn q(
             Ok((ret_len, callee_spent))
         })?;
 
+    env.decrement_icc_height();
     instance.set_remaining_points(caller_remaining - callee_spent);
 
     Ok(ret_len)
@@ -114,7 +128,7 @@ fn t(
     name_ofs: i32,
     name_len: u32,
     arg_len: u32,
-) -> Result<u32, Error> {
+) -> Result<i32, Error> {
     let env = fenv.data_mut();
 
     let instance = env.self_instance();
@@ -124,6 +138,17 @@ fn t(
         .get_remaining_points()
         .expect("there should be points remaining");
     let callee_limit = caller_remaining * POINT_PASS_PCT / 100;
+
+    // If an error is returned then we are in a re-execution, and should signal
+    // the module without executing the call.
+    env.increment_icc_height();
+    if let Some(err) = env.increment_icc_count() {
+        env.decrement_icc_height();
+        env.decrement_icc_count();
+        // Consume all gas given to the callee on an error
+        instance.set_remaining_points(caller_remaining - callee_limit);
+        return Ok(ModuleError::from(err).into());
+    }
 
     let (ret_len, callee_spent) = instance
         .with_memory_mut::<_, Result<_, Error>>(|memory| {
@@ -163,6 +188,7 @@ fn t(
             Ok((ret_len, callee_spent))
         })?;
 
+    env.decrement_icc_height();
     instance.set_remaining_points(caller_remaining - callee_spent);
 
     Ok(ret_len)

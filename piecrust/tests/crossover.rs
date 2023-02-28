@@ -24,6 +24,7 @@ fn crossover() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 
     let mut session = vm.genesis_session();
+    session.set_point_limit(u64::MAX / 100);
 
     session.deploy_with_id(CROSSOVER_ONE, module_bytecode!("crossover"))?;
     session.deploy_with_id(CROSSOVER_TWO, module_bytecode!("crossover"))?;

@@ -76,6 +76,7 @@ impl Crossover {
 
     /// Return crossover value
     pub fn crossover(&self) -> i32 {
+        uplink::debug!("Returning crossover: {}", self.crossover);
         self.crossover
     }
 

@@ -5,7 +5,9 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 use piecrust::{module_bytecode, Error, VM};
-use piecrust_uplink::{ModuleId, RawQuery, RawResult, RawTransaction};
+use piecrust_uplink::{
+    ModuleError, ModuleId, RawQuery, RawResult, RawTransaction,
+};
 
 #[test]
 pub fn cc_read_counter() -> Result<(), Error> {
@@ -148,8 +150,10 @@ pub fn cc_caller() -> Result<(), Error> {
 
     let center_id = session.deploy(module_bytecode!("callcenter"))?;
 
-    let value: bool = session.query(center_id, "call_self", &())?;
-    assert!(value);
+    let value: Result<bool, ModuleError> =
+        session.query(center_id, "call_self", &())?;
+
+    assert!(value.expect("should succeed"));
 
     Ok(())
 }

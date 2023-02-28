@@ -82,7 +82,8 @@ impl Callcenter {
         let caller = uplink::caller();
 
         match caller.is_uninitialized() {
-            true => uplink::query(self_id, "call_self", &()),
+            true => uplink::query(self_id, "call_self", &())
+                .expect("querying self should succeed"),
             false => Ok(caller == self_id),
         }
     }

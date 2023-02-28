@@ -5,8 +5,10 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 use std::borrow::Cow;
+use std::sync::Arc;
 use thiserror::Error;
 
+use piecrust_uplink::ModuleError;
 use rkyv::ser::serializers::{
     BufferSerializerError, CompositeSerializerError, FixedSizeScratchError,
 };
@@ -17,36 +19,36 @@ pub type Compo = CompositeSerializerError<
     std::convert::Infallible,
 >;
 
-#[derive(Error, Debug)]
+#[derive(Error, Debug, Clone)]
 pub enum Error {
     #[error(transparent)]
-    InstantiationError(Box<wasmer::InstantiationError>),
+    InstantiationError(Arc<wasmer::InstantiationError>),
     #[error(transparent)]
-    CompileError(Box<wasmer::CompileError>),
+    CompileError(Arc<wasmer::CompileError>),
     #[error(transparent)]
-    ExportError(Box<wasmer::ExportError>),
+    ExportError(Arc<wasmer::ExportError>),
     #[error(transparent)]
     RuntimeError(wasmer::RuntimeError),
     #[error(transparent)]
-    SerializeError(Box<wasmer::SerializeError>),
+    SerializeError(Arc<wasmer::SerializeError>),
     #[error(transparent)]
-    DeserializeError(Box<wasmer::DeserializeError>),
+    DeserializeError(Arc<wasmer::DeserializeError>),
     #[error(transparent)]
-    ParsingError(Box<wasmer::wasmparser::BinaryReaderError>),
+    ParsingError(wasmer::wasmparser::BinaryReaderError),
     #[error("WASMER TRAP")]
-    Trap(Box<wasmer_vm::Trap>),
+    Trap(Arc<wasmer_vm::Trap>),
     #[error(transparent)]
-    CompositeSerializerError(Box<Compo>),
+    CompositeSerializerError(Arc<Compo>),
     #[error(transparent)]
-    PersistenceError(std::io::Error),
+    PersistenceError(Arc<std::io::Error>),
     #[error("Commit error: {0}")]
     CommitError(Cow<'static, str>),
     #[error(transparent)]
-    RestoreError(std::io::Error),
+    RestoreError(Arc<std::io::Error>),
     #[error("Session error: {0}")]
     SessionError(Cow<'static, str>),
     #[error(transparent)]
-    MemorySetupError(std::io::Error),
+    MemorySetupError(Arc<std::io::Error>),
     #[error("ValidationError")]
     ValidationError,
     #[error("OutOfPoints")]
@@ -55,19 +57,19 @@ pub enum Error {
 
 impl From<wasmer::InstantiationError> for Error {
     fn from(e: wasmer::InstantiationError) -> Self {
-        Error::InstantiationError(Box::from(e))
+        Error::InstantiationError(Arc::from(e))
     }
 }
 
 impl From<wasmer::CompileError> for Error {
     fn from(e: wasmer::CompileError) -> Self {
-        Error::CompileError(Box::from(e))
+        Error::CompileError(Arc::from(e))
     }
 }
 
 impl From<wasmer::ExportError> for Error {
     fn from(e: wasmer::ExportError) -> Self {
-        Error::ExportError(Box::from(e))
+        Error::ExportError(Arc::from(e))
     }
 }
 
@@ -79,30 +81,42 @@ impl From<wasmer::RuntimeError> for Error {
 
 impl From<wasmer::SerializeError> for Error {
     fn from(e: wasmer::SerializeError) -> Self {
-        Error::SerializeError(Box::from(e))
+        Error::SerializeError(Arc::from(e))
     }
 }
 
 impl From<wasmer::DeserializeError> for Error {
     fn from(e: wasmer::DeserializeError) -> Self {
-        Error::DeserializeError(Box::from(e))
+        Error::DeserializeError(Arc::from(e))
     }
 }
 
 impl From<Compo> for Error {
     fn from(e: Compo) -> Self {
-        Error::CompositeSerializerError(Box::from(e))
+        Error::CompositeSerializerError(Arc::from(e))
     }
 }
 
 impl From<wasmer_vm::Trap> for Error {
     fn from(e: wasmer_vm::Trap) -> Self {
-        Error::Trap(Box::from(e))
+        Error::Trap(Arc::from(e))
     }
 }
 
 impl<A, B> From<rkyv::validation::CheckArchiveError<A, B>> for Error {
     fn from(_e: rkyv::validation::CheckArchiveError<A, B>) -> Self {
         Error::ValidationError
+    }
+}
+
+const OTHER_STATUS_CODE: i32 = i32::MIN;
+
+impl From<Error> for ModuleError {
+    fn from(err: Error) -> Self {
+        // TODO implement this fully
+        match err {
+            Error::OutOfPoints => Self::OutOfGas,
+            _ => Self::Other(OTHER_STATUS_CODE),
+        }
     }
 }

@@ -8,20 +8,10 @@ use std::ops::{Deref, DerefMut};
 use std::ptr::NonNull;
 use std::sync::Arc;
 
-use bytecheck::CheckBytes;
 use colored::*;
 use piecrust_uplink as uplink;
 use piecrust_uplink::MODULE_ID_BYTES;
-use rkyv::{
-    check_archived_root,
-    ser::{
-        serializers::{BufferScratch, BufferSerializer, CompositeSerializer},
-        Serializer,
-    },
-    validation::validators::DefaultValidator,
-    Archive, Deserialize, Infallible, Serialize,
-};
-use uplink::{ModuleId, SCRATCH_BUF_BYTES};
+use uplink::ModuleId;
 use wasmer::wasmparser::Operator;
 use wasmer::{CompilerConfig, RuntimeError, Tunables, TypedFunction};
 use wasmer_compiler_singlepass::Singlepass;
@@ -39,7 +29,6 @@ use crate::imports::DefaultImports;
 use crate::module::WrappedModule;
 use crate::session::Session;
 use crate::store::Memory;
-use crate::types::StandardBufSerializer;
 use crate::Error;
 
 pub struct WrappedInstance {
@@ -99,7 +88,7 @@ impl Env {
 pub struct Store;
 
 impl Store {
-    const INITIAL_POINT_LIMIT: u64 = 1_000_000;
+    const INITIAL_POINT_LIMIT: u64 = 10_000_000;
 
     pub fn new_store() -> wasmer::Store {
         Self::with_creator(|compiler_config| {
@@ -205,21 +194,10 @@ impl WrappedInstance {
         self.with_arg_buffer(|buf| arg.copy_from_slice(&buf[..arg.len()]))
     }
 
-    pub(crate) fn read_from_arg_buffer<T>(
-        &self,
-        arg_len: u32,
-    ) -> Result<T, Error>
-    where
-        T: Archive,
-        T::Archived: Deserialize<T, Infallible>
-            + for<'b> CheckBytes<DefaultValidator<'b>>,
-    {
-        // TODO use bytecheck here
+    pub(crate) fn read_bytes_from_arg_buffer(&self, arg_len: u32) -> Vec<u8> {
         self.with_arg_buffer(|abuf| {
             let slice = &abuf[..arg_len as usize];
-            let ta: &T::Archived = check_archived_root::<T>(slice)?;
-            let t = ta.deserialize(&mut Infallible).expect("Infallible");
-            Ok(t)
+            slice.to_vec()
         })
     }
 
@@ -262,19 +240,10 @@ impl WrappedInstance {
         })
     }
 
-    pub(crate) fn write_to_arg_buffer<T>(&self, value: &T) -> Result<u32, Error>
-    where
-        T: for<'b> Serialize<StandardBufSerializer<'b>>,
-    {
-        self.with_arg_buffer(|abuf| {
-            let mut sbuf = [0u8; SCRATCH_BUF_BYTES];
-            let scratch = BufferScratch::new(&mut sbuf);
-            let ser = BufferSerializer::new(abuf);
-            let mut ser = CompositeSerializer::new(ser, scratch, Infallible);
-
-            ser.serialize_value(value)?;
-
-            Ok(ser.pos() as u32)
+    pub(crate) fn write_bytes_to_arg_buffer(&self, buf: &[u8]) -> u32 {
+        self.with_arg_buffer(|arg_buffer| {
+            arg_buffer[..buf.len()].copy_from_slice(buf);
+            buf.len() as u32
         })
     }
 
@@ -283,8 +252,8 @@ impl WrappedInstance {
         method_name: &str,
         arg_len: u32,
         limit: u64,
-    ) -> Result<u32, Error> {
-        let fun: TypedFunction<u32, u32> = self
+    ) -> Result<i32, Error> {
+        let fun: TypedFunction<u32, i32> = self
             .instance
             .exports
             .get_typed_function(&self.store, method_name)?;
@@ -299,8 +268,8 @@ impl WrappedInstance {
         method_name: &str,
         arg_len: u32,
         limit: u64,
-    ) -> Result<u32, Error> {
-        let fun: TypedFunction<u32, u32> = self
+    ) -> Result<i32, Error> {
+        let fun: TypedFunction<u32, i32> = self
             .instance
             .exports
             .get_typed_function(&self.store, method_name)?;

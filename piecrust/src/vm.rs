@@ -29,7 +29,8 @@ impl VM {
     where
         P: Into<PathBuf>,
     {
-        let store = ModuleStore::new(dir).map_err(PersistenceError)?;
+        let store = ModuleStore::new(dir)
+            .map_err(|err| PersistenceError(Arc::new(err)))?;
         Ok(Self {
             host_queries: HostQueries::default(),
             store,
@@ -38,10 +39,11 @@ impl VM {
 
     /// Creates a new virtual machine using a temporary directory.
     pub fn ephemeral() -> Result<Self, Error> {
-        let tmp = tempdir().map_err(PersistenceError)?;
+        let tmp = tempdir().map_err(|err| PersistenceError(Arc::new(err)))?;
         let tmp = tmp.path().to_path_buf();
 
-        let store = ModuleStore::new(tmp).map_err(PersistenceError)?;
+        let store = ModuleStore::new(tmp)
+            .map_err(|err| PersistenceError(Arc::new(err)))?;
 
         Ok(Self {
             host_queries: HostQueries::default(),
@@ -59,8 +61,10 @@ impl VM {
     }
 
     pub fn session(&self, base: [u8; 32]) -> Result<Session, Error> {
-        let module_session =
-            self.store.session(base).map_err(PersistenceError)?;
+        let module_session = self
+            .store
+            .session(base)
+            .map_err(|err| PersistenceError(Arc::new(err)))?;
         Ok(Session::new(module_session, self.host_queries.clone()))
     }
 
@@ -91,12 +95,16 @@ impl VM {
     /// [`write`]: fs::write
     /// [`delete_commit`]: VM::delete_commit
     pub fn squash_commit(&self, root: [u8; 32]) -> Result<(), Error> {
-        self.store.squash_commit(root).map_err(PersistenceError)
+        self.store
+            .squash_commit(root)
+            .map_err(|err| PersistenceError(Arc::new(err)))
     }
 
     /// Deletes the given commit from disk.
     pub fn delete_commit(&self, root: [u8; 32]) -> Result<(), Error> {
-        self.store.delete_commit(root).map_err(PersistenceError)
+        self.store
+            .delete_commit(root)
+            .map_err(|err| PersistenceError(Arc::new(err)))
     }
 
     /// Return the root directory of the virtual machine.
