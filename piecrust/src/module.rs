@@ -43,7 +43,9 @@ impl WrappedModule {
         if missing_exports.is_empty() {
             Ok(())
         } else {
-            Err(Error::ModuleValidationError(missing_exports.concat().into()))
+            Err(Error::ModuleValidationError(
+                missing_exports.concat().into(),
+            ))
         }
     }
 
