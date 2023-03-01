@@ -44,7 +44,7 @@ impl WrappedModule {
             Ok(())
         } else {
             Err(Error::ModuleValidationError(
-                missing_exports.concat().into(),
+                missing_exports.join(", ").into(),
             ))
         }
     }
