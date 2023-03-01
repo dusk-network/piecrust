@@ -47,8 +47,10 @@ pub enum Error {
     SessionError(Cow<'static, str>),
     #[error(transparent)]
     MemorySetupError(std::io::Error),
+    #[error("Module validation error: {0}")]
+    ModuleValidationError(Cow<'static, str>),
     #[error("ValidationError")]
-    ValidationError,
+    DataValidationError,
     #[error("OutOfPoints")]
     OutOfPoints,
 }
@@ -103,6 +105,6 @@ impl From<wasmer_vm::Trap> for Error {
 
 impl<A, B> From<rkyv::validation::CheckArchiveError<A, B>> for Error {
     fn from(_e: rkyv::validation::CheckArchiveError<A, B>) -> Self {
-        Error::ValidationError
+        Error::DataValidationError
     }
 }
