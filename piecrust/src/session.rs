@@ -150,7 +150,7 @@ impl Session {
         ser.serialize_value(arg).expect("Infallible");
         let pos = ser.pos();
 
-        let ret_bytes = self.re_execute_until_ok(Call {
+        let ret_bytes = self.execute_until_ok(Call {
             ty: CallType::Q,
             module,
             fname: method_name.to_string(),
@@ -184,7 +184,7 @@ impl Session {
         ser.serialize_value(arg).expect("Infallible");
         let pos = ser.pos();
 
-        let ret_bytes = self.re_execute_until_ok(Call {
+        let ret_bytes = self.execute_until_ok(Call {
             ty: CallType::T,
             module,
             fname: method_name.to_string(),
@@ -385,8 +385,8 @@ impl Session {
     }
 
     /// Execute the call and re-execute until the call errors with only itself
-    /// in the call stack.
-    fn re_execute_until_ok(&mut self, call: Call) -> Result<Vec<u8>, Error> {
+    /// in the call stack, or succeeds.
+    fn execute_until_ok(&mut self, call: Call) -> Result<Vec<u8>, Error> {
         // If the call succeeds at first run, then we can proceed with adding it
         // to the call history and return.
         match self.call_if_not_error(call) {
