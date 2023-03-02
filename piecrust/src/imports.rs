@@ -6,7 +6,8 @@
 
 use wasmer::{imports, Function, FunctionEnv, FunctionEnvMut};
 
-use piecrust_uplink::{ModuleId, ARGBUF_LEN};
+use crate::Error;
+use piecrust_uplink::{ModuleError, ModuleId, ARGBUF_LEN};
 
 use crate::instance::Env;
 
@@ -41,6 +42,8 @@ fn caller(env: FunctionEnvMut<Env>) {
         .nth_from_top(1)
         .map_or(ModuleId::uninitialized(), |elem| elem.module_id);
 
+    println!("Caller Module ID: {:?}", mod_id);
+
     env.self_instance().with_arg_buffer(|arg| {
         arg[..std::mem::size_of::<ModuleId>()]
             .copy_from_slice(mod_id.as_bytes())
@@ -53,7 +56,7 @@ fn q(
     name_ofs: i32,
     name_len: u32,
     arg_len: u32,
-) -> u32 {
+) -> Result<i32, Error> {
     let env = fenv.data_mut();
 
     let instance = env.self_instance();
@@ -64,47 +67,59 @@ fn q(
         .expect("there should be points remaining");
     let callee_limit = caller_remaining * POINT_PASS_PCT / 100;
 
-    let (ret_len, callee_spent) = instance.with_memory_mut(|memory| {
-        let name = core::str::from_utf8(
-            &memory[name_ofs as usize..][..name_len as usize],
-        )
-        .expect("TODO error handling");
+    // If an error is returned then we are in a re-execution, and should signal
+    // the module without executing the call.
+    env.increment_icc_height();
+    if let Some(err) = env.increment_icc_count() {
+        env.decrement_icc_height();
+        env.decrement_icc_count();
+        // Consume all gas given to the callee on an error
+        instance.set_remaining_points(caller_remaining - callee_limit);
+        return Ok(ModuleError::from(err).into());
+    }
 
-        let arg_buf = &memory[argbuf_ofs..][..ARGBUF_LEN];
+    let (ret_len, callee_spent) = instance
+        .with_memory_mut::<_, Result<_, Error>>(|memory| {
+            let name = core::str::from_utf8(
+                &memory[name_ofs as usize..][..name_len as usize],
+            )
+            .expect("TODO error handling");
 
-        let mut mod_id = ModuleId::uninitialized();
-        mod_id.as_bytes_mut().copy_from_slice(
-            &memory[mod_id_ofs as usize..][..std::mem::size_of::<ModuleId>()],
-        );
+            let arg_buf = &memory[argbuf_ofs..][..ARGBUF_LEN];
 
-        let callee = env
-            .push_callstack(mod_id, callee_limit)
-            .expect("pushing to the callstack should succeed")
-            .instance;
+            let mut mod_id = ModuleId::uninitialized();
+            mod_id.as_bytes_mut().copy_from_slice(
+                &memory[mod_id_ofs as usize..]
+                    [..std::mem::size_of::<ModuleId>()],
+            );
 
-        let arg = &arg_buf[..arg_len as usize];
+            let callee = env
+                .push_callstack(mod_id, callee_limit)
+                .expect("pushing to the callstack should succeed")
+                .instance;
 
-        callee.write_argument(arg);
-        let ret_len = callee
-            .query(name, arg.len() as u32, callee_limit)
-            .expect("invalid query");
+            let arg = &arg_buf[..arg_len as usize];
 
-        // copy back result
-        callee.read_argument(&mut memory[argbuf_ofs..][..ret_len as usize]);
+            callee.write_argument(arg);
+            let ret_len = callee.query(name, arg.len() as u32, callee_limit)?;
 
-        let callee_remaining = callee
-            .get_remaining_points()
-            .expect("there should be points remaining");
-        let callee_spent = callee_limit - callee_remaining;
+            // copy back result
+            callee.read_argument(&mut memory[argbuf_ofs..][..ret_len as usize]);
 
-        env.pop_callstack();
+            let callee_remaining = callee
+                .get_remaining_points()
+                .expect("there should be points remaining");
+            let callee_spent = callee_limit - callee_remaining;
 
-        (ret_len, callee_spent)
-    });
+            env.pop_callstack();
 
+            Ok((ret_len, callee_spent))
+        })?;
+
+    env.decrement_icc_height();
     instance.set_remaining_points(caller_remaining - callee_spent);
 
-    ret_len
+    Ok(ret_len)
 }
 
 fn t(
@@ -113,7 +128,7 @@ fn t(
     name_ofs: i32,
     name_len: u32,
     arg_len: u32,
-) -> u32 {
+) -> Result<i32, Error> {
     let env = fenv.data_mut();
 
     let instance = env.self_instance();
@@ -124,47 +139,59 @@ fn t(
         .expect("there should be points remaining");
     let callee_limit = caller_remaining * POINT_PASS_PCT / 100;
 
-    let (ret_len, callee_spent) = instance.with_memory_mut(|memory| {
-        let name = core::str::from_utf8(
-            &memory[name_ofs as usize..][..name_len as usize],
-        )
-        .expect("TODO error handling");
+    // If an error is returned then we are in a re-execution, and should signal
+    // the module without executing the call.
+    env.increment_icc_height();
+    if let Some(err) = env.increment_icc_count() {
+        env.decrement_icc_height();
+        env.decrement_icc_count();
+        // Consume all gas given to the callee on an error
+        instance.set_remaining_points(caller_remaining - callee_limit);
+        return Ok(ModuleError::from(err).into());
+    }
 
-        let arg_buf = &memory[argbuf_ofs..][..ARGBUF_LEN];
+    let (ret_len, callee_spent) = instance
+        .with_memory_mut::<_, Result<_, Error>>(|memory| {
+            let name = core::str::from_utf8(
+                &memory[name_ofs as usize..][..name_len as usize],
+            )
+            .expect("TODO error handling");
 
-        let mut mod_id = ModuleId::uninitialized();
-        mod_id.as_bytes_mut().copy_from_slice(
-            &memory[mod_id_ofs as usize..][..std::mem::size_of::<ModuleId>()],
-        );
+            let arg_buf = &memory[argbuf_ofs..][..ARGBUF_LEN];
 
-        let callee = env
-            .push_callstack(mod_id, callee_limit)
-            .expect("pushing to the callstack should succeed")
-            .instance;
+            let mut mod_id = ModuleId::uninitialized();
+            mod_id.as_bytes_mut().copy_from_slice(
+                &memory[mod_id_ofs as usize..]
+                    [..std::mem::size_of::<ModuleId>()],
+            );
 
-        let arg = &arg_buf[..arg_len as usize];
+            let callee = env
+                .push_callstack(mod_id, callee_limit)
+                .expect("pushing to the callstack should succeed")
+                .instance;
 
-        callee.write_argument(arg);
-        let ret_len = callee
-            .transact(name, arg.len() as u32, callee_limit)
-            .expect("invalid transaction");
+            let arg = &arg_buf[..arg_len as usize];
 
-        // copy back result
-        callee.read_argument(&mut memory[argbuf_ofs..][..ret_len as usize]);
+            callee.write_argument(arg);
+            let ret_len = callee.query(name, arg.len() as u32, callee_limit)?;
 
-        let callee_remaining = callee
-            .get_remaining_points()
-            .expect("there should be points remaining");
-        let callee_spent = callee_limit - callee_remaining;
+            // copy back result
+            callee.read_argument(&mut memory[argbuf_ofs..][..ret_len as usize]);
 
-        env.pop_callstack();
+            let callee_remaining = callee
+                .get_remaining_points()
+                .expect("there should be points remaining");
+            let callee_spent = callee_limit - callee_remaining;
 
-        (ret_len, callee_spent)
-    });
+            env.pop_callstack();
 
+            Ok((ret_len, callee_spent))
+        })?;
+
+    env.decrement_icc_height();
     instance.set_remaining_points(caller_remaining - callee_spent);
 
-    ret_len
+    Ok(ret_len)
 }
 
 fn hq(
@@ -221,8 +248,8 @@ fn emit(mut fenv: FunctionEnvMut<Env>, arg_len: u32) {
     env.emit(arg_len)
 }
 
-fn host_debug(fenv: FunctionEnvMut<Env>, msg_ofs: i32, msg_len: u32) {
-    let env = fenv.data();
+fn host_debug(mut fenv: FunctionEnvMut<Env>, msg_ofs: i32, msg_len: u32) {
+    let env = fenv.data_mut();
 
     env.self_instance().with_memory(|mem| {
         let slice = &mem[msg_ofs as usize..][..msg_len as usize];

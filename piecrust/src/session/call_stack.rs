@@ -4,12 +4,11 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use crate::instance::WrappedInstance;
-use std::collections::btree_map::Entry;
-
-use std::collections::BTreeMap;
+use std::collections::btree_map::{BTreeMap, Entry};
 
 use piecrust_uplink::ModuleId;
+
+use crate::instance::WrappedInstance;
 
 #[derive(Debug, Default)]
 pub struct CallStack {
@@ -43,6 +42,18 @@ impl CallStack {
 
         self.instance_map.insert(module_id, (instance, 1));
         self.stack.push(StackElement { module_id, limit });
+    }
+
+    /// Return the length of the call stack.
+    pub fn len(&self) -> usize {
+        self.stack.len()
+    }
+
+    /// Remove all elements from the stack.
+    pub fn clear(&mut self) {
+        while self.len() > 0 {
+            self.pop();
+        }
     }
 
     /// Push an element to the call stack.

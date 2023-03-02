@@ -29,15 +29,14 @@ where
         let slice = &buf[..arg_len as usize];
 
         let aa: &A::Archived = unsafe { archived_root::<A>(slice) };
-        let a: A = aa.deserialize(&mut rkyv::Infallible).unwrap();
+        let a: A = aa.deserialize(&mut Infallible).unwrap();
 
         let ret = f(a);
 
         let mut sbuf = [0u8; SCRATCH_BUF_BYTES];
         let scratch = BufferScratch::new(&mut sbuf);
         let ser = BufferSerializer::new(buf);
-        let mut composite =
-            CompositeSerializer::new(ser, scratch, rkyv::Infallible);
+        let mut composite = CompositeSerializer::new(ser, scratch, Infallible);
         composite.serialize_value(&ret).expect("infallible");
         composite.pos() as u32
     })
@@ -56,14 +55,13 @@ where
     with_arg_buf(|buf| {
         let slice = &buf[..arg_len as usize];
         let aa: &A::Archived = unsafe { archived_root::<A>(slice) };
-        let a: A = aa.deserialize(&mut rkyv::Infallible).unwrap();
+        let a: A = aa.deserialize(&mut Infallible).unwrap();
         let ret = f(a);
 
         let mut sbuf = [0u8; SCRATCH_BUF_BYTES];
         let scratch = BufferScratch::new(&mut sbuf);
         let ser = BufferSerializer::new(buf);
-        let mut composite =
-            CompositeSerializer::new(ser, scratch, rkyv::Infallible);
+        let mut composite = CompositeSerializer::new(ser, scratch, Infallible);
         composite.serialize_value(&ret).expect("infallible");
         composite.pos() as u32
     })

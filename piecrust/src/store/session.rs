@@ -160,6 +160,11 @@ impl ModuleSession {
         }
     }
 
+    /// Clear all deployed deployed or otherwise instantiated modules.
+    pub fn clear_modules(&mut self) {
+        self.modules.clear();
+    }
+
     /// Deploys bytecode to the module store.
     ///
     /// The module ID returned is computed using the `blake3` hash of the given
