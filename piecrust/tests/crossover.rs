@@ -29,22 +29,28 @@ fn crossover() -> Result<(), Error> {
     session.deploy_with_id(CROSSOVER_ONE, module_bytecode!("crossover"))?;
     session.deploy_with_id(CROSSOVER_TWO, module_bytecode!("crossover"))?;
 
-    const CROSSOVER_TO_SET: i32 = 10;
+    // These value should not be set to `INITIAL_VALUE` in the contract.
+    const CROSSOVER_TO_SET: i32 = 42;
+    const CROSSOVER_TO_SET_FORWARD: i32 = 314;
+    const CROSSOVER_TO_SET_BACK: i32 = 272;
 
-    let state_is_ok: bool = session.transact(
+    // This call will fail if the state is inconsistent. Check the contract for
+    // more details.
+    session.transact::<_, ()>(
         CROSSOVER_ONE,
-        "call_panicking_and_set",
-        &(CROSSOVER_TWO, CROSSOVER_TO_SET),
+        "check_consistent_state_on_errors",
+        &(
+            CROSSOVER_TWO,
+            CROSSOVER_TO_SET,
+            CROSSOVER_TO_SET_FORWARD,
+            CROSSOVER_TO_SET_BACK,
+        ),
     )?;
 
-    assert!(
-        state_is_ok,
-        "The state should be unchanged in the panicking call's ray"
-    );
     assert_eq!(
         session.query::<_, i32>(CROSSOVER_ONE, "crossover", &())?,
         CROSSOVER_TO_SET,
-        "The state should be properly set even after a call panics"
+        "The crossover should still be set even though the other contract panicked"
     );
 
     Ok(())
