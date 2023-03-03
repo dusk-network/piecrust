@@ -146,8 +146,8 @@ impl VM {
     /// Failing may result in a corrupted commit, and the user is encouraged to
     /// call [`delete_commit`].
     ///
-    /// [`remove_file`]: fs::remove_file
-    /// [`write`]: fs::write
+    /// [`remove_file`]: std::fs::remove_file
+    /// [`write`]: std::fs::write
     /// [`delete_commit`]: VM::delete_commit
     pub fn squash_commit(&self, root: [u8; 32]) -> Result<(), Error> {
         self.store

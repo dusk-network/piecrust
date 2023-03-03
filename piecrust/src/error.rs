@@ -19,7 +19,7 @@ pub type Compo = CompositeSerializerError<
     std::convert::Infallible,
 >;
 
-/// The error returned by the piecrust VM.
+/// The error type returned by the piecrust VM.
 #[derive(Error, Debug, Clone)]
 pub enum Error {
     #[error(transparent)]

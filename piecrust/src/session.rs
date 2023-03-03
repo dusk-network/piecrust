@@ -41,7 +41,7 @@ const MAX_META_SIZE: usize = 65_536;
 unsafe impl Send for Session {}
 unsafe impl Sync for Session {}
 
-/// A running modification to a state.
+/// A running mutation to a state.
 ///
 /// `Session`s are spawned using a [`VM`] instance, and can be [`queried`] or
 /// [`transacted`] with to modify their state. A sequence of these calls may
@@ -103,7 +103,7 @@ impl Session {
     }
 
     /// Deploy a module, returning its [`ModuleId`]. The ID is computed using a
-    /// `blake3` hash of the bytecode.
+    /// `blake3` hash of the `bytecode`.
     ///
     /// If one needs to specify the ID, [`deploy_with_id`] is available.
     ///
@@ -246,10 +246,10 @@ impl Session {
         Ok(ret)
     }
 
-    /// Return the state root of the current state of the modules.
+    /// Return the state root of the current state of the session.
     ///
-    /// The state root is a merkle root of the tree whose leaves are the state
-    /// of each module, ordered by their module ID.
+    /// The state root is the root of a merkle tree whose leaves are the hashes
+    /// of the state of of each module, ordered by their module ID.
     ///
     /// It also doubles as the ID of a commit - the commit root.
     pub fn root(&self) -> [u8; 32] {
