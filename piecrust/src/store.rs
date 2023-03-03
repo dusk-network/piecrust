@@ -63,8 +63,12 @@ impl ModuleStore {
         let commits = read_all_commits(root_dir)?;
 
         let loop_root_dir = root_dir.to_path_buf();
-        let sync_loop =
-            thread::spawn(|| sync_loop(loop_root_dir, commits, calls));
+
+        // The thread is given a name to allow for easily identifying it while
+        // debugging.
+        let sync_loop = thread::Builder::new()
+            .name(String::from("PiecrustSync"))
+            .spawn(|| sync_loop(loop_root_dir, commits, calls))?;
 
         Ok(Self {
             sync_loop,
