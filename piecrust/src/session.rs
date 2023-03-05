@@ -270,7 +270,8 @@ impl Session {
             .map_err(|err| PersistenceError(Arc::new(err)))?
             .expect("Module should exist");
 
-        let module = WrappedModule::new(&bytecode)?;
+        let module =
+            WrappedModule::new(&bytecode, self.module_session.root_dir())?;
         let instance = WrappedInstance::new(self, module_id, module, memory)?;
 
         Ok(instance)

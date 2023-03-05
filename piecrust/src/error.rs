@@ -110,6 +110,12 @@ impl<A, B> From<rkyv::validation::CheckArchiveError<A, B>> for Error {
     }
 }
 
+impl From<std::io::Error> for Error {
+    fn from(e: std::io::Error) -> Self {
+        Error::PersistenceError(Arc::from(e))
+    }
+}
+
 const OTHER_STATUS_CODE: i32 = i32::MIN;
 
 impl From<Error> for ModuleError {

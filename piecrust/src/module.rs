@@ -4,10 +4,15 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
+use blake3::hash;
+use std::fs;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use wasmer::Module;
 
 use crate::error::Error;
 use crate::instance::Store;
+use crate::store::COMPILED_DIR;
 
 #[derive(Clone)]
 pub struct WrappedModule {
@@ -15,11 +20,32 @@ pub struct WrappedModule {
 }
 
 impl WrappedModule {
-    pub fn new<B: AsRef<[u8]>>(bytecode: B) -> Result<Self, Error> {
+    pub fn new<B: AsRef<[u8]>, P: AsRef<Path>>(
+        bytecode: B,
+        dir: P,
+    ) -> Result<Self, Error> {
         let store = Store::new_store();
-
-        let module = wasmer::Module::new(&store, bytecode)?;
-        let serialized = module.serialize()?;
+        let module_key = hash(bytecode.as_ref());
+        let compiled_hex = hex::encode(module_key.as_bytes());
+        let compiled_dir = dir.as_ref().join(COMPILED_DIR);
+        let mut compiled_path = compiled_dir.clone();
+        fs::create_dir_all(compiled_dir)?;
+        compiled_path.push(compiled_hex);
+        let serialized = match unsafe {
+            Module::deserialize_from_file(
+                &store,
+                <PathBuf as AsRef<Path>>::as_ref(&compiled_path),
+            )
+        } {
+            Ok(module) => module.serialize()?,
+            _ => {
+                let module = Module::new(&store, bytecode.as_ref())?;
+                module.serialize_to_file(<PathBuf as AsRef<Path>>::as_ref(
+                    &compiled_path,
+                ))?;
+                module.serialize()?
+            }
+        };
 
         Ok(WrappedModule {
             serialized: Arc::new(serialized.to_vec()),
