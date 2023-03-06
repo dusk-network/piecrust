@@ -41,6 +41,8 @@ pub enum Error {
     #[error(transparent)]
     CompositeSerializerError(Arc<Compo>),
     #[error(transparent)]
+    ModuleCacheError(Arc<std::io::Error>),
+    #[error(transparent)]
     PersistenceError(Arc<std::io::Error>),
     #[error("Commit error: {0}")]
     CommitError(Cow<'static, str>),
@@ -107,12 +109,6 @@ impl From<wasmer_vm::Trap> for Error {
 impl<A, B> From<rkyv::validation::CheckArchiveError<A, B>> for Error {
     fn from(_e: rkyv::validation::CheckArchiveError<A, B>) -> Self {
         Error::ValidationError
-    }
-}
-
-impl From<std::io::Error> for Error {
-    fn from(e: std::io::Error) -> Self {
-        Error::PersistenceError(Arc::from(e))
     }
 }
 
