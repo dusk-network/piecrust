@@ -52,8 +52,22 @@ impl CallStack {
     /// Remove all elements from the stack.
     pub fn clear(&mut self) {
         while self.len() > 0 {
-            self.pop();
+            self.pop_remove_instance();
         }
+    }
+
+    fn update_instance_count(&mut self, module_id: ModuleId, inc: bool) {
+        match self.instance_map.entry(module_id) {
+            Entry::Occupied(mut entry) => {
+                let (_, count) = entry.get_mut();
+                if inc {
+                    *count += 1
+                } else {
+                    *count -= 1
+                };
+            }
+            _ => unreachable!("map must have an instance here"),
+        };
     }
 
     /// Push an element to the call stack.
@@ -61,20 +75,20 @@ impl CallStack {
     /// # Panics
     /// If an instance of the given module ID is absent from the stack.
     pub fn push(&mut self, module_id: ModuleId, limit: u64) {
-        if self.instance_map.get(&module_id).is_none() {
-            panic!("Module not in the stack: {module_id:?}");
-        }
-
-        let (_, count) = self.instance_map.get_mut(&module_id).unwrap();
-        *count += 1;
-
+        self.update_instance_count(module_id, true);
         self.stack.push(StackElement { module_id, limit });
     }
 
     /// Pops an element from the callstack.
-    ///
-    /// If it is a the last element in the stack for the popped instance.
     pub fn pop(&mut self) {
+        if let Some(element) = self.stack.pop() {
+            self.update_instance_count(element.module_id, false);
+        }
+    }
+
+    /// Pops an element from the callstack and removes its
+    /// corresponding module' instance
+    pub fn pop_remove_instance(&mut self) {
         if let Some(element) = self.stack.pop() {
             let mut entry = match self.instance_map.entry(element.module_id) {
                 Entry::Occupied(e) => e,
