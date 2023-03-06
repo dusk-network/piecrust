@@ -13,6 +13,7 @@ use wasmer::Module;
 use crate::error::Error;
 use crate::instance::Store;
 use crate::store::COMPILED_DIR;
+use crate::Error::ModuleCacheError;
 
 #[derive(Clone)]
 pub struct WrappedModule {
@@ -29,7 +30,8 @@ impl WrappedModule {
         let compiled_hex = hex::encode(module_key.as_bytes());
         let compiled_dir = dir.as_ref().join(COMPILED_DIR);
         let mut compiled_path = compiled_dir.clone();
-        fs::create_dir_all(compiled_dir)?;
+        fs::create_dir_all(compiled_dir)
+            .map_err(|err| ModuleCacheError(Arc::new(err)))?;
         compiled_path.push(compiled_hex);
         let serialized = match unsafe {
             Module::deserialize_from_file(
