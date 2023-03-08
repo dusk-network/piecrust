@@ -233,7 +233,7 @@ pub fn query_raw(
 
 /// Returns data made available by the host under the given name. The type `D`
 /// must be correctly specified, otherwise undefined behavior will occur.
-pub fn host_data<D>(name: &str) -> D
+pub fn meta_data<D>(name: &str) -> Option<D>
 where
     D: Archive,
     D::Archived: Deserialize<D, Infallible>,
@@ -244,12 +244,13 @@ where
     let name_len = name_slice.len() as u32;
 
     unsafe {
-        let arg_pos = ext::hd(name, name_len) as usize;
-
-        with_arg_buf(|buf| {
-            let ret = archived_root::<D>(&buf[..arg_pos]);
-            ret.deserialize(&mut Infallible).expect("Infallible")
-        })
+        match ext::hd(name, name_len) as usize {
+            0 => None,
+            arg_pos => Some(with_arg_buf(|buf| {
+                let ret = archived_root::<D>(&buf[..arg_pos]);
+                ret.deserialize(&mut Infallible).expect("Infallible")
+            })),
+        }
     }
 }
 

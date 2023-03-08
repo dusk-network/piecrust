@@ -24,8 +24,8 @@ static mut STATE: State<Height> = State::new(Height);
 
 impl Height {
     /// Query the host for the current block height
-    pub fn get_height(&self) -> u64 {
-        uplink::host_data::<u64>("height")
+    pub fn get_height(&self) -> Option<u64> {
+        uplink::meta_data::<u64>("height")
     }
 }
 
