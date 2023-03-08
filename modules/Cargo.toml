@@ -2,6 +2,7 @@
 members = [
     "box",
     "callcenter",
+    "constructor",
     "counter",
     "debugger",
     "eventer",

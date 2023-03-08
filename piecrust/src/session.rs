@@ -31,7 +31,7 @@ use crate::store::ModuleSession;
 use crate::types::StandardBufSerializer;
 use crate::vm::HostQueries;
 use crate::Error;
-use crate::Error::PersistenceError;
+use crate::Error::{InitalizationError, PersistenceError};
 
 use call_stack::{CallStack, StackElementView};
 
@@ -198,6 +198,24 @@ impl Session {
         Ok(ret)
     }
 
+    pub fn init<Arg>(
+        &mut self,
+        module: ModuleId,
+        arg: &Arg,
+    ) -> Result<(), Error>
+    where
+        Arg: for<'b> Serialize<StandardBufSerializer<'b>>,
+    {
+        let instance = self
+            .call_stack
+            .instance(&module)
+            .expect("instance should exist");
+        if instance.is_initialized() {
+            return Err(InitalizationError);
+        }
+        instance.set_initialized();
+        self.transact::<Arg, ()>(module, "init", arg)
+    }
     pub fn root(&self) -> [u8; 32] {
         self.module_session.root()
     }
