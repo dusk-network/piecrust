@@ -40,9 +40,11 @@ mod arg_buf {
 
 mod metadata {
     use crate::METADATA_LEN;
+
     #[no_mangle]
     static mut M: [u8; METADATA_LEN] = [0u8; METADATA_LEN];
 }
+
 pub(crate) use arg_buf::with_arg_buf;
 
 mod ext {

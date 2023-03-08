@@ -39,5 +39,6 @@ pub const ARGBUF_LEN: usize = 64 * 1024;
 
 /// The size of metadata in bytes
 pub const METADATA_LEN: usize = 1;
+
 #[cfg(not(feature = "std"))]
 mod handlers;

@@ -125,6 +125,7 @@ enum ModuleInitState {
     Required,
     Done,
 }
+
 impl WrappedInstance {
     pub fn new(
         session: &mut Session,
@@ -179,6 +180,7 @@ impl WrappedInstance {
             wasmer::Value::I32(i) => i as usize,
             _ => todo!("Missing `M` Metadata export"),
         };
+
         // write self id into memory.
         let mut memory_guard = memory.write();
         let bytes = memory_guard.as_bytes_mut();
@@ -194,6 +196,7 @@ impl WrappedInstance {
                 ModuleInitState::Done as u8
             };
         }
+
         let wrapped = WrappedInstance {
             store,
             instance,
@@ -273,6 +276,7 @@ impl WrappedInstance {
             f(trimmed)
         })
     }
+
     pub(crate) fn write_bytes_to_arg_buffer(&self, buf: &[u8]) -> u32 {
         self.with_arg_buffer(|arg_buffer| {
             arg_buffer[..buf.len()].copy_from_slice(buf);
@@ -375,11 +379,13 @@ impl WrappedInstance {
     pub fn arg_buffer_offset(&self) -> usize {
         self.arg_buf_ofs
     }
+
     pub fn is_initialized(&self) -> bool {
         self.with_meta_buffer(|meta_buf| {
             meta_buf[0] == ModuleInitState::Done as u8
         })
     }
+
     pub fn set_initialized(&mut self) {
         self.with_meta_buffer(|meta_buf| {
             meta_buf[0] = ModuleInitState::Done as u8;

@@ -22,12 +22,17 @@ pub fn height() -> Result<(), Error> {
 
     Ok(())
 }
+
 #[test]
 pub fn meta_data_optionality() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
+
     let mut session = vm.genesis_session();
+
     let id = session.deploy(module_bytecode!("everest"))?;
+
     let height: Option<u64> = session.transact(id, "get_height", &())?;
     assert!(height.is_none());
+
     Ok(())
 }
