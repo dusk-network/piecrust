@@ -31,6 +31,10 @@ jobs:
   test:
     name: Make test
     runs-on: core
+    container:
+      resources:
+        limits:
+          memory: 4G
     steps:
       - uses: actions/checkout@v2
       - name: Install latest nightly toolchain
