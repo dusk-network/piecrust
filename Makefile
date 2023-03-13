@@ -17,9 +17,8 @@ modules: ## Build WASM modules
 	 	          target/wasm32-unknown-unknown/release/% \
 	 	          -o target/stripped/%
 
-##test: modules cold-reboot assert-counter-module-small ## Run all tests
-test: modules assert-counter-module-small ## Run all tests
-	@RUST_TEST_TASKS=1; cargo test \
+test: modules cold-reboot assert-counter-module-small ## Run all tests
+	@cargo test \
 	  --manifest-path=./piecrust/Cargo.toml \
 	  --color=always
 

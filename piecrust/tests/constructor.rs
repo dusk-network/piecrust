@@ -6,7 +6,7 @@
 
 use piecrust::{module_bytecode, Error, VM};
 
-#[ignore]
+#[test]
 fn constructor() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 
