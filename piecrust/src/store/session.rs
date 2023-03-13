@@ -13,8 +13,8 @@ use std::{io, mem};
 use piecrust_uplink::ModuleId;
 
 use crate::store::{
-    compute_root, Bytecode, Call, Commit, Memory, Root, BYTECODE_DIR,
-    DIFF_EXTENSION, MEMORY_DIR,
+    compute_root, Bytecode, Call, Commit, Memory, Objectcode, Root,
+    BYTECODE_DIR, DIFF_EXTENSION, MEMORY_DIR,
 };
 
 /// The representation of a session with a [`ModuleStore`].
@@ -27,7 +27,7 @@ use crate::store::{
 ///
 /// [`commit`]: ModuleSession::commit
 pub struct ModuleSession {
-    modules: BTreeMap<ModuleId, (Bytecode, Memory)>,
+    modules: BTreeMap<ModuleId, (Bytecode, Objectcode, Memory)>,
 
     base: Option<(Root, Commit)>,
     root_dir: PathBuf,
@@ -123,11 +123,19 @@ impl ModuleSession {
     pub fn module(
         &mut self,
         module: ModuleId,
-    ) -> io::Result<Option<(Bytecode, Memory)>> {
+    ) -> io::Result<Option<(Bytecode, Objectcode, Memory)>> {
+        println!("new instance/module called, modules={:?}", self.modules);
         match self.modules.entry(module) {
             Vacant(entry) => match &self.base {
-                None => Ok(None),
+                None => {
+                    println!("bytecode path=None");
+                    Ok(None)
+                }
                 Some((base, base_commit)) => {
+                    println!(
+                        "modules empty but taking stuff from base={}",
+                        hex::encode(base)
+                    );
                     match base_commit.modules.contains_key(&module) {
                         true => {
                             let base_hex = hex::encode(base);
@@ -137,6 +145,7 @@ impl ModuleSession {
 
                             let bytecode_path =
                                 base_dir.join(BYTECODE_DIR).join(&module_hex);
+                            println!("bytecode path={:?}", bytecode_path);
                             let memory_path =
                                 base_dir.join(MEMORY_DIR).join(module_hex);
                             let memory_diff_path =
@@ -153,7 +162,7 @@ impl ModuleSession {
                                 };
 
                             let module =
-                                entry.insert((bytecode, memory)).clone();
+                                entry.insert((bytecode, Objectcode::new("abc")?, memory)).clone();
 
                             Ok(Some(module))
                         }
@@ -161,7 +170,10 @@ impl ModuleSession {
                     }
                 }
             },
-            Occupied(entry) => Ok(Some(entry.get().clone())),
+            Occupied(entry) => {
+                println!("bytecode path=Occupied");
+                Ok(Some(entry.get().clone()))
+            }
         }
     }
 
@@ -170,25 +182,25 @@ impl ModuleSession {
         self.modules.clear();
     }
 
-    /// Deploys bytecode to the module store.
-    ///
-    /// The module ID returned is computed using the `blake3` hash of the given
-    /// bytecode. See [`deploy_with_id`] for deploying bytecode with a given
-    /// module ID.
-    ///
-    /// [`deploy_with_id`]: ModuleSession::deploy_with_id
-    pub fn deploy<B: AsRef<[u8]>>(
-        &mut self,
-        bytecode: B,
-    ) -> io::Result<ModuleId> {
-        let bytes = bytecode.as_ref();
-        let hash = blake3::hash(bytes);
-
-        let module_id = ModuleId::from_bytes(hash.into());
-        self.deploy_with_id(module_id, bytes)?;
-
-        Ok(module_id)
-    }
+    // Deploys bytecode to the module store.
+    //
+    // The module ID returned is computed using the `blake3` hash of the given
+    // bytecode. See [`deploy_with_id`] for deploying bytecode with a given
+    // module ID.
+    //
+    // [`deploy_with_id`]: ModuleSession::deploy_with_id
+    // pub fn deploy<B: AsRef<[u8]>>(
+    //     &mut self,
+    //     bytecode: B,
+    // ) -> io::Result<ModuleId> {
+    //     let bytes = bytecode.as_ref();
+    //     let hash = blake3::hash(bytes);
+    //
+    //     let module_id = ModuleId::from_bytes(hash.into());
+    //     self.deploy_with_id(module_id, bytes)?;
+    //
+    //     Ok(module_id)
+    // }
 
     /// Deploys bytecode to the module store with the given its `module_id`.
     ///
@@ -199,6 +211,7 @@ impl ModuleSession {
         &mut self,
         module_id: ModuleId,
         bytecode: B,
+        _objectcode: B,
     ) -> io::Result<()> {
         if self.modules.contains_key(&module_id) {
             let module_hex = hex::encode(module_id);
@@ -222,7 +235,10 @@ impl ModuleSession {
         let memory = Memory::new()?;
         let bytecode = Bytecode::new(bytecode)?;
 
-        self.modules.insert(module_id, (bytecode, memory));
+        println!(
+            "inserting into modules (deploy_with_id): bytecode and memory"
+        );
+        self.modules.insert(module_id, (bytecode, Objectcode::new("abc")?, memory));
 
         Ok(())
     }

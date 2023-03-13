@@ -10,15 +10,15 @@ use std::sync::Arc;
 
 use crate::store::mmap::Mmap;
 
-/// WASM bytecode belonging to a given module.
+/// WASM object code belonging to a given module.
 #[derive(Debug, Clone)]
-pub struct Bytecode {
+pub struct Objectcode {
     mmap: Arc<Mmap>,
 }
 
-impl Bytecode {
+impl Objectcode {
     pub(crate) fn new<B: AsRef<[u8]>>(bytes: B) -> io::Result<Self> {
-        println!("Bytecode new");
+        println!("Object code new");
         let mmap = Mmap::new(bytes)?;
 
         Ok(Self {
@@ -27,7 +27,7 @@ impl Bytecode {
     }
 
     pub(crate) fn from_file<P: AsRef<Path>>(path: P) -> io::Result<Self> {
-        println!("Bytecode from_file={:?}", path.as_ref());
+        println!("Object code from_file={:?}", path.as_ref());
         let mmap = Mmap::map(path)?;
         Ok(Self {
             mmap: Arc::new(mmap),
@@ -35,7 +35,7 @@ impl Bytecode {
     }
 }
 
-impl AsRef<[u8]> for Bytecode {
+impl AsRef<[u8]> for Objectcode {
     fn as_ref(&self) -> &[u8] {
         &self.mmap
     }

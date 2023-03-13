@@ -60,10 +60,19 @@ impl DerefMut for Env {
 
 impl Env {
     pub fn self_instance<'b>(&self) -> &'b mut WrappedInstance {
-        self.session
+        let stack_element = self
+            .session
             .nth_from_top(0)
-            .expect("there should be at least one element in the call stack")
-            .instance
+            .expect("there should be at least one element in the call stack");
+        self.instance(&stack_element.module_id)
+            .expect("instance should exist")
+    }
+
+    pub fn instance<'b>(
+        &self,
+        module_id: &ModuleId,
+    ) -> Option<&'b mut WrappedInstance> {
+        self.session.instance(module_id)
     }
 
     pub fn limit(&self) -> u64 {

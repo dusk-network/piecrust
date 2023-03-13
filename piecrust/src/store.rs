@@ -10,6 +10,7 @@ mod bytecode;
 mod diff;
 mod memory;
 mod mmap;
+mod objectcode;
 mod session;
 
 use std::collections::btree_map::Entry::*;
@@ -25,6 +26,7 @@ use flate2::Compression;
 pub use bytecode::Bytecode;
 use diff::diff;
 pub use memory::Memory;
+pub use objectcode::Objectcode;
 use piecrust_uplink::ModuleId;
 pub use session::ModuleSession;
 
@@ -287,7 +289,7 @@ pub(crate) struct Commit {
 
 pub(crate) enum Call {
     Commit {
-        modules: BTreeMap<ModuleId, (Bytecode, Memory)>,
+        modules: BTreeMap<ModuleId, (Bytecode, Objectcode, Memory)>,
         base: Option<(Root, Commit)>,
         replier: mpsc::SyncSender<io::Result<(Root, Commit)>>,
     },
@@ -468,7 +470,7 @@ fn write_commit<P: AsRef<Path>>(
     root_dir: P,
     commits: &mut BTreeMap<Root, Commit>,
     base: Option<(Root, Commit)>,
-    commit_modules: BTreeMap<ModuleId, (Bytecode, Memory)>,
+    commit_modules: BTreeMap<ModuleId, (Bytecode, Objectcode, Memory)>,
 ) -> io::Result<(Root, Commit)> {
     let root_dir = root_dir.as_ref();
 
@@ -507,7 +509,7 @@ fn write_commit_inner<P: AsRef<Path>>(
     commit_dir: P,
     base: Option<(Root, Commit)>,
     modules: BTreeMap<ModuleId, Root>,
-    commit_modules: BTreeMap<ModuleId, (Bytecode, Memory)>,
+    commit_modules: BTreeMap<ModuleId, (Bytecode, Objectcode, Memory)>,
 ) -> io::Result<Commit> {
     let root_dir = root_dir.as_ref();
     let commit_dir = commit_dir.as_ref();
@@ -522,7 +524,7 @@ fn write_commit_inner<P: AsRef<Path>>(
 
     match base {
         None => {
-            for (module, (bytecode, memory)) in commit_modules {
+            for (module, (bytecode, _objectcode, memory)) in commit_modules {
                 let module_hex = hex::encode(module);
 
                 let bytecode_path = bytecode_dir.join(&module_hex);
@@ -565,7 +567,7 @@ fn write_commit_inner<P: AsRef<Path>>(
                 }
             }
 
-            for (module, (bytecode, memory)) in commit_modules {
+            for (module, (bytecode, _objectcode, memory)) in commit_modules {
                 let module_hex = hex::encode(module);
 
                 match base_commit.modules.contains_key(&module) {
@@ -670,14 +672,14 @@ fn compute_root<'a, I>(
     modules: I,
 ) -> (Root, BTreeMap<ModuleId, Root>)
 where
-    I: IntoIterator<Item = (&'a ModuleId, &'a (Bytecode, Memory))>,
+    I: IntoIterator<Item = (&'a ModuleId, &'a (Bytecode, Objectcode, Memory))>,
 {
     let iter = modules.into_iter();
 
     let mut leaves_map = BTreeMap::new();
 
     // Compute the hashes of changed memories
-    for (module, (_, memory)) in iter {
+    for (module, (_, _, memory)) in iter {
         let mut hasher = blake3::Hasher::new();
         hasher.update(&memory.read());
         leaves_map.insert(*module, Root::from(hasher.finalize()));

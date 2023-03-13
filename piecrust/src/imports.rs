@@ -91,10 +91,12 @@ fn q(
                     [..std::mem::size_of::<ModuleId>()],
             );
 
-            let callee = env
+            let callee_stack_element = env
                 .push_callstack(mod_id, callee_limit)
-                .expect("pushing to the callstack should succeed")
-                .instance;
+                .expect("pushing to the callstack should succeed");
+            let callee = env
+                .instance(&callee_stack_element.module_id)
+                .expect("callee instance should exist");
 
             let arg = &arg_buf[..arg_len as usize];
 
@@ -163,10 +165,12 @@ fn t(
                     [..std::mem::size_of::<ModuleId>()],
             );
 
-            let callee = env
+            let callee_stack_element = env
                 .push_callstack(mod_id, callee_limit)
-                .expect("pushing to the callstack should succeed")
-                .instance;
+                .expect("pushing to the callstack should succeed");
+            let callee = env
+                .instance(&callee_stack_element.module_id)
+                .expect("callee instance should exist");
 
             let arg = &arg_buf[..arg_len as usize];
 

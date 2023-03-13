@@ -42,6 +42,8 @@ impl WrappedModule {
             Ok(module) => module.serialize()?,
             _ => {
                 let module = Module::new(&store, bytecode.as_ref())?;
+                println!("dir={:?}", dir.as_ref());
+                println!("compiled to file={:?}", compiled_path);
                 module.serialize_to_file(<PathBuf as AsRef<Path>>::as_ref(
                     &compiled_path,
                 ))?;
