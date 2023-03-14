@@ -234,13 +234,16 @@ fn hd(mut fenv: FunctionEnvMut<Env>, name_ofs: i32, name_len: u32) -> u32 {
             .to_owned()
     });
 
-    let data = env.meta(&name).expect("the metadata should exist");
+    match env.meta(&name) {
+        Some(data) => {
+            instance.with_arg_buffer(|buf| {
+                buf[..data.len()].copy_from_slice(&data);
+            });
 
-    instance.with_arg_buffer(|buf| {
-        buf[..data.len()].copy_from_slice(&data);
-    });
-
-    data.len() as u32
+            data.len() as u32
+        }
+        _ => 0u32,
+    }
 }
 
 fn emit(mut fenv: FunctionEnvMut<Env>, arg_len: u32) {
