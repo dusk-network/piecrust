@@ -22,7 +22,7 @@ impl CallStack {
         Self::default()
     }
 
-    /// Push a new instance to the call stack.
+    /// Pushes a new instance to the call stack.
     ///
     /// # Panics
     /// If an instance of the same module ID is already in the stack, a panic
@@ -44,12 +44,12 @@ impl CallStack {
         self.stack.push(StackElement { module_id, limit });
     }
 
-    /// Return the length of the call stack.
+    /// Returns the length of the call stack.
     pub fn len(&self) -> usize {
         self.stack.len()
     }
 
-    /// Remove all elements from the stack.
+    /// Removes all elements from the stack.
     pub fn clear(&mut self) {
         while self.len() > 0 {
             self.pop_remove_instance();
