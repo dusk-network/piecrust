@@ -4,6 +4,98 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
+//! Piecrust VM for WASM smart-contract execution.
+//!
+//! A [`VM`] is instantiated by calling [`VM::new`] using a directory for
+//! storage of commits.
+//!
+//! Once instantiation has been successful, [`Session`]s can be started using
+//! [`VM::session`]. A session represents the execution of a sequence of
+//! [`query`], [`transact`], and [`deploy`] calls, and stores mutations to the
+//! underlying state as a result. This sequence of mutations may be committed -
+//! meaning written to the VM's directory - using [`commit`]. After a commit,
+//! the resulting state may be used by starting a new session with it as a base.
+//!
+//! Contract execution is metered in terms of `points`. To set a limit for the
+//! number of points for the next query or transact call use
+//! [`set_point_limit`]. If the limit is exceeded during the call an error will
+//! be returned. To learn the number of points spent after a successful call use
+//! [`spent`]. To learn more about the compiler middleware used to achieve this,
+//! please refer to the relevant [wasmer docs].
+//!
+//! # State Representation and Session/Commit Mechanism
+//!
+//! Smart Contracts are represented on disk by two separate files: their WASM
+//! bytecode and their linear memory at a given commit. The collection of all
+//! the memories of smart contracts at a given commit is referred to as the
+//! *state* of said commit.
+//!
+//! During a session, each contract called in the sequence of
+//! queries/transactions is loaded by:
+//!
+//! - Reading the contract's bytecode file
+//! - Memory mapping the linear memory file copy-on-write (CoW)
+//!
+//! Using copy-on-write mappings of linear memories ensures that each commit is
+//! never mutated in place by a session, with the important exception of
+//! [`deletions`] and [`squashes`].
+//!
+//! # Session Concurrency
+//!
+//! Multiple sessions may be started concurrently on the same `VM`, and then
+//! passed on to different threads. These sessions are then non-overlapping
+//! sequences of mutations of a state and may all be committed/dropped
+//! simultaneously.
+//!
+//! ```
+//! use piecrust::{Session, VM};
+//!
+//! fn assert_send<T: Send>() {}
+//!
+//! // Both VM and Session are `Send`
+//! assert_send::<VM>();
+//! assert_send::<Session>();
+//! ```
+//!
+//! This is achieved by synchronizing commit deletions, squashes, and session
+//! spawns/commits using a synchronization loop started on VM instantiation.
+//!
+//! # Call Atomicity
+//!
+//! Each call to query or transact is all-or-nothing, in the sense that state
+//! mutations are only performed on a successful call. This is achieved by
+//! re-executing the call stack each time an error encountered.
+//!
+//! # Usage
+//! ```
+//! use piecrust::{module_bytecode, VM};
+//! let mut vm = VM::ephemeral().unwrap();
+//!
+//! let mut session = vm.genesis_session();
+//! let counter_id = session.deploy(module_bytecode!("counter")).unwrap();
+//!
+//! assert_eq!(session.query::<(), i64>(counter_id, "read_value", &()).unwrap(), 0xfc);
+//! session.transact::<(), ()>(counter_id, "increment", &()).unwrap();
+//! assert_eq!(session.query::<(), i64>(counter_id, "read_value", &()).unwrap(), 0xfd);
+//!
+//! let commit_root = session.commit().unwrap();
+//! assert_eq!(commit_root, vm.commits()[0]);
+//! ```
+//!
+//! [`VM`]: VM
+//! [`VM::new`]: VM::new
+//! [`Session`]: Session
+//! [`VM::session`]: VM::session
+//! [`query`]: Session::query
+//! [`transact`]: Session::transact
+//! [`deploy`]: Session::deploy
+//! [`commit`]: Session::commit
+//! [`set_point_limit`]: Session::set_point_limit
+//! [`spent`]: Session::spent
+//! [wasmer docs]: wasmer_middlewares::metering
+//! [`deletions`]: VM::delete_commit
+//! [`squashes`]: VM::squash_commit
+
 #[macro_use]
 mod bytecode_macro;
 mod error;

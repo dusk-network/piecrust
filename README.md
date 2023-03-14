@@ -9,15 +9,15 @@ WASM virtual machine handling Dusk's smart contracts.
 ## Usage
 
 ```rust
-use piecrust::{Error, VM};
+use piecrust::VM;
+let mut vm = VM::ephemeral().unwrap();
 
-let bytecode = // load module bytecode ;
+let bytecode = /*load bytecode*/;
 
-let mut vm = VM::ephemeral()?;
-let module_id = vm.deploy(bytecode)?;
+let mut session = vm.genesis_session();
+let contract_id = session.deploy(bytecode).unwrap();
 
-let mut session = vm.session();
-let result = session.transact::<i16, i32>(module_id, "function_name", &0x11)?;
+let result = session.transact::<i16, i32>(contract_id, "function_name", &0x11)?;
 
 // use result
 ```

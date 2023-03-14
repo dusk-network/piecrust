@@ -41,6 +41,21 @@ const MAX_META_SIZE: usize = 65_536;
 unsafe impl Send for Session {}
 unsafe impl Sync for Session {}
 
+/// A running mutation to a state.
+///
+/// `Session`s are spawned using a [`VM`] instance, and can be [`queried`] or
+/// [`transacted`] with to modify their state. A sequence of these calls may
+/// then be [`commit`]ed to, or discarded by simply allowing the session to
+/// drop.
+///
+/// New modules are to be `deploy`ed in the context of a session. Metadata
+/// queryable by modules can be set using [`set_meta`].
+///
+/// [`VM`]: crate::VM
+/// [`queried`]: Session::query
+/// [`transacted`]: Session::transact
+/// [`commit`]: Session::commit
+/// [`set_meta`]: Session::set_meta
 pub struct Session {
     call_stack: CallStack,
     debug: Vec<String>,
@@ -87,11 +102,12 @@ impl Session {
         }
     }
 
-    /// Deploy a module, returning its `ModuleId`. The ID is computed using a
-    /// `blake3` hash of the bytecode.
+    /// Deploy a module, returning its [`ModuleId`]. The ID is computed using a
+    /// `blake3` hash of the `bytecode`.
     ///
     /// If one needs to specify the ID, [`deploy_with_id`] is available.
     ///
+    /// [`ModuleId`]: ModuleId
     /// [`deploy_with_id`]: `Session::deploy_with_id`
     pub fn deploy(&mut self, bytecode: &[u8]) -> Result<ModuleId, Error> {
         let module_id = self
@@ -107,7 +123,7 @@ impl Session {
         Ok(module_id)
     }
 
-    /// Deploy a module with the given ID.
+    /// Deploy a module with the given `id`.
     ///
     /// If one would like to *not* specify the `ModuleId`, [`deploy`] is
     /// available.
@@ -115,21 +131,37 @@ impl Session {
     /// [`deploy`]: `Session::deploy`
     pub fn deploy_with_id(
         &mut self,
-        module_id: ModuleId,
+        id: ModuleId,
         bytecode: &[u8],
     ) -> Result<(), Error> {
         self.module_session
-            .deploy_with_id(module_id, bytecode)
+            .deploy_with_id(id, bytecode)
             .map_err(|err| PersistenceError(Arc::new(err)))?;
 
         self.call_history.push(From::from(Deploy {
-            module_id,
+            module_id: id,
             bytecode: bytecode.to_vec(),
         }));
 
         Ok(())
     }
 
+    /// Execute a query on the current state of this session.
+    ///
+    /// Calls are atomic, meaning that on failure their execution doesn't modify
+    /// the state. They are also metered, and will execute with the point limit
+    /// defined in [`set_point_limit`].
+    ///
+    /// To know how many points a call spent after execution use the [`spent`]
+    /// function.
+    ///
+    /// # Errors
+    /// The call may error during execution for a wide array of reasons, the
+    /// most common ones being running against the point limit and a module
+    /// panic.
+    ///
+    /// [`set_point_limit`]: Session::set_point_limit
+    /// [`spent`]: Session::spent
     pub fn query<Arg, Ret>(
         &mut self,
         module: ModuleId,
@@ -164,6 +196,22 @@ impl Session {
         Ok(ret)
     }
 
+    /// Execute a transaction on the current state of this session.
+    ///
+    /// Calls are atomic, meaning that on failure their execution doesn't modify
+    /// the state. They are also metered, and will execute with the point limit
+    /// defined in [`set_point_limit`].
+    ///
+    /// To know how many points a call spent after execution use the [`spent`]
+    /// function.
+    ///
+    /// # Errors
+    /// The call may error during execution for a wide array of reasons, the
+    /// most common ones being running against the point limit and a module
+    /// panic.
+    ///
+    /// [`set_point_limit`]: Session::set_point_limit
+    /// [`spent`]: Session::spent
     pub fn transact<Arg, Ret>(
         &mut self,
         module: ModuleId,
@@ -198,6 +246,12 @@ impl Session {
         Ok(ret)
     }
 
+    /// Return the state root of the current state of the session.
+    ///
+    /// The state root is the root of a merkle tree whose leaves are the hashes
+    /// of the state of of each module, ordered by their module ID.
+    ///
+    /// It also doubles as the ID of a commit - the commit root.
     pub fn root(&self) -> [u8; 32] {
         self.module_session.root()
     }
@@ -231,11 +285,22 @@ impl Session {
         self.host_queries.call(name, buf, arg_len)
     }
 
-    /// Sets the point limit for the next call to `query` or `transact`.
+    /// Sets the point limit for the next call to [`query`] or [`transact`].
+    ///
+    /// [`query`]: Session::query
+    /// [`transact`]: Session::transact
     pub fn set_point_limit(&mut self, limit: u64) {
         self.limit = limit
     }
 
+    /// Returns the number of points spent by the last call to [`query`] or
+    /// [`transact`].
+    ///
+    /// If neither have been called for the duration of the session, it will
+    /// return 0.
+    ///
+    /// [`query`]: Session::query
+    /// [`transact`]: Session::transact
     pub fn spent(&self) -> u64 {
         self.spent
     }
@@ -274,6 +339,8 @@ impl Session {
         self.call_stack.pop();
     }
 
+    /// Commits the given session to disk, consuming the session and returning
+    /// its state root.
     pub fn commit(self) -> Result<[u8; 32], Error> {
         self.module_session
             .commit()
@@ -295,10 +362,15 @@ impl Session {
         c(&self.debug)
     }
 
+    /// Returns the value of a metadata item previously set using [`set_meta`].
+    ///
+    /// [`set_meta`]: Session::set_meta
     pub fn meta(&self, name: &str) -> Option<Vec<u8>> {
         self.data.get(name)
     }
 
+    /// Sets a metadata item with the given `name` and `value`. These pieces of
+    /// data are then made available to modules for querying.
     pub fn set_meta<S, V>(&mut self, name: S, value: V)
     where
         S: Into<Cow<'static, str>>,
