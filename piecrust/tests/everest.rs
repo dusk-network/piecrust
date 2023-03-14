@@ -16,9 +16,18 @@ pub fn height() -> Result<(), Error> {
 
     for h in 0u64..1024 {
         session.set_meta("height", h);
-        let height: u64 = session.transact(id, "get_height", &())?;
-        assert_eq!(height, h);
+        let height: Option<u64> = session.transact(id, "get_height", &())?;
+        assert_eq!(height.unwrap(), h);
     }
 
+    Ok(())
+}
+#[test]
+pub fn meta_data_optionality() -> Result<(), Error> {
+    let vm = VM::ephemeral()?;
+    let mut session = vm.genesis_session();
+    let id = session.deploy(module_bytecode!("everest"))?;
+    let height: Option<u64> = session.transact(id, "get_height", &())?;
+    assert!(height.is_none());
     Ok(())
 }
