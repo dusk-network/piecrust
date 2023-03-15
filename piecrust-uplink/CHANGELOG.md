@@ -7,4 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-[Unreleased]: https://github.com/dusk-network/piecrust/compare/a7b280802007cabdb426c4b130286e3b55fe49f6...HEAD
+## [0.1.0] - 2023-03-15
+
+- First `piecrust-uplink` release
+
+[Unreleased]: https://github.com/dusk-network/piecrust/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/dusk-network/piecrust/releases/tag/v0.1.0
