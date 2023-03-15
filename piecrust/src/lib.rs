@@ -62,19 +62,19 @@
 //!
 //! # Call Atomicity
 //!
-//! Contract calls are executed atomically, that is, they are either executed 
+//! Contract calls are executed atomically, that is, they are either executed
 //! completely or they are not executed at all.
 //!
 //! In other words, if the call succeeds, all the state mutations they produce
-//! are kept, while if they produce an error (e.g. they panic), all such 
+//! are kept, while if they produce an error (e.g. they panic), all such
 //! mutations are reverted.
 //!
 //! If the call was made within another call (i.e., the caller was a contract),
-//! we ensure all mutations are reverted by undoing the whole call stack of the 
-//! current transact/query execution, and re-executing it with the exception of 
-//! the error-producing call, which returns an error without being actually 
+//! we ensure all mutations are reverted by undoing the whole call stack of the
+//! current transact/query execution, and re-executing it with the exception of
+//! the error-producing call, which returns an error without being actually
 //! executed.
-//! 
+//!
 //! # Usage
 //! ```
 //! use piecrust::{module_bytecode, VM};
