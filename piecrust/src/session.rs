@@ -56,6 +56,7 @@ unsafe impl Sync for Session {}
 /// [`transacted`]: Session::transact
 /// [`commit`]: Session::commit
 /// [`set_meta`]: Session::set_meta
+#[derive(Debug)]
 pub struct Session {
     call_stack: CallStack,
     debug: Vec<String>,

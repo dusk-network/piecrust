@@ -26,6 +26,7 @@ use crate::store::{
 /// call to [`commit`].
 ///
 /// [`commit`]: ModuleSession::commit
+#[derive(Debug)]
 pub struct ModuleSession {
     modules: BTreeMap<ModuleId, (Bytecode, Memory)>,
 

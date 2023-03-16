@@ -38,6 +38,7 @@ const INDEX_FILE: &str = "index";
 type Root = [u8; ROOT_LEN];
 
 /// A store for all module commits.
+#[derive(Debug)]
 pub struct ModuleStore {
     sync_loop: thread::JoinHandle<()>,
     call: mpsc::Sender<Call>,
@@ -274,7 +275,7 @@ fn index_from_path<P: AsRef<Path>>(
     Ok(modules)
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub(crate) struct Commit {
     modules: BTreeMap<ModuleId, Root>,
     diffs: BTreeSet<ModuleId>,
