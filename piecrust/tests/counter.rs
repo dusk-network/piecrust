@@ -38,12 +38,14 @@ fn counter_read_write_simple() -> Result<(), Error> {
     let commit_id = session.commit()?;
     println!("after first commit");
     let mut session = vm.session(commit_id)?;
+    let id = session.deploy(module_bytecode!("counter"))?;
     session.transact::<(), ()>(id, "increment", &())?;
 
-    let commit_id = session.commit()?;
-    println!("after second commit");
-    let mut session = vm.session(commit_id)?;
-    session.transact::<(), ()>(id, "increment", &())?;
+    // let commit_id = session.commit()?;
+    // println!("after second commit");
+    // let mut session = vm.session(commit_id)?;
+    // let id = session.deploy(module_bytecode!("counter"))?;
+    // session.transact::<(), ()>(id, "increment", &())?;
 
     Ok(())
 }

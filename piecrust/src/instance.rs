@@ -131,7 +131,7 @@ impl WrappedInstance {
     pub fn new(
         session: &mut Session,
         module_id: ModuleId,
-        module: WrappedModule,
+        module: &WrappedModule,
         memory: Memory,
     ) -> Result<Self, Error> {
         let tunables = InstanceTunables::new(memory.clone());

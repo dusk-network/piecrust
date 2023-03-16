@@ -27,7 +27,7 @@ use wasmer_types::WASM_PAGE_SIZE;
 use crate::event::Event;
 use crate::instance::WrappedInstance;
 use crate::module::WrappedModule;
-use crate::store::ModuleSession;
+use crate::store::{ModuleSession, Objectcode};
 use crate::types::StandardBufSerializer;
 use crate::vm::HostQueries;
 use crate::Error;
@@ -112,22 +112,12 @@ impl Session {
     /// [`ModuleId`]: ModuleId
     /// [`deploy_with_id`]: `Session::deploy_with_id`
     pub fn deploy(&mut self, bytecode: &[u8]) -> Result<ModuleId, Error> {
+        println!("deploying module");
         let bytes = bytecode.as_ref();
         let hash = blake3::hash(bytes);
         let module_id = ModuleId::from_bytes(hash.into());
 
-        let _ = self
-            .module_session
-            .deploy_with_id(module_id, bytecode, bytecode)
-            .map_err(|err| PersistenceError(Arc::new(err)))?;
-
-        self.create_instance(module_id)?;
-
-        self.call_history.push(From::from(Deploy {
-            module_id,
-            bytecode: bytecode.to_vec(),
-        }));
-
+        self.deploy_with_id(module_id, bytecode)?;
         Ok(module_id)
     }
 
@@ -142,6 +132,14 @@ impl Session {
         id: ModuleId,
         bytecode: &[u8],
     ) -> Result<(), Error> {
+        println!("deploying module with id {:?}", module_id);
+        if !self.module_session.module_deployed(module_id) {
+            let wrapped_module = WrappedModule::new(&bytecode, None::<Objectcode>)?;
+            self
+                .module_session
+                .deploy_with_id(module_id, bytecode, wrapped_module.as_bytes())
+                .map_err(|err| PersistenceError(Arc::new(err)))?;
+        }
         self.module_session
             .deploy_with_id(id, bytecode)
             .deploy_with_id(module_id, bytecode, bytecode)
@@ -342,15 +340,14 @@ impl Session {
         &mut self,
         module_id: ModuleId,
     ) -> Result<WrappedInstance, Error> {
-        let (bytecode, _objectcode, memory) = self
+        let (bytecode, objectcode, memory) = self
             .module_session
             .module(module_id)
             .map_err(|err| PersistenceError(Arc::new(err)))?
             .expect("Module should exist");
 
-        let module =
-            WrappedModule::new(&bytecode, self.module_session.root_dir())?;
-        let instance = WrappedInstance::new(self, module_id, module, memory)?;
+        let module = WrappedModule::new(&bytecode, Some(&objectcode))?;
+        let instance = WrappedInstance::new(self, module_id, &module, memory)?;
 
         Ok(instance)
     }

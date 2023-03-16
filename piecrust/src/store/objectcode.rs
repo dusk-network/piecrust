@@ -18,7 +18,7 @@ pub struct Objectcode {
 
 impl Objectcode {
     pub(crate) fn new<B: AsRef<[u8]>>(bytes: B) -> io::Result<Self> {
-        println!("Object code new");
+        // println!("Object code new");
         let mmap = Mmap::new(bytes)?;
 
         Ok(Self {
@@ -27,7 +27,7 @@ impl Objectcode {
     }
 
     pub(crate) fn from_file<P: AsRef<Path>>(path: P) -> io::Result<Self> {
-        println!("Object code from_file={:?}", path.as_ref());
+        // println!("Object code from_file={:?}", path.as_ref());
         let mmap = Mmap::map(path)?;
         Ok(Self {
             mmap: Arc::new(mmap),
