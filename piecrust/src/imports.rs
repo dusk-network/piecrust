@@ -42,8 +42,6 @@ fn caller(env: FunctionEnvMut<Env>) {
         .nth_from_top(1)
         .map_or(ModuleId::uninitialized(), |elem| elem.module_id);
 
-    println!("Caller Module ID: {:?}", mod_id);
-
     env.self_instance().with_arg_buffer(|arg| {
         arg[..std::mem::size_of::<ModuleId>()]
             .copy_from_slice(mod_id.as_bytes())

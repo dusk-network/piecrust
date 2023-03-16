@@ -501,8 +501,6 @@ impl Session {
     /// Purge all produced data and re-execute all transactions and deployments
     /// in order, returning the result of the last executed call.
     fn re_execute(&mut self) -> Result<Vec<u8>, Error> {
-        println!("RE-EXECUTION");
-
         // Take all transaction history since we're going to re-add it back
         // anyway.
         let mut call_history = Vec::with_capacity(self.call_history.len());
