@@ -127,21 +127,21 @@ impl Session {
     /// [`deploy`]: `Session::deploy`
     pub fn deploy_with_id(
         &mut self,
-        module_id: ModuleId,
+        id: ModuleId,
         bytecode: &[u8],
     ) -> Result<(), Error> {
-        if !self.module_session.module_deployed(module_id) {
+        if !self.module_session.module_deployed(id) {
             let wrapped_module =
                 WrappedModule::new(bytecode, None::<Objectcode>)?;
             self.module_session
-                .deploy_with_id(module_id, bytecode, wrapped_module.as_bytes())
+                .deploy_with_id(id, bytecode, wrapped_module.as_bytes())
                 .map_err(|err| PersistenceError(Arc::new(err)))?;
         }
 
-        self.create_instance(module_id)?;
+        self.create_instance(id)?;
 
         self.call_history.push(From::from(Deploy {
-            module_id,
+            module_id: id,
             bytecode: bytecode.to_vec(),
         }));
 
