@@ -254,7 +254,6 @@ impl Session {
     /// of the state of of each module, ordered by their module ID.
     ///
     /// It also doubles as the ID of a commit - the commit root.
-    /* ========================== */
 
     pub fn instance<'a>(
         &self,
