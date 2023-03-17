@@ -27,13 +27,13 @@ use wasmer_types::WASM_PAGE_SIZE;
 use crate::event::Event;
 use crate::instance::WrappedInstance;
 use crate::module::WrappedModule;
-use crate::store::ModuleSession;
+use crate::store::{ModuleSession, Objectcode};
 use crate::types::StandardBufSerializer;
 use crate::vm::HostQueries;
 use crate::Error;
 use crate::Error::PersistenceError;
 
-use call_stack::{CallStack, StackElementView};
+use call_stack::{CallStack, StackElement};
 
 const DEFAULT_LIMIT: u64 = 65_536;
 const MAX_META_SIZE: usize = 65_536;
@@ -58,6 +58,7 @@ unsafe impl Sync for Session {}
 /// [`set_meta`]: Session::set_meta
 pub struct Session {
     call_stack: CallStack,
+    instance_map: BTreeMap<ModuleId, (*mut WrappedInstance, u64)>,
     debug: Vec<String>,
     events: Vec<Event>,
     data: Metadata,
@@ -86,6 +87,7 @@ impl Session {
     ) -> Self {
         Session {
             call_stack: CallStack::new(),
+            instance_map: BTreeMap::new(),
             debug: vec![],
             events: vec![],
             data: Metadata::new(),
@@ -110,16 +112,10 @@ impl Session {
     /// [`ModuleId`]: ModuleId
     /// [`deploy_with_id`]: `Session::deploy_with_id`
     pub fn deploy(&mut self, bytecode: &[u8]) -> Result<ModuleId, Error> {
-        let module_id = self
-            .module_session
-            .deploy(bytecode)
-            .map_err(|err| PersistenceError(Arc::new(err)))?;
+        let hash = blake3::hash(bytecode);
+        let module_id = ModuleId::from_bytes(hash.into());
 
-        self.call_history.push(From::from(Deploy {
-            module_id,
-            bytecode: bytecode.to_vec(),
-        }));
-
+        self.deploy_with_id(module_id, bytecode)?;
         Ok(module_id)
     }
 
@@ -134,9 +130,15 @@ impl Session {
         id: ModuleId,
         bytecode: &[u8],
     ) -> Result<(), Error> {
-        self.module_session
-            .deploy_with_id(id, bytecode)
-            .map_err(|err| PersistenceError(Arc::new(err)))?;
+        if !self.module_session.module_deployed(id) {
+            let wrapped_module =
+                WrappedModule::new(bytecode, None::<Objectcode>)?;
+            self.module_session
+                .deploy_with_id(id, bytecode, wrapped_module.as_bytes())
+                .map_err(|err| PersistenceError(Arc::new(err)))?;
+        }
+
+        self.create_instance(id)?;
 
         self.call_history.push(From::from(Deploy {
             module_id: id,
@@ -252,6 +254,64 @@ impl Session {
     /// of the state of of each module, ordered by their module ID.
     ///
     /// It also doubles as the ID of a commit - the commit root.
+
+    pub fn instance<'a>(
+        &self,
+        module_id: &ModuleId,
+    ) -> Option<&'a mut WrappedInstance> {
+        self.instance_map.get(module_id).map(|(instance, _)| {
+            // SAFETY: We guarantee that the instance exists since we're in
+            // control over if it is dropped in `pop`
+            unsafe { &mut **instance }
+        })
+    }
+
+    fn update_instance_count(&mut self, module_id: ModuleId, inc: bool) {
+        match self.instance_map.entry(module_id) {
+            Entry::Occupied(mut entry) => {
+                let (_, count) = entry.get_mut();
+                if inc {
+                    *count += 1
+                } else {
+                    *count -= 1
+                };
+            }
+            _ => unreachable!("map must have an instance here"),
+        };
+    }
+
+    fn clear_stack_and_instances(&mut self) {
+        while self.call_stack.len() > 0 {
+            let popped = self.call_stack.pop().unwrap();
+            self.remove_instance(&popped.module_id);
+        }
+        let ids: Vec<ModuleId> = self.instance_map.keys().cloned().collect();
+        for module_id in ids.iter() {
+            self.remove_instance(module_id);
+        }
+    }
+
+    pub fn remove_instance(&mut self, module_id: &ModuleId) {
+        let mut entry = match self.instance_map.entry(*module_id) {
+            Entry::Occupied(e) => e,
+            _ => unreachable!("map must have an instance here"),
+        };
+
+        let (instance, count) = entry.get_mut();
+        *count -= 1;
+
+        if *count == 0 {
+            // SAFETY: This is the last instance of the module in the
+            // stack, therefore we should recoup the memory and drop
+            //
+            // Any pointers to it will be left dangling
+            unsafe {
+                let _ = Box::from_raw(*instance);
+                entry.remove();
+            };
+        }
+    }
+
     pub fn root(&self) -> [u8; 32] {
         self.module_session.root()
     }
@@ -264,14 +324,14 @@ impl Session {
         &mut self,
         module_id: ModuleId,
     ) -> Result<WrappedInstance, Error> {
-        let (bytecode, memory) = self
+        let (bytecode, objectcode, memory) = self
             .module_session
             .module(module_id)
             .map_err(|err| PersistenceError(Arc::new(err)))?
             .expect("Module should exist");
 
-        let module = WrappedModule::new(&bytecode)?;
-        let instance = WrappedInstance::new(self, module_id, module, memory)?;
+        let module = WrappedModule::new(&bytecode, Some(&objectcode))?;
+        let instance = WrappedInstance::new(self, module_id, &module, memory)?;
 
         Ok(instance)
     }
@@ -305,27 +365,38 @@ impl Session {
         self.spent
     }
 
-    pub(crate) fn nth_from_top<'a>(
-        &self,
-        n: usize,
-    ) -> Option<StackElementView<'a>> {
+    pub(crate) fn nth_from_top(&self, n: usize) -> Option<StackElement> {
         self.call_stack.nth_from_top(n)
     }
 
-    pub(crate) fn push_callstack<'b>(
+    fn create_instance(&mut self, module_id: ModuleId) -> Result<(), Error> {
+        let instance = self.new_instance(module_id)?;
+        if self.instance_map.get(&module_id).is_some() {
+            panic!("Module already in the stack: {module_id:?}");
+        }
+
+        let instance = Box::new(instance);
+        let instance = Box::leak(instance) as *mut WrappedInstance;
+
+        self.instance_map.insert(module_id, (instance, 1));
+        Ok(())
+    }
+
+    pub(crate) fn push_callstack(
         &mut self,
         module_id: ModuleId,
         limit: u64,
-    ) -> Result<StackElementView<'b>, Error> {
-        let instance = self.call_stack.instance(&module_id);
+    ) -> Result<StackElement, Error> {
+        let instance = self.instance(&module_id);
 
         match instance {
             Some(_) => {
+                self.update_instance_count(module_id, true);
                 self.call_stack.push(module_id, limit);
             }
             None => {
-                let instance = self.new_instance(module_id)?;
-                self.call_stack.push_instance(module_id, limit, instance);
+                self.create_instance(module_id)?;
+                self.call_stack.push(module_id, limit);
             }
         }
 
@@ -336,7 +407,9 @@ impl Session {
     }
 
     pub(crate) fn pop_callstack(&mut self) {
-        self.call_stack.pop();
+        if let Some(element) = self.call_stack.pop() {
+            self.update_instance_count(element.module_id, false);
+        }
     }
 
     /// Commits the given session to disk, consuming the session and returning
@@ -507,7 +580,7 @@ impl Session {
         mem::swap(&mut call_history, &mut self.call_history);
 
         // Purge all other data that is set by performing transactions.
-        self.call_stack.clear();
+        self.clear_stack_and_instances();
         self.debug.clear();
         self.events.clear();
         self.module_session.clear_modules();
@@ -561,7 +634,10 @@ impl Session {
     }
 
     fn call_inner(&mut self, call: &Call) -> Result<Vec<u8>, Error> {
-        let instance = self.push_callstack(call.module, call.limit)?.instance;
+        let stack_element = self.push_callstack(call.module, call.limit)?;
+        let instance = self
+            .instance(&stack_element.module_id)
+            .expect("instance should exist");
 
         let arg_len = instance.write_bytes_to_arg_buffer(&call.fdata);
         let ret_len = match call.ty {

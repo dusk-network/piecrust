@@ -41,6 +41,8 @@ pub enum Error {
     #[error(transparent)]
     CompositeSerializerError(Arc<Compo>),
     #[error(transparent)]
+    ModuleCacheError(Arc<std::io::Error>),
+    #[error(transparent)]
     PersistenceError(Arc<std::io::Error>),
     #[error("Commit error: {0}")]
     CommitError(Cow<'static, str>),

@@ -5,6 +5,7 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 use std::sync::Arc;
+use wasmer::Module;
 
 use crate::error::Error;
 use crate::instance::Store;
@@ -15,14 +16,21 @@ pub struct WrappedModule {
 }
 
 impl WrappedModule {
-    pub fn new<B: AsRef<[u8]>>(bytecode: B) -> Result<Self, Error> {
+    pub fn new<B: AsRef<[u8]>, C: AsRef<[u8]>>(
+        bytecode: B,
+        objectcode: Option<C>,
+    ) -> Result<Self, Error> {
         let store = Store::new_store();
-
-        let module = wasmer::Module::new(&store, bytecode)?;
-        let serialized = module.serialize()?;
+        let serialized = match objectcode {
+            Some(obj) => obj.as_ref().to_vec(),
+            _ => {
+                let module = Module::new(&store, bytecode.as_ref())?;
+                module.serialize()?.to_vec()
+            }
+        };
 
         Ok(WrappedModule {
-            serialized: Arc::new(serialized.to_vec()),
+            serialized: Arc::new(serialized),
         })
     }
 

@@ -13,8 +13,8 @@ use std::{io, mem};
 use piecrust_uplink::ModuleId;
 
 use crate::store::{
-    compute_root, Bytecode, Call, Commit, Memory, Root, BYTECODE_DIR,
-    DIFF_EXTENSION, MEMORY_DIR,
+    compute_root, Bytecode, Call, Commit, Memory, Objectcode, Root,
+    BYTECODE_DIR, DIFF_EXTENSION, MEMORY_DIR, OBJECTCODE_EXTENSION,
 };
 
 /// The representation of a session with a [`ModuleStore`].
@@ -27,7 +27,7 @@ use crate::store::{
 ///
 /// [`commit`]: ModuleSession::commit
 pub struct ModuleSession {
-    modules: BTreeMap<ModuleId, (Bytecode, Memory)>,
+    modules: BTreeMap<ModuleId, (Bytecode, Objectcode, Memory)>,
 
     base: Option<(Root, Commit)>,
     root_dir: PathBuf,
@@ -118,7 +118,7 @@ impl ModuleSession {
     pub fn module(
         &mut self,
         module: ModuleId,
-    ) -> io::Result<Option<(Bytecode, Memory)>> {
+    ) -> io::Result<Option<(Bytecode, Objectcode, Memory)>> {
         match self.modules.entry(module) {
             Vacant(entry) => match &self.base {
                 None => Ok(None),
@@ -132,12 +132,16 @@ impl ModuleSession {
 
                             let bytecode_path =
                                 base_dir.join(BYTECODE_DIR).join(&module_hex);
+                            let objectcode_path = bytecode_path
+                                .with_extension(OBJECTCODE_EXTENSION);
                             let memory_path =
                                 base_dir.join(MEMORY_DIR).join(module_hex);
                             let memory_diff_path =
                                 memory_path.with_extension(DIFF_EXTENSION);
 
                             let bytecode = Bytecode::from_file(bytecode_path)?;
+                            let objectcode =
+                                Objectcode::from_file(objectcode_path)?;
                             let memory =
                                 match base_commit.diffs.contains(&module) {
                                     true => Memory::from_file_and_diff(
@@ -147,8 +151,9 @@ impl ModuleSession {
                                     false => Memory::from_file(memory_path)?,
                                 };
 
-                            let module =
-                                entry.insert((bytecode, memory)).clone();
+                            let module = entry
+                                .insert((bytecode, objectcode, memory))
+                                .clone();
 
                             Ok(Some(module))
                         }
@@ -165,24 +170,15 @@ impl ModuleSession {
         self.modules.clear();
     }
 
-    /// Deploys bytecode to the module store.
-    ///
-    /// The module ID returned is computed using the `blake3` hash of the given
-    /// bytecode. See [`deploy_with_id`] for deploying bytecode with a given
-    /// module ID.
-    ///
-    /// [`deploy_with_id`]: ModuleSession::deploy_with_id
-    pub fn deploy<B: AsRef<[u8]>>(
-        &mut self,
-        bytecode: B,
-    ) -> io::Result<ModuleId> {
-        let bytes = bytecode.as_ref();
-        let hash = blake3::hash(bytes);
-
-        let module_id = ModuleId::from_bytes(hash.into());
-        self.deploy_with_id(module_id, bytes)?;
-
-        Ok(module_id)
+    /// Checks if module is deployed
+    pub fn module_deployed(&mut self, module_id: ModuleId) -> bool {
+        if self.modules.contains_key(&module_id) {
+            true
+        } else if let Some((_, base_commit)) = &self.base {
+            base_commit.modules.contains_key(&module_id)
+        } else {
+            false
+        }
     }
 
     /// Deploys bytecode to the module store with the given its `module_id`.
@@ -194,30 +190,14 @@ impl ModuleSession {
         &mut self,
         module_id: ModuleId,
         bytecode: B,
+        objectcode: B,
     ) -> io::Result<()> {
-        if self.modules.contains_key(&module_id) {
-            let module_hex = hex::encode(module_id);
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                format!("Failed deploying {module_hex}: already deployed"),
-            ));
-        }
-
-        if let Some((base, base_commit)) = &self.base {
-            if base_commit.modules.contains_key(&module_id) {
-                let module_hex = hex::encode(module_id);
-                let base_hex = hex::encode(base);
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidInput,
-                    format!("Failed deploying {module_hex}: already deployed in base commit {base_hex}"),
-                ));
-            }
-        }
-
         let memory = Memory::new()?;
         let bytecode = Bytecode::new(bytecode)?;
+        let objectcode = Objectcode::new(objectcode)?;
 
-        self.modules.insert(module_id, (bytecode, memory));
+        self.modules
+            .insert(module_id, (bytecode, objectcode, memory));
 
         Ok(())
     }
