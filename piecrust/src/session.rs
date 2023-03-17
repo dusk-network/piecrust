@@ -372,7 +372,7 @@ impl Session {
     fn create_instance(&mut self, module_id: ModuleId) -> Result<(), Error> {
         let instance = self.new_instance(module_id)?;
         if self.instance_map.get(&module_id).is_some() {
-            panic!("Module already in the stack: {module_id:?}",);
+            panic!("Module already in the stack: {module_id:?}");
         }
 
         let instance = Box::new(instance);

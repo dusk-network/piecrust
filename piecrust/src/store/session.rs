@@ -14,7 +14,7 @@ use piecrust_uplink::ModuleId;
 
 use crate::store::{
     compute_root, Bytecode, Call, Commit, Memory, Objectcode, Root,
-    BYTECODE_DIR, DIFF_EXTENSION, MEMORY_DIR, OBJECTCODE_POSTFIX,
+    BYTECODE_DIR, DIFF_EXTENSION, MEMORY_DIR, OBJECTCODE_EXTENSION,
 };
 
 /// The representation of a session with a [`ModuleStore`].
@@ -129,14 +129,11 @@ impl ModuleSession {
                             let base_dir = self.root_dir.join(base_hex);
 
                             let module_hex = hex::encode(module);
-                            let mut objectcode_name = module_hex.clone();
-                            objectcode_name.push_str(OBJECTCODE_POSTFIX);
 
                             let bytecode_path =
                                 base_dir.join(BYTECODE_DIR).join(&module_hex);
-                            let objectcode_path = base_dir
-                                .join(BYTECODE_DIR)
-                                .join(&objectcode_name);
+                            let objectcode_path = bytecode_path
+                                .with_extension(OBJECTCODE_EXTENSION);
                             let memory_path =
                                 base_dir.join(MEMORY_DIR).join(module_hex);
                             let memory_diff_path =
@@ -177,7 +174,7 @@ impl ModuleSession {
     pub fn module_deployed(&mut self, module_id: ModuleId) -> bool {
         if self.modules.contains_key(&module_id) {
             true
-        } else if let Some((_base, base_commit)) = &self.base {
+        } else if let Some((_, base_commit)) = &self.base {
             base_commit.modules.contains_key(&module_id)
         } else {
             false

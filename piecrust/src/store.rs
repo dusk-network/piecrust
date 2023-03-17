@@ -36,7 +36,7 @@ const BYTECODE_DIR: &str = "bytecode";
 const MEMORY_DIR: &str = "memory";
 const DIFF_EXTENSION: &str = "diff";
 const INDEX_FILE: &str = "index";
-const OBJECTCODE_POSTFIX: &str = ".a";
+const OBJECTCODE_EXTENSION: &str = ".a";
 
 type Root = [u8; ROOT_LEN];
 
@@ -522,11 +522,10 @@ fn write_commit_inner<P: AsRef<Path>>(
         None => {
             for (module, (bytecode, objectcode, memory)) in commit_modules {
                 let module_hex = hex::encode(module);
-                let mut objectcode_name = module_hex.clone();
-                objectcode_name.push_str(OBJECTCODE_POSTFIX);
 
                 let bytecode_path = bytecode_dir.join(&module_hex);
-                let objectcode_path = bytecode_dir.join(&objectcode_name);
+                let objectcode_path =
+                    bytecode_path.with_extension(OBJECTCODE_EXTENSION);
                 let memory_path = memory_dir.join(&module_hex);
 
                 fs::write(bytecode_path, &bytecode)?;
@@ -543,16 +542,15 @@ fn write_commit_inner<P: AsRef<Path>>(
 
             for module in base_commit.modules.keys() {
                 let module_hex = hex::encode(module);
-                let mut objectcode_name = module_hex.clone();
-                objectcode_name.push_str(OBJECTCODE_POSTFIX);
 
                 let bytecode_path = bytecode_dir.join(&module_hex);
-                let objectcode_path = bytecode_dir.join(&objectcode_name);
+                let objectcode_path =
+                    bytecode_path.with_extension(OBJECTCODE_EXTENSION);
                 let memory_path = memory_dir.join(&module_hex);
 
                 let base_bytecode_path = base_bytecode_dir.join(&module_hex);
                 let base_objectcode_path =
-                    base_bytecode_dir.join(&objectcode_name);
+                    base_bytecode_path.with_extension(OBJECTCODE_EXTENSION);
                 let base_memory_path = base_memory_dir.join(&module_hex);
 
                 fs::hard_link(base_bytecode_path, bytecode_path)?;
@@ -575,8 +573,6 @@ fn write_commit_inner<P: AsRef<Path>>(
 
             for (module, (bytecode, objectcode, memory)) in commit_modules {
                 let module_hex = hex::encode(module);
-                let mut objectcode_name = module_hex.clone();
-                objectcode_name.push_str(OBJECTCODE_POSTFIX);
 
                 match base_commit.modules.contains_key(&module) {
                     true => {
@@ -605,7 +601,7 @@ fn write_commit_inner<P: AsRef<Path>>(
                     false => {
                         let bytecode_path = bytecode_dir.join(&module_hex);
                         let objectcode_path =
-                            bytecode_dir.join(&objectcode_name);
+                            bytecode_path.with_extension(OBJECTCODE_EXTENSION);
                         let memory_path = memory_dir.join(&module_hex);
 
                         fs::write(bytecode_path, &bytecode)?;
