@@ -22,13 +22,9 @@ impl WrappedModule {
     ) -> Result<Self, Error> {
         let store = Store::new_store();
         let serialized = match objectcode {
-            Some(obj) => {
-                println!("module restored");
-                obj.as_ref().to_vec()
-            }
+            Some(obj) => obj.as_ref().to_vec(),
             _ => {
                 let module = Module::new(&store, bytecode.as_ref())?;
-                println!("module compiled");
                 module.serialize()?.to_vec()
             }
         };

@@ -112,9 +112,7 @@ impl Session {
     /// [`ModuleId`]: ModuleId
     /// [`deploy_with_id`]: `Session::deploy_with_id`
     pub fn deploy(&mut self, bytecode: &[u8]) -> Result<ModuleId, Error> {
-        println!("deploying module");
-        let bytes = bytecode.as_ref();
-        let hash = blake3::hash(bytes);
+        let hash = blake3::hash(bytecode);
         let module_id = ModuleId::from_bytes(hash.into());
 
         self.deploy_with_id(module_id, bytecode)?;
@@ -129,26 +127,21 @@ impl Session {
     /// [`deploy`]: `Session::deploy`
     pub fn deploy_with_id(
         &mut self,
-        id: ModuleId,
+        module_id: ModuleId,
         bytecode: &[u8],
     ) -> Result<(), Error> {
-        println!("deploying module with id {:?}", module_id);
         if !self.module_session.module_deployed(module_id) {
-            let wrapped_module = WrappedModule::new(&bytecode, None::<Objectcode>)?;
-            self
-                .module_session
+            let wrapped_module =
+                WrappedModule::new(bytecode, None::<Objectcode>)?;
+            self.module_session
                 .deploy_with_id(module_id, bytecode, wrapped_module.as_bytes())
                 .map_err(|err| PersistenceError(Arc::new(err)))?;
         }
-        self.module_session
-            .deploy_with_id(id, bytecode)
-            .deploy_with_id(module_id, bytecode, bytecode)
-            .map_err(|err| PersistenceError(Arc::new(err)))?;
 
         self.create_instance(module_id)?;
 
         self.call_history.push(From::from(Deploy {
-            module_id: id,
+            module_id,
             bytecode: bytecode.to_vec(),
         }));
 
@@ -288,20 +281,14 @@ impl Session {
         };
     }
 
-    // todo: simplify this if possible
     fn clear_stack_and_instances(&mut self) {
         while self.call_stack.len() > 0 {
             let popped = self.call_stack.pop().unwrap();
             self.remove_instance(&popped.module_id);
         }
-        let mut ids = vec![];
-        {
-            for id in self.instance_map.keys().cloned() {
-                ids.push(id);
-            }
-        }
-        for module_id in ids {
-            self.remove_instance(&module_id);
+        let ids: Vec<ModuleId> = self.instance_map.keys().cloned().collect();
+        for module_id in ids.iter() {
+            self.remove_instance(module_id);
         }
     }
 
@@ -325,8 +312,6 @@ impl Session {
             };
         }
     }
-
-    /* ========================== */
 
     pub fn root(&self) -> [u8; 32] {
         self.module_session.root()
@@ -381,7 +366,7 @@ impl Session {
         self.spent
     }
 
-    pub(crate) fn nth_from_top<'a>(&self, n: usize) -> Option<StackElement> {
+    pub(crate) fn nth_from_top(&self, n: usize) -> Option<StackElement> {
         self.call_stack.nth_from_top(n)
     }
 
@@ -672,16 +657,6 @@ impl Session {
         Ok(ret)
     }
 }
-
-// impl Drop for Session {
-//     fn drop(&mut self) {
-//         for (_, (instance, _)) in self.instance_map.iter() {
-//             unsafe {
-//                 let _ = Box::from_raw(*instance);
-//             }
-//         }
-//     }
-// }
 
 #[derive(Debug)]
 enum CallOrDeploy {

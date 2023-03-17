@@ -8,8 +8,7 @@ use piecrust::{module_bytecode, Error, VM};
 
 #[test]
 fn counter_read_simple() -> Result<(), Error> {
-    // let vm = VM::ephemeral()?;
-    let vm = VM::new("/tmp/001")?;
+    let vm = VM::ephemeral()?;
 
     let mut session = vm.genesis_session();
 
@@ -22,8 +21,7 @@ fn counter_read_simple() -> Result<(), Error> {
 
 #[test]
 fn counter_read_write_simple() -> Result<(), Error> {
-    // let vm = VM::ephemeral()?;
-    let vm = VM::new("/tmp/001")?;
+    let vm = VM::ephemeral()?;
 
     let mut session = vm.genesis_session();
 
@@ -34,18 +32,6 @@ fn counter_read_write_simple() -> Result<(), Error> {
     session.transact::<(), ()>(id, "increment", &())?;
 
     assert_eq!(session.query::<(), i64>(id, "read_value", &())?, 0xfd);
-
-    let commit_id = session.commit()?;
-    println!("after first commit");
-    let mut session = vm.session(commit_id)?;
-    let id = session.deploy(module_bytecode!("counter"))?;
-    session.transact::<(), ()>(id, "increment", &())?;
-
-    // let commit_id = session.commit()?;
-    // println!("after second commit");
-    // let mut session = vm.session(commit_id)?;
-    // let id = session.deploy(module_bytecode!("counter"))?;
-    // session.transact::<(), ()>(id, "increment", &())?;
 
     Ok(())
 }

@@ -36,8 +36,6 @@ const BYTECODE_DIR: &str = "bytecode";
 const MEMORY_DIR: &str = "memory";
 const DIFF_EXTENSION: &str = "diff";
 const INDEX_FILE: &str = "index";
-pub const COMPILED_DIR: &str = "compiled";
-const SKIP_LIST: [&str; 1] = [COMPILED_DIR];
 const OBJECTCODE_POSTFIX: &str = ".a";
 
 type Root = [u8; ROOT_LEN];
@@ -174,10 +172,7 @@ fn read_all_commits<P: AsRef<Path>>(
 
     for entry in fs::read_dir(root_dir)? {
         let entry = entry?;
-        if entry.path().is_dir()
-            && !SKIP_LIST
-                .contains(&entry.path().file_name().unwrap().to_str().unwrap())
-        {
+        if entry.path().is_dir() {
             let (root, commit) = read_commit(entry.path())?;
             commits.insert(root, commit);
         }

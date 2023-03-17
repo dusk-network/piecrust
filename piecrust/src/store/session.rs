@@ -119,18 +119,10 @@ impl ModuleSession {
         &mut self,
         module: ModuleId,
     ) -> io::Result<Option<(Bytecode, Objectcode, Memory)>> {
-        // println!("new instance/module called, modules={:?}", self.modules);
         match self.modules.entry(module) {
             Vacant(entry) => match &self.base {
-                None => {
-                    println!("bytecode path=None");
-                    Ok(None)
-                }
+                None => Ok(None),
                 Some((base, base_commit)) => {
-                    println!(
-                        "modules empty but taking stuff from base={}",
-                        hex::encode(base)
-                    );
                     match base_commit.modules.contains_key(&module) {
                         true => {
                             let base_hex = hex::encode(base);
@@ -145,19 +137,12 @@ impl ModuleSession {
                             let objectcode_path = base_dir
                                 .join(BYTECODE_DIR)
                                 .join(&objectcode_name);
-                            // println!("bytecode path={:?}", bytecode_path);
-                            // println!("objectcode path={:?}",
-                            // objectcode_path);
                             let memory_path =
                                 base_dir.join(MEMORY_DIR).join(module_hex);
                             let memory_diff_path =
                                 memory_path.with_extension(DIFF_EXTENSION);
 
                             let bytecode = Bytecode::from_file(bytecode_path)?;
-                            println!(
-                                "reading objectcode from file={:?}",
-                                objectcode_path
-                            );
                             let objectcode =
                                 Objectcode::from_file(objectcode_path)?;
                             let memory =
@@ -179,10 +164,7 @@ impl ModuleSession {
                     }
                 }
             },
-            Occupied(entry) => {
-                println!("modules info (bytecode etc.) found for {:?}", module);
-                Ok(Some(entry.get().clone()))
-            }
+            Occupied(entry) => Ok(Some(entry.get().clone())),
         }
     }
 
@@ -191,45 +173,15 @@ impl ModuleSession {
         self.modules.clear();
     }
 
-    // Deploys bytecode to the module store.
-    //
-    // The module ID returned is computed using the `blake3` hash of the given
-    // bytecode. See [`deploy_with_id`] for deploying bytecode with a given
-    // module ID.
-    //
-    // [`deploy_with_id`]: ModuleSession::deploy_with_id
-    // pub fn deploy<B: AsRef<[u8]>>(
-    //     &mut self,
-    //     bytecode: B,
-    // ) -> io::Result<ModuleId> {
-    //     let bytes = bytecode.as_ref();
-    //     let hash = blake3::hash(bytes);
-    //
-    //     let module_id = ModuleId::from_bytes(hash.into());
-    //     self.deploy_with_id(module_id, bytes)?;
-    //
-    //     Ok(module_id)
-    // }
-
     /// Checks if module is deployed
-    pub fn module_deployed(
-        &mut self,
-        module_id: ModuleId,
-    ) -> bool {
+    pub fn module_deployed(&mut self, module_id: ModuleId) -> bool {
         if self.modules.contains_key(&module_id) {
-            println!("already deployed: {:?}", module_id);
-            return true;
+            true
+        } else if let Some((_base, base_commit)) = &self.base {
+            base_commit.modules.contains_key(&module_id)
+        } else {
+            false
         }
-
-        if let Some((base, base_commit)) = &self.base {
-            if base_commit.modules.contains_key(&module_id) {
-                let base_hex = hex::encode(base);
-                println!("already deployed: {:?} in base commit: {}", module_id, base_hex);
-                return true;
-            }
-        }
-
-        false
     }
 
     /// Deploys bytecode to the module store with the given its `module_id`.
@@ -247,9 +199,6 @@ impl ModuleSession {
         let bytecode = Bytecode::new(bytecode)?;
         let objectcode = Objectcode::new(objectcode)?;
 
-        println!(
-            "inserting into modules (deploy_with_id): bytecode, objectcode and memory for {:?}", module_id
-        );
         self.modules
             .insert(module_id, (bytecode, objectcode, memory));
 
