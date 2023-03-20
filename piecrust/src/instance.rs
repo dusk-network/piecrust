@@ -299,6 +299,10 @@ impl WrappedInstance {
         }
     }
 
+    pub fn is_function_exported<N: AsRef<str>>(&self, name: N) -> bool {
+        self.instance.exports.get_function(name.as_ref()).is_ok()
+    }
+
     #[allow(unused)]
     pub fn snap(&self) {
         let mem = self

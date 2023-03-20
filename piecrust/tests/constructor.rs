@@ -4,7 +4,7 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use piecrust::{module_bytecode, Error, VM};
+use piecrust::{module_bytecode, Error, CONTRACT_INIT_METHOD, VM};
 
 #[test]
 fn constructor() -> Result<(), Error> {
@@ -12,32 +12,29 @@ fn constructor() -> Result<(), Error> {
 
     let mut session = vm.genesis_session();
 
-    let id = session.deploy(module_bytecode!("constructor"))?;
+    let id = session
+        .deploy_and_init::<u8>(module_bytecode!("constructor"), &0xab)?;
 
-    assert_eq!(session.query::<(), u8>(id, "read_value", &())?, 0x50);
+    assert_eq!(session.query::<(), u8>(id, "read_value", &())?, 0xab);
 
-    // perform transaction and make sure that it fails because the contract is
-    // not initialized yet
-    let result = session.transact::<(), ()>(id, "increment", &());
-    assert!(
-        result.is_err(),
-        "transaction on not initialized module should fail"
-    );
-
-    // initialize contract with some specific data
-    session.init::<u8>(id, &0xab)?;
-
-    // we should not be able to initialize contract more than once
-    let result = session.init::<u8>(id, &0xaa);
-    assert!(
-        result.is_err(),
-        "initializing more than once should not be allowed"
-    );
-
-    // perform transaction again, this time it should succeed
+    // perform transaction and make sure that the contract works as expected
     session.transact::<(), ()>(id, "increment", &())?;
+    assert_eq!(session.query::<(), u8>(id, "read_value", &())?, 0xac);
 
-    // and make sure it performed ok
+    // we should not be able to call init directly
+    let result = session.transact::<u8, ()>(id, CONTRACT_INIT_METHOD, &0xaa);
+    assert!(
+        result.is_err(),
+        "calling init directly as transaction should not be allowed"
+    );
+    // we should not be able to call init as query neither
+    let result = session.query::<u8, ()>(id, CONTRACT_INIT_METHOD, &0xaa);
+    assert!(
+        result.is_err(),
+        "calling init directly as query should not be allowed"
+    );
+
+    // make sure the state is still ok
     assert_eq!(session.query::<(), u8>(id, "read_value", &())?, 0xac);
 
     // initialized state should live through across session boundaries
@@ -45,11 +42,12 @@ fn constructor() -> Result<(), Error> {
     let mut session = vm.session(commit_id)?;
     assert_eq!(session.query::<(), u8>(id, "read_value", &())?, 0xac);
 
-    // state of being initialized should live through across session boundaries
-    let result = session.init::<u8>(id, &0xae);
+    // not being able to call init directly should also be enforced across
+    // session boundaries
+    let result = session.transact::<u8, ()>(id, CONTRACT_INIT_METHOD, &0xae);
     assert!(
         result.is_err(),
-        "initializing more than once should not be allowed even in another session"
+        "calling init directly should never be allowed"
     );
 
     Ok(())

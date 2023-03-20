@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Added contract constructor mechanism [#93]
 - Added caching of module compilation outputs [#162]
 - Made modules compile at deploy time rather than on first query/transaction time [#162]
 - Removed errant print statements
@@ -18,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - First `piecrust` release
 
 <!-- ISSUES -->
+[#93]: https://github.com/dusk-network/piecrust/issues/93
 [#162]: https://github.com/dusk-network/piecrust/issues/162
 
 <!-- VERSIONS -->
