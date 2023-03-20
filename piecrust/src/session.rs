@@ -31,12 +31,13 @@ use crate::store::{ModuleSession, Objectcode};
 use crate::types::StandardBufSerializer;
 use crate::vm::HostQueries;
 use crate::Error;
-use crate::Error::PersistenceError;
+use crate::Error::{InitalizationError, PersistenceError};
 
 use call_stack::{CallStack, StackElement};
 
 const DEFAULT_LIMIT: u64 = 65_536;
 const MAX_META_SIZE: usize = 65_536;
+pub const CONTRACT_INIT_METHOD: &str = "init";
 
 unsafe impl Send for Session {}
 unsafe impl Sync for Session {}
@@ -117,6 +118,35 @@ impl Session {
         let module_id = ModuleId::from_bytes(hash.into());
 
         self.deploy_with_id(module_id, bytecode)?;
+
+        Ok(module_id)
+    }
+
+    /// Deploy a module, returning its [`ModuleId`]. The ID is computed using a
+    /// `blake3` hash of the `bytecode`.
+    /// If contract exports an initialization method, it will be called with
+    /// the arguments provided.
+    ///
+    /// If one needs to specify the ID, [`deploy_with_id`] is available.
+    /// If one would like to *not* call the initialization method, [`deploy`] is
+    /// available.
+    ///
+    /// [`ModuleId`]: ModuleId
+    /// [`deploy_with_id`]: `Session::deploy_with_id`
+    /// [`deploy`]: `Session::deploy`
+    pub fn deploy_and_init<Arg>(
+        &mut self,
+        bytecode: &[u8],
+        arg: &Arg,
+    ) -> Result<ModuleId, Error>
+    where
+        Arg: for<'b> Serialize<StandardBufSerializer<'b>>,
+    {
+        let hash = blake3::hash(bytecode);
+        let module_id = ModuleId::from_bytes(hash.into());
+
+        self.deploy_with_id_and_init(module_id, bytecode, arg)?;
+
         Ok(module_id)
     }
 
@@ -149,6 +179,37 @@ impl Session {
         Ok(())
     }
 
+    /// Deploy a module with the given `id`.
+    /// If contract exports an initialization method, it will be called with
+    /// the arguments provided.
+    ///
+    /// If one would like to *not* specify the `ModuleId`, [`deploy`] is
+    /// available.
+    /// If one would like to *not* call the initialization method,
+    /// [`deploy_with_id`] is available.
+    ///
+    /// [`deploy`]: `Session::deploy`
+    /// [`deploy_with_id`]: `Session::deploy_with_id`
+    pub fn deploy_with_id_and_init<Arg>(
+        &mut self,
+        id: ModuleId,
+        bytecode: &[u8],
+        arg: &Arg,
+    ) -> Result<(), Error>
+    where
+        Arg: for<'b> Serialize<StandardBufSerializer<'b>>,
+    {
+        self.deploy_with_id(id, bytecode)?;
+
+        if let Some(instance) = self.instance(&id) {
+            if instance.is_function_exported(CONTRACT_INIT_METHOD) {
+                self.transact::<Arg, ()>(id, CONTRACT_INIT_METHOD, arg)?;
+            }
+        }
+
+        Ok(())
+    }
+
     /// Execute a query on the current state of this session.
     ///
     /// Calls are atomic, meaning that on failure their execution doesn't modify
@@ -177,6 +238,10 @@ impl Session {
         Ret::Archived: Deserialize<Ret, Infallible>
             + for<'b> CheckBytes<DefaultValidator<'b>>,
     {
+        if !self.is_deploy() && method_name == CONTRACT_INIT_METHOD {
+            return Err(InitalizationError);
+        }
+
         let mut sbuf = [0u8; SCRATCH_BUF_BYTES];
         let scratch = BufferScratch::new(&mut sbuf);
         let ser = BufferSerializer::new(&mut self.buffer[..]);
@@ -227,6 +292,10 @@ impl Session {
         Ret::Archived: Deserialize<Ret, Infallible>
             + for<'b> CheckBytes<DefaultValidator<'b>>,
     {
+        if !self.is_deploy() && method_name == CONTRACT_INIT_METHOD {
+            return Err(InitalizationError);
+        }
+
         let mut sbuf = [0u8; SCRATCH_BUF_BYTES];
         let scratch = BufferScratch::new(&mut sbuf);
         let ser = BufferSerializer::new(&mut self.buffer[..]);
@@ -655,6 +724,10 @@ impl Session {
         self.pop_callstack();
 
         Ok(ret)
+    }
+
+    fn is_deploy(&self) -> bool {
+        matches!(self.call_history.last(), Some(CallOrDeploy::Deploy(_)))
     }
 }
 
