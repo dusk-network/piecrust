@@ -118,7 +118,7 @@ mod types;
 mod vm;
 
 pub use error::Error;
-pub use session::{Session, CONTRACT_INIT_METHOD};
+pub use session::Session;
 pub use vm::{HostQuery, VM};
 
 // re-exports

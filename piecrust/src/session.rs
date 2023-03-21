@@ -193,42 +193,6 @@ impl Session {
         Ok(())
     }
 
-    /// Deploy a module with the given `id`.
-    /// If contract exports an initialization method, it will be called with
-    /// the arguments provided.
-    ///
-    /// If one would like to *not* specify the `ModuleId`, [`deploy`] is
-    /// available.
-    /// If one would like to *not* call the initialization method,
-    /// [`deploy_with_id`] is available.
-    ///
-    /// [`deploy`]: `Session::deploy`
-    /// [`deploy_with_id`]: `Session::deploy_with_id`
-    pub fn deploy_with_id_and_init<Arg>(
-        &mut self,
-        id: ModuleId,
-        bytecode: &[u8],
-        arg: &Arg,
-    ) -> Result<(), Error>
-    where
-        Arg: for<'b> Serialize<StandardBufSerializer<'b>>,
-    {
-        self.deploy_with_id(id, bytecode)?;
-
-        if let Some(instance) = self.instance(&id) {
-            if instance.is_function_exported(CONTRACT_INIT_METHOD) {
-                self.transact::<Arg, ()>(id, CONTRACT_INIT_METHOD, arg)?;
-            } else {
-                return Err(InitalizationError(
-                    "deploy initialization failed as init method is not exported"
-                        .into(),
-                ));
-            }
-        }
-
-        Ok(())
-    }
-
     /// Execute a query on the current state of this session.
     ///
     /// Calls are atomic, meaning that on failure their execution doesn't modify
@@ -785,10 +749,6 @@ impl Session {
         self.pop_callstack();
 
         Ok(ret)
-    }
-
-    fn is_deploy(&self) -> bool {
-        matches!(self.call_history.last(), Some(CallOrDeploy::Deploy(_)))
     }
 }
 
