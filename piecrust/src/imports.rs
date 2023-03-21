@@ -42,8 +42,6 @@ fn caller(env: FunctionEnvMut<Env>) {
         .nth_from_top(1)
         .map_or(ModuleId::uninitialized(), |elem| elem.module_id);
 
-    println!("Caller Module ID: {:?}", mod_id);
-
     env.self_instance().with_arg_buffer(|arg| {
         arg[..std::mem::size_of::<ModuleId>()]
             .copy_from_slice(mod_id.as_bytes())
@@ -93,10 +91,12 @@ fn q(
                     [..std::mem::size_of::<ModuleId>()],
             );
 
-            let callee = env
+            let callee_stack_element = env
                 .push_callstack(mod_id, callee_limit)
-                .expect("pushing to the callstack should succeed")
-                .instance;
+                .expect("pushing to the callstack should succeed");
+            let callee = env
+                .instance(&callee_stack_element.module_id)
+                .expect("callee instance should exist");
 
             let arg = &arg_buf[..arg_len as usize];
 
@@ -165,10 +165,12 @@ fn t(
                     [..std::mem::size_of::<ModuleId>()],
             );
 
-            let callee = env
+            let callee_stack_element = env
                 .push_callstack(mod_id, callee_limit)
-                .expect("pushing to the callstack should succeed")
-                .instance;
+                .expect("pushing to the callstack should succeed");
+            let callee = env
+                .instance(&callee_stack_element.module_id)
+                .expect("callee instance should exist");
 
             let arg = &arg_buf[..arg_len as usize];
 
@@ -239,6 +241,7 @@ fn hd(mut fenv: FunctionEnvMut<Env>, name_ofs: i32, name_len: u32) -> u32 {
             instance.with_arg_buffer(|buf| {
                 buf[..data.len()].copy_from_slice(&data);
             });
+
             data.len() as u32
         }
         _ => 0u32,

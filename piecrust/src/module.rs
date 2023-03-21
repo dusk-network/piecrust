@@ -21,36 +21,21 @@ pub struct WrappedModule {
 }
 
 impl WrappedModule {
-    pub fn new<B: AsRef<[u8]>, P: AsRef<Path>>(
+    pub fn new<B: AsRef<[u8]>, C: AsRef<[u8]>>(
         bytecode: B,
-        dir: P,
+        objectcode: Option<C>,
     ) -> Result<Self, Error> {
         let store = Store::new_store();
-        let module_key = hash(bytecode.as_ref());
-        let compiled_hex = hex::encode(module_key.as_bytes());
-        let compiled_dir = dir.as_ref().join(COMPILED_DIR);
-        let mut compiled_path = compiled_dir.clone();
-        fs::create_dir_all(compiled_dir)
-            .map_err(|err| ModuleCacheError(Arc::new(err)))?;
-        compiled_path.push(compiled_hex);
-        let serialized = match unsafe {
-            Module::deserialize_from_file(
-                &store,
-                <PathBuf as AsRef<Path>>::as_ref(&compiled_path),
-            )
-        } {
-            Ok(module) => module.serialize()?,
+        let serialized = match objectcode {
+            Some(obj) => obj.as_ref().to_vec(),
             _ => {
                 let module = Module::new(&store, bytecode.as_ref())?;
-                module.serialize_to_file(<PathBuf as AsRef<Path>>::as_ref(
-                    &compiled_path,
-                ))?;
-                module.serialize()?
+                module.serialize()?.to_vec()
             }
         };
 
         Ok(WrappedModule {
-            serialized: Arc::new(serialized.to_vec()),
+            serialized: Arc::new(serialized),
         })
     }
 

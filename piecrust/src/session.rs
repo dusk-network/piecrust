@@ -27,22 +27,39 @@ use wasmer_types::WASM_PAGE_SIZE;
 use crate::event::Event;
 use crate::instance::WrappedInstance;
 use crate::module::WrappedModule;
-use crate::store::ModuleSession;
+use crate::store::{ModuleSession, Objectcode};
 use crate::types::StandardBufSerializer;
 use crate::vm::HostQueries;
 use crate::Error;
 use crate::Error::{InitalizationError, PersistenceError};
 
-use call_stack::{CallStack, StackElementView};
+use call_stack::{CallStack, StackElement};
 
 const DEFAULT_LIMIT: u64 = 65_536;
 const MAX_META_SIZE: usize = 65_536;
+pub const CONTRACT_INIT_METHOD: &str = "init";
 
 unsafe impl Send for Session {}
 unsafe impl Sync for Session {}
 
+/// A running mutation to a state.
+///
+/// `Session`s are spawned using a [`VM`] instance, and can be [`queried`] or
+/// [`transacted`] with to modify their state. A sequence of these calls may
+/// then be [`commit`]ed to, or discarded by simply allowing the session to
+/// drop.
+///
+/// New modules are to be `deploy`ed in the context of a session. Metadata
+/// queryable by modules can be set using [`set_meta`].
+///
+/// [`VM`]: crate::VM
+/// [`queried`]: Session::query
+/// [`transacted`]: Session::transact
+/// [`commit`]: Session::commit
+/// [`set_meta`]: Session::set_meta
 pub struct Session {
     call_stack: CallStack,
+    instance_map: BTreeMap<ModuleId, (*mut WrappedInstance, u64)>,
     debug: Vec<String>,
     events: Vec<Event>,
     data: Metadata,
@@ -71,6 +88,7 @@ impl Session {
     ) -> Self {
         Session {
             call_stack: CallStack::new(),
+            instance_map: BTreeMap::new(),
             debug: vec![],
             events: vec![],
             data: Metadata::new(),
@@ -87,27 +105,51 @@ impl Session {
         }
     }
 
-    /// Deploy a module, returning its `ModuleId`. The ID is computed using a
-    /// `blake3` hash of the bytecode.
+    /// Deploy a module, returning its [`ModuleId`]. The ID is computed using a
+    /// `blake3` hash of the `bytecode`.
     ///
     /// If one needs to specify the ID, [`deploy_with_id`] is available.
     ///
+    /// [`ModuleId`]: ModuleId
     /// [`deploy_with_id`]: `Session::deploy_with_id`
     pub fn deploy(&mut self, bytecode: &[u8]) -> Result<ModuleId, Error> {
-        let module_id = self
-            .module_session
-            .deploy(bytecode)
-            .map_err(|err| PersistenceError(Arc::new(err)))?;
+        let hash = blake3::hash(bytecode);
+        let module_id = ModuleId::from_bytes(hash.into());
 
-        self.call_history.push(From::from(Deploy {
-            module_id,
-            bytecode: bytecode.to_vec(),
-        }));
+        self.deploy_with_id(module_id, bytecode)?;
 
         Ok(module_id)
     }
 
-    /// Deploy a module with the given ID.
+    /// Deploy a module, returning its [`ModuleId`]. The ID is computed using a
+    /// `blake3` hash of the `bytecode`.
+    /// If contract exports an initialization method, it will be called with
+    /// the arguments provided.
+    ///
+    /// If one needs to specify the ID, [`deploy_with_id`] is available.
+    /// If one would like to *not* call the initialization method, [`deploy`] is
+    /// available.
+    ///
+    /// [`ModuleId`]: ModuleId
+    /// [`deploy_with_id`]: `Session::deploy_with_id`
+    /// [`deploy`]: `Session::deploy`
+    pub fn deploy_and_init<Arg>(
+        &mut self,
+        bytecode: &[u8],
+        arg: &Arg,
+    ) -> Result<ModuleId, Error>
+    where
+        Arg: for<'b> Serialize<StandardBufSerializer<'b>>,
+    {
+        let hash = blake3::hash(bytecode);
+        let module_id = ModuleId::from_bytes(hash.into());
+
+        self.deploy_with_id_and_init(module_id, bytecode, arg)?;
+
+        Ok(module_id)
+    }
+
+    /// Deploy a module with the given `id`.
     ///
     /// If one would like to *not* specify the `ModuleId`, [`deploy`] is
     /// available.
@@ -115,21 +157,80 @@ impl Session {
     /// [`deploy`]: `Session::deploy`
     pub fn deploy_with_id(
         &mut self,
-        module_id: ModuleId,
+        id: ModuleId,
         bytecode: &[u8],
     ) -> Result<(), Error> {
-        self.module_session
-            .deploy_with_id(module_id, bytecode)
-            .map_err(|err| PersistenceError(Arc::new(err)))?;
+        if !self.module_session.module_deployed(id) {
+            let wrapped_module =
+                WrappedModule::new(bytecode, None::<Objectcode>)?;
+            self.module_session
+                .deploy_with_id(id, bytecode, wrapped_module.as_bytes())
+                .map_err(|err| PersistenceError(Arc::new(err)))?;
+        }
+
+        self.create_instance(id)?;
 
         self.call_history.push(From::from(Deploy {
-            module_id,
+            module_id: id,
             bytecode: bytecode.to_vec(),
         }));
 
         Ok(())
     }
 
+    /// Deploy a module with the given `id`.
+    /// If contract exports an initialization method, it will be called with
+    /// the arguments provided.
+    ///
+    /// If one would like to *not* specify the `ModuleId`, [`deploy`] is
+    /// available.
+    /// If one would like to *not* call the initialization method,
+    /// [`deploy_with_id`] is available.
+    ///
+    /// [`deploy`]: `Session::deploy`
+    /// [`deploy_with_id`]: `Session::deploy_with_id`
+    pub fn deploy_with_id_and_init<Arg>(
+        &mut self,
+        id: ModuleId,
+        bytecode: &[u8],
+        arg: &Arg,
+    ) -> Result<(), Error>
+    where
+        Arg: for<'b> Serialize<StandardBufSerializer<'b>>,
+    {
+        self.deploy_with_id(id, bytecode)?;
+
+        if let Some(instance) = self.instance(&id) {
+            if instance.is_function_exported(CONTRACT_INIT_METHOD) {
+                self.transact::<Arg, ()>(id, CONTRACT_INIT_METHOD, arg)?;
+            } else {
+                return Err(InitalizationError(
+                    "deploy initialization failed as init method is not exported"
+                        .into(),
+                ));
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Execute a query on the current state of this session.
+    ///
+    /// Calls are atomic, meaning that on failure their execution doesn't modify
+    /// the state. They are also metered, and will execute with the point limit
+    /// defined in [`set_point_limit`].
+    ///
+    /// To know how many points a call spent after execution use the [`spent`]
+    /// function.
+    ///
+    /// # Errors
+    /// The call may error during execution for a wide array of reasons, the
+    /// most common ones being running against the point limit and a module
+    /// panic. Calling the 'init' method is not allowed except for when
+    /// called from the deploy method.
+    ///
+    /// [`set_point_limit`]: Session::set_point_limit
+    /// [`spent`]: Session::spent
     pub fn query<Arg, Ret>(
         &mut self,
         module: ModuleId,
@@ -142,6 +243,10 @@ impl Session {
         Ret::Archived: Deserialize<Ret, Infallible>
             + for<'b> CheckBytes<DefaultValidator<'b>>,
     {
+        if !self.is_deploy() && method_name == CONTRACT_INIT_METHOD {
+            return Err(InitalizationError("init call not allowed".into()));
+        }
+
         let mut sbuf = [0u8; SCRATCH_BUF_BYTES];
         let scratch = BufferScratch::new(&mut sbuf);
         let ser = BufferSerializer::new(&mut self.buffer[..]);
@@ -164,6 +269,23 @@ impl Session {
         Ok(ret)
     }
 
+    /// Execute a transaction on the current state of this session.
+    ///
+    /// Calls are atomic, meaning that on failure their execution doesn't modify
+    /// the state. They are also metered, and will execute with the point limit
+    /// defined in [`set_point_limit`].
+    ///
+    /// To know how many points a call spent after execution use the [`spent`]
+    /// function.
+    ///
+    /// # Errors
+    /// The call may error during execution for a wide array of reasons, the
+    /// most common ones being running against the point limit and a module
+    /// panic. Calling the 'init' method is not allowed except for when
+    /// called from the deploy method.
+    ///
+    /// [`set_point_limit`]: Session::set_point_limit
+    /// [`spent`]: Session::spent
     pub fn transact<Arg, Ret>(
         &mut self,
         module: ModuleId,
@@ -176,6 +298,10 @@ impl Session {
         Ret::Archived: Deserialize<Ret, Infallible>
             + for<'b> CheckBytes<DefaultValidator<'b>>,
     {
+        if !self.is_deploy() && method_name == CONTRACT_INIT_METHOD {
+            return Err(InitalizationError("init call not allowed".into()));
+        }
+
         let mut sbuf = [0u8; SCRATCH_BUF_BYTES];
         let scratch = BufferScratch::new(&mut sbuf);
         let ser = BufferSerializer::new(&mut self.buffer[..]);
@@ -198,24 +324,70 @@ impl Session {
         Ok(ret)
     }
 
-    pub fn init<Arg>(
-        &mut self,
-        module: ModuleId,
-        arg: &Arg,
-    ) -> Result<(), Error>
-    where
-        Arg: for<'b> Serialize<StandardBufSerializer<'b>>,
-    {
-        let instance = self
-            .call_stack
-            .instance(&module)
-            .expect("instance should exist");
-        if instance.is_initialized() {
-            return Err(InitalizationError);
-        }
-        instance.set_initialized();
-        self.transact::<Arg, ()>(module, "init", arg)
+    /// Return the state root of the current state of the session.
+    ///
+    /// The state root is the root of a merkle tree whose leaves are the hashes
+    /// of the state of of each module, ordered by their module ID.
+    ///
+    /// It also doubles as the ID of a commit - the commit root.
+
+    pub fn instance<'a>(
+        &self,
+        module_id: &ModuleId,
+    ) -> Option<&'a mut WrappedInstance> {
+        self.instance_map.get(module_id).map(|(instance, _)| {
+            // SAFETY: We guarantee that the instance exists since we're in
+            // control over if it is dropped in `pop`
+            unsafe { &mut **instance }
+        })
     }
+
+    fn update_instance_count(&mut self, module_id: ModuleId, inc: bool) {
+        match self.instance_map.entry(module_id) {
+            Entry::Occupied(mut entry) => {
+                let (_, count) = entry.get_mut();
+                if inc {
+                    *count += 1
+                } else {
+                    *count -= 1
+                };
+            }
+            _ => unreachable!("map must have an instance here"),
+        };
+    }
+
+    fn clear_stack_and_instances(&mut self) {
+        while self.call_stack.len() > 0 {
+            let popped = self.call_stack.pop().unwrap();
+            self.remove_instance(&popped.module_id);
+        }
+        let ids: Vec<ModuleId> = self.instance_map.keys().cloned().collect();
+        for module_id in ids.iter() {
+            self.remove_instance(module_id);
+        }
+    }
+
+    pub fn remove_instance(&mut self, module_id: &ModuleId) {
+        let mut entry = match self.instance_map.entry(*module_id) {
+            Entry::Occupied(e) => e,
+            _ => unreachable!("map must have an instance here"),
+        };
+
+        let (instance, count) = entry.get_mut();
+        *count -= 1;
+
+        if *count == 0 {
+            // SAFETY: This is the last instance of the module in the
+            // stack, therefore we should recoup the memory and drop
+            //
+            // Any pointers to it will be left dangling
+            unsafe {
+                let _ = Box::from_raw(*instance);
+                entry.remove();
+            };
+        }
+    }
+
     pub fn root(&self) -> [u8; 32] {
         self.module_session.root()
     }
@@ -228,15 +400,14 @@ impl Session {
         &mut self,
         module_id: ModuleId,
     ) -> Result<WrappedInstance, Error> {
-        let (bytecode, memory) = self
+        let (bytecode, objectcode, memory) = self
             .module_session
             .module(module_id)
             .map_err(|err| PersistenceError(Arc::new(err)))?
             .expect("Module should exist");
 
-        let module =
-            WrappedModule::new(&bytecode, self.module_session.root_dir())?;
-        let instance = WrappedInstance::new(self, module_id, module, memory)?;
+        let module = WrappedModule::new(&bytecode, Some(&objectcode))?;
+        let instance = WrappedInstance::new(self, module_id, &module, memory)?;
 
         Ok(instance)
     }
@@ -250,36 +421,58 @@ impl Session {
         self.host_queries.call(name, buf, arg_len)
     }
 
-    /// Sets the point limit for the next call to `query` or `transact`.
+    /// Sets the point limit for the next call to [`query`] or [`transact`].
+    ///
+    /// [`query`]: Session::query
+    /// [`transact`]: Session::transact
     pub fn set_point_limit(&mut self, limit: u64) {
         self.limit = limit
     }
 
+    /// Returns the number of points spent by the last call to [`query`] or
+    /// [`transact`].
+    ///
+    /// If neither have been called for the duration of the session, it will
+    /// return 0.
+    ///
+    /// [`query`]: Session::query
+    /// [`transact`]: Session::transact
     pub fn spent(&self) -> u64 {
         self.spent
     }
 
-    pub(crate) fn nth_from_top<'a>(
-        &self,
-        n: usize,
-    ) -> Option<StackElementView<'a>> {
+    pub(crate) fn nth_from_top(&self, n: usize) -> Option<StackElement> {
         self.call_stack.nth_from_top(n)
     }
 
-    pub(crate) fn push_callstack<'b>(
+    fn create_instance(&mut self, module_id: ModuleId) -> Result<(), Error> {
+        let instance = self.new_instance(module_id)?;
+        if self.instance_map.get(&module_id).is_some() {
+            panic!("Module already in the stack: {module_id:?}");
+        }
+
+        let instance = Box::new(instance);
+        let instance = Box::leak(instance) as *mut WrappedInstance;
+
+        self.instance_map.insert(module_id, (instance, 1));
+        Ok(())
+    }
+
+    pub(crate) fn push_callstack(
         &mut self,
         module_id: ModuleId,
         limit: u64,
-    ) -> Result<StackElementView<'b>, Error> {
-        let instance = self.call_stack.instance(&module_id);
+    ) -> Result<StackElement, Error> {
+        let instance = self.instance(&module_id);
 
         match instance {
             Some(_) => {
+                self.update_instance_count(module_id, true);
                 self.call_stack.push(module_id, limit);
             }
             None => {
-                let instance = self.new_instance(module_id)?;
-                self.call_stack.push_instance(module_id, limit, instance);
+                self.create_instance(module_id)?;
+                self.call_stack.push(module_id, limit);
             }
         }
 
@@ -290,9 +483,13 @@ impl Session {
     }
 
     pub(crate) fn pop_callstack(&mut self) {
-        self.call_stack.pop();
+        if let Some(element) = self.call_stack.pop() {
+            self.update_instance_count(element.module_id, false);
+        }
     }
 
+    /// Commits the given session to disk, consuming the session and returning
+    /// its state root.
     pub fn commit(self) -> Result<[u8; 32], Error> {
         self.module_session
             .commit()
@@ -314,10 +511,15 @@ impl Session {
         c(&self.debug)
     }
 
+    /// Returns the value of a metadata item previously set using [`set_meta`].
+    ///
+    /// [`set_meta`]: Session::set_meta
     pub fn meta(&self, name: &str) -> Option<Vec<u8>> {
         self.data.get(name)
     }
 
+    /// Sets a metadata item with the given `name` and `value`. These pieces of
+    /// data are then made available to modules for querying.
     pub fn set_meta<S, V>(&mut self, name: S, value: V)
     where
         S: Into<Cow<'static, str>>,
@@ -448,15 +650,13 @@ impl Session {
     /// Purge all produced data and re-execute all transactions and deployments
     /// in order, returning the result of the last executed call.
     fn re_execute(&mut self) -> Result<Vec<u8>, Error> {
-        println!("RE-EXECUTION");
-
         // Take all transaction history since we're going to re-add it back
         // anyway.
         let mut call_history = Vec::with_capacity(self.call_history.len());
         mem::swap(&mut call_history, &mut self.call_history);
 
         // Purge all other data that is set by performing transactions.
-        self.call_stack.clear();
+        self.clear_stack_and_instances();
         self.debug.clear();
         self.events.clear();
         self.module_session.clear_modules();
@@ -510,7 +710,10 @@ impl Session {
     }
 
     fn call_inner(&mut self, call: &Call) -> Result<Vec<u8>, Error> {
-        let instance = self.push_callstack(call.module, call.limit)?.instance;
+        let stack_element = self.push_callstack(call.module, call.limit)?;
+        let instance = self
+            .instance(&stack_element.module_id)
+            .expect("instance should exist");
 
         let arg_len = instance.write_bytes_to_arg_buffer(&call.fdata);
         let ret_len = match call.ty {
@@ -527,6 +730,10 @@ impl Session {
         self.pop_callstack();
 
         Ok(ret)
+    }
+
+    fn is_deploy(&self) -> bool {
+        matches!(self.call_history.last(), Some(CallOrDeploy::Deploy(_)))
     }
 }
 

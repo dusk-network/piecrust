@@ -62,10 +62,19 @@ impl DerefMut for Env {
 
 impl Env {
     pub fn self_instance<'b>(&self) -> &'b mut WrappedInstance {
-        self.session
+        let stack_element = self
+            .session
             .nth_from_top(0)
-            .expect("there should be at least one element in the call stack")
-            .instance
+            .expect("there should be at least one element in the call stack");
+        self.instance(&stack_element.module_id)
+            .expect("instance should exist")
+    }
+
+    pub fn instance<'b>(
+        &self,
+        module_id: &ModuleId,
+    ) -> Option<&'b mut WrappedInstance> {
+        self.session.instance(module_id)
     }
 
     pub fn limit(&self) -> u64 {
@@ -130,7 +139,7 @@ impl WrappedInstance {
     pub fn new(
         session: &mut Session,
         module_id: ModuleId,
-        module: WrappedModule,
+        module: &WrappedModule,
         memory: Memory,
     ) -> Result<Self, Error> {
         let tunables = InstanceTunables::new(memory.clone());
@@ -328,6 +337,10 @@ impl WrappedInstance {
             MeteringPoints::Remaining(points) => Some(points),
             MeteringPoints::Exhausted => None,
         }
+    }
+
+    pub fn is_function_exported<N: AsRef<str>>(&self, name: N) -> bool {
+        self.instance.exports.get_function(name.as_ref()).is_ok()
     }
 
     #[allow(unused)]

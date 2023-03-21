@@ -19,6 +19,7 @@ pub type Compo = CompositeSerializerError<
     std::convert::Infallible,
 >;
 
+/// The error type returned by the piecrust VM.
 #[derive(Error, Debug, Clone)]
 pub enum Error {
     #[error(transparent)]
@@ -55,8 +56,8 @@ pub enum Error {
     ValidationError,
     #[error("OutOfPoints")]
     OutOfPoints,
-    #[error("InitalizationError")]
-    InitalizationError,
+    #[error("InitalizationError: {0}")]
+    InitalizationError(Cow<'static, str>),
 }
 
 impl From<wasmer::InstantiationError> for Error {
