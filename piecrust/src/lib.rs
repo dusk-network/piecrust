@@ -81,7 +81,7 @@
 //! let mut vm = VM::ephemeral().unwrap();
 //!
 //! let mut session = vm.genesis_session();
-//! let counter_id = session.deploy(module_bytecode!("counter")).unwrap();
+//! let counter_id = session.deploy(module_bytecode!("counter"), None::<()>).unwrap();
 //!
 //! assert_eq!(session.query::<(), i64>(counter_id, "read_value", &()).unwrap(), 0xfc);
 //! session.transact::<(), ()>(counter_id, "increment", &()).unwrap();
@@ -118,7 +118,7 @@ mod types;
 mod vm;
 
 pub use error::Error;
-pub use session::{Session, CONTRACT_INIT_METHOD};
+pub use session::Session;
 pub use vm::{HostQuery, VM};
 
 // re-exports

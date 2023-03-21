@@ -113,39 +113,14 @@ impl Session {
     ///
     /// [`ModuleId`]: ModuleId
     /// [`deploy_with_id`]: `Session::deploy_with_id`
-    pub fn deploy(&mut self, bytecode: &[u8]) -> Result<ModuleId, Error> {
-        let hash = blake3::hash(bytecode);
-        let module_id = ModuleId::from_bytes(hash.into());
-
-        self.deploy_with_id(module_id, bytecode)?;
-
-        Ok(module_id)
-    }
-
-    /// Deploy a module, returning its [`ModuleId`]. The ID is computed using a
-    /// `blake3` hash of the `bytecode`.
-    /// If contract exports an initialization method, it will be called with
-    /// the arguments provided.
-    ///
-    /// If one needs to specify the ID, [`deploy_with_id`] is available.
-    /// If one would like to *not* call the initialization method, [`deploy`] is
-    /// available.
-    ///
-    /// [`ModuleId`]: ModuleId
-    /// [`deploy_with_id`]: `Session::deploy_with_id`
-    /// [`deploy`]: `Session::deploy`
-    pub fn deploy_and_init<Arg>(
-        &mut self,
-        bytecode: &[u8],
-        arg: &Arg,
-    ) -> Result<ModuleId, Error>
+    pub fn deploy<Arg>(&mut self, bytecode: &[u8], arg: Option<Arg>) -> Result<ModuleId, Error>
     where
         Arg: for<'b> Serialize<StandardBufSerializer<'b>>,
     {
         let hash = blake3::hash(bytecode);
         let module_id = ModuleId::from_bytes(hash.into());
 
-        self.deploy_with_id_and_init(module_id, bytecode, arg)?;
+        self.deploy_with_id(module_id, bytecode, arg)?;
 
         Ok(module_id)
     }
@@ -156,11 +131,28 @@ impl Session {
     /// available.
     ///
     /// [`deploy`]: `Session::deploy`
-    pub fn deploy_with_id(
+    pub fn deploy_with_id<Arg>(
         &mut self,
         id: ModuleId,
         bytecode: &[u8],
-    ) -> Result<(), Error> {
+        arg: Option<Arg>,
+    ) -> Result<(), Error>
+    where
+        Arg: for<'b> Serialize<StandardBufSerializer<'b>>,
+    {
+        self.do_deploy_with_id(id, bytecode, arg, None)
+    }
+
+    fn do_deploy_with_id<Arg>(
+        &mut self,
+        id: ModuleId,
+        bytecode: &[u8],
+        arg: Option<Arg>,
+        ser_arg: Option<Vec<u8>>
+    ) -> Result<(), Error>
+    where
+        Arg: for<'b> Serialize<StandardBufSerializer<'b>>,
+    {
         if !self.module_session.module_deployed(id) {
             let wrapped_module =
                 WrappedModule::new(bytecode, None::<Objectcode>)?;
@@ -171,46 +163,39 @@ impl Session {
 
         self.create_instance(id)?;
 
+        let instance = self.instance(&id).expect("instance should exist");
+
+        if (arg.is_some() || ser_arg.is_some()) && !instance.is_function_exported(CONTRACT_INIT_METHOD){
+            return Err(InitalizationError(
+                "deploy initialization failed as init method is not exported"
+                    .into(),
+            ));
+        }
+
+        if ser_arg.is_some() {
+            // todo: rename s
+            let s = Some(self.init::<()>(id, &(), ser_arg)?);
+            self.call_history.push(From::from(Deploy {
+                module_id: id,
+                bytecode: bytecode.to_vec(),
+                ser_arg: s,
+            }));
+            return Ok(())
+        }
+
+        let s_arg = match arg {
+            Some(a) => {
+                Some(self.init::<Arg>(id, &a, None)?)
+            },
+            _ => None,
+        };
+
+        // todo: remove duplication of call_history push
         self.call_history.push(From::from(Deploy {
             module_id: id,
             bytecode: bytecode.to_vec(),
+            ser_arg: s_arg
         }));
-
-        Ok(())
-    }
-
-    /// Deploy a module with the given `id`.
-    /// If contract exports an initialization method, it will be called with
-    /// the arguments provided.
-    ///
-    /// If one would like to *not* specify the `ModuleId`, [`deploy`] is
-    /// available.
-    /// If one would like to *not* call the initialization method,
-    /// [`deploy_with_id`] is available.
-    ///
-    /// [`deploy`]: `Session::deploy`
-    /// [`deploy_with_id`]: `Session::deploy_with_id`
-    pub fn deploy_with_id_and_init<Arg>(
-        &mut self,
-        id: ModuleId,
-        bytecode: &[u8],
-        arg: &Arg,
-    ) -> Result<(), Error>
-    where
-        Arg: for<'b> Serialize<StandardBufSerializer<'b>>,
-    {
-        self.deploy_with_id(id, bytecode)?;
-
-        if let Some(instance) = self.instance(&id) {
-            if instance.is_function_exported(CONTRACT_INIT_METHOD) {
-                self.transact::<Arg, ()>(id, CONTRACT_INIT_METHOD, arg)?;
-            } else {
-                return Err(InitalizationError(
-                    "deploy initialization failed as init method is not exported"
-                        .into(),
-                ));
-            }
-        }
 
         Ok(())
     }
@@ -323,6 +308,51 @@ impl Session {
         let ret = ta.deserialize(&mut Infallible).expect("Infallible");
 
         Ok(ret)
+    }
+
+    pub fn init<Arg>(
+        &mut self,
+        module: ModuleId,
+        arg: &Arg,
+        ser_arg: Option<Vec<u8>>,
+    ) -> Result<Vec<u8>, Error>
+    where
+        Arg: for<'b> Serialize<StandardBufSerializer<'b>>,
+    {
+        let s_arg = match ser_arg {
+            None => {
+                let mut sbuf = [0u8; SCRATCH_BUF_BYTES];
+                let scratch = BufferScratch::new(&mut sbuf);
+                let ser = BufferSerializer::new(&mut self.buffer[..]);
+                let mut ser = CompositeSerializer::new(ser, scratch, Infallible);
+
+                ser.serialize_value(arg).expect("Infallible");
+                let pos = ser.pos();
+
+                self.execute_until_ok(Call {
+                    ty: CallType::T,
+                    module,
+                    fname: CONTRACT_INIT_METHOD.to_string(),
+                    fdata: self.buffer[..pos].to_vec(),
+                    limit: self.limit,
+                })?;
+
+                Vec::from(self.buffer.clone())
+            },
+            Some(s_arg) => {
+                self.execute_until_ok(Call {
+                    ty: CallType::T,
+                    module,
+                    fname: CONTRACT_INIT_METHOD.to_string(),
+                    fdata: s_arg.to_vec(),
+                    limit: self.limit,
+                })?;
+
+                s_arg
+            },
+        };
+
+        Ok(s_arg)
     }
 
     /// Return the state root of the current state of the session.
@@ -679,7 +709,7 @@ impl Session {
                     res = self.call_if_not_error(call);
                 }
                 CallOrDeploy::Deploy(deploy) => {
-                    self.deploy_with_id(deploy.module_id, &deploy.bytecode)
+                    self.do_deploy_with_id::<()>(deploy.module_id, &deploy.bytecode, None, deploy.ser_arg)
                         .expect("Only deploys that succeed should be added to the history");
                 }
             }
@@ -760,6 +790,7 @@ impl From<Deploy> for CallOrDeploy {
 struct Deploy {
     module_id: ModuleId,
     bytecode: Vec<u8>,
+    ser_arg: Option<Vec<u8>>,
 }
 
 #[derive(Debug)]
