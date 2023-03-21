@@ -13,7 +13,8 @@ pub fn points_get_used() -> Result<(), Error> {
     let mut session = vm.genesis_session();
 
     let counter_id = session.deploy(module_bytecode!("counter"), None::<()>)?;
-    let center_id = session.deploy(module_bytecode!("callcenter"), None::<()>)?;
+    let center_id =
+        session.deploy(module_bytecode!("callcenter"), None::<()>)?;
 
     session.query::<_, i64>(counter_id, "read_value", &())?;
     let counter_spent = session.spent();

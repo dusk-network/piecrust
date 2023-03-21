@@ -113,7 +113,11 @@ impl Session {
     ///
     /// [`ModuleId`]: ModuleId
     /// [`deploy_with_id`]: `Session::deploy_with_id`
-    pub fn deploy<Arg>(&mut self, bytecode: &[u8], arg: Option<Arg>) -> Result<ModuleId, Error>
+    pub fn deploy<Arg>(
+        &mut self,
+        bytecode: &[u8],
+        arg: Option<Arg>,
+    ) -> Result<ModuleId, Error>
     where
         Arg: for<'b> Serialize<StandardBufSerializer<'b>>,
     {
@@ -148,7 +152,7 @@ impl Session {
         id: ModuleId,
         bytecode: &[u8],
         arg: Option<Arg>,
-        ser_arg: Option<Vec<u8>>
+        ser_arg: Option<Vec<u8>>,
     ) -> Result<(), Error>
     where
         Arg: for<'b> Serialize<StandardBufSerializer<'b>>,
@@ -165,36 +169,25 @@ impl Session {
 
         let instance = self.instance(&id).expect("instance should exist");
 
-        if (arg.is_some() || ser_arg.is_some()) && !instance.is_function_exported(CONTRACT_INIT_METHOD){
+        if !matches!((&arg, &ser_arg), (None, None))
+            && !instance.is_function_exported(CONTRACT_INIT_METHOD)
+        {
             return Err(InitalizationError(
                 "deploy initialization failed as init method is not exported"
                     .into(),
             ));
         }
 
-        if ser_arg.is_some() {
-            // todo: rename s
-            let s = Some(self.init::<()>(id, &(), ser_arg)?);
-            self.call_history.push(From::from(Deploy {
-                module_id: id,
-                bytecode: bytecode.to_vec(),
-                ser_arg: s,
-            }));
-            return Ok(())
-        }
-
-        let s_arg = match arg {
-            Some(a) => {
-                Some(self.init::<Arg>(id, &a, None)?)
-            },
+        let s_arg = match (arg, &ser_arg) {
+            (Some(a), _) => Some(self.initialize::<Arg>(id, &a, None)?),
+            (None, Some(_)) => Some(self.initialize::<()>(id, &(), ser_arg)?),
             _ => None,
         };
 
-        // todo: remove duplication of call_history push
         self.call_history.push(From::from(Deploy {
             module_id: id,
             bytecode: bytecode.to_vec(),
-            ser_arg: s_arg
+            ser_arg: s_arg,
         }));
 
         Ok(())
@@ -229,7 +222,7 @@ impl Session {
         Ret::Archived: Deserialize<Ret, Infallible>
             + for<'b> CheckBytes<DefaultValidator<'b>>,
     {
-        if !self.is_deploy() && method_name == CONTRACT_INIT_METHOD {
+        if method_name == CONTRACT_INIT_METHOD {
             return Err(InitalizationError("init call not allowed".into()));
         }
 
@@ -284,7 +277,7 @@ impl Session {
         Ret::Archived: Deserialize<Ret, Infallible>
             + for<'b> CheckBytes<DefaultValidator<'b>>,
     {
-        if !self.is_deploy() && method_name == CONTRACT_INIT_METHOD {
+        if method_name == CONTRACT_INIT_METHOD {
             return Err(InitalizationError("init call not allowed".into()));
         }
 
@@ -310,7 +303,7 @@ impl Session {
         Ok(ret)
     }
 
-    pub fn init<Arg>(
+    pub fn initialize<Arg>(
         &mut self,
         module: ModuleId,
         arg: &Arg,
@@ -319,38 +312,33 @@ impl Session {
     where
         Arg: for<'b> Serialize<StandardBufSerializer<'b>>,
     {
+        let mut call = Call {
+            ty: CallType::T,
+            module,
+            fname: CONTRACT_INIT_METHOD.to_string(),
+            fdata: vec![],
+            limit: self.limit,
+        };
         let s_arg = match ser_arg {
             None => {
                 let mut sbuf = [0u8; SCRATCH_BUF_BYTES];
                 let scratch = BufferScratch::new(&mut sbuf);
                 let ser = BufferSerializer::new(&mut self.buffer[..]);
-                let mut ser = CompositeSerializer::new(ser, scratch, Infallible);
+                let mut ser =
+                    CompositeSerializer::new(ser, scratch, Infallible);
 
                 ser.serialize_value(arg).expect("Infallible");
                 let pos = ser.pos();
-
-                self.execute_until_ok(Call {
-                    ty: CallType::T,
-                    module,
-                    fname: CONTRACT_INIT_METHOD.to_string(),
-                    fdata: self.buffer[..pos].to_vec(),
-                    limit: self.limit,
-                })?;
-
-                Vec::from(self.buffer.clone())
-            },
+                call.fdata = self.buffer[..pos].to_vec();
+                call.fdata.to_vec()
+            }
             Some(s_arg) => {
-                self.execute_until_ok(Call {
-                    ty: CallType::T,
-                    module,
-                    fname: CONTRACT_INIT_METHOD.to_string(),
-                    fdata: s_arg.to_vec(),
-                    limit: self.limit,
-                })?;
-
+                call.fdata = s_arg.to_vec();
                 s_arg
-            },
+            }
         };
+
+        self.execute_until_ok(call)?;
 
         Ok(s_arg)
     }
@@ -761,10 +749,6 @@ impl Session {
         self.pop_callstack();
 
         Ok(ret)
-    }
-
-    fn is_deploy(&self) -> bool {
-        matches!(self.call_history.last(), Some(CallOrDeploy::Deploy(_)))
     }
 }
 

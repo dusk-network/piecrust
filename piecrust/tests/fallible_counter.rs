@@ -13,7 +13,8 @@ fn fallible_read_write_panic() -> Result<(), Error> {
 
     let mut session = vm.genesis_session();
 
-    let id = session.deploy(module_bytecode!("fallible_counter"), None::<()>)?;
+    let id =
+        session.deploy(module_bytecode!("fallible_counter"), None::<()>)?;
 
     session.transact::<bool, ()>(id, "increment", &false)?;
 
