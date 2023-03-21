@@ -52,3 +52,19 @@ fn constructor() -> Result<(), Error> {
 
     Ok(())
 }
+
+#[test]
+fn missing_init() -> Result<(), Error> {
+    let vm = VM::ephemeral()?;
+
+    let mut session = vm.genesis_session();
+
+    let result =
+        session.deploy_and_init::<u8>(module_bytecode!("counter"), &0xab);
+    assert!(
+        result.is_err(),
+        "deploy_and_init when the 'init' method is not exported should fail with an error"
+    );
+
+    Ok(())
+}

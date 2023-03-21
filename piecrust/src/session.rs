@@ -204,6 +204,11 @@ impl Session {
         if let Some(instance) = self.instance(&id) {
             if instance.is_function_exported(CONTRACT_INIT_METHOD) {
                 self.transact::<Arg, ()>(id, CONTRACT_INIT_METHOD, arg)?;
+            } else {
+                return Err(InitalizationError(
+                    "deploy initialization failed as init method is not exported"
+                        .into(),
+                ));
             }
         }
 
@@ -222,7 +227,8 @@ impl Session {
     /// # Errors
     /// The call may error during execution for a wide array of reasons, the
     /// most common ones being running against the point limit and a module
-    /// panic.
+    /// panic. Calling the 'init' method is not allowed except for when
+    /// called from the deploy method.
     ///
     /// [`set_point_limit`]: Session::set_point_limit
     /// [`spent`]: Session::spent
@@ -239,7 +245,7 @@ impl Session {
             + for<'b> CheckBytes<DefaultValidator<'b>>,
     {
         if !self.is_deploy() && method_name == CONTRACT_INIT_METHOD {
-            return Err(InitalizationError);
+            return Err(InitalizationError("init call not allowed".into()));
         }
 
         let mut sbuf = [0u8; SCRATCH_BUF_BYTES];
@@ -276,7 +282,8 @@ impl Session {
     /// # Errors
     /// The call may error during execution for a wide array of reasons, the
     /// most common ones being running against the point limit and a module
-    /// panic.
+    /// panic. Calling the 'init' method is not allowed except for when
+    /// called from the deploy method.
     ///
     /// [`set_point_limit`]: Session::set_point_limit
     /// [`spent`]: Session::spent
@@ -293,7 +300,7 @@ impl Session {
             + for<'b> CheckBytes<DefaultValidator<'b>>,
     {
         if !self.is_deploy() && method_name == CONTRACT_INIT_METHOD {
-            return Err(InitalizationError);
+            return Err(InitalizationError("init call not allowed".into()));
         }
 
         let mut sbuf = [0u8; SCRATCH_BUF_BYTES];
