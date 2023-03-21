@@ -63,11 +63,6 @@ impl ModuleSession {
         root
     }
 
-    /// Returns the root directory of this session.
-    pub fn root_dir(&self) -> &Path {
-        self.root_dir.as_path()
-    }
-
     /// Commits the given session to disk, consuming the session and adding it
     /// to the [`ModuleStore`] it was created from.
     ///

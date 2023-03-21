@@ -30,7 +30,6 @@ use crate::module::WrappedModule;
 use crate::session::Session;
 use crate::store::Memory;
 use crate::Error;
-use crate::Error::InitalizationError;
 
 pub struct WrappedInstance {
     instance: wasmer::Instance,
@@ -38,7 +37,6 @@ pub struct WrappedInstance {
     #[allow(unused)]
     heap_base: usize,
     store: wasmer::Store,
-    meta_ofs: usize,
 }
 
 pub(crate) struct Env {
@@ -129,12 +127,6 @@ impl Store {
     }
 }
 
-enum ModuleInitState {
-    Unknown,
-    Required,
-    Done,
-}
-
 impl WrappedInstance {
     pub fn new(
         session: &mut Session,
@@ -185,33 +177,17 @@ impl WrappedInstance {
                 _ => todo!("Missing `SELF_ID` export"),
             };
 
-        let meta_ofs = match instance.exports.get_global("M")?.get(&mut store) {
-            wasmer::Value::I32(i) => i as usize,
-            _ => todo!("Missing `M` Metadata export"),
-        };
-
         // write self id into memory.
         let mut memory_guard = memory.write();
         let bytes = memory_guard.as_bytes_mut();
         bytes[self_id_ofs..self_id_ofs + MODULE_ID_BYTES]
             .copy_from_slice(module_id.as_bytes());
 
-        if bytes[meta_ofs] == ModuleInitState::Unknown as u8 {
-            let init_function_exists =
-                instance.exports.get_function("init").is_ok();
-            bytes[meta_ofs] = if init_function_exists {
-                ModuleInitState::Required as u8
-            } else {
-                ModuleInitState::Done as u8
-            };
-        }
-
         let wrapped = WrappedInstance {
             store,
             instance,
             arg_buf_ofs,
             heap_base,
-            meta_ofs,
         };
 
         Ok(wrapped)
@@ -273,19 +249,6 @@ impl WrappedInstance {
         })
     }
 
-    pub(crate) fn with_meta_buffer<F, R>(&self, f: F) -> R
-    where
-        F: FnOnce(&mut [u8]) -> R,
-    {
-        self.with_memory_mut(|memory_bytes| {
-            let a = self.meta_ofs;
-            let b = uplink::METADATA_LEN;
-            let begin = &mut memory_bytes[a..];
-            let trimmed = &mut begin[..b];
-            f(trimmed)
-        })
-    }
-
     pub(crate) fn write_bytes_to_arg_buffer(&self, buf: &[u8]) -> u32 {
         self.with_arg_buffer(|arg_buffer| {
             arg_buffer[..buf.len()].copy_from_slice(buf);
@@ -315,9 +278,6 @@ impl WrappedInstance {
         arg_len: u32,
         limit: u64,
     ) -> Result<i32, Error> {
-        if !self.is_initialized() {
-            return Err(InitalizationError);
-        }
         let fun: TypedFunction<u32, i32> = self
             .instance
             .exports
@@ -391,18 +351,6 @@ impl WrappedInstance {
 
     pub fn arg_buffer_offset(&self) -> usize {
         self.arg_buf_ofs
-    }
-
-    pub fn is_initialized(&self) -> bool {
-        self.with_meta_buffer(|meta_buf| {
-            meta_buf[0] == ModuleInitState::Done as u8
-        })
-    }
-
-    pub fn set_initialized(&mut self) {
-        self.with_meta_buffer(|meta_buf| {
-            meta_buf[0] = ModuleInitState::Done as u8;
-        });
     }
 }
 

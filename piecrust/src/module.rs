@@ -4,16 +4,11 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use blake3::hash;
-use std::fs;
-use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use wasmer::Module;
 
 use crate::error::Error;
 use crate::instance::Store;
-use crate::store::COMPILED_DIR;
-use crate::Error::ModuleCacheError;
 
 #[derive(Clone)]
 pub struct WrappedModule {
