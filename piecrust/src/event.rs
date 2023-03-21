@@ -6,6 +6,7 @@
 
 use piecrust_uplink::ModuleId;
 
+#[derive(Debug)]
 pub struct Event {
     source: ModuleId,
     data: Vec<u8>,
