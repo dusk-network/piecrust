@@ -12,7 +12,7 @@ fn counter_read_simple() -> Result<(), Error> {
 
     let mut session = vm.genesis_session();
 
-    let id = session.deploy(module_bytecode!("counter"))?;
+    let id = session.deploy(module_bytecode!("counter"), None::<()>)?;
 
     assert_eq!(session.query::<(), i64>(id, "read_value", &())?, 0xfc);
 
@@ -25,7 +25,7 @@ fn counter_read_write_simple() -> Result<(), Error> {
 
     let mut session = vm.genesis_session();
 
-    let id = session.deploy(module_bytecode!("counter"))?;
+    let id = session.deploy(module_bytecode!("counter"), None::<()>)?;
 
     assert_eq!(session.query::<(), i64>(id, "read_value", &())?, 0xfc);
 

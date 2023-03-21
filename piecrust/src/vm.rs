@@ -38,6 +38,7 @@ use crate::Error::{self, PersistenceError};
 /// [`Deletions`]: VM::delete_commit
 /// [`squashes`]: VM::squash_commit
 /// [`sync_thread`]: VM::sync_thread
+#[derive(Debug)]
 pub struct VM {
     host_queries: HostQueries,
     store: ModuleStore,

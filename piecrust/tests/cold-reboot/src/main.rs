@@ -26,7 +26,7 @@ fn initialize_counter<P: AsRef<Path>>(
         "../../../../target/wasm32-unknown-unknown/release/counter.wasm"
     );
 
-    session.deploy_with_id(COUNTER_ID, counter_bytecode)?;
+    session.deploy_with_id(COUNTER_ID, counter_bytecode, None::<()>)?;
     session.transact::<(), ()>(COUNTER_ID, "increment", &())?;
 
     let commit_root = session.commit()?;

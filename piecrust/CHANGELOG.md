@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Derive `Debug` for `Session` and `VM`
+
 ### Fixed
 
 - Added contract constructor mechanism [#93]

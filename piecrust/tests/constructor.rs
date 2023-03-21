@@ -4,7 +4,9 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use piecrust::{module_bytecode, Error, CONTRACT_INIT_METHOD, VM};
+use piecrust::{module_bytecode, Error, VM};
+
+const CONTRACT_INIT_METHOD: &str = "init";
 
 #[test]
 fn constructor() -> Result<(), Error> {
@@ -12,8 +14,8 @@ fn constructor() -> Result<(), Error> {
 
     let mut session = vm.genesis_session();
 
-    let id = session
-        .deploy_and_init::<u8>(module_bytecode!("constructor"), &0xab)?;
+    let id =
+        session.deploy::<u8>(module_bytecode!("constructor"), Some(0xab))?;
 
     assert_eq!(session.query::<(), u8>(id, "read_value", &())?, 0xab);
 
@@ -59,8 +61,7 @@ fn missing_init() -> Result<(), Error> {
 
     let mut session = vm.genesis_session();
 
-    let result =
-        session.deploy_and_init::<u8>(module_bytecode!("counter"), &0xab);
+    let result = session.deploy::<u8>(module_bytecode!("counter"), Some(0xab));
     assert!(
         result.is_err(),
         "deploy_and_init when the 'init' method is not exported should fail with an error"
