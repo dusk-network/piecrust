@@ -188,11 +188,11 @@ impl Session {
                 ser.serialize_value(&a).expect("Infallible");
                 let pos = ser.pos();
                 let v = self.buffer[..pos].to_vec();
-                self.initialize::<Arg>(id, v.to_vec())?;
+                self.initialize(id, v.to_vec())?;
                 Some(v)
             }
             (None, Some(v)) => {
-                self.initialize::<()>(id, v.to_vec())?;
+                self.initialize(id, v.to_vec())?;
                 Some(v)
             }
             _ => None,
@@ -317,14 +317,11 @@ impl Session {
         Ok(ret)
     }
 
-    fn initialize<Arg>(
+    fn initialize(
         &mut self,
         module: ModuleId,
         arg: Vec<u8>,
-    ) -> Result<(), Error>
-    where
-        Arg: for<'b> Serialize<StandardBufSerializer<'b>>,
-    {
+    ) -> Result<(), Error> {
         self.execute_until_ok(Call {
             ty: CallType::T,
             module,
