@@ -15,7 +15,7 @@ fn constructor() -> Result<(), Error> {
     let mut session = vm.genesis_session();
 
     let id =
-        session.deploy::<u8>(module_bytecode!("constructor"), Some(0xab))?;
+        session.deploy::<u8>(module_bytecode!("constructor"), Some(&0xab))?;
 
     assert_eq!(session.query::<(), u8>(id, "read_value", &())?, 0xab);
 
@@ -61,7 +61,7 @@ fn missing_init() -> Result<(), Error> {
 
     let mut session = vm.genesis_session();
 
-    let result = session.deploy::<u8>(module_bytecode!("counter"), Some(0xab));
+    let result = session.deploy::<u8>(module_bytecode!("counter"), Some(&0xab));
     assert!(
         result.is_err(),
         "deploy_and_init when the 'init' method is not exported should fail with an error"

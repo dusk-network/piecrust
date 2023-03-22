@@ -29,12 +29,12 @@ fn crossover() -> Result<(), Error> {
     session.deploy_with_id(
         CROSSOVER_ONE,
         module_bytecode!("crossover"),
-        None::<()>,
+        None::<&()>,
     )?;
     session.deploy_with_id(
         CROSSOVER_TWO,
         module_bytecode!("crossover"),
-        None::<()>,
+        None::<&()>,
     )?;
 
     // These value should not be set to `INITIAL_VALUE` in the contract.

@@ -12,9 +12,10 @@ pub fn points_get_used() -> Result<(), Error> {
 
     let mut session = vm.genesis_session();
 
-    let counter_id = session.deploy(module_bytecode!("counter"), None::<()>)?;
+    let counter_id =
+        session.deploy(module_bytecode!("counter"), None::<&()>)?;
     let center_id =
-        session.deploy(module_bytecode!("callcenter"), None::<()>)?;
+        session.deploy(module_bytecode!("callcenter"), None::<&()>)?;
 
     session.query::<_, i64>(counter_id, "read_value", &())?;
     let counter_spent = session.spent();
@@ -33,7 +34,8 @@ pub fn fails_with_out_of_points() -> Result<(), Error> {
 
     let mut session = vm.genesis_session();
 
-    let counter_id = session.deploy(module_bytecode!("counter"), None::<()>)?;
+    let counter_id =
+        session.deploy(module_bytecode!("counter"), None::<&()>)?;
 
     session.set_point_limit(0);
 
@@ -54,7 +56,8 @@ pub fn limit_and_spent() -> Result<(), Error> {
 
     let mut session = vm.genesis_session();
 
-    let spender_id = session.deploy(module_bytecode!("spender"), None::<()>)?;
+    let spender_id =
+        session.deploy(module_bytecode!("spender"), None::<&()>)?;
 
     session.set_point_limit(LIMIT);
 

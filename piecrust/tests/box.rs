@@ -12,7 +12,7 @@ pub fn box_set_get() -> Result<(), Error> {
 
     let mut session = vm.genesis_session();
 
-    let id = session.deploy(module_bytecode!("box"), None::<()>)?;
+    let id = session.deploy(module_bytecode!("box"), None::<&()>)?;
 
     let value: Option<i16> = session.query(id, "get", &())?;
 

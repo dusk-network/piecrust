@@ -16,8 +16,8 @@ fn session_commits_persistence() -> Result<(), Error> {
     let commit_1;
     {
         let mut session = vm.genesis_session();
-        id_1 = session.deploy(module_bytecode!("counter"), None::<()>)?;
-        id_2 = session.deploy(module_bytecode!("box"), None::<()>)?;
+        id_1 = session.deploy(module_bytecode!("counter"), None::<&()>)?;
+        id_2 = session.deploy(module_bytecode!("box"), None::<&()>)?;
 
         session.transact::<(), ()>(id_1, "increment", &())?;
         session.transact::<i16, ()>(id_2, "set", &0x11)?;
@@ -73,8 +73,8 @@ fn session_commits_persistence() -> Result<(), Error> {
 fn modules_persistence() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
     let mut session = vm.genesis_session();
-    let id_1 = session.deploy(module_bytecode!("counter"), None::<()>)?;
-    let id_2 = session.deploy(module_bytecode!("box"), None::<()>)?;
+    let id_1 = session.deploy(module_bytecode!("counter"), None::<&()>)?;
+    let id_2 = session.deploy(module_bytecode!("box"), None::<&()>)?;
 
     session.transact::<(), ()>(id_1, "increment", &())?;
     session.transact::<i16, ()>(id_2, "set", &0x11)?;
