@@ -178,9 +178,23 @@ impl Session {
             ));
         }
 
-        let s_arg = match (arg, &ser_arg) {
-            (Some(a), _) => Some(self.initialize::<Arg>(id, &a, None)?),
-            (None, Some(_)) => Some(self.initialize::<()>(id, &(), ser_arg)?),
+        let s_arg = match (arg, ser_arg) {
+            (Some(a), _) => {
+                let mut sbuf = [0u8; SCRATCH_BUF_BYTES];
+                let scratch = BufferScratch::new(&mut sbuf);
+                let ser = BufferSerializer::new(&mut self.buffer[..]);
+                let mut ser =
+                    CompositeSerializer::new(ser, scratch, Infallible);
+                ser.serialize_value(&a).expect("Infallible");
+                let pos = ser.pos();
+                let v = self.buffer[..pos].to_vec();
+                self.initialize::<Arg>(id, v.to_vec())?;
+                Some(v)
+            }
+            (None, Some(v)) => {
+                self.initialize::<()>(id, v.to_vec())?;
+                Some(v)
+            }
             _ => None,
         };
 
@@ -303,44 +317,22 @@ impl Session {
         Ok(ret)
     }
 
-    pub fn initialize<Arg>(
+    fn initialize<Arg>(
         &mut self,
         module: ModuleId,
-        arg: &Arg,
-        ser_arg: Option<Vec<u8>>,
-    ) -> Result<Vec<u8>, Error>
+        arg: Vec<u8>,
+    ) -> Result<(), Error>
     where
         Arg: for<'b> Serialize<StandardBufSerializer<'b>>,
     {
-        let mut call = Call {
+        self.execute_until_ok(Call {
             ty: CallType::T,
             module,
             fname: CONTRACT_INIT_METHOD.to_string(),
-            fdata: vec![],
+            fdata: arg,
             limit: self.limit,
-        };
-        let s_arg = match ser_arg {
-            None => {
-                let mut sbuf = [0u8; SCRATCH_BUF_BYTES];
-                let scratch = BufferScratch::new(&mut sbuf);
-                let ser = BufferSerializer::new(&mut self.buffer[..]);
-                let mut ser =
-                    CompositeSerializer::new(ser, scratch, Infallible);
-
-                ser.serialize_value(arg).expect("Infallible");
-                let pos = ser.pos();
-                call.fdata = self.buffer[..pos].to_vec();
-                call.fdata.to_vec()
-            }
-            Some(s_arg) => {
-                call.fdata = s_arg.to_vec();
-                s_arg
-            }
-        };
-
-        self.execute_until_ok(call)?;
-
-        Ok(s_arg)
+        })?;
+        Ok(())
     }
 
     /// Return the state root of the current state of the session.
