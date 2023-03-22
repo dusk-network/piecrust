@@ -12,7 +12,7 @@ pub fn debug() -> Result<(), Error> {
 
     let mut session = vm.genesis_session();
 
-    let id = session.deploy(module_bytecode!("debugger"))?;
+    let id = session.deploy(module_bytecode!("debugger"), None::<&()>)?;
 
     session.query(id, "debug", &String::from("Hello world"))?;
 

@@ -31,12 +31,13 @@ use crate::store::{ModuleSession, Objectcode};
 use crate::types::StandardBufSerializer;
 use crate::vm::HostQueries;
 use crate::Error;
-use crate::Error::PersistenceError;
+use crate::Error::{InitalizationError, PersistenceError};
 
 use call_stack::{CallStack, StackElement};
 
 const DEFAULT_LIMIT: u64 = 65_536;
 const MAX_META_SIZE: usize = 65_536;
+pub const INIT_METHOD: &str = "init";
 
 unsafe impl Send for Session {}
 unsafe impl Sync for Session {}
@@ -112,11 +113,19 @@ impl Session {
     ///
     /// [`ModuleId`]: ModuleId
     /// [`deploy_with_id`]: `Session::deploy_with_id`
-    pub fn deploy(&mut self, bytecode: &[u8]) -> Result<ModuleId, Error> {
+    pub fn deploy<Arg>(
+        &mut self,
+        bytecode: &[u8],
+        arg: Option<&Arg>,
+    ) -> Result<ModuleId, Error>
+    where
+        Arg: for<'b> Serialize<StandardBufSerializer<'b>>,
+    {
         let hash = blake3::hash(bytecode);
         let module_id = ModuleId::from_bytes(hash.into());
 
-        self.deploy_with_id(module_id, bytecode)?;
+        self.deploy_with_id(module_id, bytecode, arg)?;
+
         Ok(module_id)
     }
 
@@ -126,24 +135,72 @@ impl Session {
     /// available.
     ///
     /// [`deploy`]: `Session::deploy`
-    pub fn deploy_with_id(
+    pub fn deploy_with_id<Arg>(
         &mut self,
         id: ModuleId,
         bytecode: &[u8],
+        arg: Option<&Arg>,
+    ) -> Result<(), Error>
+    where
+        Arg: for<'b> Serialize<StandardBufSerializer<'b>>,
+    {
+        let arg = arg.map(|arg| {
+            let mut sbuf = [0u8; SCRATCH_BUF_BYTES];
+            let scratch = BufferScratch::new(&mut sbuf);
+            let ser = BufferSerializer::new(&mut self.buffer[..]);
+            let mut ser = CompositeSerializer::new(ser, scratch, Infallible);
+
+            ser.serialize_value(arg).expect("Infallible");
+            let pos = ser.pos();
+
+            self.buffer[0..pos].to_vec()
+        });
+
+        self.do_deploy_with_id(id, bytecode, arg)
+    }
+
+    fn do_deploy_with_id(
+        &mut self,
+        id: ModuleId,
+        bytecode: &[u8],
+        arg: Option<Vec<u8>>,
     ) -> Result<(), Error> {
-        if !self.module_session.module_deployed(id) {
-            let wrapped_module =
-                WrappedModule::new(bytecode, None::<Objectcode>)?;
-            self.module_session
-                .deploy_with_id(id, bytecode, wrapped_module.as_bytes())
-                .map_err(|err| PersistenceError(Arc::new(err)))?;
+        if self.module_session.module_deployed(id) {
+            return Err(InitalizationError(
+                "Deployed error already exists".into(),
+            ));
         }
 
+        let wrapped_module = WrappedModule::new(bytecode, None::<Objectcode>)?;
+        self.module_session
+            .deploy_with_id(id, bytecode, wrapped_module.as_bytes())
+            .map_err(|err| PersistenceError(Arc::new(err)))?;
+
         self.create_instance(id)?;
+        let instance = self.instance(&id).expect("instance should exist");
+
+        let has_init = instance.is_function_exported(INIT_METHOD);
+        if has_init && arg.is_none() {
+            return Err(InitalizationError(
+                "Module has constructor but no argument was provided".into(),
+            ));
+        }
+
+        if let Some(arg) = &arg {
+            if !has_init {
+                return Err(InitalizationError(
+                    "Argument was provided but module has no constructor"
+                        .into(),
+                ));
+            }
+
+            self.initialize(id, arg.clone())?;
+        }
 
         self.call_history.push(From::from(Deploy {
             module_id: id,
             bytecode: bytecode.to_vec(),
+            fdata: arg,
         }));
 
         Ok(())
@@ -161,7 +218,8 @@ impl Session {
     /// # Errors
     /// The call may error during execution for a wide array of reasons, the
     /// most common ones being running against the point limit and a module
-    /// panic.
+    /// panic. Calling the 'init' method is not allowed except for when
+    /// called from the deploy method.
     ///
     /// [`set_point_limit`]: Session::set_point_limit
     /// [`spent`]: Session::spent
@@ -177,6 +235,10 @@ impl Session {
         Ret::Archived: Deserialize<Ret, Infallible>
             + for<'b> CheckBytes<DefaultValidator<'b>>,
     {
+        if method_name == INIT_METHOD {
+            return Err(InitalizationError("init call not allowed".into()));
+        }
+
         let mut sbuf = [0u8; SCRATCH_BUF_BYTES];
         let scratch = BufferScratch::new(&mut sbuf);
         let ser = BufferSerializer::new(&mut self.buffer[..]);
@@ -211,7 +273,8 @@ impl Session {
     /// # Errors
     /// The call may error during execution for a wide array of reasons, the
     /// most common ones being running against the point limit and a module
-    /// panic.
+    /// panic. Calling the 'init' method is not allowed except for when
+    /// called from the deploy method.
     ///
     /// [`set_point_limit`]: Session::set_point_limit
     /// [`spent`]: Session::spent
@@ -227,6 +290,10 @@ impl Session {
         Ret::Archived: Deserialize<Ret, Infallible>
             + for<'b> CheckBytes<DefaultValidator<'b>>,
     {
+        if method_name == INIT_METHOD {
+            return Err(InitalizationError("init call not allowed".into()));
+        }
+
         let mut sbuf = [0u8; SCRATCH_BUF_BYTES];
         let scratch = BufferScratch::new(&mut sbuf);
         let ser = BufferSerializer::new(&mut self.buffer[..]);
@@ -249,14 +316,22 @@ impl Session {
         Ok(ret)
     }
 
-    /// Return the state root of the current state of the session.
-    ///
-    /// The state root is the root of a merkle tree whose leaves are the hashes
-    /// of the state of of each module, ordered by their module ID.
-    ///
-    /// It also doubles as the ID of a commit - the commit root.
+    fn initialize(
+        &mut self,
+        module: ModuleId,
+        arg: Vec<u8>,
+    ) -> Result<(), Error> {
+        self.execute_until_ok(Call {
+            ty: CallType::T,
+            module,
+            fname: INIT_METHOD.to_string(),
+            fdata: arg,
+            limit: self.limit,
+        })?;
+        Ok(())
+    }
 
-    pub fn instance<'a>(
+    pub(crate) fn instance<'a>(
         &self,
         module_id: &ModuleId,
     ) -> Option<&'a mut WrappedInstance> {
@@ -292,7 +367,7 @@ impl Session {
         }
     }
 
-    pub fn remove_instance(&mut self, module_id: &ModuleId) {
+    pub(crate) fn remove_instance(&mut self, module_id: &ModuleId) {
         let mut entry = match self.instance_map.entry(*module_id) {
             Entry::Occupied(e) => e,
             _ => unreachable!("map must have an instance here"),
@@ -313,6 +388,12 @@ impl Session {
         }
     }
 
+    /// Return the state root of the current state of the session.
+    ///
+    /// The state root is the root of a merkle tree whose leaves are the hashes
+    /// of the state of of each module, ordered by their module ID.
+    ///
+    /// It also doubles as the ID of a commit - the commit root.
     pub fn root(&self) -> [u8; 32] {
         self.module_session.root()
     }
@@ -603,7 +684,7 @@ impl Session {
                     res = self.call_if_not_error(call);
                 }
                 CallOrDeploy::Deploy(deploy) => {
-                    self.deploy_with_id(deploy.module_id, &deploy.bytecode)
+                    self.do_deploy_with_id(deploy.module_id, &deploy.bytecode, deploy.fdata)
                         .expect("Only deploys that succeed should be added to the history");
                 }
             }
@@ -680,6 +761,7 @@ impl From<Deploy> for CallOrDeploy {
 struct Deploy {
     module_id: ModuleId,
     bytecode: Vec<u8>,
+    fdata: Option<Vec<u8>>,
 }
 
 #[derive(Debug)]

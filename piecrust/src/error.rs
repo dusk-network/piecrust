@@ -56,6 +56,8 @@ pub enum Error {
     ValidationError,
     #[error("OutOfPoints")]
     OutOfPoints,
+    #[error("InitalizationError: {0}")]
+    InitalizationError(Cow<'static, str>),
 }
 
 impl From<wasmer::InstantiationError> for Error {
