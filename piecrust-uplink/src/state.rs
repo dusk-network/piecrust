@@ -62,6 +62,7 @@ mod ext {
         pub(crate) fn emit(arg_len: u32);
         pub(crate) fn limit() -> u64;
         pub(crate) fn spent() -> u64;
+        pub(crate) fn owner() -> i32;
     }
 }
 
@@ -261,6 +262,15 @@ pub fn height() -> u64 {
         let ret = unsafe {
             archived_root::<u64>(&buf[..core::mem::size_of::<Archived<u64>>()])
         };
+        ret.deserialize(&mut Infallible).expect("Infallible")
+    })
+}
+
+/// Return the current owner.
+pub fn owner() -> [u8; 32] {
+    unsafe { ext::owner() };
+    with_arg_buf(|buf| {
+        let ret = unsafe { archived_root::<[u8; 32]>(&buf[..32]) };
         ret.deserialize(&mut Infallible).expect("Infallible")
     })
 }

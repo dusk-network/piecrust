@@ -172,10 +172,17 @@ impl Session {
         }
 
         let wrapped_module = WrappedModule::new(bytecode, None::<Objectcode>)?;
-        // todo: replace this mock with real metadata
-        let mock_metadata = "abc".as_bytes();
+        /* todo: replace this mock with real metadata
+           we are not serializing the metadata here, just taking it
+           literally, still, it deserializes correctly for [u8;32] */
+        const OWNER_MOCK_VALUE: [u8; 32] = [3u8; 32];
         self.module_session
-            .deploy_with_id(id, bytecode, wrapped_module.as_bytes(), mock_metadata)
+            .deploy_with_id(
+                id,
+                bytecode,
+                wrapped_module.as_bytes(),
+                OWNER_MOCK_VALUE.as_slice(),
+            )
             .map_err(|err| PersistenceError(Arc::new(err)))?;
 
         self.create_instance(id)?;
@@ -746,6 +753,10 @@ impl Session {
         self.pop_callstack();
 
         Ok(ret)
+    }
+
+    pub fn metadata(&self, module_id: &ModuleId) -> Option<&[u8]> {
+        self.module_session.metadata(module_id)
     }
 }
 

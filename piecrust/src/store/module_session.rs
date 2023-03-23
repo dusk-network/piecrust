@@ -245,10 +245,19 @@ impl ModuleSession {
         let objectcode = Objectcode::new(objectcode)?;
         let metadata = Metadata::new(metadata)?;
 
-        self.modules
-            .insert(module_id, StoreData::new(bytecode, objectcode, metadata, memory));
+        self.modules.insert(
+            module_id,
+            StoreData::new(bytecode, objectcode, metadata, memory),
+        );
 
         Ok(())
+    }
+
+    /// todo
+    pub fn metadata(&self, module_id: &ModuleId) -> Option<&[u8]> {
+        self.modules
+            .get(module_id)
+            .map(|store_data| store_data.metadata.as_ref())
     }
 }
 

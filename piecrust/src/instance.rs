@@ -91,6 +91,10 @@ impl Env {
         let event = Event::new(self.self_id, data);
         self.session.push_event(event);
     }
+
+    pub fn self_module_id(&self) -> &ModuleId {
+        &self.self_id
+    }
 }
 
 /// Convenience methods for dealing with our custom store
