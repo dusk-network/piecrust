@@ -9,6 +9,7 @@
 mod bytecode;
 mod diff;
 mod memory;
+mod metadata;
 mod mmap;
 mod module_session;
 mod objectcode;
@@ -26,6 +27,7 @@ use flate2::Compression;
 pub use bytecode::Bytecode;
 use diff::diff;
 pub use memory::Memory;
+pub use metadata::Metadata;
 pub use module_session::ModuleSession;
 use module_session::StoreData;
 pub use objectcode::Objectcode;
@@ -38,6 +40,7 @@ const MEMORY_DIR: &str = "memory";
 const DIFF_EXTENSION: &str = "diff";
 const INDEX_FILE: &str = "index";
 const OBJECTCODE_EXTENSION: &str = ".a";
+const METADATA_EXTENSION: &str = ".m";
 
 type Root = [u8; ROOT_LEN];
 
@@ -528,10 +531,13 @@ fn write_commit_inner<P: AsRef<Path>>(
                 let bytecode_path = bytecode_dir.join(&module_hex);
                 let objectcode_path =
                     bytecode_path.with_extension(OBJECTCODE_EXTENSION);
+                let metadata_path =
+                    bytecode_path.with_extension(METADATA_EXTENSION);
                 let memory_path = memory_dir.join(&module_hex);
 
                 fs::write(bytecode_path, store_data.bytecode())?;
                 fs::write(objectcode_path, store_data.objectcode())?;
+                fs::write(metadata_path, store_data.metadata())?;
                 fs::write(memory_path, &store_data.memory().read())?;
             }
         }
@@ -548,15 +554,20 @@ fn write_commit_inner<P: AsRef<Path>>(
                 let bytecode_path = bytecode_dir.join(&module_hex);
                 let objectcode_path =
                     bytecode_path.with_extension(OBJECTCODE_EXTENSION);
+                let metadata_path =
+                    bytecode_path.with_extension(METADATA_EXTENSION);
                 let memory_path = memory_dir.join(&module_hex);
 
                 let base_bytecode_path = base_bytecode_dir.join(&module_hex);
                 let base_objectcode_path =
                     base_bytecode_path.with_extension(OBJECTCODE_EXTENSION);
+                let base_metadata_path =
+                    base_bytecode_path.with_extension(METADATA_EXTENSION);
                 let base_memory_path = base_memory_dir.join(&module_hex);
 
                 fs::hard_link(base_bytecode_path, bytecode_path)?;
                 fs::hard_link(base_objectcode_path, objectcode_path)?;
+                fs::hard_link(base_metadata_path, metadata_path)?;
                 fs::hard_link(&base_memory_path, &memory_path)?;
 
                 // If there is a diff of this memory in the base module, and it
@@ -604,10 +615,13 @@ fn write_commit_inner<P: AsRef<Path>>(
                         let bytecode_path = bytecode_dir.join(&module_hex);
                         let objectcode_path =
                             bytecode_path.with_extension(OBJECTCODE_EXTENSION);
+                        let metadata_path =
+                            bytecode_path.with_extension(METADATA_EXTENSION);
                         let memory_path = memory_dir.join(&module_hex);
 
                         fs::write(bytecode_path, store_data.bytecode())?;
                         fs::write(objectcode_path, store_data.objectcode())?;
+                        fs::write(metadata_path, store_data.metadata())?;
                         fs::write(memory_path, store_data.memory().read())?;
                     }
                 }

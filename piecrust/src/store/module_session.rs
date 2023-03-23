@@ -13,14 +13,16 @@ use std::{io, mem};
 use piecrust_uplink::ModuleId;
 
 use crate::store::{
-    compute_root, Bytecode, Call, Commit, Memory, Objectcode, Root,
-    BYTECODE_DIR, DIFF_EXTENSION, MEMORY_DIR, OBJECTCODE_EXTENSION,
+    compute_root, Bytecode, Call, Commit, Memory, Metadata, Objectcode, Root,
+    BYTECODE_DIR, DIFF_EXTENSION, MEMORY_DIR, METADATA_EXTENSION,
+    OBJECTCODE_EXTENSION,
 };
 
 #[derive(Debug, Clone)]
 pub struct StoreData {
     bytecode: Bytecode,
     objectcode: Objectcode,
+    metadata: Metadata,
     memory: Memory,
 }
 
@@ -28,11 +30,13 @@ impl StoreData {
     pub fn new(
         bytecode: Bytecode,
         objectcode: Objectcode,
+        metadata: Metadata,
         memory: Memory,
     ) -> Self {
         Self {
             bytecode,
             objectcode,
+            metadata,
             memory,
         }
     }
@@ -43,6 +47,10 @@ impl StoreData {
 
     pub fn objectcode(&self) -> &Objectcode {
         &self.objectcode
+    }
+
+    pub fn metadata(&self) -> &Metadata {
+        &self.metadata
     }
 
     pub fn memory(&self) -> Memory {
@@ -168,6 +176,8 @@ impl ModuleSession {
                                 base_dir.join(BYTECODE_DIR).join(&module_hex);
                             let objectcode_path = bytecode_path
                                 .with_extension(OBJECTCODE_EXTENSION);
+                            let metadata_path = bytecode_path
+                                .with_extension(METADATA_EXTENSION);
                             let memory_path =
                                 base_dir.join(MEMORY_DIR).join(module_hex);
                             let memory_diff_path =
@@ -176,6 +186,7 @@ impl ModuleSession {
                             let bytecode = Bytecode::from_file(bytecode_path)?;
                             let objectcode =
                                 Objectcode::from_file(objectcode_path)?;
+                            let metadata = Metadata::from_file(metadata_path)?;
                             let memory =
                                 match base_commit.diffs.contains(&module) {
                                     true => Memory::from_file_and_diff(
@@ -187,7 +198,7 @@ impl ModuleSession {
 
                             let module = entry
                                 .insert(StoreData::new(
-                                    bytecode, objectcode, memory,
+                                    bytecode, objectcode, metadata, memory,
                                 ))
                                 .clone();
 
@@ -227,13 +238,15 @@ impl ModuleSession {
         module_id: ModuleId,
         bytecode: B,
         objectcode: B,
+        metadata: B,
     ) -> io::Result<()> {
         let memory = Memory::new()?;
         let bytecode = Bytecode::new(bytecode)?;
         let objectcode = Objectcode::new(objectcode)?;
+        let metadata = Metadata::new(metadata)?;
 
         self.modules
-            .insert(module_id, StoreData::new(bytecode, objectcode, memory));
+            .insert(module_id, StoreData::new(bytecode, objectcode, metadata, memory));
 
         Ok(())
     }

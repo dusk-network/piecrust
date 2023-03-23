@@ -63,7 +63,7 @@ pub struct Session {
     instance_map: BTreeMap<ModuleId, (*mut WrappedInstance, u64)>,
     debug: Vec<String>,
     events: Vec<Event>,
-    data: Metadata,
+    data: SessionMetadata,
 
     module_session: ModuleSession,
     host_queries: HostQueries,
@@ -92,7 +92,7 @@ impl Session {
             instance_map: BTreeMap::new(),
             debug: vec![],
             events: vec![],
-            data: Metadata::new(),
+            data: SessionMetadata::new(),
             module_session,
             host_queries,
             limit: DEFAULT_LIMIT,
@@ -172,8 +172,10 @@ impl Session {
         }
 
         let wrapped_module = WrappedModule::new(bytecode, None::<Objectcode>)?;
+        // todo: replace this mock with real metadata
+        let mock_metadata = "abc".as_bytes();
         self.module_session
-            .deploy_with_id(id, bytecode, wrapped_module.as_bytes())
+            .deploy_with_id(id, bytecode, wrapped_module.as_bytes(), mock_metadata)
             .map_err(|err| PersistenceError(Arc::new(err)))?;
 
         self.create_instance(id)?;
@@ -788,11 +790,11 @@ struct Call {
 }
 
 #[derive(Debug)]
-pub struct Metadata {
+pub struct SessionMetadata {
     data: BTreeMap<Cow<'static, str>, Vec<u8>>,
 }
 
-impl Metadata {
+impl SessionMetadata {
     fn new() -> Self {
         Self {
             data: BTreeMap::new(),
