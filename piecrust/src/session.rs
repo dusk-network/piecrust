@@ -406,14 +406,22 @@ impl Session {
         &mut self,
         module_id: ModuleId,
     ) -> Result<WrappedInstance, Error> {
-        let (bytecode, objectcode, memory) = self
+        let store_data = self
             .module_session
             .module(module_id)
             .map_err(|err| PersistenceError(Arc::new(err)))?
             .expect("Module should exist");
 
-        let module = WrappedModule::new(&bytecode, Some(&objectcode))?;
-        let instance = WrappedInstance::new(self, module_id, &module, memory)?;
+        let module = WrappedModule::new(
+            store_data.bytecode(),
+            Some(store_data.objectcode()),
+        )?;
+        let instance = WrappedInstance::new(
+            self,
+            module_id,
+            &module,
+            store_data.memory(),
+        )?;
 
         Ok(instance)
     }

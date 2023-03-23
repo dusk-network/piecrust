@@ -17,6 +17,39 @@ use crate::store::{
     BYTECODE_DIR, DIFF_EXTENSION, MEMORY_DIR, OBJECTCODE_EXTENSION,
 };
 
+#[derive(Debug, Clone)]
+pub struct StoreData {
+    bytecode: Bytecode,
+    objectcode: Objectcode,
+    memory: Memory,
+}
+
+impl StoreData {
+    pub fn new(
+        bytecode: Bytecode,
+        objectcode: Objectcode,
+        memory: Memory,
+    ) -> Self {
+        Self {
+            bytecode,
+            objectcode,
+            memory,
+        }
+    }
+
+    pub fn bytecode(&self) -> &Bytecode {
+        &self.bytecode
+    }
+
+    pub fn objectcode(&self) -> &Objectcode {
+        &self.objectcode
+    }
+
+    pub fn memory(&self) -> Memory {
+        self.memory.clone()
+    }
+}
+
 /// The representation of a session with a [`ModuleStore`].
 ///
 /// A session tracks modifications to the modules' memories by keeping
@@ -28,7 +61,7 @@ use crate::store::{
 /// [`commit`]: ModuleSession::commit
 #[derive(Debug)]
 pub struct ModuleSession {
-    modules: BTreeMap<ModuleId, (Bytecode, Objectcode, Memory)>,
+    modules: BTreeMap<ModuleId, StoreData>,
 
     base: Option<(Root, Commit)>,
     root_dir: PathBuf,
@@ -119,7 +152,7 @@ impl ModuleSession {
     pub fn module(
         &mut self,
         module: ModuleId,
-    ) -> io::Result<Option<(Bytecode, Objectcode, Memory)>> {
+    ) -> io::Result<Option<StoreData>> {
         match self.modules.entry(module) {
             Vacant(entry) => match &self.base {
                 None => Ok(None),
@@ -153,7 +186,9 @@ impl ModuleSession {
                                 };
 
                             let module = entry
-                                .insert((bytecode, objectcode, memory))
+                                .insert(StoreData::new(
+                                    bytecode, objectcode, memory,
+                                ))
                                 .clone();
 
                             Ok(Some(module))
@@ -198,7 +233,7 @@ impl ModuleSession {
         let objectcode = Objectcode::new(objectcode)?;
 
         self.modules
-            .insert(module_id, (bytecode, objectcode, memory));
+            .insert(module_id, StoreData::new(bytecode, objectcode, memory));
 
         Ok(())
     }
