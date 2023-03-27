@@ -37,7 +37,6 @@ pub struct WrappedInstance {
     #[allow(unused)]
     heap_base: usize,
     store: wasmer::Store,
-    meta_ofs: usize,
 }
 
 pub(crate) struct Env {
@@ -178,10 +177,6 @@ impl WrappedInstance {
                 _ => todo!("Missing `SELF_ID` export"),
             };
 
-        let meta_ofs = match instance.exports.get_global("M")?.get(&mut store) {
-            wasmer::Value::I32(i) => i as usize,
-            _ => todo!("Missing `M` Metadata export"),
-        };
         // write self id into memory.
         let mut memory_guard = memory.write();
         let bytes = memory_guard.as_bytes_mut();
@@ -193,7 +188,6 @@ impl WrappedInstance {
             instance,
             arg_buf_ofs,
             heap_base,
-            meta_ofs,
         };
 
         Ok(wrapped)
@@ -255,18 +249,6 @@ impl WrappedInstance {
         })
     }
 
-    pub(crate) fn with_meta_buffer<F, R>(&self, f: F) -> R
-    where
-        F: FnOnce(&mut [u8]) -> R,
-    {
-        self.with_memory_mut(|memory_bytes| {
-            let a = self.meta_ofs;
-            let b = uplink::METADATA_LEN;
-            let begin = &mut memory_bytes[a..];
-            let trimmed = &mut begin[..b];
-            f(trimmed)
-        })
-    }
     pub(crate) fn write_bytes_to_arg_buffer(&self, buf: &[u8]) -> u32 {
         self.with_arg_buffer(|arg_buffer| {
             arg_buffer[..buf.len()].copy_from_slice(buf);
