@@ -13,7 +13,7 @@ use rkyv::{
 };
 
 use crate::{
-    RawQuery, RawResult, RawTransaction, StandardBufSerializer,
+    ModuleMetadata, RawQuery, RawResult, RawTransaction, StandardBufSerializer,
     SCRATCH_BUF_BYTES,
 };
 
@@ -62,7 +62,7 @@ mod ext {
         pub(crate) fn emit(arg_len: u32);
         pub(crate) fn limit() -> u64;
         pub(crate) fn spent() -> u64;
-        pub(crate) fn owner() -> i32;
+        pub(crate) fn metadata() -> u32;
     }
 }
 
@@ -268,11 +268,12 @@ pub fn height() -> u64 {
 
 /// Return the current owner.
 pub fn owner() -> [u8; 32] {
-    unsafe { ext::owner() };
-    with_arg_buf(|buf| {
-        let ret = unsafe { archived_root::<[u8; 32]>(&buf[..32]) };
+    let len = unsafe { ext::metadata() } as usize;
+    let m: ModuleMetadata = with_arg_buf(|buf| {
+        let ret = unsafe { archived_root::<ModuleMetadata>(&buf[..len]) };
         ret.deserialize(&mut Infallible).expect("Infallible")
-    })
+    });
+    *m.owner()
 }
 
 /// Return the ID of the calling module. The returned id will be

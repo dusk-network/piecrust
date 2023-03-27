@@ -13,7 +13,7 @@ use std::mem;
 use std::sync::Arc;
 
 use bytecheck::CheckBytes;
-use piecrust_uplink::{ModuleId, SCRATCH_BUF_BYTES};
+use piecrust_uplink::{ModuleId, ModuleMetadata, SCRATCH_BUF_BYTES};
 use rkyv::ser::serializers::{
     BufferScratch, BufferSerializer, CompositeSerializer,
 };
@@ -172,16 +172,23 @@ impl Session {
         }
 
         let wrapped_module = WrappedModule::new(bytecode, None::<Objectcode>)?;
-        /* todo: replace this mock with real metadata
-           we are not serializing the metadata here, just taking it
-           literally, still, it deserializes correctly for [u8;32] */
+        // Todo: we need to decide how to pass the owner value here,
+        // which API to expose for it,
+        // how to deal with it when re-executing,
+        // what lifecycle should it have (set only once or multiple times,
+        // etc.).
+
+        // for the time being we use a mock value for an owner
         const OWNER_MOCK_VALUE: [u8; 32] = [3u8; 32];
+        let metadata =
+            Self::serialize_data(ModuleMetadata::new(OWNER_MOCK_VALUE));
+
         self.module_session
             .deploy_with_id(
                 id,
                 bytecode,
                 wrapped_module.as_bytes(),
-                OWNER_MOCK_VALUE.as_slice(),
+                metadata.as_slice(),
             )
             .map_err(|err| PersistenceError(Arc::new(err)))?;
 
@@ -541,11 +548,8 @@ impl Session {
         self.data.get(name)
     }
 
-    /// Sets a metadata item with the given `name` and `value`. These pieces of
-    /// data are then made available to modules for querying.
-    pub fn set_meta<S, V>(&mut self, name: S, value: V)
+    pub fn serialize_data<V>(value: V) -> Vec<u8>
     where
-        S: Into<Cow<'static, str>>,
         V: for<'a> Serialize<StandardBufSerializer<'a>>,
     {
         let mut buf = [0u8; MAX_META_SIZE];
@@ -560,7 +564,17 @@ impl Session {
 
         let pos = serializer.pos();
 
-        let data = buf[..pos].to_vec();
+        buf[..pos].to_vec()
+    }
+
+    /// Sets a metadata item with the given `name` and `value`. These pieces of
+    /// data are then made available to modules for querying.
+    pub fn set_meta<S, V>(&mut self, name: S, value: V)
+    where
+        S: Into<Cow<'static, str>>,
+        V: for<'a> Serialize<StandardBufSerializer<'a>>,
+    {
+        let data = Self::serialize_data(value);
         self.data.insert(name, data);
     }
 

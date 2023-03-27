@@ -253,7 +253,7 @@ impl ModuleSession {
         Ok(())
     }
 
-    /// todo
+    /// Provides metadata of the module with a given `module_id`.
     pub fn metadata(&self, module_id: &ModuleId) -> Option<&[u8]> {
         self.modules
             .get(module_id)

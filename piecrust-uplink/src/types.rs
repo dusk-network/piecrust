@@ -218,6 +218,22 @@ impl RawResult {
     }
 }
 
+#[derive(Archive, Serialize, Deserialize)]
+#[archive_attr(derive(CheckBytes))]
+pub struct ModuleMetadata {
+    owner: [u8; 32],
+}
+
+impl ModuleMetadata {
+    pub fn new(owner: [u8; 32]) -> Self {
+        Self { owner }
+    }
+
+    pub fn owner(&self) -> &[u8; 32] {
+        &self.owner
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::*;

@@ -8,22 +8,23 @@ use piecrust::{module_bytecode, Error, VM};
 
 #[test]
 fn metadata() -> Result<(), Error> {
+    const EXPECTED_OWNER: [u8; 32] = [3u8; 32];
+
     let vm = VM::ephemeral()?;
 
     let mut session = vm.genesis_session();
 
     let id = session.deploy(module_bytecode!("metadata"), None::<&()>)?;
 
+    // owner should be available after deployment
     let owner = session.query::<(), [u8; 32]>(id, "read_owner", &())?;
-    println!("owner1 = {:x?}", owner);
-    assert_eq!(owner, [3u8; 32]);
+    assert_eq!(owner, EXPECTED_OWNER);
 
-    // metadata should live through across session boundaries
+    // owner should live across session boundaries
     let commit_id = session.commit()?;
     let mut session = vm.session(commit_id)?;
     let owner = session.query::<(), [u8; 32]>(id, "read_owner", &())?;
-    println!("owner2 = {:x?}", owner);
-    assert_eq!(owner, [3u8; 32]);
+    assert_eq!(owner, EXPECTED_OWNER);
 
     Ok(())
 }

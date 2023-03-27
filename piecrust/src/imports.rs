@@ -10,7 +10,6 @@ use crate::Error;
 use piecrust_uplink::{ModuleError, ModuleId, ARGBUF_LEN};
 
 use crate::instance::Env;
-use crate::store::Metadata;
 
 const POINT_PASS_PCT: u64 = 93;
 
@@ -31,7 +30,7 @@ impl DefaultImports {
                 "emit" => Function::new_typed_with_env(store, &fenv, emit),
                 "limit" => Function::new_typed_with_env(store, &fenv, limit),
                 "spent" => Function::new_typed_with_env(store, &fenv, spent),
-                "owner" => Function::new_typed_with_env(store, &fenv, owner),
+                "metadata" => Function::new_typed_with_env(store, &fenv, metadata),
             }
         }
     }
@@ -285,12 +284,12 @@ fn spent(fenv: FunctionEnvMut<Env>) -> u64 {
     limit - remaining
 }
 
-fn owner(fenv: FunctionEnvMut<Env>) -> i32 {
+fn metadata(fenv: FunctionEnvMut<Env>) -> u32 {
     let env = fenv.data();
     let self_id = env.self_module_id();
     let slice = env.metadata(self_id).expect("metadata should exist");
-    assert_eq!(slice.len(), 32);
+    let len = slice.len();
     env.self_instance()
-        .with_arg_buffer(|arg| arg[..32].copy_from_slice(slice));
-    32
+        .with_arg_buffer(|arg| arg[..len].copy_from_slice(slice));
+    len as u32
 }
