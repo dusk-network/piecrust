@@ -13,7 +13,7 @@ use std::mem;
 use std::sync::Arc;
 
 use bytecheck::CheckBytes;
-use piecrust_uplink::{ModuleId, SCRATCH_BUF_BYTES};
+use piecrust_uplink::{ModuleId, ModuleMetadata, SCRATCH_BUF_BYTES};
 use rkyv::ser::serializers::{
     BufferScratch, BufferSerializer, CompositeSerializer,
 };
@@ -63,7 +63,7 @@ pub struct Session {
     instance_map: BTreeMap<ModuleId, (*mut WrappedInstance, u64)>,
     debug: Vec<String>,
     events: Vec<Event>,
-    data: Metadata,
+    data: SessionMetadata,
 
     module_session: ModuleSession,
     host_queries: HostQueries,
@@ -92,7 +92,7 @@ impl Session {
             instance_map: BTreeMap::new(),
             debug: vec![],
             events: vec![],
-            data: Metadata::new(),
+            data: SessionMetadata::new(),
             module_session,
             host_queries,
             limit: DEFAULT_LIMIT,
@@ -172,8 +172,16 @@ impl Session {
         }
 
         let wrapped_module = WrappedModule::new(bytecode, None::<Objectcode>)?;
+        // Todo: we need to decide how to pass the metadata here,
+        let metadata = Self::serialize_data(ModuleMetadata::new(None));
+
         self.module_session
-            .deploy_with_id(id, bytecode, wrapped_module.as_bytes())
+            .deploy_with_id(
+                id,
+                bytecode,
+                wrapped_module.as_bytes(),
+                metadata.as_slice(),
+            )
             .map_err(|err| PersistenceError(Arc::new(err)))?;
 
         self.create_instance(id)?;
@@ -406,14 +414,22 @@ impl Session {
         &mut self,
         module_id: ModuleId,
     ) -> Result<WrappedInstance, Error> {
-        let (bytecode, objectcode, memory) = self
+        let store_data = self
             .module_session
             .module(module_id)
             .map_err(|err| PersistenceError(Arc::new(err)))?
             .expect("Module should exist");
 
-        let module = WrappedModule::new(&bytecode, Some(&objectcode))?;
-        let instance = WrappedInstance::new(self, module_id, &module, memory)?;
+        let module = WrappedModule::new(
+            store_data.bytecode(),
+            Some(store_data.objectcode()),
+        )?;
+        let instance = WrappedInstance::new(
+            self,
+            module_id,
+            &module,
+            store_data.memory(),
+        )?;
 
         Ok(instance)
     }
@@ -524,11 +540,8 @@ impl Session {
         self.data.get(name)
     }
 
-    /// Sets a metadata item with the given `name` and `value`. These pieces of
-    /// data are then made available to modules for querying.
-    pub fn set_meta<S, V>(&mut self, name: S, value: V)
+    pub fn serialize_data<V>(value: V) -> Vec<u8>
     where
-        S: Into<Cow<'static, str>>,
         V: for<'a> Serialize<StandardBufSerializer<'a>>,
     {
         let mut buf = [0u8; MAX_META_SIZE];
@@ -543,7 +556,17 @@ impl Session {
 
         let pos = serializer.pos();
 
-        let data = buf[..pos].to_vec();
+        buf[..pos].to_vec()
+    }
+
+    /// Sets a metadata item with the given `name` and `value`. These pieces of
+    /// data are then made available to modules for querying.
+    pub fn set_meta<S, V>(&mut self, name: S, value: V)
+    where
+        S: Into<Cow<'static, str>>,
+        V: for<'a> Serialize<StandardBufSerializer<'a>>,
+    {
+        let data = Self::serialize_data(value);
         self.data.insert(name, data);
     }
 
@@ -737,6 +760,10 @@ impl Session {
 
         Ok(ret)
     }
+
+    pub fn metadata(&self, module_id: &ModuleId) -> Option<&[u8]> {
+        self.module_session.metadata(module_id)
+    }
 }
 
 #[derive(Debug)]
@@ -780,11 +807,11 @@ struct Call {
 }
 
 #[derive(Debug)]
-pub struct Metadata {
+pub struct SessionMetadata {
     data: BTreeMap<Cow<'static, str>, Vec<u8>>,
 }
 
-impl Metadata {
+impl SessionMetadata {
     fn new() -> Self {
         Self {
             data: BTreeMap::new(),

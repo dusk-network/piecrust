@@ -9,9 +9,10 @@
 mod bytecode;
 mod diff;
 mod memory;
+mod metadata;
 mod mmap;
+mod module_session;
 mod objectcode;
-mod session;
 
 use std::collections::btree_map::Entry::*;
 use std::collections::{BTreeMap, BTreeSet};
@@ -26,9 +27,11 @@ use flate2::Compression;
 pub use bytecode::Bytecode;
 use diff::diff;
 pub use memory::Memory;
+pub use metadata::Metadata;
+pub use module_session::ModuleSession;
+use module_session::StoreData;
 pub use objectcode::Objectcode;
 use piecrust_uplink::ModuleId;
-pub use session::ModuleSession;
 
 const ROOT_LEN: usize = 32;
 
@@ -37,6 +40,7 @@ const MEMORY_DIR: &str = "memory";
 const DIFF_EXTENSION: &str = "diff";
 const INDEX_FILE: &str = "index";
 const OBJECTCODE_EXTENSION: &str = ".a";
+const METADATA_EXTENSION: &str = ".m";
 
 type Root = [u8; ROOT_LEN];
 
@@ -286,7 +290,7 @@ pub(crate) struct Commit {
 
 pub(crate) enum Call {
     Commit {
-        modules: BTreeMap<ModuleId, (Bytecode, Objectcode, Memory)>,
+        modules: BTreeMap<ModuleId, StoreData>,
         base: Option<(Root, Commit)>,
         replier: mpsc::SyncSender<io::Result<(Root, Commit)>>,
     },
@@ -467,7 +471,7 @@ fn write_commit<P: AsRef<Path>>(
     root_dir: P,
     commits: &mut BTreeMap<Root, Commit>,
     base: Option<(Root, Commit)>,
-    commit_modules: BTreeMap<ModuleId, (Bytecode, Objectcode, Memory)>,
+    commit_modules: BTreeMap<ModuleId, StoreData>,
 ) -> io::Result<(Root, Commit)> {
     let root_dir = root_dir.as_ref();
 
@@ -506,7 +510,7 @@ fn write_commit_inner<P: AsRef<Path>>(
     commit_dir: P,
     base: Option<(Root, Commit)>,
     modules: BTreeMap<ModuleId, Root>,
-    commit_modules: BTreeMap<ModuleId, (Bytecode, Objectcode, Memory)>,
+    commit_modules: BTreeMap<ModuleId, StoreData>,
 ) -> io::Result<Commit> {
     let root_dir = root_dir.as_ref();
     let commit_dir = commit_dir.as_ref();
@@ -521,17 +525,20 @@ fn write_commit_inner<P: AsRef<Path>>(
 
     match base {
         None => {
-            for (module, (bytecode, objectcode, memory)) in commit_modules {
+            for (module, store_data) in commit_modules {
                 let module_hex = hex::encode(module);
 
                 let bytecode_path = bytecode_dir.join(&module_hex);
                 let objectcode_path =
                     bytecode_path.with_extension(OBJECTCODE_EXTENSION);
+                let metadata_path =
+                    bytecode_path.with_extension(METADATA_EXTENSION);
                 let memory_path = memory_dir.join(&module_hex);
 
-                fs::write(bytecode_path, &bytecode)?;
-                fs::write(objectcode_path, &objectcode)?;
-                fs::write(memory_path, &memory.read())?;
+                fs::write(bytecode_path, store_data.bytecode())?;
+                fs::write(objectcode_path, store_data.objectcode())?;
+                fs::write(metadata_path, store_data.metadata())?;
+                fs::write(memory_path, &store_data.memory().read())?;
             }
         }
         Some((base, base_commit)) => {
@@ -547,15 +554,20 @@ fn write_commit_inner<P: AsRef<Path>>(
                 let bytecode_path = bytecode_dir.join(&module_hex);
                 let objectcode_path =
                     bytecode_path.with_extension(OBJECTCODE_EXTENSION);
+                let metadata_path =
+                    bytecode_path.with_extension(METADATA_EXTENSION);
                 let memory_path = memory_dir.join(&module_hex);
 
                 let base_bytecode_path = base_bytecode_dir.join(&module_hex);
                 let base_objectcode_path =
                     base_bytecode_path.with_extension(OBJECTCODE_EXTENSION);
+                let base_metadata_path =
+                    base_bytecode_path.with_extension(METADATA_EXTENSION);
                 let base_memory_path = base_memory_dir.join(&module_hex);
 
                 fs::hard_link(base_bytecode_path, bytecode_path)?;
                 fs::hard_link(base_objectcode_path, objectcode_path)?;
+                fs::hard_link(base_metadata_path, metadata_path)?;
                 fs::hard_link(&base_memory_path, &memory_path)?;
 
                 // If there is a diff of this memory in the base module, and it
@@ -572,7 +584,7 @@ fn write_commit_inner<P: AsRef<Path>>(
                 }
             }
 
-            for (module, (bytecode, objectcode, memory)) in commit_modules {
+            for (module, store_data) in commit_modules {
                 let module_hex = hex::encode(module);
 
                 match base_commit.modules.contains_key(&module) {
@@ -593,7 +605,7 @@ fn write_commit_inner<P: AsRef<Path>>(
 
                         diff(
                             &base_memory.read(),
-                            &memory.read(),
+                            &store_data.memory().read(),
                             &mut encoder,
                         )?;
 
@@ -603,11 +615,14 @@ fn write_commit_inner<P: AsRef<Path>>(
                         let bytecode_path = bytecode_dir.join(&module_hex);
                         let objectcode_path =
                             bytecode_path.with_extension(OBJECTCODE_EXTENSION);
+                        let metadata_path =
+                            bytecode_path.with_extension(METADATA_EXTENSION);
                         let memory_path = memory_dir.join(&module_hex);
 
-                        fs::write(bytecode_path, &bytecode)?;
-                        fs::write(objectcode_path, &objectcode)?;
-                        fs::write(memory_path, memory.read())?;
+                        fs::write(bytecode_path, store_data.bytecode())?;
+                        fs::write(objectcode_path, store_data.objectcode())?;
+                        fs::write(metadata_path, store_data.metadata())?;
+                        fs::write(memory_path, store_data.memory().read())?;
                     }
                 }
             }
@@ -680,16 +695,16 @@ fn compute_root<'a, I>(
     modules: I,
 ) -> (Root, BTreeMap<ModuleId, Root>)
 where
-    I: IntoIterator<Item = (&'a ModuleId, &'a (Bytecode, Objectcode, Memory))>,
+    I: IntoIterator<Item = (&'a ModuleId, &'a StoreData)>,
 {
     let iter = modules.into_iter();
 
     let mut leaves_map = BTreeMap::new();
 
     // Compute the hashes of changed memories
-    for (module, (_, _, memory)) in iter {
+    for (module, store_data) in iter {
         let mut hasher = blake3::Hasher::new();
-        hasher.update(&memory.read());
+        hasher.update(&store_data.memory().read());
         leaves_map.insert(*module, Root::from(hasher.finalize()));
     }
 

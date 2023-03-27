@@ -13,7 +13,7 @@ use rkyv::{
 };
 
 use crate::{
-    RawQuery, RawResult, RawTransaction, StandardBufSerializer,
+    ModuleMetadata, RawQuery, RawResult, RawTransaction, StandardBufSerializer,
     SCRATCH_BUF_BYTES,
 };
 
@@ -62,6 +62,7 @@ mod ext {
         pub(crate) fn emit(arg_len: u32);
         pub(crate) fn limit() -> u64;
         pub(crate) fn spent() -> u64;
+        pub(crate) fn metadata() -> u32;
     }
 }
 
@@ -261,6 +262,15 @@ pub fn height() -> u64 {
         let ret = unsafe {
             archived_root::<u64>(&buf[..core::mem::size_of::<Archived<u64>>()])
         };
+        ret.deserialize(&mut Infallible).expect("Infallible")
+    })
+}
+
+/// Return the module metadata.
+pub fn metadata() -> ModuleMetadata {
+    let len = unsafe { ext::metadata() } as usize;
+    with_arg_buf(|buf| {
+        let ret = unsafe { archived_root::<ModuleMetadata>(&buf[..len]) };
         ret.deserialize(&mut Infallible).expect("Infallible")
     })
 }

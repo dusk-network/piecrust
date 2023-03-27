@@ -64,7 +64,7 @@ fn missing_init() -> Result<(), Error> {
     let result = session.deploy::<u8>(module_bytecode!("counter"), Some(&0xab));
     assert!(
         result.is_err(),
-        "deploy_and_init when the 'init' method is not exported should fail with an error"
+        "deploy with data when the 'init' method is not exported should fail with an error"
     );
 
     Ok(())
