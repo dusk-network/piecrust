@@ -10,7 +10,7 @@ use std::sync::Arc;
 
 use crate::store::mmap::Mmap;
 
-/// WASM object code belonging to a given module.
+/// Module metadata pertaining to a given module but maintained by host.
 #[derive(Debug, Clone)]
 pub struct Metadata {
     mmap: Arc<Mmap>,
