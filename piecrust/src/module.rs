@@ -10,13 +10,13 @@ use wasmer::Module;
 use crate::error::Error;
 use crate::instance::Store;
 
-pub struct ModuleData<Arg> {
-    id: Option<[u8; 32]>,
-    constructor_arg: Option<Arg>,
-    owner: [u8; 32],
+pub struct DeployData<Arg> {
+    pub id: Option<[u8; 32]>,
+    pub constructor_arg: Option<Arg>,
+    pub owner: [u8; 32],
 }
 
-impl<Arg> ModuleData<Arg> {
+impl<Arg> DeployData<Arg> {
     pub fn new(
         self_id: Option<[u8; 32]>,
         constructor_arg: Option<Arg>,

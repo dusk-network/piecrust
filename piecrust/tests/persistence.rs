@@ -4,7 +4,7 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use piecrust::{module_bytecode, Error, ModuleData, VM};
+use piecrust::{module_bytecode, DeployData, Error, VM};
 
 const OWNER: [u8; 32] = [0u8; 32];
 
@@ -20,10 +20,10 @@ fn session_commits_persistence() -> Result<(), Error> {
         let mut session = vm.genesis_session();
         id_1 = session.deploy(
             module_bytecode!("counter"),
-            ModuleData::<()>::from(OWNER),
+            DeployData::<()>::from(OWNER),
         )?;
         id_2 = session
-            .deploy(module_bytecode!("box"), ModuleData::<()>::from(OWNER))?;
+            .deploy(module_bytecode!("box"), DeployData::<()>::from(OWNER))?;
 
         session.transact::<(), ()>(id_1, "increment", &())?;
         session.transact::<i16, ()>(id_2, "set", &0x11)?;
@@ -80,9 +80,9 @@ fn modules_persistence() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
     let mut session = vm.genesis_session();
     let id_1 = session
-        .deploy(module_bytecode!("counter"), ModuleData::<()>::from(OWNER))?;
+        .deploy(module_bytecode!("counter"), DeployData::<()>::from(OWNER))?;
     let id_2 = session
-        .deploy(module_bytecode!("box"), ModuleData::<()>::from(OWNER))?;
+        .deploy(module_bytecode!("box"), DeployData::<()>::from(OWNER))?;
 
     session.transact::<(), ()>(id_1, "increment", &())?;
     session.transact::<i16, ()>(id_2, "set", &0x11)?;

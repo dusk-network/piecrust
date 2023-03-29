@@ -9,7 +9,7 @@ extern crate core;
 use std::path::{Path, PathBuf};
 use std::{env, fs};
 
-use piecrust::{ModuleData, ModuleId, VM};
+use piecrust::{DeployData, ModuleId, VM};
 const COUNTER_ID: ModuleId = {
     let mut bytes = [0u8; 32];
     bytes[0] = 99;
@@ -27,7 +27,7 @@ fn initialize_counter<P: AsRef<Path>>(
         "../../../../target/wasm32-unknown-unknown/release/counter.wasm"
     );
 
-    session.deploy(counter_bytecode, ModuleData::new(Some(COUNTER_ID.to_bytes()), None::<()>, OWNER))?;
+    session.deploy(counter_bytecode, DeployData::new(Some(COUNTER_ID.to_bytes()), None::<()>, OWNER))?;
     session.transact::<(), ()>(COUNTER_ID, "increment", &())?;
 
     let commit_root = session.commit()?;

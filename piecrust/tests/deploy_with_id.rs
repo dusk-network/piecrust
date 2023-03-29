@@ -4,7 +4,7 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use piecrust::{module_bytecode, Error, ModuleData, VM};
+use piecrust::{module_bytecode, DeployData, Error, VM};
 use piecrust_uplink::ModuleId;
 
 const OWNER: [u8; 32] = [0u8; 32];
@@ -18,7 +18,7 @@ pub fn deploy_with_id() -> Result<(), Error> {
     let module_id = ModuleId::from(some_id);
     let mut session = vm.genesis_session();
     let module_data =
-        ModuleData::new(Some(module_id.to_bytes()), None::<()>, OWNER);
+        DeployData::new(Some(module_id.to_bytes()), None::<()>, OWNER);
     session.deploy(bytecode, module_data)?;
 
     assert_eq!(

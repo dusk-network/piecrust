@@ -26,7 +26,7 @@ use wasmer_types::WASM_PAGE_SIZE;
 
 use crate::event::Event;
 use crate::instance::WrappedInstance;
-use crate::module::{ModuleData, WrappedModule};
+use crate::module::{DeployData, WrappedModule};
 use crate::store::{ModuleSession, Objectcode};
 use crate::types::StandardBufSerializer;
 use crate::vm::HostQueries;
@@ -116,7 +116,7 @@ impl Session {
     pub fn deploy<Arg>(
         &mut self,
         bytecode: &[u8],
-        mut module_data: ModuleData<Arg>,
+        mut module_data: DeployData<Arg>,
     ) -> Result<ModuleId, Error>
     where
         Arg: for<'b> Serialize<StandardBufSerializer<'b>>,

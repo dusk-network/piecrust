@@ -4,7 +4,7 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use piecrust::{module_bytecode, Error, ModuleData, VM};
+use piecrust::{module_bytecode, DeployData, Error, VM};
 use rkyv::Deserialize;
 
 const OWNER: [u8; 32] = [0u8; 32];
@@ -27,7 +27,7 @@ pub fn host_hash() -> Result<(), Error> {
     let mut session = vm.genesis_session();
 
     let id = session
-        .deploy(module_bytecode!("host"), ModuleData::<()>::from(OWNER))?;
+        .deploy(module_bytecode!("host"), DeployData::<()>::from(OWNER))?;
 
     let v = vec![0u8, 1, 2];
     let h = session
