@@ -13,7 +13,7 @@ use std::mem;
 use std::sync::Arc;
 
 use bytecheck::CheckBytes;
-use piecrust_uplink::{ModuleId, ModuleMetadata, SCRATCH_BUF_BYTES};
+use piecrust_uplink::{ModuleId, SCRATCH_BUF_BYTES};
 use rkyv::ser::serializers::{
     BufferScratch, BufferSerializer, CompositeSerializer,
 };
@@ -26,7 +26,7 @@ use wasmer_types::WASM_PAGE_SIZE;
 
 use crate::event::Event;
 use crate::instance::WrappedInstance;
-use crate::module::{DeployData, WrappedModule};
+use crate::module::{DeployData, ModuleMetadata, WrappedModule};
 use crate::store::{ModuleSession, Objectcode};
 use crate::types::StandardBufSerializer;
 use crate::vm::HostQueries;

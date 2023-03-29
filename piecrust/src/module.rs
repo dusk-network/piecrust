@@ -7,6 +7,9 @@
 use std::sync::Arc;
 use wasmer::Module;
 
+use bytecheck::CheckBytes;
+use rkyv::{Archive, Deserialize, Serialize};
+
 use crate::error::Error;
 use crate::instance::Store;
 
@@ -35,6 +38,27 @@ impl<Arg> DeployData<Arg> {
             constructor_arg: None,
             owner,
         }
+    }
+}
+
+#[derive(Archive, Serialize, Deserialize, Debug, Clone)]
+#[archive_attr(derive(CheckBytes))]
+pub struct ModuleMetadata {
+    id: [u8; 32],
+    owner: [u8; 32],
+}
+
+impl ModuleMetadata {
+    pub fn new(id: [u8; 32], owner: [u8; 32]) -> Self {
+        Self { id, owner }
+    }
+
+    pub fn id(&self) -> &[u8; 32] {
+        &self.id
+    }
+
+    pub fn owner(&self) -> &[u8; 32] {
+        &self.owner
     }
 }
 

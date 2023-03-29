@@ -8,10 +8,10 @@ use std::io;
 use std::path::Path;
 use std::sync::Arc;
 
-use piecrust_uplink::ModuleMetadata;
 use rkyv::{archived_root, Deserialize, Infallible};
 
 use crate::store::mmap::Mmap;
+use crate::module::ModuleMetadata;
 
 /// Module metadata pertaining to a given module but maintained by the host.
 #[derive(Debug, Clone)]
