@@ -116,22 +116,23 @@ impl Session {
     pub fn deploy<Arg>(
         &mut self,
         bytecode: &[u8],
-        mut module_data: DeployData<Arg>,
+        deploy_data: DeployData<Arg>,
     ) -> Result<ModuleId, Error>
     where
         Arg: for<'b> Serialize<StandardBufSerializer<'b>>,
     {
-        match module_data.id {
+        let mut deploy_data = deploy_data;
+        match deploy_data.id {
             Some(_) => (),
             _ => {
                 let hash = blake3::hash(bytecode);
-                module_data.id = Some(hash.into());
+                deploy_data.id = Some(hash.into());
             }
         };
 
-        let module_id = ModuleId::from(module_data.id.unwrap());
+        let module_id = ModuleId::from(deploy_data.id.unwrap());
 
-        let constructor_arg = module_data.constructor_arg.as_ref().map(|arg| {
+        let constructor_arg = deploy_data.constructor_arg.as_ref().map(|arg| {
             let mut sbuf = [0u8; SCRATCH_BUF_BYTES];
             let scratch = BufferScratch::new(&mut sbuf);
             let ser = BufferSerializer::new(&mut self.buffer[..]);
@@ -144,10 +145,10 @@ impl Session {
         });
 
         self.do_deploy(
-            ModuleId::from(module_data.id.unwrap()),
+            ModuleId::from(deploy_data.id.unwrap()),
             bytecode,
             constructor_arg,
-            module_data.owner,
+            deploy_data.owner,
         )?;
 
         Ok(module_id)
