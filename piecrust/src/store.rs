@@ -39,8 +39,8 @@ const BYTECODE_DIR: &str = "bytecode";
 const MEMORY_DIR: &str = "memory";
 const DIFF_EXTENSION: &str = "diff";
 const INDEX_FILE: &str = "index";
-const OBJECTCODE_EXTENSION: &str = ".a";
-const METADATA_EXTENSION: &str = ".m";
+const OBJECTCODE_EXTENSION: &str = "a";
+const METADATA_EXTENSION: &str = "m";
 
 type Root = [u8; ROOT_LEN];
 
