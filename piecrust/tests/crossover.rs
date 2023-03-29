@@ -28,11 +28,9 @@ fn crossover() -> Result<(), Error> {
     let mut session = vm.genesis_session();
     session.set_point_limit(u64::MAX / 100);
 
-    let module_data =
-        DeployData::new(Some(CROSSOVER_ONE.to_bytes()), None::<()>, OWNER);
+    let module_data = DeployData::new(Some(CROSSOVER_ONE), None::<()>, OWNER);
     session.deploy(module_bytecode!("crossover"), module_data)?;
-    let module_data =
-        DeployData::new(Some(CROSSOVER_TWO.to_bytes()), None::<()>, OWNER);
+    let module_data = DeployData::new(Some(CROSSOVER_TWO), None::<()>, OWNER);
     session.deploy(module_bytecode!("crossover"), module_data)?;
 
     // These value should not be set to `INITIAL_VALUE` in the contract.

@@ -10,8 +10,8 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 use std::{io, mem};
 
-use piecrust_uplink::ModuleId;
 use crate::module::ModuleMetadata;
+use piecrust_uplink::ModuleId;
 
 use crate::store::{
     compute_root, Bytecode, Call, Commit, Memory, Metadata, Objectcode, Root,

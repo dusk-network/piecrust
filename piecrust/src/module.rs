@@ -12,16 +12,17 @@ use rkyv::{Archive, Deserialize, Serialize};
 
 use crate::error::Error;
 use crate::instance::Store;
+use piecrust_uplink::ModuleId;
 
 pub struct DeployData<Arg> {
-    pub id: Option<[u8; 32]>,
+    pub id: Option<ModuleId>,
     pub constructor_arg: Option<Arg>,
     pub owner: [u8; 32],
 }
 
 impl<Arg> DeployData<Arg> {
     pub fn new(
-        self_id: Option<[u8; 32]>,
+        self_id: Option<ModuleId>,
         constructor_arg: Option<Arg>,
         owner: [u8; 32],
     ) -> Self {

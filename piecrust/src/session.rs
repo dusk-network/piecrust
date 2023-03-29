@@ -126,11 +126,9 @@ impl Session {
             Some(_) => (),
             _ => {
                 let hash = blake3::hash(bytecode);
-                deploy_data.id = Some(hash.into());
+                deploy_data.id = Some(ModuleId::from_bytes(hash.into()));
             }
         };
-
-        let module_id = ModuleId::from(deploy_data.id.unwrap());
 
         let constructor_arg = deploy_data.constructor_arg.as_ref().map(|arg| {
             let mut sbuf = [0u8; SCRATCH_BUF_BYTES];
@@ -144,8 +142,9 @@ impl Session {
             self.buffer[0..pos].to_vec()
         });
 
+        let module_id = deploy_data.id.unwrap();
         self.do_deploy(
-            ModuleId::from(deploy_data.id.unwrap()),
+            module_id,
             bytecode,
             constructor_arg,
             deploy_data.owner,
