@@ -13,7 +13,7 @@ use rkyv::{
 };
 
 use crate::{
-    ModuleMetadata, RawQuery, RawResult, RawTransaction, StandardBufSerializer,
+    RawQuery, RawResult, RawTransaction, StandardBufSerializer,
     SCRATCH_BUF_BYTES,
 };
 
@@ -62,7 +62,8 @@ mod ext {
         pub(crate) fn emit(arg_len: u32);
         pub(crate) fn limit() -> u64;
         pub(crate) fn spent() -> u64;
-        pub(crate) fn metadata() -> u32;
+        pub(crate) fn owner() -> u32;
+        pub(crate) fn self_id() -> u32;
     }
 }
 
@@ -268,22 +269,21 @@ pub fn height() -> u64 {
 
 /// Return the current module's owner.
 pub fn owner() -> [u8; 32] {
-    let len = unsafe { ext::metadata() } as usize;
-    let m: ModuleMetadata = with_arg_buf(|buf| {
-        let ret = unsafe { archived_root::<ModuleMetadata>(&buf[..len]) };
+    let len = unsafe { ext::owner() } as usize;
+    with_arg_buf(|buf| {
+        let ret = unsafe { archived_root::<[u8; 32]>(&buf[..len]) };
         ret.deserialize(&mut Infallible).expect("Infallible")
-    });
-    *m.owner()
+    })
 }
 
 /// Return the current module's id.
 pub fn self_id() -> ModuleId {
-    let len = unsafe { ext::metadata() } as usize;
-    let m: ModuleMetadata = with_arg_buf(|buf| {
-        let ret = unsafe { archived_root::<ModuleMetadata>(&buf[..len]) };
+    let len = unsafe { ext::self_id() } as usize;
+    let id: [u8; 32] = with_arg_buf(|buf| {
+        let ret = unsafe { archived_root::<[u8; 32]>(&buf[..len]) };
         ret.deserialize(&mut Infallible).expect("Infallible")
     });
-    ModuleId::from(*m.id())
+    ModuleId::from(id)
 }
 
 /// Return the ID of the calling module. The returned id will be

@@ -8,28 +8,44 @@ use std::io;
 use std::path::Path;
 use std::sync::Arc;
 
+use piecrust_uplink::ModuleMetadata;
+use rkyv::{archived_root, Deserialize, Infallible};
+
 use crate::store::mmap::Mmap;
 
-/// Module metadata pertaining to a given module but maintained by host.
+/// Module metadata pertaining to a given module but maintained by the host.
 #[derive(Debug, Clone)]
 pub struct Metadata {
     mmap: Arc<Mmap>,
+    data: ModuleMetadata,
 }
 
 impl Metadata {
-    pub(crate) fn new<B: AsRef<[u8]>>(bytes: B) -> io::Result<Self> {
+    pub(crate) fn new<B: AsRef<[u8]>>(
+        bytes: B,
+        data: ModuleMetadata,
+    ) -> io::Result<Self> {
         let mmap = Mmap::new(bytes)?;
 
         Ok(Self {
             mmap: Arc::new(mmap),
+            data,
         })
     }
 
     pub(crate) fn from_file<P: AsRef<Path>>(path: P) -> io::Result<Self> {
         let mmap = Mmap::map(path)?;
+        let ret = unsafe { archived_root::<ModuleMetadata>(&mmap) };
+        let data = ret.deserialize(&mut Infallible).expect("Infallible");
+
         Ok(Self {
             mmap: Arc::new(mmap),
+            data,
         })
+    }
+
+    pub(crate) fn data(&self) -> &ModuleMetadata {
+        &self.data
     }
 }
 

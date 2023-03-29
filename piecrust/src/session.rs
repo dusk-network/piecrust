@@ -167,15 +167,16 @@ impl Session {
         }
 
         let wrapped_module = WrappedModule::new(bytecode, None::<Objectcode>)?;
-        let metadata =
-            Self::serialize_data(ModuleMetadata::new(id.to_bytes(), owner));
+        let metadata = ModuleMetadata::new(id.to_bytes(), owner);
+        let metadata_bytes = Self::serialize_data(&metadata);
 
         self.module_session
             .deploy(
                 id,
                 bytecode,
                 wrapped_module.as_bytes(),
-                metadata.as_slice(),
+                metadata,
+                metadata_bytes.as_slice(),
             )
             .map_err(|err| PersistenceError(Arc::new(err)))?;
 
@@ -536,7 +537,7 @@ impl Session {
         self.data.get(name)
     }
 
-    pub fn serialize_data<V>(value: V) -> Vec<u8>
+    pub fn serialize_data<V>(value: &V) -> Vec<u8>
     where
         V: for<'a> Serialize<StandardBufSerializer<'a>>,
     {
@@ -548,7 +549,7 @@ impl Session {
 
         let mut serializer =
             StandardBufSerializer::new(ser, scratch, Infallible);
-        serializer.serialize_value(&value).expect("Infallible");
+        serializer.serialize_value(value).expect("Infallible");
 
         let pos = serializer.pos();
 
@@ -562,7 +563,7 @@ impl Session {
         S: Into<Cow<'static, str>>,
         V: for<'a> Serialize<StandardBufSerializer<'a>>,
     {
-        let data = Self::serialize_data(value);
+        let data = Self::serialize_data(&value);
         self.data.insert(name, data);
     }
 
@@ -757,7 +758,7 @@ impl Session {
         Ok(ret)
     }
 
-    pub fn metadata(&self, module_id: &ModuleId) -> Option<&[u8]> {
+    pub fn metadata(&self, module_id: &ModuleId) -> Option<&ModuleMetadata> {
         self.module_session.metadata(module_id)
     }
 }

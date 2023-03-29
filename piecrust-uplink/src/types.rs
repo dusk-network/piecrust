@@ -218,7 +218,7 @@ impl RawResult {
     }
 }
 
-#[derive(Archive, Serialize, Deserialize)]
+#[derive(Archive, Serialize, Deserialize, Debug, Clone)]
 #[archive_attr(derive(CheckBytes))]
 pub struct ModuleMetadata {
     id: [u8; 32],

@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 use std::{io, mem};
 
-use piecrust_uplink::ModuleId;
+use piecrust_uplink::{ModuleId, ModuleMetadata};
 
 use crate::store::{
     compute_root, Bytecode, Call, Commit, Memory, Metadata, Objectcode, Root,
@@ -238,12 +238,13 @@ impl ModuleSession {
         module_id: ModuleId,
         bytecode: B,
         objectcode: B,
-        metadata: B,
+        metadata: ModuleMetadata,
+        metadata_bytes: B,
     ) -> io::Result<()> {
         let memory = Memory::new()?;
         let bytecode = Bytecode::new(bytecode)?;
         let objectcode = Objectcode::new(objectcode)?;
-        let metadata = Metadata::new(metadata)?;
+        let metadata = Metadata::new(metadata_bytes, metadata)?;
 
         self.modules.insert(
             module_id,
@@ -254,10 +255,10 @@ impl ModuleSession {
     }
 
     /// Provides metadata of the module with a given `module_id`.
-    pub fn metadata(&self, module_id: &ModuleId) -> Option<&[u8]> {
+    pub fn metadata(&self, module_id: &ModuleId) -> Option<&ModuleMetadata> {
         self.modules
             .get(module_id)
-            .map(|store_data| store_data.metadata.as_ref())
+            .map(|store_data| store_data.metadata.data())
     }
 }
 
