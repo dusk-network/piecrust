@@ -10,16 +10,12 @@
 #![no_std]
 
 use piecrust_uplink as uplink;
-use uplink::{ModuleId, State};
+use uplink::State;
 
 /// Struct that describes the state of the fallible counter module
 pub struct FallibleCounter {
     value: i64,
 }
-
-/// Module ID, initialized by the host when the module is deployed
-#[no_mangle]
-static SELF_ID: ModuleId = ModuleId::uninitialized();
 
 /// State of the fallible counter module
 static mut STATE: State<FallibleCounter> =

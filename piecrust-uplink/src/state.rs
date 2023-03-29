@@ -266,13 +266,24 @@ pub fn height() -> u64 {
     })
 }
 
-/// Return the module metadata.
-pub fn metadata() -> ModuleMetadata {
+/// Return the current module's owner.
+pub fn owner() -> [u8; 32] {
     let len = unsafe { ext::metadata() } as usize;
-    with_arg_buf(|buf| {
+    let m: ModuleMetadata = with_arg_buf(|buf| {
         let ret = unsafe { archived_root::<ModuleMetadata>(&buf[..len]) };
         ret.deserialize(&mut Infallible).expect("Infallible")
-    })
+    });
+    *m.owner()
+}
+
+/// Return the current module's id.
+pub fn self_id() -> ModuleId {
+    let len = unsafe { ext::metadata() } as usize;
+    let m: ModuleMetadata = with_arg_buf(|buf| {
+        let ret = unsafe { archived_root::<ModuleMetadata>(&buf[..len]) };
+        ret.deserialize(&mut Infallible).expect("Infallible")
+    });
+    ModuleId::from(*m.id())
 }
 
 /// Return the ID of the calling module. The returned id will be

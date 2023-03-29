@@ -233,7 +233,7 @@ impl ModuleSession {
     /// See [`deploy`] for deploying bytecode without specifying a module ID.
     ///
     /// [`deploy`]: ModuleSession::deploy
-    pub fn deploy_with_id<B: AsRef<[u8]>>(
+    pub fn deploy<B: AsRef<[u8]>>(
         &mut self,
         module_id: ModuleId,
         bytecode: B,

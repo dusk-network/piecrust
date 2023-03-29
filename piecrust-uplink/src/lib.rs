@@ -15,15 +15,12 @@ pub use snap::snap;
 
 mod state;
 pub use state::{
-    caller, height, host_query, limit, meta_data, metadata, query, query_raw,
-    spent, ModuleError, State,
+    caller, height, host_query, limit, meta_data, owner, query, query_raw,
+    self_id, spent, ModuleError, State,
 };
 
 mod helpers;
 pub use helpers::*;
-
-mod ops;
-pub use ops::*;
 
 mod types;
 pub use types::*;

@@ -77,11 +77,12 @@
 //!
 //! # Usage
 //! ```
-//! use piecrust::{module_bytecode, VM};
+//! use piecrust::{module_bytecode, ModuleData, VM};
 //! let mut vm = VM::ephemeral().unwrap();
 //!
+//! const OWNER: [u8; 32] = [0u8; 32];
 //! let mut session = vm.genesis_session();
-//! let counter_id = session.deploy(module_bytecode!("counter"), None::<&()>).unwrap();
+//! let counter_id = session.deploy(module_bytecode!("counter"), ModuleData::<()>::from(OWNER)).unwrap();
 //!
 //! assert_eq!(session.query::<(), i64>(counter_id, "read_value", &()).unwrap(), 0xfc);
 //! session.transact::<(), ()>(counter_id, "increment", &()).unwrap();
@@ -118,6 +119,7 @@ mod types;
 mod vm;
 
 pub use error::Error;
+pub use module::ModuleData;
 pub use session::Session;
 pub use vm::{HostQuery, VM};
 

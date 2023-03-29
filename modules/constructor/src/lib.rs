@@ -10,7 +10,7 @@
 #![no_std]
 
 use piecrust_uplink as uplink;
-use uplink::{ModuleId, State};
+use uplink::State;
 
 /// Struct that describes the state of the Constructor module
 pub struct Constructor {
@@ -22,10 +22,6 @@ impl Constructor {
         self.value = value;
     }
 }
-
-/// Module ID, initialized by the host when the module is deployed
-#[no_mangle]
-static SELF_ID: ModuleId = ModuleId::uninitialized();
 
 /// State of the Constructor module
 static mut STATE: State<Constructor> = State::new(Constructor { value: 0x50 });

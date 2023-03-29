@@ -221,16 +221,21 @@ impl RawResult {
 #[derive(Archive, Serialize, Deserialize)]
 #[archive_attr(derive(CheckBytes))]
 pub struct ModuleMetadata {
-    owner: Option<[u8; 32]>,
+    id: [u8; 32],
+    owner: [u8; 32],
 }
 
 impl ModuleMetadata {
-    pub fn new(owner: Option<[u8; 32]>) -> Self {
-        Self { owner }
+    pub fn new(id: [u8; 32], owner: [u8; 32]) -> Self {
+        Self { id, owner }
     }
 
-    pub fn owner(&self) -> Option<&[u8; 32]> {
-        self.owner.as_ref()
+    pub fn id(&self) -> &[u8; 32] {
+        &self.id
+    }
+
+    pub fn owner(&self) -> &[u8; 32] {
+        &self.owner
     }
 }
 

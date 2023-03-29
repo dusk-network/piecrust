@@ -10,28 +10,35 @@
 #![no_std]
 
 use piecrust_uplink as uplink;
-use uplink::{ModuleId, ModuleMetadata, State};
+use uplink::{ModuleId, State};
 
 /// Struct that describes the (empty) state of the Metadata module
 pub struct Metadata;
 
 
-/// Module ID, initialized by the host when the module is deployed
-#[no_mangle]
-static SELF_ID: ModuleId = ModuleId::uninitialized();
-
 /// State of the Metadata module
 static mut STATE: State<Metadata> = State::new(Metadata {});
 
 impl Metadata {
-    /// Read the value of the metadata module state
-    pub fn read_metadata(&self) -> ModuleMetadata {
-        uplink::metadata()
+    /// Read the value of the module's owner
+    pub fn read_owner(&self) -> [u8; 32] {
+        uplink::owner()
+    }
+
+    /// Read the value of the module's id
+    pub fn read_id(&self) -> ModuleId {
+        uplink::self_id()
     }
 }
 
 /// Expose `Metadata::read_owner()` to the host
 #[no_mangle]
-unsafe fn read_metadata(arg_len: u32) -> u32 {
-    uplink::wrap_query(arg_len, |_: ()| STATE.read_metadata())
+unsafe fn read_owner(arg_len: u32) -> u32 {
+    uplink::wrap_query(arg_len, |_: ()| STATE.read_owner())
+}
+
+/// Expose `Metadata::read_id()` to the host
+#[no_mangle]
+unsafe fn read_id(arg_len: u32) -> u32 {
+    uplink::wrap_query(arg_len, |_: ()| STATE.read_id())
 }

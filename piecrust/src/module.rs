@@ -10,6 +10,50 @@ use wasmer::Module;
 use crate::error::Error;
 use crate::instance::Store;
 
+pub struct ModuleData<Arg> {
+    id: Option<[u8; 32]>,
+    constructor_arg: Option<Arg>,
+    owner: [u8; 32],
+}
+
+impl<Arg> ModuleData<Arg> {
+    pub fn new(
+        self_id: Option<[u8; 32]>,
+        constructor_arg: Option<Arg>,
+        owner: [u8; 32],
+    ) -> Self {
+        Self {
+            id: self_id,
+            constructor_arg,
+            owner,
+        }
+    }
+
+    pub fn from(owner: [u8; 32]) -> Self {
+        Self {
+            id: None,
+            constructor_arg: None,
+            owner,
+        }
+    }
+
+    pub fn id(&self) -> Option<&[u8; 32]> {
+        self.id.as_ref()
+    }
+
+    pub fn set_id(&mut self, id: [u8; 32]) {
+        self.id = Some(id);
+    }
+
+    pub fn constructor_arg(&self) -> Option<&Arg> {
+        self.constructor_arg.as_ref()
+    }
+
+    pub fn owner(&self) -> &[u8; 32] {
+        &self.owner
+    }
+}
+
 #[derive(Clone)]
 pub struct WrappedModule {
     serialized: Arc<Vec<u8>>,

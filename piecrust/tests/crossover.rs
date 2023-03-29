@@ -4,8 +4,10 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use piecrust::{module_bytecode, Error, VM};
+use piecrust::{module_bytecode, Error, ModuleData, VM};
 use piecrust_uplink::ModuleId;
+
+const OWNER: [u8; 32] = [0u8; 32];
 
 const CROSSOVER_ONE: ModuleId = {
     let mut bytes = [0; 32];
@@ -26,16 +28,12 @@ fn crossover() -> Result<(), Error> {
     let mut session = vm.genesis_session();
     session.set_point_limit(u64::MAX / 100);
 
-    session.deploy_with_id(
-        CROSSOVER_ONE,
-        module_bytecode!("crossover"),
-        None::<&()>,
-    )?;
-    session.deploy_with_id(
-        CROSSOVER_TWO,
-        module_bytecode!("crossover"),
-        None::<&()>,
-    )?;
+    let module_data =
+        ModuleData::new(Some(CROSSOVER_ONE.to_bytes()), None::<()>, OWNER);
+    session.deploy(module_bytecode!("crossover"), module_data)?;
+    let module_data =
+        ModuleData::new(Some(CROSSOVER_TWO.to_bytes()), None::<()>, OWNER);
+    session.deploy(module_bytecode!("crossover"), module_data)?;
 
     // These value should not be set to `INITIAL_VALUE` in the contract.
     const CROSSOVER_TO_SET: i32 = 42;

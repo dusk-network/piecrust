@@ -26,7 +26,7 @@ use wasmer_types::WASM_PAGE_SIZE;
 
 use crate::event::Event;
 use crate::instance::WrappedInstance;
-use crate::module::WrappedModule;
+use crate::module::{ModuleData, WrappedModule};
 use crate::store::{ModuleSession, Objectcode};
 use crate::types::StandardBufSerializer;
 use crate::vm::HostQueries;
@@ -116,35 +116,22 @@ impl Session {
     pub fn deploy<Arg>(
         &mut self,
         bytecode: &[u8],
-        arg: Option<&Arg>,
+        mut module_data: ModuleData<Arg>,
     ) -> Result<ModuleId, Error>
     where
         Arg: for<'b> Serialize<StandardBufSerializer<'b>>,
     {
-        let hash = blake3::hash(bytecode);
-        let module_id = ModuleId::from_bytes(hash.into());
+        match module_data.id() {
+            Some(_) => (),
+            _ => {
+                let hash = blake3::hash(bytecode);
+                module_data.set_id(hash.into());
+            }
+        };
 
-        self.deploy_with_id(module_id, bytecode, arg)?;
+        let module_id = ModuleId::from(*module_data.id().unwrap());
 
-        Ok(module_id)
-    }
-
-    /// Deploy a module with the given `id`.
-    ///
-    /// If one would like to *not* specify the `ModuleId`, [`deploy`] is
-    /// available.
-    ///
-    /// [`deploy`]: `Session::deploy`
-    pub fn deploy_with_id<Arg>(
-        &mut self,
-        id: ModuleId,
-        bytecode: &[u8],
-        arg: Option<&Arg>,
-    ) -> Result<(), Error>
-    where
-        Arg: for<'b> Serialize<StandardBufSerializer<'b>>,
-    {
-        let arg = arg.map(|arg| {
+        let constructor_arg = module_data.constructor_arg().map(|arg| {
             let mut sbuf = [0u8; SCRATCH_BUF_BYTES];
             let scratch = BufferScratch::new(&mut sbuf);
             let ser = BufferSerializer::new(&mut self.buffer[..]);
@@ -156,14 +143,22 @@ impl Session {
             self.buffer[0..pos].to_vec()
         });
 
-        self.do_deploy_with_id(id, bytecode, arg)
+        self.do_deploy(
+            ModuleId::from(*module_data.id().unwrap()),
+            bytecode,
+            constructor_arg,
+            *module_data.owner(),
+        )?;
+
+        Ok(module_id)
     }
 
-    fn do_deploy_with_id(
+    fn do_deploy(
         &mut self,
         id: ModuleId,
         bytecode: &[u8],
         arg: Option<Vec<u8>>,
+        owner: [u8; 32],
     ) -> Result<(), Error> {
         if self.module_session.module_deployed(id) {
             return Err(InitalizationError(
@@ -172,11 +167,11 @@ impl Session {
         }
 
         let wrapped_module = WrappedModule::new(bytecode, None::<Objectcode>)?;
-        // Todo: we need to decide how to pass the metadata here,
-        let metadata = Self::serialize_data(ModuleMetadata::new(None));
+        let metadata =
+            Self::serialize_data(ModuleMetadata::new(id.to_bytes(), owner));
 
         self.module_session
-            .deploy_with_id(
+            .deploy(
                 id,
                 bytecode,
                 wrapped_module.as_bytes(),
@@ -209,6 +204,7 @@ impl Session {
             module_id: id,
             bytecode: bytecode.to_vec(),
             fdata: arg,
+            owner,
         }));
 
         Ok(())
@@ -707,7 +703,7 @@ impl Session {
                     res = self.call_if_not_error(call);
                 }
                 CallOrDeploy::Deploy(deploy) => {
-                    self.do_deploy_with_id(deploy.module_id, &deploy.bytecode, deploy.fdata)
+                    self.do_deploy(deploy.module_id, &deploy.bytecode, deploy.fdata, deploy.owner)
                         .expect("Only deploys that succeed should be added to the history");
                 }
             }
@@ -789,6 +785,7 @@ struct Deploy {
     module_id: ModuleId,
     bytecode: Vec<u8>,
     fdata: Option<Vec<u8>>,
+    owner: [u8; 32],
 }
 
 #[derive(Debug)]
