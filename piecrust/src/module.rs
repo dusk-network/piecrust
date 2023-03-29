@@ -36,22 +36,6 @@ impl<Arg> DeployData<Arg> {
             owner,
         }
     }
-
-    pub fn id(&self) -> Option<&[u8; 32]> {
-        self.id.as_ref()
-    }
-
-    pub fn set_id(&mut self, id: [u8; 32]) {
-        self.id = Some(id);
-    }
-
-    pub fn constructor_arg(&self) -> Option<&Arg> {
-        self.constructor_arg.as_ref()
-    }
-
-    pub fn owner(&self) -> &[u8; 32] {
-        &self.owner
-    }
 }
 
 #[derive(Clone)]
