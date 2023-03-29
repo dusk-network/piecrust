@@ -19,14 +19,14 @@ use crate::store::{
 };
 
 #[derive(Debug, Clone)]
-pub struct StoreData {
+pub struct ModuleData {
     bytecode: Bytecode,
     objectcode: Objectcode,
     metadata: Metadata,
     memory: Memory,
 }
 
-impl StoreData {
+impl ModuleData {
     pub fn new(
         bytecode: Bytecode,
         objectcode: Objectcode,
@@ -69,7 +69,7 @@ impl StoreData {
 /// [`commit`]: ModuleSession::commit
 #[derive(Debug)]
 pub struct ModuleSession {
-    modules: BTreeMap<ModuleId, StoreData>,
+    modules: BTreeMap<ModuleId, ModuleData>,
 
     base: Option<(Root, Commit)>,
     root_dir: PathBuf,
@@ -160,7 +160,7 @@ impl ModuleSession {
     pub fn module(
         &mut self,
         module: ModuleId,
-    ) -> io::Result<Option<StoreData>> {
+    ) -> io::Result<Option<ModuleData>> {
         match self.modules.entry(module) {
             Vacant(entry) => match &self.base {
                 None => Ok(None),
@@ -197,7 +197,7 @@ impl ModuleSession {
                                 };
 
                             let module = entry
-                                .insert(StoreData::new(
+                                .insert(ModuleData::new(
                                     bytecode, objectcode, metadata, memory,
                                 ))
                                 .clone();
@@ -248,7 +248,7 @@ impl ModuleSession {
 
         self.modules.insert(
             module_id,
-            StoreData::new(bytecode, objectcode, metadata, memory),
+            ModuleData::new(bytecode, objectcode, metadata, memory),
         );
 
         Ok(())
