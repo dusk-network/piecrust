@@ -82,7 +82,7 @@
 //!
 //! const OWNER: [u8; 32] = [0u8; 32];
 //! let mut session = vm.genesis_session();
-//! let counter_id = session.deploy(module_bytecode!("counter"), DeployData::<()>::from(OWNER)).unwrap();
+//! let counter_id = session.deploy(module_bytecode!("counter"), DeployData::from(OWNER)).unwrap();
 //!
 //! assert_eq!(session.query::<(), i64>(counter_id, "read_value", &()).unwrap(), 0xfc);
 //! session.transact::<(), ()>(counter_id, "increment", &()).unwrap();

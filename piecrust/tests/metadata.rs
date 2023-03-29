@@ -17,7 +17,7 @@ fn metadata() -> Result<(), Error> {
 
     let id = session.deploy(
         module_bytecode!("metadata"),
-        DeployData::<()>::from(EXPECTED_OWNER),
+        DeployData::from(EXPECTED_OWNER),
     )?;
 
     // owner should be available after deployment

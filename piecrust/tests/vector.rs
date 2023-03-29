@@ -14,8 +14,8 @@ pub fn vector_push_pop() -> Result<(), Error> {
 
     let mut session = vm.genesis_session();
 
-    let id = session
-        .deploy(module_bytecode!("vector"), DeployData::<()>::from(OWNER))?;
+    let id =
+        session.deploy(module_bytecode!("vector"), DeployData::from(OWNER))?;
 
     const N: usize = 128;
 

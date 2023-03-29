@@ -32,7 +32,9 @@ impl<Arg> DeployData<Arg> {
             owner,
         }
     }
+}
 
+impl DeployData<()> {
     pub fn from(owner: [u8; 32]) -> Self {
         Self {
             id: None,

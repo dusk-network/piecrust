@@ -17,7 +17,7 @@ fn fallible_read_write_panic() -> Result<(), Error> {
 
     let id = session.deploy(
         module_bytecode!("fallible_counter"),
-        DeployData::<()>::from(OWNER),
+        DeployData::from(OWNER),
     )?;
 
     session.transact::<bool, ()>(id, "increment", &false)?;
