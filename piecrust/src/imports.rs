@@ -30,6 +30,8 @@ impl DefaultImports {
                 "emit" => Function::new_typed_with_env(store, &fenv, emit),
                 "limit" => Function::new_typed_with_env(store, &fenv, limit),
                 "spent" => Function::new_typed_with_env(store, &fenv, spent),
+                "owner" => Function::new_typed_with_env(store, &fenv, owner),
+                "self_id" => Function::new_typed_with_env(store, &fenv, self_id),
             }
         }
     }
@@ -281,4 +283,26 @@ fn spent(fenv: FunctionEnvMut<Env>) -> u64 {
         .expect("there should be remaining points");
 
     limit - remaining
+}
+
+fn owner(fenv: FunctionEnvMut<Env>) -> u32 {
+    let env = fenv.data();
+    let self_id = env.self_module_id();
+    let module_metadata = env.metadata(self_id).expect("metadata should exist");
+    let slice = module_metadata.owner.as_slice();
+    let len = slice.len();
+    env.self_instance()
+        .with_arg_buffer(|arg| arg[..len].copy_from_slice(slice));
+    len as u32
+}
+
+fn self_id(fenv: FunctionEnvMut<Env>) -> u32 {
+    let env = fenv.data();
+    let self_id = env.self_module_id();
+    let module_metadata = env.metadata(self_id).expect("metadata should exist");
+    let slice = module_metadata.module_id.as_bytes();
+    let len = slice.len();
+    env.self_instance()
+        .with_arg_buffer(|arg| arg[..len].copy_from_slice(slice));
+    len as u32
 }

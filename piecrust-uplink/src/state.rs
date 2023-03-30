@@ -62,6 +62,8 @@ mod ext {
         pub(crate) fn emit(arg_len: u32);
         pub(crate) fn limit() -> u64;
         pub(crate) fn spent() -> u64;
+        pub(crate) fn owner() -> u32;
+        pub(crate) fn self_id() -> u32;
     }
 }
 
@@ -138,9 +140,9 @@ impl<S> DerefMut for State<S> {
     }
 }
 
-pub fn host_query<Arg, Ret>(name: &str, arg: Arg) -> Ret
+pub fn host_query<A, Ret>(name: &str, arg: A) -> Ret
 where
-    Arg: for<'a> Serialize<StandardBufSerializer<'a>>,
+    A: for<'a> Serialize<StandardBufSerializer<'a>>,
     Ret: Archive,
     Ret::Archived: Deserialize<Ret, Infallible>,
 {
@@ -166,13 +168,13 @@ where
     })
 }
 
-pub fn query<Arg, Ret>(
+pub fn query<A, Ret>(
     mod_id: ModuleId,
     name: &str,
-    arg: &Arg,
+    arg: &A,
 ) -> Result<Ret, ModuleError>
 where
-    Arg: for<'a> Serialize<StandardBufSerializer<'a>>,
+    A: for<'a> Serialize<StandardBufSerializer<'a>>,
     Ret: Archive,
     Ret::Archived: Deserialize<Ret, Infallible>,
 {
@@ -265,6 +267,25 @@ pub fn height() -> u64 {
     })
 }
 
+/// Return the current module's owner.
+pub fn owner() -> [u8; 32] {
+    let len = unsafe { ext::owner() } as usize;
+    with_arg_buf(|buf| {
+        let ret = unsafe { archived_root::<[u8; 32]>(&buf[..len]) };
+        ret.deserialize(&mut Infallible).expect("Infallible")
+    })
+}
+
+/// Return the current module's id.
+pub fn self_id() -> ModuleId {
+    let len = unsafe { ext::self_id() } as usize;
+    let id: [u8; 32] = with_arg_buf(|buf| {
+        let ret = unsafe { archived_root::<[u8; 32]>(&buf[..len]) };
+        ret.deserialize(&mut Infallible).expect("Infallible")
+    });
+    ModuleId::from(id)
+}
+
 /// Return the ID of the calling module. The returned id will be
 /// uninitialized if there is no caller - meaning this is the first module
 /// to be called.
@@ -336,14 +357,14 @@ impl<S> State<S> {
         with_arg_buf(|buf| Ok(RawResult::new(&buf[..ret_len as usize])))
     }
 
-    pub fn transact<Arg, Ret>(
+    pub fn transact<A, Ret>(
         &mut self,
         mod_id: ModuleId,
         name: &str,
-        arg: &Arg,
+        arg: &A,
     ) -> Result<Ret, ModuleError>
     where
-        Arg: for<'a> Serialize<StandardBufSerializer<'a>>,
+        A: for<'a> Serialize<StandardBufSerializer<'a>>,
         Ret: Archive,
         Ret::Archived: Deserialize<Ret, Infallible>,
     {

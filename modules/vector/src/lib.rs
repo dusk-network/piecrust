@@ -12,16 +12,12 @@ extern crate alloc;
 
 use alloc::vec::Vec;
 use piecrust_uplink as uplink;
-use uplink::{ModuleId, State};
+use uplink::State;
 
 /// Struct that describes the state of the vector module
 pub struct Vector {
     a: Vec<i16>,
 }
-
-/// Module ID, initialized by the host when the module is deployed
-#[no_mangle]
-static SELF_ID: ModuleId = ModuleId::uninitialized();
 
 /// State of the vector module
 static mut STATE: State<Vector> = State::new(Vector { a: Vec::new() });

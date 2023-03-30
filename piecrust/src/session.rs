@@ -26,7 +26,7 @@ use wasmer_types::WASM_PAGE_SIZE;
 
 use crate::event::Event;
 use crate::instance::WrappedInstance;
-use crate::module::WrappedModule;
+use crate::module::{DeployData, ModuleMetadata, WrappedModule};
 use crate::store::{ModuleSession, Objectcode};
 use crate::types::StandardBufSerializer;
 use crate::vm::HostQueries;
@@ -63,7 +63,7 @@ pub struct Session {
     instance_map: BTreeMap<ModuleId, (*mut WrappedInstance, u64)>,
     debug: Vec<String>,
     events: Vec<Event>,
-    data: Metadata,
+    data: SessionMetadata,
 
     module_session: ModuleSession,
     host_queries: HostQueries,
@@ -92,7 +92,7 @@ impl Session {
             instance_map: BTreeMap::new(),
             debug: vec![],
             events: vec![],
-            data: Metadata::new(),
+            data: SessionMetadata::new(),
             module_session,
             host_queries,
             limit: DEFAULT_LIMIT,
@@ -113,38 +113,26 @@ impl Session {
     ///
     /// [`ModuleId`]: ModuleId
     /// [`deploy_with_id`]: `Session::deploy_with_id`
-    pub fn deploy<Arg>(
+    pub fn deploy<'a, A, D>(
         &mut self,
         bytecode: &[u8],
-        arg: Option<&Arg>,
+        deploy_data: D,
     ) -> Result<ModuleId, Error>
     where
-        Arg: for<'b> Serialize<StandardBufSerializer<'b>>,
+        A: 'a + for<'b> Serialize<StandardBufSerializer<'b>>,
+        D: Into<DeployData<'a, A>>,
     {
-        let hash = blake3::hash(bytecode);
-        let module_id = ModuleId::from_bytes(hash.into());
+        let mut deploy_data = deploy_data.into();
 
-        self.deploy_with_id(module_id, bytecode, arg)?;
+        match deploy_data.module_id {
+            Some(_) => (),
+            _ => {
+                let hash = blake3::hash(bytecode);
+                deploy_data.module_id = Some(ModuleId::from_bytes(hash.into()));
+            }
+        };
 
-        Ok(module_id)
-    }
-
-    /// Deploy a module with the given `id`.
-    ///
-    /// If one would like to *not* specify the `ModuleId`, [`deploy`] is
-    /// available.
-    ///
-    /// [`deploy`]: `Session::deploy`
-    pub fn deploy_with_id<Arg>(
-        &mut self,
-        id: ModuleId,
-        bytecode: &[u8],
-        arg: Option<&Arg>,
-    ) -> Result<(), Error>
-    where
-        Arg: for<'b> Serialize<StandardBufSerializer<'b>>,
-    {
-        let arg = arg.map(|arg| {
+        let constructor_arg = deploy_data.constructor_arg.map(|arg| {
             let mut sbuf = [0u8; SCRATCH_BUF_BYTES];
             let scratch = BufferScratch::new(&mut sbuf);
             let ser = BufferSerializer::new(&mut self.buffer[..]);
@@ -156,28 +144,47 @@ impl Session {
             self.buffer[0..pos].to_vec()
         });
 
-        self.do_deploy_with_id(id, bytecode, arg)
+        let module_id = deploy_data.module_id.unwrap();
+        self.do_deploy(
+            module_id,
+            bytecode,
+            constructor_arg,
+            deploy_data.owner,
+        )?;
+
+        Ok(module_id)
     }
 
-    fn do_deploy_with_id(
+    fn do_deploy(
         &mut self,
-        id: ModuleId,
+        module_id: ModuleId,
         bytecode: &[u8],
         arg: Option<Vec<u8>>,
+        owner: [u8; 32],
     ) -> Result<(), Error> {
-        if self.module_session.module_deployed(id) {
+        if self.module_session.module_deployed(module_id) {
             return Err(InitalizationError(
                 "Deployed error already exists".into(),
             ));
         }
 
         let wrapped_module = WrappedModule::new(bytecode, None::<Objectcode>)?;
+        let metadata = ModuleMetadata { module_id, owner };
+        let metadata_bytes = Self::serialize_data(&metadata);
+
         self.module_session
-            .deploy_with_id(id, bytecode, wrapped_module.as_bytes())
+            .deploy(
+                module_id,
+                bytecode,
+                wrapped_module.as_bytes(),
+                metadata,
+                metadata_bytes.as_slice(),
+            )
             .map_err(|err| PersistenceError(Arc::new(err)))?;
 
-        self.create_instance(id)?;
-        let instance = self.instance(&id).expect("instance should exist");
+        self.create_instance(module_id)?;
+        let instance =
+            self.instance(&module_id).expect("instance should exist");
 
         let has_init = instance.is_function_exported(INIT_METHOD);
         if has_init && arg.is_none() {
@@ -194,13 +201,14 @@ impl Session {
                 ));
             }
 
-            self.initialize(id, arg.clone())?;
+            self.initialize(module_id, arg.clone())?;
         }
 
         self.call_history.push(From::from(Deploy {
-            module_id: id,
+            module_id,
             bytecode: bytecode.to_vec(),
             fdata: arg,
+            owner,
         }));
 
         Ok(())
@@ -223,14 +231,14 @@ impl Session {
     ///
     /// [`set_point_limit`]: Session::set_point_limit
     /// [`spent`]: Session::spent
-    pub fn query<Arg, Ret>(
+    pub fn query<A, Ret>(
         &mut self,
         module: ModuleId,
         method_name: &str,
-        arg: &Arg,
+        arg: &A,
     ) -> Result<Ret, Error>
     where
-        Arg: for<'b> Serialize<StandardBufSerializer<'b>>,
+        A: for<'b> Serialize<StandardBufSerializer<'b>>,
         Ret: Archive,
         Ret::Archived: Deserialize<Ret, Infallible>
             + for<'b> CheckBytes<DefaultValidator<'b>>,
@@ -278,14 +286,14 @@ impl Session {
     ///
     /// [`set_point_limit`]: Session::set_point_limit
     /// [`spent`]: Session::spent
-    pub fn transact<Arg, Ret>(
+    pub fn transact<A, Ret>(
         &mut self,
         module: ModuleId,
         method_name: &str,
-        arg: &Arg,
+        arg: &A,
     ) -> Result<Ret, Error>
     where
-        Arg: for<'b> Serialize<StandardBufSerializer<'b>>,
+        A: for<'b> Serialize<StandardBufSerializer<'b>>,
         Ret: Archive,
         Ret::Archived: Deserialize<Ret, Infallible>
             + for<'b> CheckBytes<DefaultValidator<'b>>,
@@ -406,14 +414,18 @@ impl Session {
         &mut self,
         module_id: ModuleId,
     ) -> Result<WrappedInstance, Error> {
-        let (bytecode, objectcode, memory) = self
+        let store_data = self
             .module_session
             .module(module_id)
             .map_err(|err| PersistenceError(Arc::new(err)))?
             .expect("Module should exist");
 
-        let module = WrappedModule::new(&bytecode, Some(&objectcode))?;
-        let instance = WrappedInstance::new(self, module_id, &module, memory)?;
+        let module = WrappedModule::new(
+            store_data.bytecode,
+            Some(store_data.objectcode),
+        )?;
+        let instance =
+            WrappedInstance::new(self, module_id, &module, store_data.memory)?;
 
         Ok(instance)
     }
@@ -524,11 +536,8 @@ impl Session {
         self.data.get(name)
     }
 
-    /// Sets a metadata item with the given `name` and `value`. These pieces of
-    /// data are then made available to modules for querying.
-    pub fn set_meta<S, V>(&mut self, name: S, value: V)
+    pub fn serialize_data<V>(value: &V) -> Vec<u8>
     where
-        S: Into<Cow<'static, str>>,
         V: for<'a> Serialize<StandardBufSerializer<'a>>,
     {
         let mut buf = [0u8; MAX_META_SIZE];
@@ -539,11 +548,21 @@ impl Session {
 
         let mut serializer =
             StandardBufSerializer::new(ser, scratch, Infallible);
-        serializer.serialize_value(&value).expect("Infallible");
+        serializer.serialize_value(value).expect("Infallible");
 
         let pos = serializer.pos();
 
-        let data = buf[..pos].to_vec();
+        buf[..pos].to_vec()
+    }
+
+    /// Sets a metadata item with the given `name` and `value`. These pieces of
+    /// data are then made available to modules for querying.
+    pub fn set_meta<S, V>(&mut self, name: S, value: V)
+    where
+        S: Into<Cow<'static, str>>,
+        V: for<'a> Serialize<StandardBufSerializer<'a>>,
+    {
+        let data = Self::serialize_data(&value);
         self.data.insert(name, data);
     }
 
@@ -684,7 +703,7 @@ impl Session {
                     res = self.call_if_not_error(call);
                 }
                 CallOrDeploy::Deploy(deploy) => {
-                    self.do_deploy_with_id(deploy.module_id, &deploy.bytecode, deploy.fdata)
+                    self.do_deploy(deploy.module_id, &deploy.bytecode, deploy.fdata, deploy.owner)
                         .expect("Only deploys that succeed should be added to the history");
                 }
             }
@@ -737,6 +756,10 @@ impl Session {
 
         Ok(ret)
     }
+
+    pub fn metadata(&self, module_id: &ModuleId) -> Option<&ModuleMetadata> {
+        self.module_session.metadata(module_id)
+    }
 }
 
 #[derive(Debug)]
@@ -762,6 +785,7 @@ struct Deploy {
     module_id: ModuleId,
     bytecode: Vec<u8>,
     fdata: Option<Vec<u8>>,
+    owner: [u8; 32],
 }
 
 #[derive(Debug)]
@@ -780,11 +804,11 @@ struct Call {
 }
 
 #[derive(Debug)]
-pub struct Metadata {
+pub struct SessionMetadata {
     data: BTreeMap<Cow<'static, str>, Vec<u8>>,
 }
 
-impl Metadata {
+impl SessionMetadata {
     fn new() -> Self {
         Self {
             data: BTreeMap::new(),

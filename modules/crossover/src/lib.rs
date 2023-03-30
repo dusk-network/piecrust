@@ -17,10 +17,6 @@ pub struct Crossover {
     value: i32,
 }
 
-/// Module ID, initialized by the host when the module is deployed
-#[no_mangle]
-static SELF_ID: ModuleId = ModuleId::uninitialized();
-
 const INITIAL_VALUE: i32 = 0;
 
 /// State of the crossover module

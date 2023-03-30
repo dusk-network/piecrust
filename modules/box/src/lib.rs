@@ -14,17 +14,13 @@ extern crate alloc;
 use alloc::boxed::Box;
 
 use piecrust_uplink as uplink;
-use uplink::{ModuleId, State};
+use uplink::State;
 
 /// Struct that describes the state of the box module
 // One Box, many `Boxen`
 pub struct Boxen {
     a: Option<Box<i16>>,
 }
-
-/// Module ID, initialized by the host when the module is deployed
-#[no_mangle]
-static SELF_ID: ModuleId = ModuleId::uninitialized();
 
 /// State of the box module
 static mut STATE: State<Boxen> = State::new(Boxen { a: None });

@@ -12,14 +12,10 @@
 extern crate alloc;
 
 use piecrust_uplink as uplink;
-use uplink::{ModuleId, State};
+use uplink::State;
 
 /// Struct that describes the state of the debug module
 pub struct Debug;
-
-/// Module ID, initialized by the host when the module is deployed
-#[no_mangle]
-static SELF_ID: ModuleId = ModuleId::uninitialized();
 
 /// State of the debug module
 static mut STATE: State<Debug> = State::new(Debug);

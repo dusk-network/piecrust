@@ -4,7 +4,9 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use piecrust::{module_bytecode, Error, VM};
+use piecrust::{module_bytecode, DeployData, Error, VM};
+
+const OWNER: [u8; 32] = [0u8; 32];
 
 #[test]
 fn counter_read_simple() -> Result<(), Error> {
@@ -12,7 +14,8 @@ fn counter_read_simple() -> Result<(), Error> {
 
     let mut session = vm.genesis_session();
 
-    let id = session.deploy(module_bytecode!("counter"), None::<&()>)?;
+    let id = session
+        .deploy(module_bytecode!("counter"), DeployData::builder(OWNER))?;
 
     assert_eq!(session.query::<(), i64>(id, "read_value", &())?, 0xfc);
 
@@ -25,7 +28,8 @@ fn counter_read_write_simple() -> Result<(), Error> {
 
     let mut session = vm.genesis_session();
 
-    let id = session.deploy(module_bytecode!("counter"), None::<&()>)?;
+    let id = session
+        .deploy(module_bytecode!("counter"), DeployData::builder(OWNER))?;
 
     assert_eq!(session.query::<(), i64>(id, "read_value", &())?, 0xfc);
 

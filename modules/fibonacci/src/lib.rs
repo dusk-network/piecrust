@@ -13,11 +13,7 @@
 pub struct Fibonacci;
 
 use piecrust_uplink as uplink;
-use uplink::{ModuleId, State};
-
-/// Module ID, initialized by the host when the module is deployed
-#[no_mangle]
-static SELF_ID: ModuleId = ModuleId::uninitialized();
+use uplink::State;
 
 #[allow(unused)]
 /// State of the fibonacci module

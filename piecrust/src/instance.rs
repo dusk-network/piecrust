@@ -10,7 +10,6 @@ use std::sync::Arc;
 
 use colored::*;
 use piecrust_uplink as uplink;
-use piecrust_uplink::MODULE_ID_BYTES;
 use uplink::ModuleId;
 use wasmer::wasmparser::Operator;
 use wasmer::{CompilerConfig, RuntimeError, Tunables, TypedFunction};
@@ -91,6 +90,10 @@ impl Env {
         let event = Event::new(self.self_id, data);
         self.session.push_event(event);
     }
+
+    pub fn self_module_id(&self) -> &ModuleId {
+        &self.self_id
+    }
 }
 
 /// Convenience methods for dealing with our custom store
@@ -134,7 +137,7 @@ impl WrappedInstance {
         module: &WrappedModule,
         memory: Memory,
     ) -> Result<Self, Error> {
-        let tunables = InstanceTunables::new(memory.clone());
+        let tunables = InstanceTunables::new(memory);
         let mut store = Store::new_store_with_tunables(tunables);
 
         let env = Env {
@@ -170,18 +173,6 @@ impl WrappedInstance {
                 wasmer::Value::I32(i) => i as usize,
                 _ => todo!("Missing heap base"),
             };
-
-        let self_id_ofs =
-            match instance.exports.get_global("SELF_ID")?.get(&mut store) {
-                wasmer::Value::I32(i) => i as usize,
-                _ => todo!("Missing `SELF_ID` export"),
-            };
-
-        // write self id into memory.
-        let mut memory_guard = memory.write();
-        let bytes = memory_guard.as_bytes_mut();
-        bytes[self_id_ofs..self_id_ofs + MODULE_ID_BYTES]
-            .copy_from_slice(module_id.as_bytes());
 
         let wrapped = WrappedInstance {
             store,

@@ -10,12 +10,22 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 use std::{io, mem};
 
+use crate::module::ModuleMetadata;
 use piecrust_uplink::ModuleId;
 
 use crate::store::{
-    compute_root, Bytecode, Call, Commit, Memory, Objectcode, Root,
-    BYTECODE_DIR, DIFF_EXTENSION, MEMORY_DIR, OBJECTCODE_EXTENSION,
+    compute_root, Bytecode, Call, Commit, Memory, Metadata, Objectcode, Root,
+    BYTECODE_DIR, DIFF_EXTENSION, MEMORY_DIR, METADATA_EXTENSION,
+    OBJECTCODE_EXTENSION,
 };
+
+#[derive(Debug, Clone)]
+pub struct ModuleData {
+    pub bytecode: Bytecode,
+    pub objectcode: Objectcode,
+    pub metadata: Metadata,
+    pub memory: Memory,
+}
 
 /// The representation of a session with a [`ModuleStore`].
 ///
@@ -28,7 +38,7 @@ use crate::store::{
 /// [`commit`]: ModuleSession::commit
 #[derive(Debug)]
 pub struct ModuleSession {
-    modules: BTreeMap<ModuleId, (Bytecode, Objectcode, Memory)>,
+    modules: BTreeMap<ModuleId, ModuleData>,
 
     base: Option<(Root, Commit)>,
     root_dir: PathBuf,
@@ -119,7 +129,7 @@ impl ModuleSession {
     pub fn module(
         &mut self,
         module: ModuleId,
-    ) -> io::Result<Option<(Bytecode, Objectcode, Memory)>> {
+    ) -> io::Result<Option<ModuleData>> {
         match self.modules.entry(module) {
             Vacant(entry) => match &self.base {
                 None => Ok(None),
@@ -135,6 +145,8 @@ impl ModuleSession {
                                 base_dir.join(BYTECODE_DIR).join(&module_hex);
                             let objectcode_path = bytecode_path
                                 .with_extension(OBJECTCODE_EXTENSION);
+                            let metadata_path = bytecode_path
+                                .with_extension(METADATA_EXTENSION);
                             let memory_path =
                                 base_dir.join(MEMORY_DIR).join(module_hex);
                             let memory_diff_path =
@@ -143,6 +155,7 @@ impl ModuleSession {
                             let bytecode = Bytecode::from_file(bytecode_path)?;
                             let objectcode =
                                 Objectcode::from_file(objectcode_path)?;
+                            let metadata = Metadata::from_file(metadata_path)?;
                             let memory =
                                 match base_commit.diffs.contains(&module) {
                                     true => Memory::from_file_and_diff(
@@ -153,7 +166,12 @@ impl ModuleSession {
                                 };
 
                             let module = entry
-                                .insert((bytecode, objectcode, memory))
+                                .insert(ModuleData {
+                                    bytecode,
+                                    objectcode,
+                                    metadata,
+                                    memory,
+                                })
                                 .clone();
 
                             Ok(Some(module))
@@ -187,20 +205,37 @@ impl ModuleSession {
     /// See [`deploy`] for deploying bytecode without specifying a module ID.
     ///
     /// [`deploy`]: ModuleSession::deploy
-    pub fn deploy_with_id<B: AsRef<[u8]>>(
+    pub fn deploy<B: AsRef<[u8]>>(
         &mut self,
         module_id: ModuleId,
         bytecode: B,
         objectcode: B,
+        metadata: ModuleMetadata,
+        metadata_bytes: B,
     ) -> io::Result<()> {
         let memory = Memory::new()?;
         let bytecode = Bytecode::new(bytecode)?;
         let objectcode = Objectcode::new(objectcode)?;
+        let metadata = Metadata::new(metadata_bytes, metadata)?;
 
-        self.modules
-            .insert(module_id, (bytecode, objectcode, memory));
+        self.modules.insert(
+            module_id,
+            ModuleData {
+                bytecode,
+                objectcode,
+                metadata,
+                memory,
+            },
+        );
 
         Ok(())
+    }
+
+    /// Provides metadata of the module with a given `module_id`.
+    pub fn metadata(&self, module_id: &ModuleId) -> Option<&ModuleMetadata> {
+        self.modules
+            .get(module_id)
+            .map(|store_data| store_data.metadata.data())
     }
 }
 
