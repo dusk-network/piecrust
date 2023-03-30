@@ -27,7 +27,7 @@ impl<'a> DeployData<'a, ()> {
     ///
     /// This function returns a builder that can be used to set optional fields
     /// in module deployment.
-    pub fn build(owner: [u8; 32]) -> DeployDataBuilder<'a, ()> {
+    pub fn builder(owner: [u8; 32]) -> DeployDataBuilder<'a, ()> {
         DeployDataBuilder {
             module_id: None,
             constructor_arg: None,

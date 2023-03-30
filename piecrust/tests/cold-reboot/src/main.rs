@@ -29,7 +29,7 @@ fn initialize_counter<P: AsRef<Path>>(
 
     session.deploy(
         counter_bytecode,
-        DeployData::build(OWNER).module_id(COUNTER_ID),
+        DeployData::builder(OWNER).module_id(COUNTER_ID),
     )?;
     session.transact::<(), ()>(COUNTER_ID, "increment", &())?;
 

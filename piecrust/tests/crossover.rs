@@ -30,11 +30,11 @@ fn crossover() -> Result<(), Error> {
 
     session.deploy(
         module_bytecode!("crossover"),
-        DeployData::build(OWNER).module_id(CROSSOVER_ONE),
+        DeployData::builder(OWNER).module_id(CROSSOVER_ONE),
     )?;
     session.deploy(
         module_bytecode!("crossover"),
-        DeployData::build(OWNER).module_id(CROSSOVER_TWO),
+        DeployData::builder(OWNER).module_id(CROSSOVER_TWO),
     )?;
 
     // These value should not be set to `INITIAL_VALUE` in the contract.

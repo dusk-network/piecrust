@@ -17,7 +17,7 @@ fn constructor() -> Result<(), Error> {
 
     let id = session.deploy(
         module_bytecode!("constructor"),
-        DeployData::build(OWNER).constructor_arg(&0xabu8),
+        DeployData::builder(OWNER).constructor_arg(&0xabu8),
     )?;
 
     assert_eq!(session.query::<(), u8>(id, "read_value", &())?, 0xab);
@@ -66,7 +66,7 @@ fn missing_init() -> Result<(), Error> {
 
     let result = session.deploy(
         module_bytecode!("counter"),
-        DeployData::build(OWNER).constructor_arg(&0xabu8),
+        DeployData::builder(OWNER).constructor_arg(&0xabu8),
     );
 
     assert!(
