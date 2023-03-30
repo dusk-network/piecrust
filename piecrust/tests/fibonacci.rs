@@ -15,7 +15,7 @@ pub fn fibo() -> Result<(), Error> {
     let mut session = vm.genesis_session();
 
     let id = session
-        .deploy(module_bytecode!("fibonacci"), DeployData::from(OWNER))?;
+        .deploy(module_bytecode!("fibonacci"), DeployData::build(OWNER))?;
 
     assert_eq!(session.query::<u32, u64>(id, "nth", &0)?, 1);
     assert_eq!(session.query::<u32, u64>(id, "nth", &1)?, 1);

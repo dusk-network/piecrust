@@ -14,8 +14,8 @@ pub fn vm_center_events() -> Result<(), Error> {
 
     let mut session = vm.genesis_session();
 
-    let eventer_id =
-        session.deploy(module_bytecode!("eventer"), DeployData::from(OWNER))?;
+    let eventer_id = session
+        .deploy(module_bytecode!("eventer"), DeployData::build(OWNER))?;
 
     const EVENT_NUM: u32 = 5;
 

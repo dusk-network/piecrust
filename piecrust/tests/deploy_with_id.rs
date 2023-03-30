@@ -17,8 +17,7 @@ pub fn deploy_with_id() -> Result<(), Error> {
     let some_id = [1u8; 32];
     let module_id = ModuleId::from(some_id);
     let mut session = vm.genesis_session();
-    let module_data = DeployData::new(Some(module_id), None::<()>, OWNER);
-    session.deploy(bytecode, module_data)?;
+    session.deploy(bytecode, DeployData::build(OWNER).module_id(module_id))?;
 
     assert_eq!(
         session.query::<(), i64>(module_id, "read_value", &())?,

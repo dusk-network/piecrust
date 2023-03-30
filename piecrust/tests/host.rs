@@ -27,7 +27,7 @@ pub fn host_hash() -> Result<(), Error> {
     let mut session = vm.genesis_session();
 
     let id =
-        session.deploy(module_bytecode!("host"), DeployData::from(OWNER))?;
+        session.deploy(module_bytecode!("host"), DeployData::build(OWNER))?;
 
     let v = vec![0u8, 1, 2];
     let h = session
