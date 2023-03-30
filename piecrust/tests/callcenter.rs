@@ -4,7 +4,7 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use piecrust::{module_bytecode, DeployData, Error, VM};
+use piecrust::{deploy_data, module_bytecode, DeployData, Error, VM};
 use piecrust_uplink::{
     ModuleError, ModuleId, RawQuery, RawResult, RawTransaction,
 };
@@ -18,15 +18,15 @@ pub fn cc_read_counter() -> Result<(), Error> {
     let mut session = vm.genesis_session();
 
     let counter_id =
-        session.deploy(module_bytecode!("counter"), DeployData::from(OWNER))?;
+        session.deploy(module_bytecode!("counter"), deploy_data!(OWNER))?;
 
     // read direct
 
     let value: i64 = session.query(counter_id, "read_value", &())?;
     assert_eq!(value, 0xfc);
 
-    let center_id = session
-        .deploy(module_bytecode!("callcenter"), DeployData::from(OWNER))?;
+    let center_id =
+        session.deploy(module_bytecode!("callcenter"), deploy_data!(OWNER))?;
 
     // read value through callcenter
     let value: i64 = session.query(center_id, "query_counter", &counter_id)?;
@@ -42,14 +42,14 @@ pub fn cc_direct() -> Result<(), Error> {
     let mut session = vm.genesis_session();
 
     let counter_id =
-        session.deploy(module_bytecode!("counter"), DeployData::from(OWNER))?;
+        session.deploy(module_bytecode!("counter"), deploy_data!(OWNER))?;
 
     // read value directly
     let value: i64 = session.query(counter_id, "read_value", &())?;
     assert_eq!(value, 0xfc);
 
-    let center_id = session
-        .deploy(module_bytecode!("callcenter"), DeployData::from(OWNER))?;
+    let center_id =
+        session.deploy(module_bytecode!("callcenter"), deploy_data!(OWNER))?;
 
     // read value through callcenter
     let value: i64 = session.query(center_id, "query_counter", &counter_id)?;
@@ -75,8 +75,8 @@ pub fn cc_passthrough() -> Result<(), Error> {
 
     let mut session = vm.genesis_session();
 
-    let center_id = session
-        .deploy(module_bytecode!("callcenter"), DeployData::from(OWNER))?;
+    let center_id =
+        session.deploy(module_bytecode!("callcenter"), deploy_data!(OWNER))?;
 
     let rq = RawQuery::new("read_value", ());
 
@@ -94,9 +94,9 @@ pub fn cc_delegated_read() -> Result<(), Error> {
     let mut session = vm.genesis_session();
 
     let counter_id =
-        session.deploy(module_bytecode!("counter"), DeployData::from(OWNER))?;
-    let center_id = session
-        .deploy(module_bytecode!("callcenter"), DeployData::from(OWNER))?;
+        session.deploy(module_bytecode!("counter"), deploy_data!(OWNER))?;
+    let center_id =
+        session.deploy(module_bytecode!("callcenter"), deploy_data!(OWNER))?;
 
     let rq = RawQuery::new("read_value", ());
 
@@ -124,9 +124,9 @@ pub fn cc_delegated_write() -> Result<(), Error> {
 
     let mut session = vm.genesis_session();
     let counter_id =
-        session.deploy(module_bytecode!("counter"), DeployData::from(OWNER))?;
-    let center_id = session
-        .deploy(module_bytecode!("callcenter"), DeployData::from(OWNER))?;
+        session.deploy(module_bytecode!("counter"), deploy_data!(OWNER))?;
+    let center_id =
+        session.deploy(module_bytecode!("callcenter"), deploy_data!(OWNER))?;
 
     session.transact(center_id, "delegate_transaction", &(counter_id, rt))?;
 
@@ -143,8 +143,8 @@ pub fn cc_self() -> Result<(), Error> {
 
     let mut session = vm.genesis_session();
 
-    let center_id = session
-        .deploy(module_bytecode!("callcenter"), DeployData::from(OWNER))?;
+    let center_id =
+        session.deploy(module_bytecode!("callcenter"), deploy_data!(OWNER))?;
 
     // am i calling myself
     let calling_self: bool =
@@ -160,8 +160,8 @@ pub fn cc_caller() -> Result<(), Error> {
 
     let mut session = vm.genesis_session();
 
-    let center_id = session
-        .deploy(module_bytecode!("callcenter"), DeployData::from(OWNER))?;
+    let center_id =
+        session.deploy(module_bytecode!("callcenter"), deploy_data!(OWNER))?;
 
     let value: Result<bool, ModuleError> =
         session.query(center_id, "call_self", &())?;
@@ -177,8 +177,8 @@ pub fn cc_caller_uninit() -> Result<(), Error> {
 
     let mut session = vm.genesis_session();
 
-    let center_id = session
-        .deploy(module_bytecode!("callcenter"), DeployData::from(OWNER))?;
+    let center_id =
+        session.deploy(module_bytecode!("callcenter"), deploy_data!(OWNER))?;
 
     let caller: ModuleId = session.query(center_id, "return_caller", &())?;
     assert_eq!(caller, ModuleId::uninitialized());
@@ -192,8 +192,8 @@ pub fn cc_self_id() -> Result<(), Error> {
 
     let mut session = vm.genesis_session();
 
-    let center_id = session
-        .deploy(module_bytecode!("callcenter"), DeployData::from(OWNER))?;
+    let center_id =
+        session.deploy(module_bytecode!("callcenter"), deploy_data!(OWNER))?;
 
     let value: ModuleId = session.query(center_id, "return_self_id", &())?;
     assert_eq!(value, center_id);

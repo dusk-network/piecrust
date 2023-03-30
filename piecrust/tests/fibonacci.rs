@@ -4,7 +4,7 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use piecrust::{module_bytecode, DeployData, Error, VM};
+use piecrust::{deploy_data, module_bytecode, DeployData, Error, VM};
 
 const OWNER: [u8; 32] = [0u8; 32];
 
@@ -14,8 +14,8 @@ pub fn fibo() -> Result<(), Error> {
 
     let mut session = vm.genesis_session();
 
-    let id = session
-        .deploy(module_bytecode!("fibonacci"), DeployData::from(OWNER))?;
+    let id =
+        session.deploy(module_bytecode!("fibonacci"), deploy_data!(OWNER))?;
 
     assert_eq!(session.query::<u32, u64>(id, "nth", &0)?, 1);
     assert_eq!(session.query::<u32, u64>(id, "nth", &1)?, 1);

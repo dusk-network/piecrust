@@ -20,6 +20,13 @@ pub struct DeployData<Arg> {
     pub owner: [u8; 32],
 }
 
+#[macro_export]
+macro_rules! deploy_data {
+    ($owner:expr) => {
+        DeployData::<()>::new(None, None, $owner)
+    };
+}
+
 impl<Arg> DeployData<Arg> {
     pub fn new(
         self_id: Option<ModuleId>,
@@ -29,16 +36,6 @@ impl<Arg> DeployData<Arg> {
         Self {
             id: self_id,
             constructor_arg,
-            owner,
-        }
-    }
-}
-
-impl DeployData<()> {
-    pub fn from(owner: [u8; 32]) -> Self {
-        Self {
-            id: None,
-            constructor_arg: None,
             owner,
         }
     }
