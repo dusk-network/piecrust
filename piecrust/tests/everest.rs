@@ -4,7 +4,7 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use piecrust::{deploy_data, module_bytecode, DeployData, Error, VM};
+use piecrust::{module_bytecode, DeployData, Error, VM};
 
 const OWNER: [u8; 32] = [0u8; 32];
 
@@ -14,8 +14,8 @@ pub fn height() -> Result<(), Error> {
 
     let mut session = vm.genesis_session();
 
-    let id =
-        session.deploy(module_bytecode!("everest"), deploy_data!(OWNER))?;
+    let id = session
+        .deploy(module_bytecode!("everest"), DeployData::build(OWNER))?;
 
     for h in 0u64..1024 {
         session.set_meta("height", h);
@@ -29,8 +29,8 @@ pub fn height() -> Result<(), Error> {
 pub fn meta_data_optionality() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
     let mut session = vm.genesis_session();
-    let id =
-        session.deploy(module_bytecode!("everest"), deploy_data!(OWNER))?;
+    let id = session
+        .deploy(module_bytecode!("everest"), DeployData::build(OWNER))?;
     let height: Option<u64> = session.transact(id, "get_height", &())?;
     assert!(height.is_none());
     Ok(())

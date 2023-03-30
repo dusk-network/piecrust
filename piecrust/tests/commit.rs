@@ -4,7 +4,7 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use piecrust::{deploy_data, module_bytecode, DeployData, Error, Session, VM};
+use piecrust::{module_bytecode, DeployData, Error, Session, VM};
 use piecrust_uplink::ModuleId;
 use std::thread;
 
@@ -16,8 +16,8 @@ fn read_write_session() -> Result<(), Error> {
 
     {
         let mut session = vm.genesis_session();
-        let id =
-            session.deploy(module_bytecode!("counter"), deploy_data!(OWNER))?;
+        let id = session
+            .deploy(module_bytecode!("counter"), DeployData::build(OWNER))?;
 
         assert_eq!(session.query::<(), i64>(id, "read_value", &())?, 0xfc);
 
@@ -31,7 +31,7 @@ fn read_write_session() -> Result<(), Error> {
 
     let mut other_session = vm.genesis_session();
     let id = other_session
-        .deploy(module_bytecode!("counter"), deploy_data!(OWNER))?;
+        .deploy(module_bytecode!("counter"), DeployData::build(OWNER))?;
 
     assert_eq!(other_session.query::<(), i64>(id, "read_value", &())?, 0xfc);
 
@@ -51,8 +51,8 @@ fn read_write_session() -> Result<(), Error> {
 fn commit_restore() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
     let mut session_1 = vm.genesis_session();
-    let id =
-        session_1.deploy(module_bytecode!("counter"), deploy_data!(OWNER))?;
+    let id = session_1
+        .deploy(module_bytecode!("counter"), DeployData::build(OWNER))?;
     // commit 1
     assert_eq!(session_1.query::<(), i64>(id, "read_value", &())?, 0xfc);
     session_1.transact::<(), ()>(id, "increment", &())?;
@@ -82,9 +82,10 @@ fn commit_restore_two_modules_session() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 
     let mut session = vm.genesis_session();
-    let id_1 =
-        session.deploy(module_bytecode!("counter"), deploy_data!(OWNER))?;
-    let id_2 = session.deploy(module_bytecode!("box"), deploy_data!(OWNER))?;
+    let id_1 = session
+        .deploy(module_bytecode!("counter"), DeployData::build(OWNER))?;
+    let id_2 =
+        session.deploy(module_bytecode!("box"), DeployData::build(OWNER))?;
 
     session.transact::<(), ()>(id_1, "increment", &())?;
     session.transact::<i16, ()>(id_2, "set", &0x11)?;
@@ -123,8 +124,8 @@ fn multiple_commits() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 
     let mut session = vm.genesis_session();
-    let id =
-        session.deploy(module_bytecode!("counter"), deploy_data!(OWNER))?;
+    let id = session
+        .deploy(module_bytecode!("counter"), DeployData::build(OWNER))?;
     // commit 1
     assert_eq!(session.query::<(), i64>(id, "read_value", &())?, 0xfc);
     session.transact::<(), ()>(id, "increment", &())?;
@@ -165,8 +166,8 @@ fn concurrent_sessions() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 
     let mut session = vm.genesis_session();
-    let counter =
-        session.deploy(module_bytecode!("counter"), deploy_data!(OWNER))?;
+    let counter = session
+        .deploy(module_bytecode!("counter"), DeployData::build(OWNER))?;
 
     assert_eq!(session.query::<(), i64>(counter, "read_value", &())?, 0xfc);
 
@@ -252,8 +253,8 @@ fn squashing() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 
     let mut session = vm.genesis_session();
-    let counter =
-        session.deploy(module_bytecode!("counter"), deploy_data!(OWNER))?;
+    let counter = session
+        .deploy(module_bytecode!("counter"), DeployData::build(OWNER))?;
 
     assert_eq!(session.query::<(), i64>(counter, "read_value", &())?, 0xfc);
 

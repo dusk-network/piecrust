@@ -113,24 +113,26 @@ impl Session {
     ///
     /// [`ModuleId`]: ModuleId
     /// [`deploy_with_id`]: `Session::deploy_with_id`
-    pub fn deploy<Arg>(
+    pub fn deploy<'a, A, D>(
         &mut self,
         bytecode: &[u8],
-        deploy_data: DeployData<Arg>,
+        deploy_data: D,
     ) -> Result<ModuleId, Error>
     where
-        Arg: for<'b> Serialize<StandardBufSerializer<'b>>,
+        A: 'a + for<'b> Serialize<StandardBufSerializer<'b>>,
+        D: Into<DeployData<'a, A>>,
     {
-        let mut deploy_data = deploy_data;
-        match deploy_data.id {
+        let mut deploy_data = deploy_data.into();
+
+        match deploy_data.module_id {
             Some(_) => (),
             _ => {
                 let hash = blake3::hash(bytecode);
-                deploy_data.id = Some(ModuleId::from_bytes(hash.into()));
+                deploy_data.module_id = Some(ModuleId::from_bytes(hash.into()));
             }
         };
 
-        let constructor_arg = deploy_data.constructor_arg.as_ref().map(|arg| {
+        let constructor_arg = deploy_data.constructor_arg.map(|arg| {
             let mut sbuf = [0u8; SCRATCH_BUF_BYTES];
             let scratch = BufferScratch::new(&mut sbuf);
             let ser = BufferSerializer::new(&mut self.buffer[..]);
@@ -142,7 +144,7 @@ impl Session {
             self.buffer[0..pos].to_vec()
         });
 
-        let module_id = deploy_data.id.unwrap();
+        let module_id = deploy_data.module_id.unwrap();
         self.do_deploy(
             module_id,
             bytecode,
@@ -155,27 +157,24 @@ impl Session {
 
     fn do_deploy(
         &mut self,
-        id: ModuleId,
+        module_id: ModuleId,
         bytecode: &[u8],
         arg: Option<Vec<u8>>,
         owner: [u8; 32],
     ) -> Result<(), Error> {
-        if self.module_session.module_deployed(id) {
+        if self.module_session.module_deployed(module_id) {
             return Err(InitalizationError(
                 "Deployed error already exists".into(),
             ));
         }
 
         let wrapped_module = WrappedModule::new(bytecode, None::<Objectcode>)?;
-        let metadata = ModuleMetadata {
-            id: id.to_bytes(),
-            owner,
-        };
+        let metadata = ModuleMetadata { module_id, owner };
         let metadata_bytes = Self::serialize_data(&metadata);
 
         self.module_session
             .deploy(
-                id,
+                module_id,
                 bytecode,
                 wrapped_module.as_bytes(),
                 metadata,
@@ -183,8 +182,9 @@ impl Session {
             )
             .map_err(|err| PersistenceError(Arc::new(err)))?;
 
-        self.create_instance(id)?;
-        let instance = self.instance(&id).expect("instance should exist");
+        self.create_instance(module_id)?;
+        let instance =
+            self.instance(&module_id).expect("instance should exist");
 
         let has_init = instance.is_function_exported(INIT_METHOD);
         if has_init && arg.is_none() {
@@ -201,11 +201,11 @@ impl Session {
                 ));
             }
 
-            self.initialize(id, arg.clone())?;
+            self.initialize(module_id, arg.clone())?;
         }
 
         self.call_history.push(From::from(Deploy {
-            module_id: id,
+            module_id,
             bytecode: bytecode.to_vec(),
             fdata: arg,
             owner,
@@ -231,14 +231,14 @@ impl Session {
     ///
     /// [`set_point_limit`]: Session::set_point_limit
     /// [`spent`]: Session::spent
-    pub fn query<Arg, Ret>(
+    pub fn query<A, Ret>(
         &mut self,
         module: ModuleId,
         method_name: &str,
-        arg: &Arg,
+        arg: &A,
     ) -> Result<Ret, Error>
     where
-        Arg: for<'b> Serialize<StandardBufSerializer<'b>>,
+        A: for<'b> Serialize<StandardBufSerializer<'b>>,
         Ret: Archive,
         Ret::Archived: Deserialize<Ret, Infallible>
             + for<'b> CheckBytes<DefaultValidator<'b>>,
@@ -286,14 +286,14 @@ impl Session {
     ///
     /// [`set_point_limit`]: Session::set_point_limit
     /// [`spent`]: Session::spent
-    pub fn transact<Arg, Ret>(
+    pub fn transact<A, Ret>(
         &mut self,
         module: ModuleId,
         method_name: &str,
-        arg: &Arg,
+        arg: &A,
     ) -> Result<Ret, Error>
     where
-        Arg: for<'b> Serialize<StandardBufSerializer<'b>>,
+        A: for<'b> Serialize<StandardBufSerializer<'b>>,
         Ret: Archive,
         Ret::Archived: Deserialize<Ret, Infallible>
             + for<'b> CheckBytes<DefaultValidator<'b>>,

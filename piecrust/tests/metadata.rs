@@ -4,7 +4,7 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use piecrust::{deploy_data, module_bytecode, DeployData, Error, VM};
+use piecrust::{module_bytecode, DeployData, Error, VM};
 use piecrust_uplink::ModuleId;
 
 #[test]
@@ -15,8 +15,10 @@ fn metadata() -> Result<(), Error> {
 
     let mut session = vm.genesis_session();
 
-    let id = session
-        .deploy(module_bytecode!("metadata"), deploy_data!(EXPECTED_OWNER))?;
+    let id = session.deploy(
+        module_bytecode!("metadata"),
+        DeployData::build(EXPECTED_OWNER),
+    )?;
 
     // owner should be available after deployment
     let owner = session.query::<(), [u8; 32]>(id, "read_owner", &())?;

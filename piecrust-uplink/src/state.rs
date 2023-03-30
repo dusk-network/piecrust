@@ -140,9 +140,9 @@ impl<S> DerefMut for State<S> {
     }
 }
 
-pub fn host_query<Arg, Ret>(name: &str, arg: Arg) -> Ret
+pub fn host_query<A, Ret>(name: &str, arg: A) -> Ret
 where
-    Arg: for<'a> Serialize<StandardBufSerializer<'a>>,
+    A: for<'a> Serialize<StandardBufSerializer<'a>>,
     Ret: Archive,
     Ret::Archived: Deserialize<Ret, Infallible>,
 {
@@ -168,13 +168,13 @@ where
     })
 }
 
-pub fn query<Arg, Ret>(
+pub fn query<A, Ret>(
     mod_id: ModuleId,
     name: &str,
-    arg: &Arg,
+    arg: &A,
 ) -> Result<Ret, ModuleError>
 where
-    Arg: for<'a> Serialize<StandardBufSerializer<'a>>,
+    A: for<'a> Serialize<StandardBufSerializer<'a>>,
     Ret: Archive,
     Ret::Archived: Deserialize<Ret, Infallible>,
 {
@@ -357,14 +357,14 @@ impl<S> State<S> {
         with_arg_buf(|buf| Ok(RawResult::new(&buf[..ret_len as usize])))
     }
 
-    pub fn transact<Arg, Ret>(
+    pub fn transact<A, Ret>(
         &mut self,
         mod_id: ModuleId,
         name: &str,
-        arg: &Arg,
+        arg: &A,
     ) -> Result<Ret, ModuleError>
     where
-        Arg: for<'a> Serialize<StandardBufSerializer<'a>>,
+        A: for<'a> Serialize<StandardBufSerializer<'a>>,
         Ret: Archive,
         Ret::Archived: Deserialize<Ret, Infallible>,
     {
