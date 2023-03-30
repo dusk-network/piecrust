@@ -167,7 +167,10 @@ impl Session {
         }
 
         let wrapped_module = WrappedModule::new(bytecode, None::<Objectcode>)?;
-        let metadata = ModuleMetadata::new(id.to_bytes(), owner);
+        let metadata = ModuleMetadata {
+            id: id.to_bytes(),
+            owner,
+        };
         let metadata_bytes = Self::serialize_data(&metadata);
 
         self.module_session
@@ -418,15 +421,11 @@ impl Session {
             .expect("Module should exist");
 
         let module = WrappedModule::new(
-            store_data.bytecode(),
-            Some(store_data.objectcode()),
+            store_data.bytecode,
+            Some(store_data.objectcode),
         )?;
-        let instance = WrappedInstance::new(
-            self,
-            module_id,
-            &module,
-            store_data.memory(),
-        )?;
+        let instance =
+            WrappedInstance::new(self, module_id, &module, store_data.memory)?;
 
         Ok(instance)
     }

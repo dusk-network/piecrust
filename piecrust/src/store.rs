@@ -535,10 +535,10 @@ fn write_commit_inner<P: AsRef<Path>>(
                     bytecode_path.with_extension(METADATA_EXTENSION);
                 let memory_path = memory_dir.join(&module_hex);
 
-                fs::write(bytecode_path, store_data.bytecode())?;
-                fs::write(objectcode_path, store_data.objectcode())?;
-                fs::write(metadata_path, store_data.metadata())?;
-                fs::write(memory_path, &store_data.memory().read())?;
+                fs::write(bytecode_path, store_data.bytecode)?;
+                fs::write(objectcode_path, store_data.objectcode)?;
+                fs::write(metadata_path, store_data.metadata)?;
+                fs::write(memory_path, &store_data.memory.read())?;
             }
         }
         Some((base, base_commit)) => {
@@ -605,7 +605,7 @@ fn write_commit_inner<P: AsRef<Path>>(
 
                         diff(
                             &base_memory.read(),
-                            &store_data.memory().read(),
+                            &store_data.memory.read(),
                             &mut encoder,
                         )?;
 
@@ -619,10 +619,10 @@ fn write_commit_inner<P: AsRef<Path>>(
                             bytecode_path.with_extension(METADATA_EXTENSION);
                         let memory_path = memory_dir.join(&module_hex);
 
-                        fs::write(bytecode_path, store_data.bytecode())?;
-                        fs::write(objectcode_path, store_data.objectcode())?;
-                        fs::write(metadata_path, store_data.metadata())?;
-                        fs::write(memory_path, store_data.memory().read())?;
+                        fs::write(bytecode_path, store_data.bytecode)?;
+                        fs::write(objectcode_path, store_data.objectcode)?;
+                        fs::write(metadata_path, store_data.metadata)?;
+                        fs::write(memory_path, store_data.memory.read())?;
                     }
                 }
             }
@@ -704,7 +704,7 @@ where
     // Compute the hashes of changed memories
     for (module, store_data) in iter {
         let mut hasher = blake3::Hasher::new();
-        hasher.update(&store_data.memory().read());
+        hasher.update(&store_data.memory.read());
         leaves_map.insert(*module, Root::from(hasher.finalize()));
     }
 

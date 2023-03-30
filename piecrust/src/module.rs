@@ -47,22 +47,8 @@ impl DeployData<()> {
 #[derive(Archive, Serialize, Deserialize, Debug, Clone)]
 #[archive_attr(derive(CheckBytes))]
 pub struct ModuleMetadata {
-    id: [u8; 32],
-    owner: [u8; 32],
-}
-
-impl ModuleMetadata {
-    pub fn new(id: [u8; 32], owner: [u8; 32]) -> Self {
-        Self { id, owner }
-    }
-
-    pub fn id(&self) -> &[u8; 32] {
-        &self.id
-    }
-
-    pub fn owner(&self) -> &[u8; 32] {
-        &self.owner
-    }
+    pub id: [u8; 32],
+    pub owner: [u8; 32],
 }
 
 #[derive(Clone)]

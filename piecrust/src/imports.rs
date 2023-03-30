@@ -289,7 +289,7 @@ fn owner(fenv: FunctionEnvMut<Env>) -> u32 {
     let env = fenv.data();
     let self_id = env.self_module_id();
     let module_metadata = env.metadata(self_id).expect("metadata should exist");
-    let slice = module_metadata.owner().as_slice();
+    let slice = module_metadata.owner.as_slice();
     let len = slice.len();
     env.self_instance()
         .with_arg_buffer(|arg| arg[..len].copy_from_slice(slice));
@@ -300,7 +300,7 @@ fn self_id(fenv: FunctionEnvMut<Env>) -> u32 {
     let env = fenv.data();
     let self_id = env.self_module_id();
     let module_metadata = env.metadata(self_id).expect("metadata should exist");
-    let slice = module_metadata.id().as_slice();
+    let slice = module_metadata.id.as_slice();
     let len = slice.len();
     env.self_instance()
         .with_arg_buffer(|arg| arg[..len].copy_from_slice(slice));

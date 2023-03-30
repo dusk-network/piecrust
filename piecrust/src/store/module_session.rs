@@ -21,42 +21,10 @@ use crate::store::{
 
 #[derive(Debug, Clone)]
 pub struct ModuleData {
-    bytecode: Bytecode,
-    objectcode: Objectcode,
-    metadata: Metadata,
-    memory: Memory,
-}
-
-impl ModuleData {
-    pub fn new(
-        bytecode: Bytecode,
-        objectcode: Objectcode,
-        metadata: Metadata,
-        memory: Memory,
-    ) -> Self {
-        Self {
-            bytecode,
-            objectcode,
-            metadata,
-            memory,
-        }
-    }
-
-    pub fn bytecode(&self) -> &Bytecode {
-        &self.bytecode
-    }
-
-    pub fn objectcode(&self) -> &Objectcode {
-        &self.objectcode
-    }
-
-    pub fn metadata(&self) -> &Metadata {
-        &self.metadata
-    }
-
-    pub fn memory(&self) -> Memory {
-        self.memory.clone()
-    }
+    pub bytecode: Bytecode,
+    pub objectcode: Objectcode,
+    pub metadata: Metadata,
+    pub memory: Memory,
 }
 
 /// The representation of a session with a [`ModuleStore`].
@@ -198,9 +166,12 @@ impl ModuleSession {
                                 };
 
                             let module = entry
-                                .insert(ModuleData::new(
-                                    bytecode, objectcode, metadata, memory,
-                                ))
+                                .insert(ModuleData {
+                                    bytecode,
+                                    objectcode,
+                                    metadata,
+                                    memory,
+                                })
                                 .clone();
 
                             Ok(Some(module))
@@ -249,7 +220,12 @@ impl ModuleSession {
 
         self.modules.insert(
             module_id,
-            ModuleData::new(bytecode, objectcode, metadata, memory),
+            ModuleData {
+                bytecode,
+                objectcode,
+                metadata,
+                memory,
+            },
         );
 
         Ok(())
