@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Implemented Display for ModuleId. [#178]
 - Removed SELF_ID export from contracts. [#167]
 - Added uplink::owner and uplink::self_id. [#158]
 - Added persistence fo module metadata. [#167]
