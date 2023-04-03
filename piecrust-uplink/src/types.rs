@@ -85,6 +85,12 @@ impl AsMut<[u8]> for ModuleId {
 
 impl core::fmt::Debug for ModuleId {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        core::fmt::Display::fmt(self, f)
+    }
+}
+
+impl core::fmt::Display for ModuleId {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         if f.alternate() {
             write!(f, "0x")?
         }
