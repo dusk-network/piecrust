@@ -26,7 +26,7 @@ use wasmer_types::WASM_PAGE_SIZE;
 
 use crate::event::Event;
 use crate::instance::WrappedInstance;
-use crate::module::{DeployData, ModuleMetadata, WrappedModule};
+use crate::module::{ModuleData, ModuleMetadata, WrappedModule};
 use crate::store::{ModuleSession, Objectcode};
 use crate::types::StandardBufSerializer;
 use crate::vm::HostQueries;
@@ -120,7 +120,7 @@ impl Session {
     ) -> Result<ModuleId, Error>
     where
         A: 'a + for<'b> Serialize<StandardBufSerializer<'b>>,
-        D: Into<DeployData<'a, A>>,
+        D: Into<ModuleData<'a, A>>,
     {
         let mut deploy_data = deploy_data.into();
 

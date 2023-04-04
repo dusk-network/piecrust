@@ -4,7 +4,7 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use piecrust::{module_bytecode, DeployData, Error, VM};
+use piecrust::{module_bytecode, ModuleData, Error, VM};
 use piecrust_uplink::ModuleId;
 
 const OWNER: [u8; 32] = [0u8; 32];
@@ -30,11 +30,11 @@ fn crossover() -> Result<(), Error> {
 
     session.deploy(
         module_bytecode!("crossover"),
-        DeployData::builder(OWNER).module_id(CROSSOVER_ONE),
+        ModuleData::builder(OWNER).module_id(CROSSOVER_ONE),
     )?;
     session.deploy(
         module_bytecode!("crossover"),
-        DeployData::builder(OWNER).module_id(CROSSOVER_TWO),
+        ModuleData::builder(OWNER).module_id(CROSSOVER_TWO),
     )?;
 
     // These value should not be set to `INITIAL_VALUE` in the contract.
