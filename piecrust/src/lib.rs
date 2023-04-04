@@ -119,7 +119,7 @@ mod types;
 mod vm;
 
 pub use error::Error;
-pub use module::{ModuleData, DeployDataBuilder};
+pub use module::{DeployDataBuilder, ModuleData};
 pub use session::Session;
 pub use vm::{HostQuery, VM};
 

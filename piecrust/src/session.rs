@@ -757,8 +757,11 @@ impl Session {
         Ok(ret)
     }
 
-    pub fn metadata(&self, module_id: &ModuleId) -> Option<&ModuleMetadata> {
-        self.module_session.metadata(module_id)
+    pub fn module_metadata(
+        &self,
+        module_id: &ModuleId,
+    ) -> Option<&ModuleMetadata> {
+        self.module_session.module_metadata(module_id)
     }
 }
 

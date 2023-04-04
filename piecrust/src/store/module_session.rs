@@ -232,7 +232,10 @@ impl ModuleSession {
     }
 
     /// Provides metadata of the module with a given `module_id`.
-    pub fn metadata(&self, module_id: &ModuleId) -> Option<&ModuleMetadata> {
+    pub fn module_metadata(
+        &self,
+        module_id: &ModuleId,
+    ) -> Option<&ModuleMetadata> {
         self.modules
             .get(module_id)
             .map(|store_data| store_data.metadata.data())
