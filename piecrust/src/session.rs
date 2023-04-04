@@ -63,7 +63,7 @@ pub struct Session {
     instance_map: BTreeMap<ModuleId, (*mut WrappedInstance, u64)>,
     debug: Vec<String>,
     events: Vec<Event>,
-    data: SessionMetadata,
+    data: SessionData,
 
     module_session: ModuleSession,
     host_queries: HostQueries,
@@ -86,13 +86,14 @@ impl Session {
     pub(crate) fn new(
         module_session: ModuleSession,
         host_queries: HostQueries,
+        data: SessionData,
     ) -> Self {
         Session {
             call_stack: CallStack::new(),
             instance_map: BTreeMap::new(),
             debug: vec![],
             events: vec![],
-            data: SessionMetadata::new(),
+            data,
             module_session,
             host_queries,
             limit: DEFAULT_LIMIT,
@@ -807,12 +808,12 @@ struct Call {
 }
 
 #[derive(Debug)]
-pub struct SessionMetadata {
+pub struct SessionData {
     data: BTreeMap<Cow<'static, str>, Vec<u8>>,
 }
 
-impl SessionMetadata {
-    fn new() -> Self {
+impl SessionData {
+    pub fn new() -> Self {
         Self {
             data: BTreeMap::new(),
         }

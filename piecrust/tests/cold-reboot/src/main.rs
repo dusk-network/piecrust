@@ -9,7 +9,7 @@ extern crate core;
 use std::path::{Path, PathBuf};
 use std::{env, fs};
 
-use piecrust::{ModuleData, ModuleId, VM};
+use piecrust::{ModuleData, ModuleId, SessionData, VM};
 const COUNTER_ID: ModuleId = {
     let mut bytes = [0u8; 32];
     bytes[0] = 99;
@@ -21,7 +21,7 @@ fn initialize_counter<P: AsRef<Path>>(
     vm: &VM,
     commit_id_file_path: P,
 ) -> Result<(), piecrust::Error> {
-    let mut session = vm.genesis_session();
+    let mut session = vm.genesis_session(SessionData::new());
 
     let counter_bytecode = include_bytes!(
         "../../../../target/wasm32-unknown-unknown/release/counter.wasm"
@@ -51,7 +51,7 @@ fn confirm_counter<P: AsRef<Path>>(
     commit_root.copy_from_slice(&commit_root_bytes);
 
     let mut session = vm
-        .session(commit_root)
+        .session(commit_root, SessionData::new())
         .expect("Instantiating session from given root should succeed");
 
     assert_eq!(

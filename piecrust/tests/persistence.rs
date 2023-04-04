@@ -4,7 +4,7 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use piecrust::{module_bytecode, Error, ModuleData, VM};
+use piecrust::{module_bytecode, Error, ModuleData, SessionData, VM};
 
 const OWNER: [u8; 32] = [0u8; 32];
 
@@ -17,7 +17,7 @@ fn session_commits_persistence() -> Result<(), Error> {
 
     let commit_1;
     {
-        let mut session = vm.genesis_session();
+        let mut session = vm.genesis_session(SessionData::new());
         id_1 = session
             .deploy(module_bytecode!("counter"), ModuleData::builder(OWNER))?;
         id_2 = session
@@ -35,7 +35,7 @@ fn session_commits_persistence() -> Result<(), Error> {
 
     let commit_2;
     {
-        let mut session = vm.session(commit_1)?;
+        let mut session = vm.session(commit_1, SessionData::new())?;
 
         session.transact::<(), ()>(id_1, "increment", &())?;
         session.transact::<i16, ()>(id_2, "set", &0x12)?;
@@ -49,7 +49,7 @@ fn session_commits_persistence() -> Result<(), Error> {
 
     {
         let vm2 = VM::new(vm.root_dir())?;
-        let mut session = vm2.session(commit_1)?;
+        let mut session = vm2.session(commit_1, SessionData::new())?;
 
         // check if both modules' state was restored
         assert_eq!(session.query::<(), i64>(id_1, "read_value", &())?, 0xfd);
@@ -61,7 +61,7 @@ fn session_commits_persistence() -> Result<(), Error> {
 
     {
         let vm3 = VM::new(vm.root_dir())?;
-        let mut session = vm3.session(commit_2)?;
+        let mut session = vm3.session(commit_2, SessionData::new())?;
 
         // check if both modules' state was restored
         assert_eq!(session.query::<(), i64>(id_1, "read_value", &())?, 0xfe);
@@ -76,7 +76,7 @@ fn session_commits_persistence() -> Result<(), Error> {
 #[test]
 fn modules_persistence() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
-    let mut session = vm.genesis_session();
+    let mut session = vm.genesis_session(SessionData::new());
     let id_1 = session
         .deploy(module_bytecode!("counter"), ModuleData::builder(OWNER))?;
     let id_2 =
@@ -93,7 +93,7 @@ fn modules_persistence() -> Result<(), Error> {
     let commit_1 = session.commit()?;
 
     let vm2 = VM::new(vm.root_dir())?;
-    let mut session2 = vm2.session(commit_1)?;
+    let mut session2 = vm2.session(commit_1, SessionData::new())?;
 
     // check if both modules' state was restored
     assert_eq!(session2.query::<(), i64>(id_1, "read_value", &())?, 0xfd);
