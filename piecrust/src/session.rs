@@ -170,15 +170,15 @@ impl Session {
         }
 
         let wrapped_module = WrappedModule::new(bytecode, None::<Objectcode>)?;
-        let metadata = ModuleMetadata { module_id, owner };
-        let metadata_bytes = Self::serialize_data(&metadata);
+        let module_metadata = ModuleMetadata { module_id, owner };
+        let metadata_bytes = Self::serialize_data(&module_metadata);
 
         self.module_session
             .deploy(
                 module_id,
                 bytecode,
                 wrapped_module.as_bytes(),
-                metadata,
+                module_metadata,
                 metadata_bytes.as_slice(),
             )
             .map_err(|err| PersistenceError(Arc::new(err)))?;
@@ -556,17 +556,6 @@ impl Session {
         buf[..pos].to_vec()
     }
 
-    /// Sets a metadata item with the given `name` and `value`. These pieces of
-    /// data are then made available to modules for querying.
-    pub fn set_meta<S, V>(&mut self, name: S, value: V)
-    where
-        S: Into<Cow<'static, str>>,
-        V: for<'a> Serialize<StandardBufSerializer<'a>>,
-    {
-        let data = Self::serialize_data(&value);
-        self.data.insert(name, data);
-    }
-
     /// Increment the call execution count.
     ///
     /// If the call errors on the first called module, return said error.
@@ -819,11 +808,14 @@ impl SessionData {
         }
     }
 
-    fn insert<S>(&mut self, name: S, data: Vec<u8>)
+    pub fn insert<S, V>(mut self, name: S, value: V) -> Self
     where
         S: Into<Cow<'static, str>>,
+        V: for<'a> Serialize<StandardBufSerializer<'a>>,
     {
+        let data = Session::serialize_data(&value);
         self.data.insert(name.into(), data);
+        self
     }
 
     fn get(&self, name: &str) -> Option<Vec<u8>> {

@@ -110,12 +110,20 @@ impl VM {
     ///
     /// [`Session`]: Session
     /// [`genesis_session`]: VM::genesis_session
-    pub fn session(&self, base: [u8; 32], data: SessionData) -> Result<Session, Error> {
+    pub fn session(
+        &self,
+        base: [u8; 32],
+        data: SessionData,
+    ) -> Result<Session, Error> {
         let module_session = self
             .store
             .session(base)
             .map_err(|err| PersistenceError(Arc::new(err)))?;
-        Ok(Session::new(module_session, self.host_queries.clone(), data))
+        Ok(Session::new(
+            module_session,
+            self.host_queries.clone(),
+            data,
+        ))
     }
 
     /// Spawn a [`Session`] with no commit as a base.
