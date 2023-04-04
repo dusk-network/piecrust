@@ -4,7 +4,7 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use piecrust::{module_bytecode, Error, ModuleData, Session, VM};
+use piecrust::{module_bytecode, Error, ModuleData, Session, SessionData, VM};
 use piecrust_uplink::ModuleId;
 use std::thread;
 
@@ -15,7 +15,7 @@ fn read_write_session() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 
     {
-        let mut session = vm.genesis_session();
+        let mut session = vm.genesis_session(SessionData::new());
         let id = session
             .deploy(module_bytecode!("counter"), ModuleData::builder(OWNER))?;
 
@@ -29,7 +29,7 @@ fn read_write_session() -> Result<(), Error> {
     // mutable session dropped without committing.
     // old counter value still accessible.
 
-    let mut other_session = vm.genesis_session();
+    let mut other_session = vm.genesis_session(SessionData::new());
     let id = other_session
         .deploy(module_bytecode!("counter"), ModuleData::builder(OWNER))?;
 
@@ -41,7 +41,7 @@ fn read_write_session() -> Result<(), Error> {
 
     // session committed, new value accessible
 
-    let mut session = vm.session(_commit_id)?;
+    let mut session = vm.session(_commit_id, SessionData::new())?;
 
     assert_eq!(session.query::<(), i64>(id, "read_value", &())?, 0xfd);
     Ok(())
@@ -50,7 +50,7 @@ fn read_write_session() -> Result<(), Error> {
 #[test]
 fn commit_restore() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
-    let mut session_1 = vm.genesis_session();
+    let mut session_1 = vm.genesis_session(SessionData::new());
     let id = session_1
         .deploy(module_bytecode!("counter"), ModuleData::builder(OWNER))?;
     // commit 1
@@ -59,20 +59,20 @@ fn commit_restore() -> Result<(), Error> {
     let commit_1 = session_1.commit()?;
 
     // commit 2
-    let mut session_2 = vm.session(commit_1)?;
+    let mut session_2 = vm.session(commit_1, SessionData::new())?;
     assert_eq!(session_2.query::<(), i64>(id, "read_value", &())?, 0xfd);
     session_2.transact::<(), ()>(id, "increment", &())?;
     session_2.transact::<(), ()>(id, "increment", &())?;
     let commit_2 = session_2.commit()?;
-    let mut session_2 = vm.session(commit_2)?;
+    let mut session_2 = vm.session(commit_2, SessionData::new())?;
     assert_eq!(session_2.query::<(), i64>(id, "read_value", &())?, 0xff);
 
     // restore commit 1
-    let mut session_3 = vm.session(commit_1)?;
+    let mut session_3 = vm.session(commit_1, SessionData::new())?;
     assert_eq!(session_3.query::<(), i64>(id, "read_value", &())?, 0xfd);
 
     // restore commit 2
-    let mut session_4 = vm.session(commit_2)?;
+    let mut session_4 = vm.session(commit_2, SessionData::new())?;
     assert_eq!(session_4.query::<(), i64>(id, "read_value", &())?, 0xff);
     Ok(())
 }
@@ -81,7 +81,7 @@ fn commit_restore() -> Result<(), Error> {
 fn commit_restore_two_modules_session() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 
-    let mut session = vm.genesis_session();
+    let mut session = vm.genesis_session(SessionData::new());
     let id_1 = session
         .deploy(module_bytecode!("counter"), ModuleData::builder(OWNER))?;
     let id_2 =
@@ -97,18 +97,18 @@ fn commit_restore_two_modules_session() -> Result<(), Error> {
 
     let commit_1 = session.commit()?;
 
-    let mut session = vm.session(commit_1)?;
+    let mut session = vm.session(commit_1, SessionData::new())?;
     session.transact::<(), ()>(id_1, "increment", &())?;
     session.transact::<i16, ()>(id_2, "set", &0x12)?;
     let commit_2 = session.commit()?;
-    let mut session = vm.session(commit_2)?;
+    let mut session = vm.session(commit_2, SessionData::new())?;
     assert_eq!(session.query::<(), i64>(id_1, "read_value", &())?, 0xfe);
     assert_eq!(
         session.query::<_, Option<i16>>(id_2, "get", &())?,
         Some(0x12)
     );
 
-    let mut session = vm.session(commit_1)?;
+    let mut session = vm.session(commit_1, SessionData::new())?;
 
     // check if both modules' state was restored
     assert_eq!(session.query::<(), i64>(id_1, "read_value", &())?, 0xfd);
@@ -123,7 +123,7 @@ fn commit_restore_two_modules_session() -> Result<(), Error> {
 fn multiple_commits() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 
-    let mut session = vm.genesis_session();
+    let mut session = vm.genesis_session(SessionData::new());
     let id = session
         .deploy(module_bytecode!("counter"), ModuleData::builder(OWNER))?;
     // commit 1
@@ -132,20 +132,20 @@ fn multiple_commits() -> Result<(), Error> {
     let commit_1 = session.commit()?;
 
     // commit 2
-    let mut session = vm.session(commit_1)?;
+    let mut session = vm.session(commit_1, SessionData::new())?;
     assert_eq!(session.query::<(), i64>(id, "read_value", &())?, 0xfd);
     session.transact::<(), ()>(id, "increment", &())?;
     session.transact::<(), ()>(id, "increment", &())?;
     let commit_2 = session.commit()?;
-    let mut session = vm.session(commit_2)?;
+    let mut session = vm.session(commit_2, SessionData::new())?;
     assert_eq!(session.query::<(), i64>(id, "read_value", &())?, 0xff);
 
     // restore commit 1
-    let mut session = vm.session(commit_1)?;
+    let mut session = vm.session(commit_1, SessionData::new())?;
     assert_eq!(session.query::<(), i64>(id, "read_value", &())?, 0xfd);
 
     // restore commit 2
-    let mut session = vm.session(commit_2)?;
+    let mut session = vm.session(commit_2, SessionData::new())?;
     assert_eq!(session.query::<(), i64>(id, "read_value", &())?, 0xff);
     Ok(())
 }
@@ -165,7 +165,7 @@ fn increment_counter_and_commit(
 fn concurrent_sessions() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 
-    let mut session = vm.genesis_session();
+    let mut session = vm.genesis_session(SessionData::new());
     let counter = session
         .deploy(module_bytecode!("counter"), ModuleData::builder(OWNER))?;
 
@@ -181,7 +181,7 @@ fn concurrent_sessions() -> Result<(), Error> {
     const THREAD_NUM: usize = 6;
     let mut threads = Vec::with_capacity(THREAD_NUM);
     for n in 0..THREAD_NUM {
-        let session = vm.session(root)?;
+        let session = vm.session(root, SessionData::new())?;
         threads.push(thread::spawn(move || {
             increment_counter_and_commit(session, counter, n + 1)
         }));
@@ -213,7 +213,7 @@ fn concurrent_sessions() -> Result<(), Error> {
     const INCREMENTS_NUM: usize = 100;
     let mut threads = Vec::with_capacity(roots.len());
     for root in &roots {
-        let session = vm.session(*root)?;
+        let session = vm.session(*root, SessionData::new())?;
         threads.push(thread::spawn(move || {
             increment_counter_and_commit(session, counter, INCREMENTS_NUM)
         }));
@@ -252,7 +252,7 @@ fn concurrent_sessions() -> Result<(), Error> {
 fn squashing() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 
-    let mut session = vm.genesis_session();
+    let mut session = vm.genesis_session(SessionData::new());
     let counter = session
         .deploy(module_bytecode!("counter"), ModuleData::builder(OWNER))?;
 
@@ -260,15 +260,15 @@ fn squashing() -> Result<(), Error> {
 
     let genesis_root = session.commit()?;
 
-    let session = vm.session(genesis_root)?;
+    let session = vm.session(genesis_root, SessionData::new())?;
     let root_1 = increment_counter_and_commit(session, counter, 2)?;
 
-    let session = vm.session(root_1)?;
+    let session = vm.session(root_1, SessionData::new())?;
     let root_2 = increment_counter_and_commit(session, counter, 2)?;
 
     vm.squash_commit(root_1)?;
 
-    let session = vm.session(root_1)?;
+    let session = vm.session(root_1, SessionData::new())?;
     let root_3 = increment_counter_and_commit(session, counter, 2)?;
 
     assert_eq!(

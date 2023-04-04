@@ -4,7 +4,7 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use piecrust::{module_bytecode, Error, ModuleData, VM};
+use piecrust::{module_bytecode, Error, ModuleData, SessionData, VM};
 
 const OWNER: [u8; 32] = [0u8; 32];
 
@@ -12,7 +12,7 @@ const OWNER: [u8; 32] = [0u8; 32];
 pub fn points_get_used() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 
-    let mut session = vm.genesis_session();
+    let mut session = vm.genesis_session(SessionData::new());
 
     let counter_id = session
         .deploy(module_bytecode!("counter"), ModuleData::builder(OWNER))?;
@@ -34,7 +34,7 @@ pub fn points_get_used() -> Result<(), Error> {
 pub fn fails_with_out_of_points() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 
-    let mut session = vm.genesis_session();
+    let mut session = vm.genesis_session(SessionData::new());
 
     let counter_id = session
         .deploy(module_bytecode!("counter"), ModuleData::builder(OWNER))?;
@@ -56,7 +56,7 @@ pub fn limit_and_spent() -> Result<(), Error> {
 
     const LIMIT: u64 = 10000;
 
-    let mut session = vm.genesis_session();
+    let mut session = vm.genesis_session(SessionData::new());
 
     let spender_id = session
         .deploy(module_bytecode!("spender"), ModuleData::builder(OWNER))?;

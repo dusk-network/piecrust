@@ -4,7 +4,7 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use piecrust::{module_bytecode, Error, ModuleData, VM};
+use piecrust::{module_bytecode, Error, ModuleData, SessionData, VM};
 
 const OWNER: [u8; 32] = [0u8; 32];
 
@@ -13,7 +13,7 @@ const OWNER: [u8; 32] = [0u8; 32];
 fn fallible_read_write_panic() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 
-    let mut session = vm.genesis_session();
+    let mut session = vm.genesis_session(SessionData::new());
 
     let id = session.deploy(
         module_bytecode!("fallible_counter"),

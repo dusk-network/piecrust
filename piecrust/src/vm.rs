@@ -13,7 +13,7 @@ use std::thread;
 
 use tempfile::tempdir;
 
-use crate::session::Session;
+use crate::session::{Session, SessionData};
 use crate::store::ModuleStore;
 use crate::Error::{self, PersistenceError};
 
@@ -110,12 +110,12 @@ impl VM {
     ///
     /// [`Session`]: Session
     /// [`genesis_session`]: VM::genesis_session
-    pub fn session(&self, base: [u8; 32]) -> Result<Session, Error> {
+    pub fn session(&self, base: [u8; 32], data: SessionData) -> Result<Session, Error> {
         let module_session = self
             .store
             .session(base)
             .map_err(|err| PersistenceError(Arc::new(err)))?;
-        Ok(Session::new(module_session, self.host_queries.clone()))
+        Ok(Session::new(module_session, self.host_queries.clone(), data))
     }
 
     /// Spawn a [`Session`] with no commit as a base.
@@ -125,9 +125,9 @@ impl VM {
     ///
     /// [`Session`]: Session
     /// [`session`]: VM::session
-    pub fn genesis_session(&self) -> Session {
+    pub fn genesis_session(&self, data: SessionData) -> Session {
         let module_session = self.store.genesis_session();
-        Session::new(module_session, self.host_queries.clone())
+        Session::new(module_session, self.host_queries.clone(), data)
     }
 
     /// Return all existing commits.
