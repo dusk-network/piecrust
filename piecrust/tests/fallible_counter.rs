@@ -4,7 +4,7 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use piecrust::{module_bytecode, DeployData, Error, VM};
+use piecrust::{module_bytecode, ModuleData, Error, VM};
 
 const OWNER: [u8; 32] = [0u8; 32];
 
@@ -17,7 +17,7 @@ fn fallible_read_write_panic() -> Result<(), Error> {
 
     let id = session.deploy(
         module_bytecode!("fallible_counter"),
-        DeployData::builder(OWNER),
+        ModuleData::builder(OWNER),
     )?;
 
     session.transact::<bool, ()>(id, "increment", &false)?;

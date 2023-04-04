@@ -14,7 +14,7 @@ use crate::error::Error;
 use crate::instance::Store;
 use piecrust_uplink::ModuleId;
 
-pub struct DeployData<'a, A> {
+pub struct ModuleData<'a, A> {
     pub(crate) module_id: Option<ModuleId>,
     pub(crate) constructor_arg: Option<&'a A>,
     pub(crate) owner: [u8; 32],
@@ -22,7 +22,7 @@ pub struct DeployData<'a, A> {
 
 // `()` is done on purpose, since by default it should be that the constructor
 // takes no argument.
-impl<'a> DeployData<'a, ()> {
+impl<'a> ModuleData<'a, ()> {
     /// Build a deploy data structure.
     ///
     /// This function returns a builder that can be used to set optional fields
@@ -36,7 +36,7 @@ impl<'a> DeployData<'a, ()> {
     }
 }
 
-impl<'a, A> From<DeployDataBuilder<'a, A>> for DeployData<'a, A> {
+impl<'a, A> From<DeployDataBuilder<'a, A>> for ModuleData<'a, A> {
     fn from(builder: DeployDataBuilder<'a, A>) -> Self {
         builder.build()
     }
@@ -64,8 +64,8 @@ impl<'a, A> DeployDataBuilder<'a, A> {
         }
     }
 
-    pub fn build(self) -> DeployData<'a, A> {
-        DeployData {
+    pub fn build(self) -> ModuleData<'a, A> {
+        ModuleData {
             module_id: self.module_id,
             constructor_arg: self.constructor_arg,
             owner: self.owner,

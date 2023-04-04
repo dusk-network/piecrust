@@ -4,7 +4,7 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use piecrust::{module_bytecode, DeployData, Error, VM};
+use piecrust::{module_bytecode, ModuleData, Error, VM};
 use piecrust_uplink::ModuleId;
 
 #[test]
@@ -17,7 +17,7 @@ fn metadata() -> Result<(), Error> {
 
     let id = session.deploy(
         module_bytecode!("metadata"),
-        DeployData::builder(EXPECTED_OWNER),
+        ModuleData::builder(EXPECTED_OWNER),
     )?;
 
     // owner should be available after deployment

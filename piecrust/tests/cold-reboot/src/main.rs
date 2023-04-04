@@ -9,7 +9,7 @@ extern crate core;
 use std::path::{Path, PathBuf};
 use std::{env, fs};
 
-use piecrust::{DeployData, ModuleId, VM};
+use piecrust::{ModuleData, ModuleId, VM};
 const COUNTER_ID: ModuleId = {
     let mut bytes = [0u8; 32];
     bytes[0] = 99;
@@ -29,7 +29,7 @@ fn initialize_counter<P: AsRef<Path>>(
 
     session.deploy(
         counter_bytecode,
-        DeployData::builder(OWNER).module_id(COUNTER_ID),
+        ModuleData::builder(OWNER).module_id(COUNTER_ID),
     )?;
     session.transact::<(), ()>(COUNTER_ID, "increment", &())?;
 
