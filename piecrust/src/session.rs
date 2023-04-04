@@ -35,7 +35,6 @@ use crate::Error::{InitalizationError, PersistenceError};
 
 use call_stack::{CallStack, StackElement};
 
-const DEFAULT_LIMIT: u64 = 65_536;
 const MAX_META_SIZE: usize = 65_536;
 pub const INIT_METHOD: &str = "init";
 
@@ -68,7 +67,6 @@ pub struct Session {
     module_session: ModuleSession,
     host_queries: HostQueries,
 
-    limit: u64,
     spent: u64,
 
     call_history: Vec<CallOrDeploy>,
@@ -96,7 +94,6 @@ impl Session {
             data,
             module_session,
             host_queries,
-            limit: DEFAULT_LIMIT,
             spent: 0,
             call_history: vec![],
             buffer: vec![0; WASM_PAGE_SIZE],
@@ -118,6 +115,7 @@ impl Session {
         &mut self,
         bytecode: &[u8],
         deploy_data: D,
+        call_data: CallData,
     ) -> Result<ModuleId, Error>
     where
         A: 'a + for<'b> Serialize<StandardBufSerializer<'b>>,
@@ -151,6 +149,7 @@ impl Session {
             bytecode,
             constructor_arg,
             deploy_data.owner,
+            call_data
         )?;
 
         Ok(module_id)
@@ -162,6 +161,7 @@ impl Session {
         bytecode: &[u8],
         arg: Option<Vec<u8>>,
         owner: [u8; 32],
+        call_data: CallData,
     ) -> Result<(), Error> {
         if self.module_session.module_deployed(module_id) {
             return Err(InitalizationError(
@@ -202,7 +202,7 @@ impl Session {
                 ));
             }
 
-            self.initialize(module_id, arg.clone())?;
+            self.initialize(module_id, arg.clone(), &call_data)?;
         }
 
         self.call_history.push(From::from(Deploy {
@@ -210,6 +210,7 @@ impl Session {
             bytecode: bytecode.to_vec(),
             fdata: arg,
             owner,
+            call_data,
         }));
 
         Ok(())
@@ -237,6 +238,7 @@ impl Session {
         module: ModuleId,
         method_name: &str,
         arg: &A,
+        call_data: CallData,
     ) -> Result<Ret, Error>
     where
         A: for<'b> Serialize<StandardBufSerializer<'b>>,
@@ -261,7 +263,7 @@ impl Session {
             module,
             fname: method_name.to_string(),
             fdata: self.buffer[..pos].to_vec(),
-            limit: self.limit,
+            limit: call_data.limit,
         })?;
 
         let ta = check_archived_root::<Ret>(&ret_bytes[..])?;
@@ -292,6 +294,7 @@ impl Session {
         module: ModuleId,
         method_name: &str,
         arg: &A,
+        call_data: CallData,
     ) -> Result<Ret, Error>
     where
         A: for<'b> Serialize<StandardBufSerializer<'b>>,
@@ -316,7 +319,7 @@ impl Session {
             module,
             fname: method_name.to_string(),
             fdata: self.buffer[..pos].to_vec(),
-            limit: self.limit,
+            limit: call_data.limit,
         })?;
 
         let ta = check_archived_root::<Ret>(&ret_bytes[..])?;
@@ -329,13 +332,14 @@ impl Session {
         &mut self,
         module: ModuleId,
         arg: Vec<u8>,
+        call_data: &CallData,
     ) -> Result<(), Error> {
         self.execute_until_ok(Call {
             ty: CallType::T,
             module,
             fname: INIT_METHOD.to_string(),
             fdata: arg,
-            limit: self.limit,
+            limit: call_data.limit,
         })?;
         Ok(())
     }
@@ -438,14 +442,6 @@ impl Session {
         arg_len: u32,
     ) -> Option<u32> {
         self.host_queries.call(name, buf, arg_len)
-    }
-
-    /// Sets the point limit for the next call to [`query`] or [`transact`].
-    ///
-    /// [`query`]: Session::query
-    /// [`transact`]: Session::transact
-    pub fn set_point_limit(&mut self, limit: u64) {
-        self.limit = limit
     }
 
     /// Returns the number of points spent by the last call to [`query`] or
@@ -693,7 +689,7 @@ impl Session {
                     res = self.call_if_not_error(call);
                 }
                 CallOrDeploy::Deploy(deploy) => {
-                    self.do_deploy(deploy.module_id, &deploy.bytecode, deploy.fdata, deploy.owner)
+                    self.do_deploy(deploy.module_id, &deploy.bytecode, deploy.fdata, deploy.owner, deploy.call_data)
                         .expect("Only deploys that succeed should be added to the history");
                 }
             }
@@ -779,6 +775,7 @@ struct Deploy {
     bytecode: Vec<u8>,
     fdata: Option<Vec<u8>>,
     owner: [u8; 32],
+    call_data: CallData,
 }
 
 #[derive(Debug)]
@@ -820,5 +817,17 @@ impl SessionData {
 
     fn get(&self, name: &str) -> Option<Vec<u8>> {
         self.data.get(name).cloned()
+    }
+}
+
+#[derive(Debug)]
+pub struct CallData {
+    pub sender: [u8; 32],
+    pub limit: u64,
+}
+
+impl CallData {
+    pub fn new(sender: [u8; 32], limit: u64) -> Self {
+        Self { sender, limit }
     }
 }

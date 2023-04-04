@@ -120,7 +120,7 @@ mod vm;
 
 pub use error::Error;
 pub use module::{DeployDataBuilder, ModuleData};
-pub use session::{Session, SessionData};
+pub use session::{CallData, Session, SessionData};
 pub use vm::{HostQuery, VM};
 
 // re-exports

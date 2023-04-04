@@ -9,13 +9,15 @@ extern crate core;
 use std::path::{Path, PathBuf};
 use std::{env, fs};
 
-use piecrust::{ModuleData, ModuleId, SessionData, VM};
+use piecrust::{CallData, ModuleData, ModuleId, SessionData, VM};
 const COUNTER_ID: ModuleId = {
     let mut bytes = [0u8; 32];
     bytes[0] = 99;
     ModuleId::from_bytes(bytes)
 };
 const OWNER: [u8; 32] = [0u8; 32];
+const DEFAULT_LIMIT: u64 = 65_536;
+
 
 fn initialize_counter<P: AsRef<Path>>(
     vm: &VM,
@@ -30,8 +32,9 @@ fn initialize_counter<P: AsRef<Path>>(
     session.deploy(
         counter_bytecode,
         ModuleData::builder(OWNER).module_id(COUNTER_ID),
+        CallData::new(COUNTER_ID.to_bytes(), DEFAULT_LIMIT) // todo - should deploy accept call data as well?
     )?;
-    session.transact::<(), ()>(COUNTER_ID, "increment", &())?;
+    session.transact::<(), ()>(COUNTER_ID, "increment", &(), CallData::new(COUNTER_ID.to_bytes(), DEFAULT_LIMIT))?; // todo - to_bytes? - ModuleId vs [u8; 32]
 
     let commit_root = session.commit()?;
     fs::write(commit_id_file_path, commit_root)
@@ -55,7 +58,7 @@ fn confirm_counter<P: AsRef<Path>>(
         .expect("Instantiating session from given root should succeed");
 
     assert_eq!(
-        session.query::<(), i64>(COUNTER_ID, "read_value", &())?,
+        session.query::<(), i64>(COUNTER_ID, "read_value", &(), CallData::new(COUNTER_ID.to_bytes(), DEFAULT_LIMIT))?,
         0xfd
     );
 
