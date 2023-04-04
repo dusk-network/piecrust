@@ -4,7 +4,7 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use piecrust::{module_bytecode, ModuleData, Error, VM};
+use piecrust::{module_bytecode, Error, ModuleData, VM};
 
 const CONTRACT_INIT_METHOD: &str = "init";
 const OWNER: [u8; 32] = [0u8; 32];

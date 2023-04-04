@@ -4,7 +4,7 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use piecrust::{module_bytecode, ModuleData, Error, VM};
+use piecrust::{module_bytecode, Error, ModuleData, VM};
 use piecrust_uplink::{
     ModuleError, ModuleId, RawQuery, RawResult, RawTransaction,
 };

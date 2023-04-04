@@ -4,7 +4,7 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use piecrust::{module_bytecode, ModuleData, Error, Session, VM};
+use piecrust::{module_bytecode, Error, ModuleData, Session, VM};
 use piecrust_uplink::ModuleId;
 use std::thread;
 
