@@ -822,3 +822,9 @@ impl SessionData {
         self.data.get(name).cloned()
     }
 }
+
+impl Default for SessionData {
+    fn default() -> Self {
+        Self::new()
+    }
+}
