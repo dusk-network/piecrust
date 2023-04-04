@@ -12,19 +12,19 @@ const OWNER: [u8; 32] = [0u8; 32];
 pub fn height() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 
-    let mut session = vm.genesis_session(SessionData::new());
+    const HEIGHT: u64 = 384u64;
+    let mut session =
+        vm.genesis_session(SessionData::new().insert("height", HEIGHT));
 
     let id = session
         .deploy(module_bytecode!("everest"), ModuleData::builder(OWNER))?;
 
-    for h in 0u64..1024 {
-        session.set_meta("height", h);
-        let height: Option<u64> = session.transact(id, "get_height", &())?;
-        assert_eq!(height.unwrap(), h);
-    }
+    let height: Option<u64> = session.transact(id, "get_height", &())?;
+    assert_eq!(height.unwrap(), HEIGHT);
 
     Ok(())
 }
+
 #[test]
 pub fn meta_data_optionality() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
