@@ -4,9 +4,10 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use piecrust::{module_bytecode, Error, ModuleData, SessionData, VM};
+use piecrust::{module_bytecode, CallData, Error, ModuleData, SessionData, VM};
 
 const OWNER: [u8; 32] = [0u8; 32];
+const LIMIT: u64 = 65_536;
 
 #[test]
 pub fn push_pop() -> Result<(), Error> {
@@ -14,18 +15,22 @@ pub fn push_pop() -> Result<(), Error> {
 
     let mut session = vm.genesis_session(SessionData::new());
 
-    let id = session
-        .deploy(module_bytecode!("stack"), ModuleData::builder(OWNER))?;
+    let id = session.deploy(
+        module_bytecode!("stack"),
+        ModuleData::builder(OWNER),
+        &CallData::build(LIMIT),
+    )?;
 
     let val = 42;
 
-    session.transact(id, "push", &val)?;
+    session.transact(id, "push", &val, &CallData::build(LIMIT))?;
 
-    let len: u32 = session.query(id, "len", &())?;
+    let len: u32 = session.query(id, "len", &(), &CallData::build(LIMIT))?;
     assert_eq!(len, 1);
 
-    let popped: Option<i32> = session.transact(id, "pop", &())?;
-    let len: i32 = session.query(id, "len", &())?;
+    let popped: Option<i32> =
+        session.transact(id, "pop", &(), &CallData::build(LIMIT))?;
+    let len: i32 = session.query(id, "len", &(), &CallData::build(LIMIT))?;
 
     assert_eq!(len, 0);
     assert_eq!(popped, Some(val));
@@ -39,27 +44,34 @@ pub fn multi_push_pop() -> Result<(), Error> {
 
     let mut session = vm.genesis_session(SessionData::new());
 
-    let id = session
-        .deploy(module_bytecode!("stack"), ModuleData::builder(OWNER))?;
+    let id = session.deploy(
+        module_bytecode!("stack"),
+        ModuleData::builder(OWNER),
+        &CallData::build(LIMIT),
+    )?;
 
     const N: i32 = 16;
 
     for i in 0..N {
-        session.transact(id, "push", &i)?;
-        let len: i32 = session.query(id, "len", &())?;
+        session.transact(id, "push", &i, &CallData::build(LIMIT))?;
+        let len: i32 =
+            session.query(id, "len", &(), &CallData::build(LIMIT))?;
 
         assert_eq!(len, i + 1);
     }
 
     for i in (0..N).rev() {
-        let popped: Option<i32> = session.transact(id, "pop", &())?;
-        let len: i32 = session.query(id, "len", &())?;
+        let popped: Option<i32> =
+            session.transact(id, "pop", &(), &CallData::build(LIMIT))?;
+        let len: i32 =
+            session.query(id, "len", &(), &CallData::build(LIMIT))?;
 
         assert_eq!(len, i);
         assert_eq!(popped, Some(i));
     }
 
-    let popped: Option<i32> = session.transact(id, "pop", &())?;
+    let popped: Option<i32> =
+        session.transact(id, "pop", &(), &CallData::build(LIMIT))?;
     assert_eq!(popped, None);
 
     Ok(())

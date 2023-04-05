@@ -4,8 +4,10 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use piecrust::{module_bytecode, Error, ModuleData, SessionData, VM};
+use piecrust::{module_bytecode, CallData, Error, ModuleData, SessionData, VM};
 use piecrust_uplink::ModuleId;
+
+const LIMIT: u64 = 65_536;
 
 #[test]
 fn metadata() -> Result<(), Error> {
@@ -18,19 +20,40 @@ fn metadata() -> Result<(), Error> {
     let id = session.deploy(
         module_bytecode!("metadata"),
         ModuleData::builder(EXPECTED_OWNER),
+        &CallData::build(LIMIT),
     )?;
 
     // owner should be available after deployment
-    let owner = session.query::<(), [u8; 32]>(id, "read_owner", &())?;
-    let self_id = session.query::<(), ModuleId>(id, "read_id", &())?;
+    let owner = session.query::<(), [u8; 32]>(
+        id,
+        "read_owner",
+        &(),
+        &CallData::build(LIMIT),
+    )?;
+    let self_id = session.query::<(), ModuleId>(
+        id,
+        "read_id",
+        &(),
+        &CallData::build(LIMIT),
+    )?;
     assert_eq!(owner, EXPECTED_OWNER);
     assert_eq!(self_id, id);
 
     // owner should live across session boundaries
     let commit_id = session.commit()?;
     let mut session = vm.session(commit_id, SessionData::new())?;
-    let owner = session.query::<(), [u8; 32]>(id, "read_owner", &())?;
-    let self_id = session.query::<(), ModuleId>(id, "read_id", &())?;
+    let owner = session.query::<(), [u8; 32]>(
+        id,
+        "read_owner",
+        &(),
+        &CallData::build(LIMIT),
+    )?;
+    let self_id = session.query::<(), ModuleId>(
+        id,
+        "read_id",
+        &(),
+        &CallData::build(LIMIT),
+    )?;
     assert_eq!(owner, EXPECTED_OWNER);
     assert_eq!(self_id, id);
 

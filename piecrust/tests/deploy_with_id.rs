@@ -4,10 +4,11 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use piecrust::{module_bytecode, Error, ModuleData, SessionData, VM};
+use piecrust::{module_bytecode, CallData, Error, ModuleData, SessionData, VM};
 use piecrust_uplink::ModuleId;
 
 const OWNER: [u8; 32] = [0u8; 32];
+const LIMIT: u64 = 65_536;
 
 #[test]
 pub fn deploy_with_id() -> Result<(), Error> {
@@ -17,18 +18,36 @@ pub fn deploy_with_id() -> Result<(), Error> {
     let some_id = [1u8; 32];
     let module_id = ModuleId::from(some_id);
     let mut session = vm.genesis_session(SessionData::new());
-    session
-        .deploy(bytecode, ModuleData::builder(OWNER).module_id(module_id))?;
+    session.deploy(
+        bytecode,
+        ModuleData::builder(OWNER).module_id(module_id),
+        &CallData::build(LIMIT),
+    )?;
 
     assert_eq!(
-        session.query::<(), i64>(module_id, "read_value", &())?,
+        session.query::<(), i64>(
+            module_id,
+            "read_value",
+            &(),
+            &CallData::build(LIMIT)
+        )?,
         0xfc
     );
 
-    session.transact::<(), ()>(module_id, "increment", &())?;
+    session.transact::<(), ()>(
+        module_id,
+        "increment",
+        &(),
+        &CallData::build(LIMIT),
+    )?;
 
     assert_eq!(
-        session.query::<(), i64>(module_id, "read_value", &())?,
+        session.query::<(), i64>(
+            module_id,
+            "read_value",
+            &(),
+            &CallData::build(LIMIT)
+        )?,
         0xfd
     );
 

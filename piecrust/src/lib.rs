@@ -77,16 +77,17 @@
 //!
 //! # Usage
 //! ```
-//! use piecrust::{module_bytecode, ModuleData, SessionData, VM};
+//! use piecrust::{module_bytecode, CallData, ModuleData, SessionData, VM};
 //! let mut vm = VM::ephemeral().unwrap();
 //!
 //! const OWNER: [u8; 32] = [0u8; 32];
+//! const LIMIT: u64 = 65_536;
 //! let mut session = vm.genesis_session(SessionData::new());
-//! let counter_id = session.deploy(module_bytecode!("counter"), ModuleData::builder(OWNER)).unwrap();
+//! let counter_id = session.deploy(module_bytecode!("counter"), ModuleData::builder(OWNER), &CallData::build(LIMIT)).unwrap();
 //!
-//! assert_eq!(session.query::<(), i64>(counter_id, "read_value", &()).unwrap(), 0xfc);
-//! session.transact::<(), ()>(counter_id, "increment", &()).unwrap();
-//! assert_eq!(session.query::<(), i64>(counter_id, "read_value", &()).unwrap(), 0xfd);
+//! assert_eq!(session.query::<(), i64>(counter_id, "read_value", &(), &CallData::build(LIMIT)).unwrap(), 0xfc);
+//! session.transact::<(), ()>(counter_id, "increment", &(), &CallData::build(LIMIT)).unwrap();
+//! assert_eq!(session.query::<(), i64>(counter_id, "read_value", &(), &CallData::build(LIMIT)).unwrap(), 0xfd);
 //!
 //! let commit_root = session.commit().unwrap();
 //! assert_eq!(commit_root, vm.commits()[0]);

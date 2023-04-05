@@ -4,9 +4,10 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use piecrust::{module_bytecode, Error, ModuleData, SessionData, VM};
+use piecrust::{module_bytecode, CallData, Error, ModuleData, SessionData, VM};
 
 const OWNER: [u8; 32] = [0u8; 32];
+const LIMIT: u64 = 65_536;
 
 #[test]
 fn counter_read_simple() -> Result<(), Error> {
@@ -14,10 +15,21 @@ fn counter_read_simple() -> Result<(), Error> {
 
     let mut session = vm.genesis_session(SessionData::new());
 
-    let id = session
-        .deploy(module_bytecode!("counter"), ModuleData::builder(OWNER))?;
+    let id = session.deploy(
+        module_bytecode!("counter"),
+        ModuleData::builder(OWNER),
+        &CallData::build(LIMIT),
+    )?;
 
-    assert_eq!(session.query::<(), i64>(id, "read_value", &())?, 0xfc);
+    assert_eq!(
+        session.query::<(), i64>(
+            id,
+            "read_value",
+            &(),
+            &CallData::build(LIMIT)
+        )?,
+        0xfc
+    );
 
     Ok(())
 }
@@ -28,14 +40,38 @@ fn counter_read_write_simple() -> Result<(), Error> {
 
     let mut session = vm.genesis_session(SessionData::new());
 
-    let id = session
-        .deploy(module_bytecode!("counter"), ModuleData::builder(OWNER))?;
+    let id = session.deploy(
+        module_bytecode!("counter"),
+        ModuleData::builder(OWNER),
+        &CallData::build(LIMIT),
+    )?;
 
-    assert_eq!(session.query::<(), i64>(id, "read_value", &())?, 0xfc);
+    assert_eq!(
+        session.query::<(), i64>(
+            id,
+            "read_value",
+            &(),
+            &CallData::build(LIMIT)
+        )?,
+        0xfc
+    );
 
-    session.transact::<(), ()>(id, "increment", &())?;
+    session.transact::<(), ()>(
+        id,
+        "increment",
+        &(),
+        &CallData::build(LIMIT),
+    )?;
 
-    assert_eq!(session.query::<(), i64>(id, "read_value", &())?, 0xfd);
+    assert_eq!(
+        session.query::<(), i64>(
+            id,
+            "read_value",
+            &(),
+            &CallData::build(LIMIT)
+        )?,
+        0xfd
+    );
 
     Ok(())
 }

@@ -4,9 +4,10 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use piecrust::{module_bytecode, Error, ModuleData, SessionData, VM};
+use piecrust::{module_bytecode, CallData, Error, ModuleData, SessionData, VM};
 
 const OWNER: [u8; 32] = [0u8; 32];
+const LIMIT: u64 = 65_536;
 
 #[test]
 fn session_commits_persistence() -> Result<(), Error> {
@@ -18,16 +19,45 @@ fn session_commits_persistence() -> Result<(), Error> {
     let commit_1;
     {
         let mut session = vm.genesis_session(SessionData::new());
-        id_1 = session
-            .deploy(module_bytecode!("counter"), ModuleData::builder(OWNER))?;
-        id_2 = session
-            .deploy(module_bytecode!("box"), ModuleData::builder(OWNER))?;
+        id_1 = session.deploy(
+            module_bytecode!("counter"),
+            ModuleData::builder(OWNER),
+            &CallData::build(LIMIT),
+        )?;
+        id_2 = session.deploy(
+            module_bytecode!("box"),
+            ModuleData::builder(OWNER),
+            &CallData::build(LIMIT),
+        )?;
 
-        session.transact::<(), ()>(id_1, "increment", &())?;
-        session.transact::<i16, ()>(id_2, "set", &0x11)?;
-        assert_eq!(session.query::<(), i64>(id_1, "read_value", &())?, 0xfd);
+        session.transact::<(), ()>(
+            id_1,
+            "increment",
+            &(),
+            &CallData::build(LIMIT),
+        )?;
+        session.transact::<i16, ()>(
+            id_2,
+            "set",
+            &0x11,
+            &CallData::build(LIMIT),
+        )?;
         assert_eq!(
-            session.query::<_, Option<i16>>(id_2, "get", &())?,
+            session.query::<(), i64>(
+                id_1,
+                "read_value",
+                &(),
+                &CallData::build(LIMIT)
+            )?,
+            0xfd
+        );
+        assert_eq!(
+            session.query::<_, Option<i16>>(
+                id_2,
+                "get",
+                &(),
+                &CallData::build(LIMIT)
+            )?,
             Some(0x11)
         );
         commit_1 = session.commit()?;
@@ -37,11 +67,34 @@ fn session_commits_persistence() -> Result<(), Error> {
     {
         let mut session = vm.session(commit_1, SessionData::new())?;
 
-        session.transact::<(), ()>(id_1, "increment", &())?;
-        session.transact::<i16, ()>(id_2, "set", &0x12)?;
-        assert_eq!(session.query::<(), i64>(id_1, "read_value", &())?, 0xfe);
+        session.transact::<(), ()>(
+            id_1,
+            "increment",
+            &(),
+            &CallData::build(LIMIT),
+        )?;
+        session.transact::<i16, ()>(
+            id_2,
+            "set",
+            &0x12,
+            &CallData::build(LIMIT),
+        )?;
         assert_eq!(
-            session.query::<_, Option<i16>>(id_2, "get", &())?,
+            session.query::<(), i64>(
+                id_1,
+                "read_value",
+                &(),
+                &CallData::build(LIMIT)
+            )?,
+            0xfe
+        );
+        assert_eq!(
+            session.query::<_, Option<i16>>(
+                id_2,
+                "get",
+                &(),
+                &CallData::build(LIMIT)
+            )?,
             Some(0x12)
         );
         commit_2 = session.commit()?;
@@ -52,9 +105,22 @@ fn session_commits_persistence() -> Result<(), Error> {
         let mut session = vm2.session(commit_1, SessionData::new())?;
 
         // check if both modules' state was restored
-        assert_eq!(session.query::<(), i64>(id_1, "read_value", &())?, 0xfd);
         assert_eq!(
-            session.query::<_, Option<i16>>(id_2, "get", &())?,
+            session.query::<(), i64>(
+                id_1,
+                "read_value",
+                &(),
+                &CallData::build(LIMIT)
+            )?,
+            0xfd
+        );
+        assert_eq!(
+            session.query::<_, Option<i16>>(
+                id_2,
+                "get",
+                &(),
+                &CallData::build(LIMIT)
+            )?,
             Some(0x11)
         );
     }
@@ -64,9 +130,22 @@ fn session_commits_persistence() -> Result<(), Error> {
         let mut session = vm3.session(commit_2, SessionData::new())?;
 
         // check if both modules' state was restored
-        assert_eq!(session.query::<(), i64>(id_1, "read_value", &())?, 0xfe);
         assert_eq!(
-            session.query::<_, Option<i16>>(id_2, "get", &())?,
+            session.query::<(), i64>(
+                id_1,
+                "read_value",
+                &(),
+                &CallData::build(LIMIT)
+            )?,
+            0xfe
+        );
+        assert_eq!(
+            session.query::<_, Option<i16>>(
+                id_2,
+                "get",
+                &(),
+                &CallData::build(LIMIT)
+            )?,
             Some(0x12)
         );
     }
@@ -77,16 +156,40 @@ fn session_commits_persistence() -> Result<(), Error> {
 fn modules_persistence() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
     let mut session = vm.genesis_session(SessionData::new());
-    let id_1 = session
-        .deploy(module_bytecode!("counter"), ModuleData::builder(OWNER))?;
-    let id_2 =
-        session.deploy(module_bytecode!("box"), ModuleData::builder(OWNER))?;
+    let id_1 = session.deploy(
+        module_bytecode!("counter"),
+        ModuleData::builder(OWNER),
+        &CallData::build(LIMIT),
+    )?;
+    let id_2 = session.deploy(
+        module_bytecode!("box"),
+        ModuleData::builder(OWNER),
+        &CallData::build(LIMIT),
+    )?;
 
-    session.transact::<(), ()>(id_1, "increment", &())?;
-    session.transact::<i16, ()>(id_2, "set", &0x11)?;
-    assert_eq!(session.query::<(), i64>(id_1, "read_value", &())?, 0xfd);
+    session.transact::<(), ()>(
+        id_1,
+        "increment",
+        &(),
+        &CallData::build(LIMIT),
+    )?;
+    session.transact::<i16, ()>(id_2, "set", &0x11, &CallData::build(LIMIT))?;
     assert_eq!(
-        session.query::<_, Option<i16>>(id_2, "get", &())?,
+        session.query::<(), i64>(
+            id_1,
+            "read_value",
+            &(),
+            &CallData::build(LIMIT)
+        )?,
+        0xfd
+    );
+    assert_eq!(
+        session.query::<_, Option<i16>>(
+            id_2,
+            "get",
+            &(),
+            &CallData::build(LIMIT)
+        )?,
         Some(0x11)
     );
 
@@ -96,9 +199,22 @@ fn modules_persistence() -> Result<(), Error> {
     let mut session2 = vm2.session(commit_1, SessionData::new())?;
 
     // check if both modules' state was restored
-    assert_eq!(session2.query::<(), i64>(id_1, "read_value", &())?, 0xfd);
     assert_eq!(
-        session2.query::<_, Option<i16>>(id_2, "get", &())?,
+        session2.query::<(), i64>(
+            id_1,
+            "read_value",
+            &(),
+            &CallData::build(LIMIT)
+        )?,
+        0xfd
+    );
+    assert_eq!(
+        session2.query::<_, Option<i16>>(
+            id_2,
+            "get",
+            &(),
+            &CallData::build(LIMIT)
+        )?,
         Some(0x11)
     );
     Ok(())

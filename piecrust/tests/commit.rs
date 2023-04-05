@@ -4,11 +4,14 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use piecrust::{module_bytecode, Error, ModuleData, Session, SessionData, VM};
+use piecrust::{
+    module_bytecode, CallData, Error, ModuleData, Session, SessionData, VM,
+};
 use piecrust_uplink::ModuleId;
 use std::thread;
 
 const OWNER: [u8; 32] = [0u8; 32];
+const LIMIT: u64 = 65_536;
 
 #[test]
 fn read_write_session() -> Result<(), Error> {
@@ -16,26 +19,66 @@ fn read_write_session() -> Result<(), Error> {
 
     {
         let mut session = vm.genesis_session(SessionData::new());
-        let id = session
-            .deploy(module_bytecode!("counter"), ModuleData::builder(OWNER))?;
+        let id = session.deploy(
+            module_bytecode!("counter"),
+            ModuleData::builder(OWNER),
+            &CallData::build(LIMIT),
+        )?;
 
-        assert_eq!(session.query::<(), i64>(id, "read_value", &())?, 0xfc);
+        assert_eq!(
+            session.query::<(), i64>(
+                id,
+                "read_value",
+                &(),
+                &CallData::build(LIMIT)
+            )?,
+            0xfc
+        );
 
-        session.transact::<(), ()>(id, "increment", &())?;
+        session.transact::<(), ()>(
+            id,
+            "increment",
+            &(),
+            &CallData::build(LIMIT),
+        )?;
 
-        assert_eq!(session.query::<(), i64>(id, "read_value", &())?, 0xfd);
+        assert_eq!(
+            session.query::<(), i64>(
+                id,
+                "read_value",
+                &(),
+                &CallData::build(LIMIT)
+            )?,
+            0xfd
+        );
     }
 
     // mutable session dropped without committing.
     // old counter value still accessible.
 
     let mut other_session = vm.genesis_session(SessionData::new());
-    let id = other_session
-        .deploy(module_bytecode!("counter"), ModuleData::builder(OWNER))?;
+    let id = other_session.deploy(
+        module_bytecode!("counter"),
+        ModuleData::builder(OWNER),
+        &CallData::build(LIMIT),
+    )?;
 
-    assert_eq!(other_session.query::<(), i64>(id, "read_value", &())?, 0xfc);
+    assert_eq!(
+        other_session.query::<(), i64>(
+            id,
+            "read_value",
+            &(),
+            &CallData::build(LIMIT)
+        )?,
+        0xfc
+    );
 
-    other_session.transact::<(), ()>(id, "increment", &())?;
+    other_session.transact::<(), ()>(
+        id,
+        "increment",
+        &(),
+        &CallData::build(LIMIT),
+    )?;
 
     let _commit_id = other_session.commit()?;
 
@@ -43,7 +86,15 @@ fn read_write_session() -> Result<(), Error> {
 
     let mut session = vm.session(_commit_id, SessionData::new())?;
 
-    assert_eq!(session.query::<(), i64>(id, "read_value", &())?, 0xfd);
+    assert_eq!(
+        session.query::<(), i64>(
+            id,
+            "read_value",
+            &(),
+            &CallData::build(LIMIT)
+        )?,
+        0xfd
+    );
     Ok(())
 }
 
@@ -51,29 +102,87 @@ fn read_write_session() -> Result<(), Error> {
 fn commit_restore() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
     let mut session_1 = vm.genesis_session(SessionData::new());
-    let id = session_1
-        .deploy(module_bytecode!("counter"), ModuleData::builder(OWNER))?;
+    let id = session_1.deploy(
+        module_bytecode!("counter"),
+        ModuleData::builder(OWNER),
+        &CallData::build(LIMIT),
+    )?;
     // commit 1
-    assert_eq!(session_1.query::<(), i64>(id, "read_value", &())?, 0xfc);
-    session_1.transact::<(), ()>(id, "increment", &())?;
+    assert_eq!(
+        session_1.query::<(), i64>(
+            id,
+            "read_value",
+            &(),
+            &CallData::build(LIMIT)
+        )?,
+        0xfc
+    );
+    session_1.transact::<(), ()>(
+        id,
+        "increment",
+        &(),
+        &CallData::build(LIMIT),
+    )?;
     let commit_1 = session_1.commit()?;
 
     // commit 2
     let mut session_2 = vm.session(commit_1, SessionData::new())?;
-    assert_eq!(session_2.query::<(), i64>(id, "read_value", &())?, 0xfd);
-    session_2.transact::<(), ()>(id, "increment", &())?;
-    session_2.transact::<(), ()>(id, "increment", &())?;
+    assert_eq!(
+        session_2.query::<(), i64>(
+            id,
+            "read_value",
+            &(),
+            &CallData::build(LIMIT)
+        )?,
+        0xfd
+    );
+    session_2.transact::<(), ()>(
+        id,
+        "increment",
+        &(),
+        &CallData::build(LIMIT),
+    )?;
+    session_2.transact::<(), ()>(
+        id,
+        "increment",
+        &(),
+        &CallData::build(LIMIT),
+    )?;
     let commit_2 = session_2.commit()?;
     let mut session_2 = vm.session(commit_2, SessionData::new())?;
-    assert_eq!(session_2.query::<(), i64>(id, "read_value", &())?, 0xff);
+    assert_eq!(
+        session_2.query::<(), i64>(
+            id,
+            "read_value",
+            &(),
+            &CallData::build(LIMIT)
+        )?,
+        0xff
+    );
 
     // restore commit 1
     let mut session_3 = vm.session(commit_1, SessionData::new())?;
-    assert_eq!(session_3.query::<(), i64>(id, "read_value", &())?, 0xfd);
+    assert_eq!(
+        session_3.query::<(), i64>(
+            id,
+            "read_value",
+            &(),
+            &CallData::build(LIMIT)
+        )?,
+        0xfd
+    );
 
     // restore commit 2
     let mut session_4 = vm.session(commit_2, SessionData::new())?;
-    assert_eq!(session_4.query::<(), i64>(id, "read_value", &())?, 0xff);
+    assert_eq!(
+        session_4.query::<(), i64>(
+            id,
+            "read_value",
+            &(),
+            &CallData::build(LIMIT)
+        )?,
+        0xff
+    );
     Ok(())
 }
 
@@ -82,38 +191,93 @@ fn commit_restore_two_modules_session() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 
     let mut session = vm.genesis_session(SessionData::new());
-    let id_1 = session
-        .deploy(module_bytecode!("counter"), ModuleData::builder(OWNER))?;
-    let id_2 =
-        session.deploy(module_bytecode!("box"), ModuleData::builder(OWNER))?;
+    let id_1 = session.deploy(
+        module_bytecode!("counter"),
+        ModuleData::builder(OWNER),
+        &CallData::build(LIMIT),
+    )?;
+    let id_2 = session.deploy(
+        module_bytecode!("box"),
+        ModuleData::builder(OWNER),
+        &CallData::build(LIMIT),
+    )?;
 
-    session.transact::<(), ()>(id_1, "increment", &())?;
-    session.transact::<i16, ()>(id_2, "set", &0x11)?;
-    assert_eq!(session.query::<(), i64>(id_1, "read_value", &())?, 0xfd);
+    session.transact::<(), ()>(
+        id_1,
+        "increment",
+        &(),
+        &CallData::build(LIMIT),
+    )?;
+    session.transact::<i16, ()>(id_2, "set", &0x11, &CallData::build(LIMIT))?;
     assert_eq!(
-        session.query::<_, Option<i16>>(id_2, "get", &())?,
+        session.query::<(), i64>(
+            id_1,
+            "read_value",
+            &(),
+            &CallData::build(LIMIT)
+        )?,
+        0xfd
+    );
+    assert_eq!(
+        session.query::<_, Option<i16>>(
+            id_2,
+            "get",
+            &(),
+            &CallData::build(LIMIT)
+        )?,
         Some(0x11)
     );
 
     let commit_1 = session.commit()?;
 
     let mut session = vm.session(commit_1, SessionData::new())?;
-    session.transact::<(), ()>(id_1, "increment", &())?;
-    session.transact::<i16, ()>(id_2, "set", &0x12)?;
+    session.transact::<(), ()>(
+        id_1,
+        "increment",
+        &(),
+        &CallData::build(LIMIT),
+    )?;
+    session.transact::<i16, ()>(id_2, "set", &0x12, &CallData::build(LIMIT))?;
     let commit_2 = session.commit()?;
     let mut session = vm.session(commit_2, SessionData::new())?;
-    assert_eq!(session.query::<(), i64>(id_1, "read_value", &())?, 0xfe);
     assert_eq!(
-        session.query::<_, Option<i16>>(id_2, "get", &())?,
+        session.query::<(), i64>(
+            id_1,
+            "read_value",
+            &(),
+            &CallData::build(LIMIT)
+        )?,
+        0xfe
+    );
+    assert_eq!(
+        session.query::<_, Option<i16>>(
+            id_2,
+            "get",
+            &(),
+            &CallData::build(LIMIT)
+        )?,
         Some(0x12)
     );
 
     let mut session = vm.session(commit_1, SessionData::new())?;
 
     // check if both modules' state was restored
-    assert_eq!(session.query::<(), i64>(id_1, "read_value", &())?, 0xfd);
     assert_eq!(
-        session.query::<_, Option<i16>>(id_2, "get", &())?,
+        session.query::<(), i64>(
+            id_1,
+            "read_value",
+            &(),
+            &CallData::build(LIMIT)
+        )?,
+        0xfd
+    );
+    assert_eq!(
+        session.query::<_, Option<i16>>(
+            id_2,
+            "get",
+            &(),
+            &CallData::build(LIMIT)
+        )?,
         Some(0x11)
     );
     Ok(())
@@ -124,29 +288,87 @@ fn multiple_commits() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 
     let mut session = vm.genesis_session(SessionData::new());
-    let id = session
-        .deploy(module_bytecode!("counter"), ModuleData::builder(OWNER))?;
+    let id = session.deploy(
+        module_bytecode!("counter"),
+        ModuleData::builder(OWNER),
+        &CallData::build(LIMIT),
+    )?;
     // commit 1
-    assert_eq!(session.query::<(), i64>(id, "read_value", &())?, 0xfc);
-    session.transact::<(), ()>(id, "increment", &())?;
+    assert_eq!(
+        session.query::<(), i64>(
+            id,
+            "read_value",
+            &(),
+            &CallData::build(LIMIT)
+        )?,
+        0xfc
+    );
+    session.transact::<(), ()>(
+        id,
+        "increment",
+        &(),
+        &CallData::build(LIMIT),
+    )?;
     let commit_1 = session.commit()?;
 
     // commit 2
     let mut session = vm.session(commit_1, SessionData::new())?;
-    assert_eq!(session.query::<(), i64>(id, "read_value", &())?, 0xfd);
-    session.transact::<(), ()>(id, "increment", &())?;
-    session.transact::<(), ()>(id, "increment", &())?;
+    assert_eq!(
+        session.query::<(), i64>(
+            id,
+            "read_value",
+            &(),
+            &CallData::build(LIMIT)
+        )?,
+        0xfd
+    );
+    session.transact::<(), ()>(
+        id,
+        "increment",
+        &(),
+        &CallData::build(LIMIT),
+    )?;
+    session.transact::<(), ()>(
+        id,
+        "increment",
+        &(),
+        &CallData::build(LIMIT),
+    )?;
     let commit_2 = session.commit()?;
     let mut session = vm.session(commit_2, SessionData::new())?;
-    assert_eq!(session.query::<(), i64>(id, "read_value", &())?, 0xff);
+    assert_eq!(
+        session.query::<(), i64>(
+            id,
+            "read_value",
+            &(),
+            &CallData::build(LIMIT)
+        )?,
+        0xff
+    );
 
     // restore commit 1
     let mut session = vm.session(commit_1, SessionData::new())?;
-    assert_eq!(session.query::<(), i64>(id, "read_value", &())?, 0xfd);
+    assert_eq!(
+        session.query::<(), i64>(
+            id,
+            "read_value",
+            &(),
+            &CallData::build(LIMIT)
+        )?,
+        0xfd
+    );
 
     // restore commit 2
     let mut session = vm.session(commit_2, SessionData::new())?;
-    assert_eq!(session.query::<(), i64>(id, "read_value", &())?, 0xff);
+    assert_eq!(
+        session.query::<(), i64>(
+            id,
+            "read_value",
+            &(),
+            &CallData::build(LIMIT)
+        )?,
+        0xff
+    );
     Ok(())
 }
 
@@ -156,7 +378,12 @@ fn increment_counter_and_commit(
     count: usize,
 ) -> Result<[u8; 32], Error> {
     for _ in 0..count {
-        session.transact::<(), ()>(id, "increment", &())?;
+        session.transact::<(), ()>(
+            id,
+            "increment",
+            &(),
+            &CallData::build(LIMIT),
+        )?;
     }
     session.commit()
 }
@@ -166,10 +393,21 @@ fn concurrent_sessions() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 
     let mut session = vm.genesis_session(SessionData::new());
-    let counter = session
-        .deploy(module_bytecode!("counter"), ModuleData::builder(OWNER))?;
+    let counter = session.deploy(
+        module_bytecode!("counter"),
+        ModuleData::builder(OWNER),
+        &CallData::build(LIMIT),
+    )?;
 
-    assert_eq!(session.query::<(), i64>(counter, "read_value", &())?, 0xfc);
+    assert_eq!(
+        session.query::<(), i64>(
+            counter,
+            "read_value",
+            &(),
+            &CallData::build(LIMIT)
+        )?,
+        0xfc
+    );
 
     let root = session.commit()?;
 
@@ -253,10 +491,21 @@ fn squashing() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 
     let mut session = vm.genesis_session(SessionData::new());
-    let counter = session
-        .deploy(module_bytecode!("counter"), ModuleData::builder(OWNER))?;
+    let counter = session.deploy(
+        module_bytecode!("counter"),
+        ModuleData::builder(OWNER),
+        &CallData::build(LIMIT),
+    )?;
 
-    assert_eq!(session.query::<(), i64>(counter, "read_value", &())?, 0xfc);
+    assert_eq!(
+        session.query::<(), i64>(
+            counter,
+            "read_value",
+            &(),
+            &CallData::build(LIMIT)
+        )?,
+        0xfc
+    );
 
     let genesis_root = session.commit()?;
 

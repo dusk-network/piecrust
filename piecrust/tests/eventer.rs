@@ -4,9 +4,10 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use piecrust::{module_bytecode, Error, ModuleData, SessionData, VM};
+use piecrust::{module_bytecode, CallData, Error, ModuleData, SessionData, VM};
 
 const OWNER: [u8; 32] = [0u8; 32];
+const LIMIT: u64 = 65_536;
 
 #[test]
 pub fn vm_center_events() -> Result<(), Error> {
@@ -14,12 +15,20 @@ pub fn vm_center_events() -> Result<(), Error> {
 
     let mut session = vm.genesis_session(SessionData::new());
 
-    let eventer_id = session
-        .deploy(module_bytecode!("eventer"), ModuleData::builder(OWNER))?;
+    let eventer_id = session.deploy(
+        module_bytecode!("eventer"),
+        ModuleData::builder(OWNER),
+        &CallData::build(LIMIT),
+    )?;
 
     const EVENT_NUM: u32 = 5;
 
-    session.transact(eventer_id, "emit_events", &EVENT_NUM)?;
+    session.transact(
+        eventer_id,
+        "emit_events",
+        &EVENT_NUM,
+        &CallData::build(LIMIT),
+    )?;
 
     let events = session.take_events();
     assert_eq!(events.len() as u32, EVENT_NUM);

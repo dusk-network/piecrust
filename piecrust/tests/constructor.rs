@@ -4,10 +4,11 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use piecrust::{module_bytecode, Error, ModuleData, SessionData, VM};
+use piecrust::{module_bytecode, CallData, Error, ModuleData, SessionData, VM};
 
 const CONTRACT_INIT_METHOD: &str = "init";
 const OWNER: [u8; 32] = [0u8; 32];
+const LIMIT: u64 = 65_536;
 
 #[test]
 fn constructor() -> Result<(), Error> {
@@ -18,38 +19,91 @@ fn constructor() -> Result<(), Error> {
     let id = session.deploy(
         module_bytecode!("constructor"),
         ModuleData::builder(OWNER).constructor_arg(&0xabu8),
+        &CallData::build(LIMIT),
     )?;
 
-    assert_eq!(session.query::<(), u8>(id, "read_value", &())?, 0xab);
+    assert_eq!(
+        session.query::<(), u8>(
+            id,
+            "read_value",
+            &(),
+            &CallData::build(LIMIT)
+        )?,
+        0xab
+    );
 
     // perform transaction and make sure that the contract works as expected
-    session.transact::<(), ()>(id, "increment", &())?;
-    assert_eq!(session.query::<(), u8>(id, "read_value", &())?, 0xac);
+    session.transact::<(), ()>(
+        id,
+        "increment",
+        &(),
+        &CallData::build(LIMIT),
+    )?;
+    assert_eq!(
+        session.query::<(), u8>(
+            id,
+            "read_value",
+            &(),
+            &CallData::build(LIMIT)
+        )?,
+        0xac
+    );
 
     // we should not be able to call init directly
-    let result = session.transact::<u8, ()>(id, CONTRACT_INIT_METHOD, &0xaa);
+    let result = session.transact::<u8, ()>(
+        id,
+        CONTRACT_INIT_METHOD,
+        &0xaa,
+        &CallData::build(LIMIT),
+    );
     assert!(
         result.is_err(),
         "calling init directly as transaction should not be allowed"
     );
     // we should not be able to call init as query neither
-    let result = session.query::<u8, ()>(id, CONTRACT_INIT_METHOD, &0xaa);
+    let result = session.query::<u8, ()>(
+        id,
+        CONTRACT_INIT_METHOD,
+        &0xaa,
+        &CallData::build(LIMIT),
+    );
     assert!(
         result.is_err(),
         "calling init directly as query should not be allowed"
     );
 
     // make sure the state is still ok
-    assert_eq!(session.query::<(), u8>(id, "read_value", &())?, 0xac);
+    assert_eq!(
+        session.query::<(), u8>(
+            id,
+            "read_value",
+            &(),
+            &CallData::build(LIMIT)
+        )?,
+        0xac
+    );
 
     // initialized state should live through across session boundaries
     let commit_id = session.commit()?;
     let mut session = vm.session(commit_id, SessionData::new())?;
-    assert_eq!(session.query::<(), u8>(id, "read_value", &())?, 0xac);
+    assert_eq!(
+        session.query::<(), u8>(
+            id,
+            "read_value",
+            &(),
+            &CallData::build(LIMIT)
+        )?,
+        0xac
+    );
 
     // not being able to call init directly should also be enforced across
     // session boundaries
-    let result = session.transact::<u8, ()>(id, CONTRACT_INIT_METHOD, &0xae);
+    let result = session.transact::<u8, ()>(
+        id,
+        CONTRACT_INIT_METHOD,
+        &0xae,
+        &CallData::build(LIMIT),
+    );
     assert!(
         result.is_err(),
         "calling init directly should never be allowed"
@@ -67,6 +121,7 @@ fn missing_init() -> Result<(), Error> {
     let result = session.deploy(
         module_bytecode!("counter"),
         ModuleData::builder(OWNER).constructor_arg(&0xabu8),
+        &CallData::build(LIMIT),
     );
 
     assert!(

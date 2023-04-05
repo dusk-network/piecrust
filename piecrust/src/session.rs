@@ -115,7 +115,7 @@ impl Session {
         &mut self,
         bytecode: &[u8],
         deploy_data: D,
-        call_data: CallData,
+        call_data: &CallData,
     ) -> Result<ModuleId, Error>
     where
         A: 'a + for<'b> Serialize<StandardBufSerializer<'b>>,
@@ -149,7 +149,7 @@ impl Session {
             bytecode,
             constructor_arg,
             deploy_data.owner,
-            call_data
+            call_data,
         )?;
 
         Ok(module_id)
@@ -161,7 +161,7 @@ impl Session {
         bytecode: &[u8],
         arg: Option<Vec<u8>>,
         owner: [u8; 32],
-        call_data: CallData,
+        call_data: &CallData,
     ) -> Result<(), Error> {
         if self.module_session.module_deployed(module_id) {
             return Err(InitalizationError(
@@ -210,7 +210,7 @@ impl Session {
             bytecode: bytecode.to_vec(),
             fdata: arg,
             owner,
-            call_data,
+            call_data: (*call_data).clone(),
         }));
 
         Ok(())
@@ -238,7 +238,7 @@ impl Session {
         module: ModuleId,
         method_name: &str,
         arg: &A,
-        call_data: CallData,
+        call_data: &CallData,
     ) -> Result<Ret, Error>
     where
         A: for<'b> Serialize<StandardBufSerializer<'b>>,
@@ -294,7 +294,7 @@ impl Session {
         module: ModuleId,
         method_name: &str,
         arg: &A,
-        call_data: CallData,
+        call_data: &CallData,
     ) -> Result<Ret, Error>
     where
         A: for<'b> Serialize<StandardBufSerializer<'b>>,
@@ -689,7 +689,7 @@ impl Session {
                     res = self.call_if_not_error(call);
                 }
                 CallOrDeploy::Deploy(deploy) => {
-                    self.do_deploy(deploy.module_id, &deploy.bytecode, deploy.fdata, deploy.owner, deploy.call_data)
+                    self.do_deploy(deploy.module_id, &deploy.bytecode, deploy.fdata, deploy.owner, &deploy.call_data)
                         .expect("Only deploys that succeed should be added to the history");
                 }
             }
@@ -820,14 +820,22 @@ impl SessionData {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct CallData {
-    pub sender: [u8; 32],
+    pub sender: ModuleId,
     pub limit: u64,
 }
 
 impl CallData {
-    pub fn new(sender: [u8; 32], limit: u64) -> Self {
-        Self { sender, limit }
+    pub fn build(limit: u64) -> Self {
+        Self {
+            sender: ModuleId::uninitialized(),
+            limit,
+        }
+    }
+
+    pub fn sender(mut self, sender: ModuleId) -> Self {
+        self.sender = sender;
+        self
     }
 }

@@ -4,10 +4,11 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use piecrust::{module_bytecode, Error, ModuleData, SessionData, VM};
+use piecrust::{module_bytecode, CallData, Error, ModuleData, SessionData, VM};
 use piecrust_uplink::ModuleId;
 
 const OWNER: [u8; 32] = [0u8; 32];
+const LIMIT: u64 = u64::MAX / 100;
 
 const CROSSOVER_ONE: ModuleId = {
     let mut bytes = [0; 32];
@@ -26,15 +27,16 @@ fn crossover() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 
     let mut session = vm.genesis_session(SessionData::new());
-    session.set_point_limit(u64::MAX / 100);
 
     session.deploy(
         module_bytecode!("crossover"),
         ModuleData::builder(OWNER).module_id(CROSSOVER_ONE),
+        &CallData::build(LIMIT),
     )?;
     session.deploy(
         module_bytecode!("crossover"),
         ModuleData::builder(OWNER).module_id(CROSSOVER_TWO),
+        &CallData::build(LIMIT),
     )?;
 
     // These value should not be set to `INITIAL_VALUE` in the contract.
@@ -53,10 +55,11 @@ fn crossover() -> Result<(), Error> {
             CROSSOVER_TO_SET_FORWARD,
             CROSSOVER_TO_SET_BACK,
         ),
+        &CallData::build(LIMIT),
     )?;
 
     assert_eq!(
-        session.query::<_, i32>(CROSSOVER_ONE, "crossover", &())?,
+        session.query::<_, i32>(CROSSOVER_ONE, "crossover", &(), &CallData::build(LIMIT))?,
         CROSSOVER_TO_SET,
         "The crossover should still be set even though the other contract panicked"
     );

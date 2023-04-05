@@ -4,9 +4,10 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use piecrust::{module_bytecode, Error, ModuleData, SessionData, VM};
+use piecrust::{module_bytecode, CallData, Error, ModuleData, SessionData, VM};
 
 const OWNER: [u8; 32] = [0u8; 32];
+const LIMIT: u64 = 65_536;
 
 #[test]
 pub fn vector_push_pop() -> Result<(), Error> {
@@ -14,22 +15,32 @@ pub fn vector_push_pop() -> Result<(), Error> {
 
     let mut session = vm.genesis_session(SessionData::new());
 
-    let id = session
-        .deploy(module_bytecode!("vector"), ModuleData::builder(OWNER))?;
+    let id = session.deploy(
+        module_bytecode!("vector"),
+        ModuleData::builder(OWNER),
+        &CallData::build(LIMIT),
+    )?;
 
     const N: usize = 128;
 
     for i in 0..N {
-        session.transact::<_, ()>(id, "push", &(i as i16))?;
+        session.transact::<_, ()>(
+            id,
+            "push",
+            &(i as i16),
+            &CallData::build(LIMIT),
+        )?;
     }
 
     for i in 0..N {
-        let popped: Option<i16> = session.transact(id, "pop", &())?;
+        let popped: Option<i16> =
+            session.transact(id, "pop", &(), &CallData::build(LIMIT))?;
 
         assert_eq!(popped, Some((N - i - 1) as i16));
     }
 
-    let popped: Option<i16> = session.transact(id, "pop", &())?;
+    let popped: Option<i16> =
+        session.transact(id, "pop", &(), &CallData::build(LIMIT))?;
 
     assert_eq!(popped, None);
 
