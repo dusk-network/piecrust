@@ -119,7 +119,7 @@ mod types;
 mod vm;
 
 pub use error::Error;
-pub use module::{ModuleDataBuilder, ModuleData};
+pub use module::{ModuleData, ModuleDataBuilder};
 pub use session::{Session, SessionData};
 pub use vm::{HostQuery, VM};
 

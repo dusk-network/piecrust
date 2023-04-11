@@ -106,24 +106,17 @@ impl VM {
     ///
     /// [`Session`]: Session
     /// [`genesis_session`]: VM::genesis_session
-    pub fn session<D>(
-        &self,
-        data: D,
-    ) -> Result<Session, Error>
+    pub fn session<D>(&self, data: D) -> Result<Session, Error>
     where
-        D: Into<SessionData>
+        D: Into<SessionData>,
     {
         let data = data.into();
         let module_session = match data.base {
-            Some(base) => {
-                self
-                    .store
-                    .session(base)
-                    .map_err(|err| PersistenceError(Arc::new(err)))?
-            },
-            _ => {
-                self.store.genesis_session()
-            }
+            Some(base) => self
+                .store
+                .session(base)
+                .map_err(|err| PersistenceError(Arc::new(err)))?,
+            _ => self.store.genesis_session(),
         };
         Ok(Session::new(
             module_session,

@@ -845,7 +845,7 @@ impl SessionDataBuilder {
     fn build(&self) -> SessionData {
         SessionData {
             data: self.data.clone(),
-            base: self.base
+            base: self.base,
         }
     }
 }
