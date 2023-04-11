@@ -16,7 +16,7 @@ pub fn deploy_with_id() -> Result<(), Error> {
     let bytecode = module_bytecode!("counter");
     let some_id = [1u8; 32];
     let module_id = ModuleId::from(some_id);
-    let mut session = vm.genesis_session(SessionData::new());
+    let mut session = vm.session(SessionData::builder())?;
     session
         .deploy(bytecode, ModuleData::builder(OWNER).module_id(module_id))?;
 

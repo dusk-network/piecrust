@@ -12,7 +12,7 @@ const OWNER: [u8; 32] = [0u8; 32];
 fn counter_read_simple() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 
-    let mut session = vm.genesis_session(SessionData::new());
+    let mut session = vm.session(SessionData::builder())?;
 
     let id = session
         .deploy(module_bytecode!("counter"), ModuleData::builder(OWNER))?;
@@ -26,7 +26,7 @@ fn counter_read_simple() -> Result<(), Error> {
 fn counter_read_write_simple() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 
-    let mut session = vm.genesis_session(SessionData::new());
+    let mut session = vm.session(SessionData::builder())?;
 
     let id = session
         .deploy(module_bytecode!("counter"), ModuleData::builder(OWNER))?;

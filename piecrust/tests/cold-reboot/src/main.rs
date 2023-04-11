@@ -21,7 +21,7 @@ fn initialize_counter<P: AsRef<Path>>(
     vm: &VM,
     commit_id_file_path: P,
 ) -> Result<(), piecrust::Error> {
-    let mut session = vm.genesis_session(SessionData::new());
+    let mut session = vm.session(SessionData::builder())?;
 
     let counter_bytecode = include_bytes!(
         "../../../../target/wasm32-unknown-unknown/release/counter.wasm"
@@ -51,7 +51,7 @@ fn confirm_counter<P: AsRef<Path>>(
     commit_root.copy_from_slice(&commit_root_bytes);
 
     let mut session = vm
-        .session(commit_root, SessionData::new())
+        .session(SessionData::builder().base(commit_root))
         .expect("Instantiating session from given root should succeed");
 
     assert_eq!(

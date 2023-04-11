@@ -796,18 +796,37 @@ struct Call {
     limit: u64,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct SessionData {
     data: BTreeMap<Cow<'static, str>, Vec<u8>>,
+    pub base: Option<[u8; 32]>,
 }
 
 impl SessionData {
-    pub fn new() -> Self {
-        Self {
+    pub fn builder() -> SessionDataBuilder {
+        SessionDataBuilder {
             data: BTreeMap::new(),
+            base: None,
         }
     }
 
+    fn get(&self, name: &str) -> Option<Vec<u8>> {
+        self.data.get(name).cloned()
+    }
+}
+
+impl From<SessionDataBuilder> for SessionData {
+    fn from(builder: SessionDataBuilder) -> Self {
+        builder.build()
+    }
+}
+
+pub struct SessionDataBuilder {
+    data: BTreeMap<Cow<'static, str>, Vec<u8>>,
+    base: Option<[u8; 32]>,
+}
+
+impl SessionDataBuilder {
     pub fn insert<S, V>(mut self, name: S, value: V) -> Self
     where
         S: Into<Cow<'static, str>>,
@@ -818,13 +837,15 @@ impl SessionData {
         self
     }
 
-    fn get(&self, name: &str) -> Option<Vec<u8>> {
-        self.data.get(name).cloned()
+    pub fn base(mut self, base: [u8; 32]) -> Self {
+        self.base = Some(base);
+        self
     }
-}
 
-impl Default for SessionData {
-    fn default() -> Self {
-        Self::new()
+    fn build(&self) -> SessionData {
+        SessionData {
+            data: self.data.clone(),
+            base: self.base
+        }
     }
 }

@@ -13,7 +13,7 @@ fn metadata() -> Result<(), Error> {
 
     let vm = VM::ephemeral()?;
 
-    let mut session = vm.genesis_session(SessionData::new());
+    let mut session = vm.session(SessionData::builder())?;
 
     let id = session.deploy(
         module_bytecode!("metadata"),
@@ -28,7 +28,7 @@ fn metadata() -> Result<(), Error> {
 
     // owner should live across session boundaries
     let commit_id = session.commit()?;
-    let mut session = vm.session(commit_id, SessionData::new())?;
+    let mut session = vm.session(SessionData::builder().base(commit_id))?;
     let owner = session.query::<(), [u8; 32]>(id, "read_owner", &())?;
     let self_id = session.query::<(), ModuleId>(id, "read_id", &())?;
     assert_eq!(owner, EXPECTED_OWNER);

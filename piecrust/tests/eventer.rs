@@ -12,7 +12,7 @@ const OWNER: [u8; 32] = [0u8; 32];
 pub fn vm_center_events() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 
-    let mut session = vm.genesis_session(SessionData::new());
+    let mut session = vm.session(SessionData::builder())?;
 
     let eventer_id = session
         .deploy(module_bytecode!("eventer"), ModuleData::builder(OWNER))?;

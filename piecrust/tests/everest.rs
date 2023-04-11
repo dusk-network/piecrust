@@ -14,7 +14,7 @@ pub fn height() -> Result<(), Error> {
 
     const HEIGHT: u64 = 384u64;
     let mut session =
-        vm.genesis_session(SessionData::new().insert("height", HEIGHT));
+        vm.session(SessionData::builder().insert("height", HEIGHT))?;
 
     let id = session
         .deploy(module_bytecode!("everest"), ModuleData::builder(OWNER))?;
@@ -28,7 +28,7 @@ pub fn height() -> Result<(), Error> {
 #[test]
 pub fn meta_data_optionality() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
-    let mut session = vm.genesis_session(SessionData::new());
+    let mut session = vm.session(SessionData::builder())?;
     let id = session
         .deploy(module_bytecode!("everest"), ModuleData::builder(OWNER))?;
     let height: Option<u64> = session.transact(id, "get_height", &())?;

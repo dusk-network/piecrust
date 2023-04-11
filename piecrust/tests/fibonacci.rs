@@ -12,7 +12,7 @@ const OWNER: [u8; 32] = [0u8; 32];
 pub fn fibo() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 
-    let mut session = vm.genesis_session(SessionData::new());
+    let mut session = vm.session(SessionData::builder())?;
 
     let id = session
         .deploy(module_bytecode!("fibonacci"), ModuleData::builder(OWNER))?;

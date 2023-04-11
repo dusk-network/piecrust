@@ -27,8 +27,8 @@ impl<'a> ModuleData<'a, ()> {
     ///
     /// This function returns a builder that can be used to set optional fields
     /// in module deployment.
-    pub fn builder(owner: [u8; 32]) -> DeployDataBuilder<'a, ()> {
-        DeployDataBuilder {
+    pub fn builder(owner: [u8; 32]) -> ModuleDataBuilder<'a, ()> {
+        ModuleDataBuilder {
             module_id: None,
             constructor_arg: None,
             owner,
@@ -36,19 +36,19 @@ impl<'a> ModuleData<'a, ()> {
     }
 }
 
-impl<'a, A> From<DeployDataBuilder<'a, A>> for ModuleData<'a, A> {
-    fn from(builder: DeployDataBuilder<'a, A>) -> Self {
+impl<'a, A> From<ModuleDataBuilder<'a, A>> for ModuleData<'a, A> {
+    fn from(builder: ModuleDataBuilder<'a, A>) -> Self {
         builder.build()
     }
 }
 
-pub struct DeployDataBuilder<'a, A> {
+pub struct ModuleDataBuilder<'a, A> {
     module_id: Option<ModuleId>,
     owner: [u8; 32],
     constructor_arg: Option<&'a A>,
 }
 
-impl<'a, A> DeployDataBuilder<'a, A> {
+impl<'a, A> ModuleDataBuilder<'a, A> {
     /// Set the deployment module ID.
     pub fn module_id(mut self, id: ModuleId) -> Self {
         self.module_id = Some(id);
@@ -56,8 +56,8 @@ impl<'a, A> DeployDataBuilder<'a, A> {
     }
 
     /// Set the constructor argument for deployment.
-    pub fn constructor_arg<B>(self, arg: &B) -> DeployDataBuilder<B> {
-        DeployDataBuilder {
+    pub fn constructor_arg<B>(self, arg: &B) -> ModuleDataBuilder<B> {
+        ModuleDataBuilder {
             module_id: self.module_id,
             owner: self.owner,
             constructor_arg: Some(arg),

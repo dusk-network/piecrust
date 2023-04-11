@@ -81,7 +81,7 @@
 //! let mut vm = VM::ephemeral().unwrap();
 //!
 //! const OWNER: [u8; 32] = [0u8; 32];
-//! let mut session = vm.genesis_session(SessionData::new());
+//! let mut session = vm.session(SessionData::builder()).unwrap();
 //! let counter_id = session.deploy(module_bytecode!("counter"), ModuleData::builder(OWNER)).unwrap();
 //!
 //! assert_eq!(session.query::<(), i64>(counter_id, "read_value", &()).unwrap(), 0xfc);
@@ -119,7 +119,7 @@ mod types;
 mod vm;
 
 pub use error::Error;
-pub use module::{DeployDataBuilder, ModuleData};
+pub use module::{ModuleDataBuilder, ModuleData};
 pub use session::{Session, SessionData};
 pub use vm::{HostQuery, VM};
 

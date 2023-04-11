@@ -12,7 +12,7 @@ const OWNER: [u8; 32] = [0u8; 32];
 pub fn push_pop() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 
-    let mut session = vm.genesis_session(SessionData::new());
+    let mut session = vm.session(SessionData::builder())?;
 
     let id = session
         .deploy(module_bytecode!("stack"), ModuleData::builder(OWNER))?;
@@ -37,7 +37,7 @@ pub fn push_pop() -> Result<(), Error> {
 pub fn multi_push_pop() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 
-    let mut session = vm.genesis_session(SessionData::new());
+    let mut session = vm.session(SessionData::builder())?;
 
     let id = session
         .deploy(module_bytecode!("stack"), ModuleData::builder(OWNER))?;

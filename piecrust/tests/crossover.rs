@@ -25,7 +25,7 @@ const CROSSOVER_TWO: ModuleId = {
 fn crossover() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 
-    let mut session = vm.genesis_session(SessionData::new());
+    let mut session = vm.session(SessionData::builder())?;
     session.set_point_limit(u64::MAX / 100);
 
     session.deploy(
