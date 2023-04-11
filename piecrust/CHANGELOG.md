@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Made session data settable only at deploy time. [#181]
 - Changed deploy API to accept `Into<DeployData>`. [#158]
 - Made modules compile at deploy time rather than on first query/transaction time. [#162]
 
@@ -34,6 +35,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - First `piecrust` release
 
 <!-- ISSUES -->
+[#181]: https://github.com/dusk-network/piecrust/issues/181
 [#178]: https://github.com/dusk-network/piecrust/issues/178
 [#167]: https://github.com/dusk-network/piecrust/issues/167
 [#162]: https://github.com/dusk-network/piecrust/issues/162

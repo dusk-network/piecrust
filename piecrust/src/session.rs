@@ -530,9 +530,7 @@ impl Session {
         c(&self.debug)
     }
 
-    /// Returns the value of a metadata item previously set using [`set_meta`].
-    ///
-    /// [`set_meta`]: Session::set_meta
+    /// Returns the value of a metadata item.
     pub fn meta(&self, name: &str) -> Option<Vec<u8>> {
         self.data.get(name)
     }
