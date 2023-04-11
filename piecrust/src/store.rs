@@ -13,6 +13,7 @@ mod metadata;
 mod mmap;
 mod module_session;
 mod objectcode;
+mod tree;
 
 use std::collections::btree_map::Entry::*;
 use std::collections::{BTreeMap, BTreeSet};
@@ -32,17 +33,15 @@ use module_session::ModuleDataEntry;
 pub use module_session::ModuleSession;
 pub use objectcode::Objectcode;
 use piecrust_uplink::ModuleId;
-
-const ROOT_LEN: usize = 32;
+use tree::{position_from_module, Hash, Hasher, Tree};
 
 const BYTECODE_DIR: &str = "bytecode";
 const MEMORY_DIR: &str = "memory";
 const DIFF_EXTENSION: &str = "diff";
 const INDEX_FILE: &str = "index";
+const TREE_FILE: &str = "merkle";
 const OBJECTCODE_EXTENSION: &str = "a";
 const METADATA_EXTENSION: &str = "m";
-
-type Root = [u8; ROOT_LEN];
 
 /// A store for all module commits.
 #[derive(Debug)]
@@ -88,7 +87,7 @@ impl ModuleStore {
     /// Create a new [`ModuleSession`] with the given `base` commit.
     ///
     /// Errors if the given base commit does not exist in the store.
-    pub fn session(&self, base: Root) -> io::Result<ModuleSession> {
+    pub fn session(&self, base: Hash) -> io::Result<ModuleSession> {
         let base_commit = self
             .call_with_replier(|replier| Call::CommitHold { base, replier })
             .ok_or_else(|| {
@@ -98,7 +97,7 @@ impl ModuleStore {
                 )
             })?;
 
-        Ok(self.session_with_base(Some((base, base_commit))))
+        Ok(self.session_with_base(Some(base_commit)))
     }
 
     /// Create a new [`ModuleSession`] that has no base commit.
@@ -111,13 +110,13 @@ impl ModuleStore {
     }
 
     /// Returns the roots of the commits that are currently in the store.
-    pub fn commits(&self) -> Vec<Root> {
+    pub fn commits(&self) -> Vec<Hash> {
         self.call_with_replier(|replier| Call::GetCommits { replier })
     }
 
     /// Remove the diff files from a commit by applying them to the base memory,
     /// and writing it back to disk.
-    pub fn squash_commit(&self, commit: Root) -> io::Result<()> {
+    pub fn squash_commit(&self, commit: Hash) -> io::Result<()> {
         self.call_with_replier(|replier| Call::CommitSquash { commit, replier })
             .ok_or_else(|| {
                 io::Error::new(
@@ -134,7 +133,7 @@ impl ModuleStore {
     /// commit has dropped.
     ///
     /// It will block until the operation is completed.
-    pub fn delete_commit(&self, commit: Root) -> io::Result<()> {
+    pub fn delete_commit(&self, commit: Hash) -> io::Result<()> {
         self.call_with_replier(|replier| Call::CommitDelete { commit, replier })
     }
 
@@ -164,72 +163,43 @@ impl ModuleStore {
             .expect("The sender should never be dropped without responding")
     }
 
-    fn session_with_base(&self, base: Option<(Root, Commit)>) -> ModuleSession {
+    fn session_with_base(&self, base: Option<Commit>) -> ModuleSession {
         ModuleSession::new(&self.root_dir, base, self.call.clone())
     }
 }
 
 fn read_all_commits<P: AsRef<Path>>(
     root_dir: P,
-) -> io::Result<BTreeMap<Root, Commit>> {
+) -> io::Result<BTreeMap<Hash, Commit>> {
     let root_dir = root_dir.as_ref();
     let mut commits = BTreeMap::new();
 
     for entry in fs::read_dir(root_dir)? {
         let entry = entry?;
         if entry.path().is_dir() {
-            let (root, commit) = read_commit(entry.path())?;
-            commits.insert(root, commit);
+            let commit = read_commit(entry.path())?;
+            commits.insert(*commit.tree.root(), commit);
         }
     }
 
     Ok(commits)
 }
 
-fn read_commit<P: AsRef<Path>>(commit_dir: P) -> io::Result<(Root, Commit)> {
+fn read_commit<P: AsRef<Path>>(commit_dir: P) -> io::Result<Commit> {
     let commit_dir = commit_dir.as_ref();
-
-    let root = root_from_dir(commit_dir)?;
     let commit = commit_from_dir(commit_dir)?;
-
-    Ok((root, commit))
-}
-
-fn root_from_dir<P: AsRef<Path>>(dir: P) -> io::Result<Root> {
-    let dir = dir.as_ref();
-    let dir_name = dir.file_name().unwrap().to_str().ok_or_else(|| {
-        io::Error::new(
-            io::ErrorKind::InvalidData,
-            format!("Directory name \"{dir:?}\" is invalid UTF-8"),
-        )
-    })?;
-
-    let dir_name_bytes = hex::decode(dir_name).map_err(|err| {
-        io::Error::new(
-            io::ErrorKind::InvalidData,
-            format!("Directory name \"{dir_name}\" is invalid hex: {err}"),
-        )
-    })?;
-
-    if dir_name_bytes.len() != ROOT_LEN {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            format!("Expected directory name \"{dir_name}\" to be of size {ROOT_LEN}, was {}", dir_name_bytes.len()),
-        ));
-    }
-
-    let mut root = [0u8; ROOT_LEN];
-    root.copy_from_slice(&dir_name_bytes);
-
-    Ok(root)
+    Ok(commit)
 }
 
 fn commit_from_dir<P: AsRef<Path>>(dir: P) -> io::Result<Commit> {
     let dir = dir.as_ref();
 
     let index_path = dir.join(INDEX_FILE);
+    let tree_path = dir.join(TREE_FILE);
 
     let modules = index_from_path(index_path)?;
+    let tree = tree_from_path(tree_path)?;
+
     let mut diffs = BTreeSet::new();
 
     let bytecode_dir = dir.join(BYTECODE_DIR);
@@ -263,12 +233,16 @@ fn commit_from_dir<P: AsRef<Path>>(dir: P) -> io::Result<Commit> {
         }
     }
 
-    Ok(Commit { modules, diffs })
+    Ok(Commit {
+        modules,
+        diffs,
+        tree,
+    })
 }
 
 fn index_from_path<P: AsRef<Path>>(
     path: P,
-) -> io::Result<BTreeMap<ModuleId, Root>> {
+) -> io::Result<BTreeMap<ModuleId, Hash>> {
     let path = path.as_ref();
 
     let modules_bytes = fs::read(path)?;
@@ -282,39 +256,54 @@ fn index_from_path<P: AsRef<Path>>(
     Ok(modules)
 }
 
+fn tree_from_path<P: AsRef<Path>>(path: P) -> io::Result<Tree> {
+    let path = path.as_ref();
+
+    let tree_bytes = fs::read(path)?;
+    let tree = rkyv::from_bytes(&tree_bytes).map_err(|err| {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("Invalid merkle tree file \"{path:?}\": {err}"),
+        )
+    })?;
+
+    Ok(tree)
+}
+
 #[derive(Debug, Clone)]
 pub(crate) struct Commit {
-    modules: BTreeMap<ModuleId, Root>,
+    modules: BTreeMap<ModuleId, Hash>,
     diffs: BTreeSet<ModuleId>,
+    tree: Tree,
 }
 
 pub(crate) enum Call {
     Commit {
         modules: BTreeMap<ModuleId, ModuleDataEntry>,
-        base: Option<(Root, Commit)>,
-        replier: mpsc::SyncSender<io::Result<(Root, Commit)>>,
+        base: Option<Commit>,
+        replier: mpsc::SyncSender<io::Result<Commit>>,
     },
     GetCommits {
-        replier: mpsc::SyncSender<Vec<Root>>,
+        replier: mpsc::SyncSender<Vec<Hash>>,
     },
     CommitDelete {
-        commit: Root,
+        commit: Hash,
         replier: mpsc::SyncSender<io::Result<()>>,
     },
     CommitSquash {
-        commit: Root,
+        commit: Hash,
         replier: mpsc::SyncSender<Option<io::Result<()>>>,
     },
     CommitHold {
-        base: Root,
+        base: Hash,
         replier: mpsc::SyncSender<Option<Commit>>,
     },
-    SessionDrop(Root),
+    SessionDrop(Hash),
 }
 
 fn sync_loop<P: AsRef<Path>>(
     root_dir: P,
-    commits: BTreeMap<Root, Commit>,
+    commits: BTreeMap<Hash, Commit>,
     calls: mpsc::Receiver<Call>,
 ) {
     let root_dir = root_dir.as_ref();
@@ -469,33 +458,34 @@ fn sync_loop<P: AsRef<Path>>(
 
 fn write_commit<P: AsRef<Path>>(
     root_dir: P,
-    commits: &mut BTreeMap<Root, Commit>,
-    base: Option<(Root, Commit)>,
+    commits: &mut BTreeMap<Hash, Commit>,
+    base: Option<Commit>,
     commit_modules: BTreeMap<ModuleId, ModuleDataEntry>,
-) -> io::Result<(Root, Commit)> {
+) -> io::Result<Commit> {
     let root_dir = root_dir.as_ref();
+    let (modules, tree) = compute_tree(&base, &commit_modules);
 
-    let (root, modules) = compute_root(&base, &commit_modules);
+    let root = *tree.root();
     let root_hex = hex::encode(root);
-
     let commit_dir = root_dir.join(root_hex);
 
     // Don't write the commit if it already exists on disk. This may happen if
     // the same transactions on the same base commit for example.
     if let Some(commit) = commits.get(&root) {
-        return Ok((root, commit.clone()));
+        return Ok(commit.clone());
     }
 
     match write_commit_inner(
         root_dir,
         &commit_dir,
+        tree,
         base,
         modules,
         commit_modules,
     ) {
         Ok(commit) => {
             commits.insert(root, commit.clone());
-            Ok((root, commit))
+            Ok(commit)
         }
         Err(err) => {
             let _ = fs::remove_dir_all(commit_dir);
@@ -508,8 +498,9 @@ fn write_commit<P: AsRef<Path>>(
 fn write_commit_inner<P: AsRef<Path>>(
     root_dir: P,
     commit_dir: P,
-    base: Option<(Root, Commit)>,
-    modules: BTreeMap<ModuleId, Root>,
+    tree: Tree,
+    base: Option<Commit>,
+    modules: BTreeMap<ModuleId, Hash>,
     commit_modules: BTreeMap<ModuleId, ModuleDataEntry>,
 ) -> io::Result<Commit> {
     let root_dir = root_dir.as_ref();
@@ -541,7 +532,9 @@ fn write_commit_inner<P: AsRef<Path>>(
                 fs::write(memory_path, &store_data.memory.read())?;
             }
         }
-        Some((base, base_commit)) => {
+        Some(base_commit) => {
+            let base = base_commit.tree.root();
+
             let base_hex = hex::encode(base);
             let base_dir = root_dir.join(base_hex);
 
@@ -640,13 +633,28 @@ fn write_commit_inner<P: AsRef<Path>>(
         .to_vec();
     fs::write(index_path, index_bytes)?;
 
-    Ok(Commit { modules, diffs })
+    let merkle_path = commit_dir.join(TREE_FILE);
+    let merkle_bytes = rkyv::to_bytes::<_, 128>(&tree)
+        .map_err(|err| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("Failed serializing merkle file: {err}"),
+            )
+        })?
+        .to_vec();
+    fs::write(merkle_path, merkle_bytes)?;
+
+    Ok(Commit {
+        modules,
+        diffs,
+        tree,
+    })
 }
 
 /// Delete the given commit's directory.
 fn delete_commit_dir<P: AsRef<Path>>(
     root_dir: P,
-    root: Root,
+    root: Hash,
 ) -> io::Result<()> {
     let root = hex::encode(root);
     let commit_dir = root_dir.as_ref().join(root);
@@ -656,7 +664,7 @@ fn delete_commit_dir<P: AsRef<Path>>(
 /// Squash the given commit.
 fn squash_commit<P: AsRef<Path>>(
     root_dir: P,
-    root: Root,
+    root: Hash,
     commit: &mut Commit,
 ) -> io::Result<()> {
     let root_dir = root_dir.as_ref();
@@ -684,93 +692,41 @@ fn squash_commit<P: AsRef<Path>>(
     Ok(())
 }
 
-/// Compute the root of the state.
-///
-/// The root is computed by arranging all existing modules in order of their
-/// module ID, and computing a hash of the module ID, the bytecode, and the
-/// current state of the memory. These hashes then form the leaves of the tree
-/// whose root is then computed.
-fn compute_root<'a, I>(
-    base: &Option<(Root, Commit)>,
+/// Compute the new tree and modules map resulting from the changed `modules`,
+/// and originating from the given `base` commit.
+fn compute_tree<'a, I>(
+    base: &Option<Commit>,
     modules: I,
-) -> (Root, BTreeMap<ModuleId, Root>)
+) -> (BTreeMap<ModuleId, Hash>, Tree)
 where
     I: IntoIterator<Item = (&'a ModuleId, &'a ModuleDataEntry)>,
 {
     let iter = modules.into_iter();
 
     let mut leaves_map = BTreeMap::new();
+    let mut tree = match &base {
+        Some(base) => base.tree.clone(),
+        None => Tree::new(),
+    };
 
     // Compute the hashes of changed memories
     for (module, store_data) in iter {
-        let mut hasher = blake3::Hasher::new();
+        let mut hasher = Hasher::new();
         hasher.update(&store_data.memory.read());
-        leaves_map.insert(*module, Root::from(hasher.finalize()));
+        let hash = hasher.finalize();
+
+        tree.insert(position_from_module(module), hash);
+        leaves_map.insert(*module, hash);
     }
 
     // Store the hashes of *un*changed memories
-    if let Some((_, base_commit)) = base {
-        for (module, root) in &base_commit.modules {
+    if let Some(base_commit) = base {
+        for (module, hash) in &base_commit.modules {
             if !leaves_map.contains_key(module) {
-                leaves_map.insert(*module, *root);
+                leaves_map.insert(*module, *hash);
             }
         }
     }
 
-    let leaves = leaves_map.clone().into_values().collect();
-    let root = compute_merkle_root(leaves);
-
-    (root, leaves_map)
-}
-
-fn compute_merkle_root(mut leaves: Vec<Root>) -> Root {
-    while leaves.len() > 1 {
-        leaves = leaves
-            .chunks(2)
-            .map(|chunk| {
-                let mut hasher = blake3::Hasher::new();
-
-                hasher.update(&chunk[0]);
-                if chunk.len() == 2 {
-                    hasher.update(&chunk[1]);
-                }
-
-                Root::from(hasher.finalize())
-            })
-            .collect();
-    }
-
-    leaves[0]
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::store::{compute_merkle_root, Root};
-    use blake3::Hasher;
-
-    #[test]
-    fn merkle() {
-        let leaf_1 = [1; 32];
-        let leaf_2 = [2; 32];
-        let leaf_3 = [3; 32];
-
-        let mut hasher = Hasher::new();
-        hasher.update(&leaf_1);
-        hasher.update(&leaf_2);
-        let leaf_12 = Root::from(hasher.finalize());
-
-        // An unpaired leaf should also be hashed
-        let mut hasher = Hasher::new();
-        hasher.update(&leaf_3);
-        let leaf_33 = Root::from(hasher.finalize());
-
-        let mut hasher = Hasher::new();
-        hasher.update(&leaf_12);
-        hasher.update(&leaf_33);
-        let expected_root = Root::from(hasher.finalize());
-
-        let root = compute_merkle_root(vec![leaf_1, leaf_2, leaf_3]);
-
-        assert_eq!(expected_root, root);
-    }
+    (leaves_map, tree)
 }
