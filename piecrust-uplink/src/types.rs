@@ -15,7 +15,7 @@ use rkyv::{
 
 use crate::SCRATCH_BUF_BYTES;
 
-/// Type with `rkyv` buffer serialization capabilities
+/// Type with `rkyv` serialization capabilities for specific types.
 pub type StandardBufSerializer<'a> = CompositeSerializer<
     BufferSerializer<&'a mut [u8]>,
     BufferScratch<&'a mut [u8; SCRATCH_BUF_BYTES]>,
@@ -44,7 +44,8 @@ pub struct ModuleId([u8; MODULE_ID_BYTES]);
 
 impl ModuleId {
     /// Creates a placeholder [`ModuleId`] until the host deploys the module
-    /// and sets a real [`ModuleId`]
+    /// and sets a real [`ModuleId`]. This can also be used to determine if a
+    /// module is the first to be called.
     pub const fn uninitialized() -> Self {
         ModuleId([0u8; MODULE_ID_BYTES])
     }
@@ -70,7 +71,8 @@ impl ModuleId {
         &mut self.0
     }
 
-    /// Determines whether the [`ModuleId`] still is uninitialized
+    /// Determines whether the [`ModuleId`] is uninitialized, which can be used
+    /// to check if this module is the first to be called.
     pub fn is_uninitialized(&self) -> bool {
         self == &Self::uninitialized()
     }
@@ -112,8 +114,8 @@ impl core::fmt::Display for ModuleId {
     }
 }
 
-/// A RawQuery is a host query that doesn't care about types and only operates
-/// on raw data.
+/// A RawQuery is a contract call (or query) that doesn't care about types and
+/// only operates on raw data.
 #[derive(Archive, Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
 #[archive_attr(derive(CheckBytes))]
 pub struct RawQuery {
@@ -169,7 +171,7 @@ impl RawQuery {
     }
 }
 
-/// A RawTransaction is a host transaction that doesn't care about types and
+/// A RawTransaction is a transaction that doesn't care about types and
 /// only operates on raw data.
 #[derive(Archive, Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
 #[archive_attr(derive(CheckBytes))]
