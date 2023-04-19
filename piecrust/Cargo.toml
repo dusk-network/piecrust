@@ -15,11 +15,11 @@ license = "MPL-2.0"
 [dependencies]
 piecrust-uplink = { version = "0.2.0", path = "../piecrust-uplink" }
 
-wasmer = "3.1"
-wasmer-vm = "3.1"
-wasmer-types = "3.1"
-wasmer-middlewares = "3.1"
-wasmer-compiler-singlepass = "3.1"
+wasmer = "=3.1"
+wasmer-vm = "=3.1"
+wasmer-types = "=3.1"
+wasmer-middlewares = "=3.1"
+wasmer-compiler-singlepass = "=3.1"
 bytecheck = "0.6"
 rkyv = { version = "0.7", features = ["size_32", "validation"] }
 parking_lot = "0.12"
