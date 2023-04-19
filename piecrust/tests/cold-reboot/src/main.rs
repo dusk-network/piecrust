@@ -6,59 +6,56 @@
 
 extern crate core;
 
-use std::env;
 use std::path::{Path, PathBuf};
+use std::{env, fs};
 
-use piecrust::{CommitId, Session, VM};
+use piecrust::{DeployData, ModuleId, VM};
+const COUNTER_ID: ModuleId = {
+    let mut bytes = [0u8; 32];
+    bytes[0] = 99;
+    ModuleId::from_bytes(bytes)
+};
+const OWNER: [u8; 32] = [0u8; 32];
 
 fn initialize_counter<P: AsRef<Path>>(
-    vm: &mut VM,
+    vm: &VM,
     commit_id_file_path: P,
 ) -> Result<(), piecrust::Error> {
-    let mut session = vm.session();
+    let mut session = vm.genesis_session();
 
     let counter_bytecode = include_bytes!(
         "../../../../target/wasm32-unknown-unknown/release/counter.wasm"
     );
 
-    let module_id = session.deploy(counter_bytecode)?;
+    session.deploy(
+        counter_bytecode,
+        DeployData::builder(OWNER).module_id(COUNTER_ID),
+    )?;
+    session.transact::<(), ()>(COUNTER_ID, "increment", &())?;
 
-    assert_eq!(
-        session.query::<(), i64>(module_id, "read_value", &())?,
-        0xfc
-    );
-    session.transact::<(), ()>(module_id, "increment", &())?;
-    assert_eq!(
-        session.query::<(), i64>(module_id, "read_value", &())?,
-        0xfd
-    );
+    let commit_root = session.commit()?;
+    fs::write(commit_id_file_path, commit_root)
+        .expect("writing commit root should succeed");
 
-    let commit_id = session.commit()?;
-    assert_eq!(commit_id.as_bytes(), vm.session().root(false)?);
-    commit_id.persist(commit_id_file_path)?;
-
-    vm.persist()
+    Ok(())
 }
 
 fn confirm_counter<P: AsRef<Path>>(
-    session: &mut Session,
+    vm: &VM,
     commit_id_file_path: P,
 ) -> Result<(), piecrust::Error> {
-    let commit_id = CommitId::restore(commit_id_file_path)?;
-    session.restore(&commit_id)?;
-    assert_eq!(commit_id.as_bytes(), session.root(false)?);
+    let mut commit_root = [0u8; 32];
 
-    let counter_bytecode = include_bytes!(
-        "../../../../target/wasm32-unknown-unknown/release/counter.wasm"
-    );
+    let commit_root_bytes = fs::read(commit_id_file_path)
+        .expect("Reading commit root should succeed");
+    commit_root.copy_from_slice(&commit_root_bytes);
 
-    /*
-     * Note that module deployment does not change its state.
-     */
-    let module_id = session.deploy(counter_bytecode)?;
+    let mut session = vm
+        .session(commit_root)
+        .expect("Instantiating session from given root should succeed");
 
     assert_eq!(
-        session.query::<(), i64>(module_id, "read_value", &())?,
+        session.query::<(), i64>(COUNTER_ID, "read_value", &())?,
         0xfd
     );
 
@@ -68,16 +65,15 @@ fn confirm_counter<P: AsRef<Path>>(
 fn initialize<P: AsRef<str>>(vm_data_path: P) -> Result<(), piecrust::Error> {
     let commit_id_file_path =
         PathBuf::from(vm_data_path.as_ref()).join("commit_id");
-    let mut vm = VM::new(vm_data_path.as_ref())?;
-    initialize_counter(&mut vm, &commit_id_file_path)
+    let vm = VM::new(vm_data_path.as_ref())?;
+    initialize_counter(&vm, &commit_id_file_path)
 }
 
 fn confirm<P: AsRef<str>>(vm_data_path: P) -> Result<(), piecrust::Error> {
     let commit_id_file_path =
         PathBuf::from(vm_data_path.as_ref()).join("commit_id");
-    let mut vm = VM::new(vm_data_path.as_ref())?;
-    let mut session = vm.session();
-    confirm_counter(&mut session, &commit_id_file_path)
+    let vm = VM::new(vm_data_path.as_ref())?;
+    confirm_counter(&vm, &commit_id_file_path)
 }
 
 fn main() -> Result<(), piecrust::Error> {
@@ -97,7 +93,9 @@ fn main() -> Result<(), piecrust::Error> {
         "confirm" => confirm(&vm_data_path)?,
         "test_both" => {
             initialize(&vm_data_path)?;
-            confirm(&vm_data_path)?;
+            for _ in 0..10 {
+                confirm(&vm_data_path)?;
+            }
         }
         _ => {
             println!("{}", MESSAGE);

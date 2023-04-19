@@ -4,23 +4,29 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use piecrust::{module_bytecode, Error, VM};
-use piecrust_uplink::{ModuleId, RawQuery, RawResult, RawTransaction};
+use piecrust::{module_bytecode, DeployData, Error, VM};
+use piecrust_uplink::{
+    ModuleError, ModuleId, RawQuery, RawResult, RawTransaction,
+};
+
+const OWNER: [u8; 32] = [0u8; 32];
 
 #[test]
 pub fn cc_read_counter() -> Result<(), Error> {
-    let mut vm = VM::ephemeral()?;
+    let vm = VM::ephemeral()?;
 
-    let mut session = vm.session();
+    let mut session = vm.genesis_session();
 
-    let counter_id = session.deploy(module_bytecode!("counter"))?;
+    let counter_id = session
+        .deploy(module_bytecode!("counter"), DeployData::builder(OWNER))?;
 
     // read direct
 
     let value: i64 = session.query(counter_id, "read_value", &())?;
     assert_eq!(value, 0xfc);
 
-    let center_id = session.deploy(module_bytecode!("callcenter"))?;
+    let center_id = session
+        .deploy(module_bytecode!("callcenter"), DeployData::builder(OWNER))?;
 
     // read value through callcenter
     let value: i64 = session.query(center_id, "query_counter", &counter_id)?;
@@ -31,17 +37,19 @@ pub fn cc_read_counter() -> Result<(), Error> {
 
 #[test]
 pub fn cc_direct() -> Result<(), Error> {
-    let mut vm = VM::ephemeral()?;
+    let vm = VM::ephemeral()?;
 
-    let mut session = vm.session();
+    let mut session = vm.genesis_session();
 
-    let counter_id = session.deploy(module_bytecode!("counter"))?;
+    let counter_id = session
+        .deploy(module_bytecode!("counter"), DeployData::builder(OWNER))?;
 
     // read value directly
     let value: i64 = session.query(counter_id, "read_value", &())?;
     assert_eq!(value, 0xfc);
 
-    let center_id = session.deploy(module_bytecode!("callcenter"))?;
+    let center_id = session
+        .deploy(module_bytecode!("callcenter"), DeployData::builder(OWNER))?;
 
     // read value through callcenter
     let value: i64 = session.query(center_id, "query_counter", &counter_id)?;
@@ -63,11 +71,12 @@ pub fn cc_direct() -> Result<(), Error> {
 
 #[test]
 pub fn cc_passthrough() -> Result<(), Error> {
-    let mut vm = VM::ephemeral()?;
+    let vm = VM::ephemeral()?;
 
-    let mut session = vm.session();
+    let mut session = vm.genesis_session();
 
-    let center_id = session.deploy(module_bytecode!("callcenter"))?;
+    let center_id = session
+        .deploy(module_bytecode!("callcenter"), DeployData::builder(OWNER))?;
 
     let rq = RawQuery::new("read_value", ());
 
@@ -80,12 +89,14 @@ pub fn cc_passthrough() -> Result<(), Error> {
 
 #[test]
 pub fn cc_delegated_read() -> Result<(), Error> {
-    let mut vm = VM::ephemeral()?;
+    let vm = VM::ephemeral()?;
 
-    let mut session = vm.session();
+    let mut session = vm.genesis_session();
 
-    let counter_id = session.deploy(module_bytecode!("counter"))?;
-    let center_id = session.deploy(module_bytecode!("callcenter"))?;
+    let counter_id = session
+        .deploy(module_bytecode!("counter"), DeployData::builder(OWNER))?;
+    let center_id = session
+        .deploy(module_bytecode!("callcenter"), DeployData::builder(OWNER))?;
 
     let rq = RawQuery::new("read_value", ());
 
@@ -105,15 +116,17 @@ pub fn cc_delegated_read() -> Result<(), Error> {
 
 #[test]
 pub fn cc_delegated_write() -> Result<(), Error> {
-    let mut vm = VM::ephemeral()?;
+    let vm = VM::ephemeral()?;
 
     // increment through delegated transaction
 
     let rt = RawTransaction::new("increment", ());
 
-    let mut session = vm.session();
-    let counter_id = session.deploy(module_bytecode!("counter"))?;
-    let center_id = session.deploy(module_bytecode!("callcenter"))?;
+    let mut session = vm.genesis_session();
+    let counter_id = session
+        .deploy(module_bytecode!("counter"), DeployData::builder(OWNER))?;
+    let center_id = session
+        .deploy(module_bytecode!("callcenter"), DeployData::builder(OWNER))?;
 
     session.transact(center_id, "delegate_transaction", &(counter_id, rt))?;
 
@@ -126,11 +139,12 @@ pub fn cc_delegated_write() -> Result<(), Error> {
 
 #[test]
 pub fn cc_self() -> Result<(), Error> {
-    let mut vm = VM::ephemeral()?;
+    let vm = VM::ephemeral()?;
 
-    let mut session = vm.session();
+    let mut session = vm.genesis_session();
 
-    let center_id = session.deploy(module_bytecode!("callcenter"))?;
+    let center_id = session
+        .deploy(module_bytecode!("callcenter"), DeployData::builder(OWNER))?;
 
     // am i calling myself
     let calling_self: bool =
@@ -142,25 +156,29 @@ pub fn cc_self() -> Result<(), Error> {
 
 #[test]
 pub fn cc_caller() -> Result<(), Error> {
-    let mut vm = VM::ephemeral()?;
+    let vm = VM::ephemeral()?;
 
-    let mut session = vm.session();
+    let mut session = vm.genesis_session();
 
-    let center_id = session.deploy(module_bytecode!("callcenter"))?;
+    let center_id = session
+        .deploy(module_bytecode!("callcenter"), DeployData::builder(OWNER))?;
 
-    let value: bool = session.query(center_id, "call_self", &())?;
-    assert!(value);
+    let value: Result<bool, ModuleError> =
+        session.query(center_id, "call_self", &())?;
+
+    assert!(value.expect("should succeed"));
 
     Ok(())
 }
 
 #[test]
 pub fn cc_caller_uninit() -> Result<(), Error> {
-    let mut vm = VM::ephemeral()?;
+    let vm = VM::ephemeral()?;
 
-    let mut session = vm.session();
+    let mut session = vm.genesis_session();
 
-    let center_id = session.deploy(module_bytecode!("callcenter"))?;
+    let center_id = session
+        .deploy(module_bytecode!("callcenter"), DeployData::builder(OWNER))?;
 
     let caller: ModuleId = session.query(center_id, "return_caller", &())?;
     assert_eq!(caller, ModuleId::uninitialized());
@@ -170,11 +188,12 @@ pub fn cc_caller_uninit() -> Result<(), Error> {
 
 #[test]
 pub fn cc_self_id() -> Result<(), Error> {
-    let mut vm = VM::ephemeral()?;
+    let vm = VM::ephemeral()?;
 
-    let mut session = vm.session();
+    let mut session = vm.genesis_session();
 
-    let center_id = session.deploy(module_bytecode!("callcenter"))?;
+    let center_id = session
+        .deploy(module_bytecode!("callcenter"), DeployData::builder(OWNER))?;
 
     let value: ModuleId = session.query(center_id, "return_self_id", &())?;
     assert_eq!(value, center_id);

@@ -47,7 +47,7 @@ mod ext {
             name: *const u8,
             name_len: u32,
             arg_len: u32,
-        ) -> u32;
+        ) -> i32;
         pub(crate) fn hq(name: *const u8, name_len: u32, arg_len: u32) -> u32;
         pub(crate) fn hd(name: *const u8, name_len: u32) -> u32;
         pub(crate) fn t(
@@ -55,24 +55,65 @@ mod ext {
             name: *const u8,
             name_len: u32,
             arg_len: u32,
-        ) -> u32;
+        ) -> i32;
 
         pub(crate) fn height();
         pub(crate) fn caller();
         pub(crate) fn emit(arg_len: u32);
         pub(crate) fn limit() -> u64;
         pub(crate) fn spent() -> u64;
+        pub(crate) fn owner() -> u32;
+        pub(crate) fn self_id() -> u32;
     }
 }
 
 use crate::ModuleId;
 use core::ops::{Deref, DerefMut};
 
-#[derive(Debug, Archive, Serialize, Deserialize)]
+/// The error possibly returned on an inter-contract-call.
+//
+// We do **not use rkyv** to pass it to the module from the VM. Instead, we use
+// use the calling convention being able to pass negative numbers to signal a
+// failure.
+//
+// The contract writer, however, is free to pass it around and react to it if it
+// wishes.
+#[derive(Debug, Clone, Copy, Archive, Serialize, Deserialize)]
 #[archive_attr(derive(CheckBytes))]
 pub enum ModuleError {
     Panic,
     OutOfGas,
+    Other(i32),
+}
+
+impl ModuleError {
+    /// Returns a module error from a return `code`.
+    ///
+    /// # Panic
+    /// Panics if the value is larger than or equal to 0.
+    pub fn from_code(code: i32) -> Self {
+        if code >= 0 {
+            panic!(
+                "A `ModuleError` is never equal or larger than 0, got {code}"
+            );
+        }
+
+        match code {
+            -1 => Self::Panic,
+            -2 => Self::OutOfGas,
+            v => Self::Other(v),
+        }
+    }
+}
+
+impl From<ModuleError> for i32 {
+    fn from(err: ModuleError) -> Self {
+        match err {
+            ModuleError::Panic => -1,
+            ModuleError::OutOfGas => -2,
+            ModuleError::Other(c) => c,
+        }
+    }
 }
 
 pub struct State<S> {
@@ -99,9 +140,9 @@ impl<S> DerefMut for State<S> {
     }
 }
 
-pub fn host_query<Arg, Ret>(name: &str, arg: Arg) -> Ret
+pub fn host_query<A, Ret>(name: &str, arg: A) -> Ret
 where
-    Arg: for<'a> Serialize<StandardBufSerializer<'a>>,
+    A: for<'a> Serialize<StandardBufSerializer<'a>>,
     Ret: Archive,
     Ret::Archived: Deserialize<Ret, Infallible>,
 {
@@ -127,13 +168,13 @@ where
     })
 }
 
-pub fn query<Arg, Ret>(
+pub fn query<A, Ret>(
     mod_id: ModuleId,
     name: &str,
-    arg: &Arg,
+    arg: &A,
 ) -> Result<Ret, ModuleError>
 where
-    Arg: for<'a> Serialize<StandardBufSerializer<'a>>,
+    A: for<'a> Serialize<StandardBufSerializer<'a>>,
     Ret: Archive,
     Ret::Archived: Deserialize<Ret, Infallible>,
 {
@@ -158,6 +199,10 @@ where
         )
     };
 
+    if ret_len < 0 {
+        return Err(ModuleError::from_code(ret_len));
+    }
+
     with_arg_buf(|buf| {
         let slice = &buf[..ret_len as usize];
         let ret = unsafe { archived_root::<Ret>(slice) };
@@ -181,12 +226,16 @@ pub fn query_raw(
         ext::q(&mod_id.as_bytes()[0], &name[0], name.len() as u32, arg_len)
     };
 
+    if ret_len < 0 {
+        return Err(ModuleError::from_code(ret_len));
+    }
+
     with_arg_buf(|buf| Ok(RawResult::new(&buf[..ret_len as usize])))
 }
 
 /// Returns data made available by the host under the given name. The type `D`
 /// must be correctly specified, otherwise undefined behavior will occur.
-pub fn host_data<D>(name: &str) -> D
+pub fn meta_data<D>(name: &str) -> Option<D>
 where
     D: Archive,
     D::Archived: Deserialize<D, Infallible>,
@@ -197,12 +246,13 @@ where
     let name_len = name_slice.len() as u32;
 
     unsafe {
-        let arg_pos = ext::hd(name, name_len) as usize;
-
-        with_arg_buf(|buf| {
-            let ret = archived_root::<D>(&buf[..arg_pos]);
-            ret.deserialize(&mut Infallible).expect("Infallible")
-        })
+        match ext::hd(name, name_len) as usize {
+            0 => None,
+            arg_pos => Some(with_arg_buf(|buf| {
+                let ret = archived_root::<D>(&buf[..arg_pos]);
+                ret.deserialize(&mut Infallible).expect("Infallible")
+            })),
+        }
     }
 }
 
@@ -215,6 +265,25 @@ pub fn height() -> u64 {
         };
         ret.deserialize(&mut Infallible).expect("Infallible")
     })
+}
+
+/// Return the current module's owner.
+pub fn owner() -> [u8; 32] {
+    let len = unsafe { ext::owner() } as usize;
+    with_arg_buf(|buf| {
+        let ret = unsafe { archived_root::<[u8; 32]>(&buf[..len]) };
+        ret.deserialize(&mut Infallible).expect("Infallible")
+    })
+}
+
+/// Return the current module's id.
+pub fn self_id() -> ModuleId {
+    let len = unsafe { ext::self_id() } as usize;
+    let id: [u8; 32] = with_arg_buf(|buf| {
+        let ret = unsafe { archived_root::<[u8; 32]>(&buf[..len]) };
+        ret.deserialize(&mut Infallible).expect("Infallible")
+    });
+    ModuleId::from(id)
 }
 
 /// Return the ID of the calling module. The returned id will be
@@ -277,22 +346,25 @@ impl<S> State<S> {
         let name = raw.name_bytes();
         let arg_len = raw.arg_bytes().len() as u32;
 
-        // ERROR?
         let ret_len = unsafe {
             ext::t(&mod_id.as_bytes()[0], &name[0], name.len() as u32, arg_len)
         };
 
+        if ret_len < 0 {
+            return Err(ModuleError::from_code(ret_len));
+        }
+
         with_arg_buf(|buf| Ok(RawResult::new(&buf[..ret_len as usize])))
     }
 
-    pub fn transact<Arg, Ret>(
+    pub fn transact<A, Ret>(
         &mut self,
         mod_id: ModuleId,
         name: &str,
-        arg: &Arg,
+        arg: &A,
     ) -> Result<Ret, ModuleError>
     where
-        Arg: for<'a> Serialize<StandardBufSerializer<'a>>,
+        A: for<'a> Serialize<StandardBufSerializer<'a>>,
         Ret: Archive,
         Ret::Archived: Deserialize<Ret, Infallible>,
     {
@@ -321,6 +393,10 @@ impl<S> State<S> {
                 arg_len,
             )
         };
+
+        if ret_len < 0 {
+            return Err(ModuleError::from_code(ret_len));
+        }
 
         with_arg_buf(|buf| {
             let slice = &buf[..ret_len as usize];

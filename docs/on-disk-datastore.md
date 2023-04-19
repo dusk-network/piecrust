@@ -1,196 +1,123 @@
 # On-Disk Store
 
-VM uses on disk store to manage commits and state persistence.
-A session can perform one commit before it ceases to exist.
-The commit is stored on disk and can be restored any time by another session.
-Session commits are always stored on disk yet their ids will not survive system restart.
-VM persist and restore mechanism allow for commits to be preserved when system is restarted.
-What follows is a more thorough explanation of how the on-disk store functions
-as we progress with session commits, restore and VM persist and restore functions.
+The VM uses an on-disk store to manage state persistence. The structure of this
+store will be explained in the following document, together with how session
+commitments affect the state.
 
-### Initial State
+### Genesis Commit
 
-Assume that we create a VM with a base directory path "/tmp/001".
-We deploy two modules with identifiers ModId1 and ModId2.
-We perform some transactions which change the state of memory,
-the state will be reflected in memory backing files which are also named ModId1 and ModId2 respectively.
-In real life ModId1 and ModId2 will look more like 64-characters long hexadecimal numbers.
-At this state the on-disk store looks as follows:
+Assume that we create a VM with a root directory path "/tmp/piecrust". We then
+proceed to start a "genesis session", and deploy two modules with identifiers
+`module_1` and `module_2`. After committing this session - with root `root_1`
+and, the directory will contain the following files:
 
-
-| Base directory                    | Files         | Comment                    |
-|-----------------------------------|---------------|----------------------------|
-| /tmp/001                          | ModId1        | mmap backing file          |
-|                                   | ModId2        | mmap backing file          |
-
-Here is how the contents of the directory will look like in real life:
 ```
-/tmp/001:
-912D69F5B63ECFDE1F70F25C45AD810D191D3381DC3012FB807FF926098A209E
-A2937AF0F0137F912F7569E28B2773563160DD99460A7E4DAA78E08B2DABFA80
+/tmp/piecrust/
+    root_1/
+        bytecode/ # Module bytecodes
+            module_1
+            module_2
+        memory/   # Module memories
+            module_1
+            module_2
+        index    # Module memory hashes
 ```
 
-### After Session Commit 1
+### Another Commit
 
-When we commit a session, modules' states are stored in respective files.
-In addition, files ModId1_last and ModId2_last are crated, as well as
-ModId1_last_id and ModId2_last_id.
-From now on, on module instantiation, corresponding files with postfix "_last" will be loaded
-to memory instead of normal memory initialization.
-Files with postfix "last_id" contain current last module commit id,
-which takes part in a merkle root of the VM's state calculation.
+When can then start a new session using `Root1` as a base commit, and make some
+modifications to the state by performing transactions. Let's say that we made
+some modifications to `module_1`'s memory, and deploy a new module with
+identifier `module_3`. We can then commit to those changes forming a new commit
+with `root_2`.
 
-| Base directory                    | Files         | Comment                                   |
-|-----------------------------------|---------------|-------------------------------------------|
-| /tmp/001                          | ModId1        | mmap backing file                         |
-|                                   | ModId1_Commit1|                                           |
-|                                   | ModId1_last   | points to commit1                         |
-|                                   | ModId1_last_id| contains id of commit1 for module ModId1  |
-|                                   | ModId2        | mmap backing file                         |
-|                                   | ModId2_Commit1|                                           |
-|                                   | ModId2_last   | points to commit1                         |
-|                                   | ModId2_last   | contains id of commit1 for module ModId2  |
+The directory will then look like this:
 
-Note that by "points to commitN", it is currently meant that the file has the same content as commitN file.
-In future implementations this semantics will be preserved yet actual technical mechanism will differ,
-for example, symbolic link or a postfix name will be used instead.
-
-Here is how the contents of the directory will look like in real life:
 ```
-/tmp/001:
-912D69F5B63ECFDE1F70F25C45AD810D191D3381DC3012FB807FF926098A209E
-912D69F5B63ECFDE1F70F25C45AD810D191D3381DC3012FB807FF926098A209E_E3FB8F23757660D140CD6E9945B29DF2C37FE2C40D39D236E1A5339151C5671C
-912D69F5B63ECFDE1F70F25C45AD810D191D3381DC3012FB807FF926098A209E_last
-912D69F5B63ECFDE1F70F25C45AD810D191D3381DC3012FB807FF926098A209E_last_id
-A2937AF0F0137F912F7569E28B2773563160DD99460A7E4DAA78E08B2DABFA80
-A2937AF0F0137F912F7569E28B2773563160DD99460A7E4DAA78E08B2DABFA80_591FF54F19C2783CB4EE07E0DA90A4D1572ED5ABBEC4C766A27A90E75C325BBA
-A2937AF0F0137F912F7569E28B2773563160DD99460A7E4DAA78E08B2DABFA80_last
-A2937AF0F0137F912F7569E28B2773563160DD99460A7E4DAA78E08B2DABFA80_last_id
+/tmp/piecrust/
+    root_1/
+        bytecode/
+            module_1
+            module_2
+        memory/
+            module_1
+            module_2
+        index
+    root_2/
+        bytecode/
+            module_1 # Hard link
+            module_2 # Hard link
+            module_3 # New module
+        memory/
+            module_1 # Hard link
+            module_1.diff # Delta
+            module_2 # Hard link
+            module_3
+        index
 ```
 
+To save space on disk, the `module_1.diff` file is a compressed delta between
+the contents of the memory on disk and what they would be in `root_2`. Coupled
+together with the hard linking of memories and bytecodes, this allows us to
+effectively maintain a commit history and allow for independent commit
+deletions, while maintaining a small file system footprint.
 
-### After Session Commit 2
+### Yet Another Commit...
 
-When we commit yet another session, additional commit files for the corresponding modules are created,
-and the "last" files are updated to point to these last commit files.
+We start yet another session, this time basing ourselves from `root_2`, and we make
+some changes to `module_2`. The
 
-| Base directory                    | Files         | Comment                                   |
-|-----------------------------------|---------------|-------------------------------------------|
-| /tmp/001                          | ModId1        | mmap backing file                         |
-|                                   | ModId1_Commit1|                                           |
-|                                   | ModId1_Commit2|                                           |
-|                                   | ModId1_last   | points to commit2                         |
-|                                   | ModId1_last_id| contains id of commit2 for module ModId1  |
-|                                   | ModId2        | mmap backing file                         |
-|                                   | ModId2_Commit1|                                           |
-|                                   | ModId2_Commit2|                                           |
-|                                   | ModId2_last   | points to commit2                         |
-|                                   | ModId2_last_id| contains id of commit2 for module ModId2  |
+When we commit yet another session, make some change additional commit files are created:
 
-Here is how the contents of the directory will look like in real life:
 ```
-/tmp/001:
-912D69F5B63ECFDE1F70F25C45AD810D191D3381DC3012FB807FF926098A209E
-912D69F5B63ECFDE1F70F25C45AD810D191D3381DC3012FB807FF926098A209E_17698D259DC35B01ECB4D676DE11B69FAD37B57EEA98045A6022E97EA2CEFB43
-912D69F5B63ECFDE1F70F25C45AD810D191D3381DC3012FB807FF926098A209E_E3FB8F23757660D140CD6E9945B29DF2C37FE2C40D39D236E1A5339151C5671C
-912D69F5B63ECFDE1F70F25C45AD810D191D3381DC3012FB807FF926098A209E_last
-912D69F5B63ECFDE1F70F25C45AD810D191D3381DC3012FB807FF926098A209E_last_id
-A2937AF0F0137F912F7569E28B2773563160DD99460A7E4DAA78E08B2DABFA80
-A2937AF0F0137F912F7569E28B2773563160DD99460A7E4DAA78E08B2DABFA80_591FF54F19C2783CB4EE07E0DA90A4D1572ED5ABBEC4C766A27A90E75C325BBA
-A2937AF0F0137F912F7569E28B2773563160DD99460A7E4DAA78E08B2DABFA80_D1BD8323DDC7B9B124EE2E8A47E65863DBCB98CAAB580A328D044C3801F974B2
-A2937AF0F0137F912F7569E28B2773563160DD99460A7E4DAA78E08B2DABFA80_last
-A2937AF0F0137F912F7569E28B2773563160DD99460A7E4DAA78E08B2DABFA80_last_id
+/tmp/piecrust/
+    root_1/*
+    root_2/
+        bytecode/
+            module_1
+            module_2
+            module_3
+        memory/
+            module_1
+            module_1.diff
+            module_2
+            module_3
+        index
+    root_3/
+        bytecode/
+            module_1
+            module_2
+            module_3
+        memory/
+            module_1
+            module_1.diff # Hard link
+            module_2
+            module_2.diff
+            module_3
+        index
 ```
 
-### After VM Persist
+### Index File
 
-VM Persist step leaves the on-disk storage unchanged with an exception that it
-adds a file named "commits" containing the Commits Store (described below). 
+The `index` file in all commit directories contains a map of all existing
+modules to their respective memory hashes. This is handy for avoiding IO
+operations when computing the root of the state.
 
-| Base directory                    | Files         | Comment                                   |
-|-----------------------------------|---------------|-------------------------------------------|
-| /tmp/001                          | ModId1        | mmap backing file                         |
-|                                   | ModId1_Commit1|                                           |
-|                                   | ModId1_Commit2|                                           |
-|                                   | ModId1_last   | points to commit2                         |
-|                                   | ModId1_last   | contains id of commit2 for module ModId1  |
-|                                   | ModId2        | mmap backing file                         |
-|                                   | ModId2_Commit1|                                           |
-|                                   | ModId2_Commit2|                                           |
-|                                   | ModId2_last   | points to commit2                         |
-|                                   | ModId2_last   | contains id of commit2 for module ModId2  |
-|                                   | commits       | contains commits' store                   |
+### Copy-on-write and Session concurrency 
 
+Copy-on-write memory mapped files - see [mmap](https://man7.org/linux/man-pages/man2/mmap.2.html) -
+can be leveraged to make commits read-only, while keeping changes in memory.
+Consequently, combined with the fact that commits are independent, sessions can
+be run concurrently, as long as they're synchronized with commit deletions - since
+deleting a commit while a session is "using it" would cause data corruption.
 
-### After VM Restore Commit 1
+### Glossary
 
-Restore to Commit1 step changes contents of the "last" files so that they
-point again to Commit1. Note that now:
-1) ModId1_last points to ModId1_Commit1
-2) ModId2_last points to ModId2_Commit1
-
- 
-From now on, upon module instantiation, Commit1 content will be loaded rather than Commit2.
-
-
-| Base directory                    | Files         | Comment                                   |
-|-----------------------------------|---------------|-------------------------------------------|
-| /tmp/001                          | ModId1        | mmap backing file                         |
-|                                   | ModId1_Commit1|                                           |
-|                                   | ModId1_Commit2|                                           |
-|                                   | ModId1_last   | points to commit1                         |
-|                                   | ModId1_last   | contains id of commit1 for module ModId1  |
-|                                   | ModId2        | mmap backing file                         |
-|                                   | ModId2_Commit1|                                           |
-|                                   | ModId2_Commit2|                                           |
-|                                   | ModId2_last   | points to commit1                         |
-|                                   | ModId2_last   | contains id of commit1 for module ModId2  |
-|                                   | commits       | contains commits' store                   |
-
-
-
-## Commits Store (On-disk as file 'commits' and in memory)
-
-In addition to module's state, we also need to store information about commits for
-particular modules for particular session commits. This database, a map of maps, 
-will be referred to as Commits Store. Below we explain how Commits Store is utilized.
-
-### Initial State
-
-Until the first session commit is done, Commits Store is empty.
-
-### After Session Commit 1
-
-After first commit, a map of maps is created, with session commits as primary keys, 
-and module ids as secondary keys. Commits Store allows for retrieving the following information:
-for a given session commit - which module commits correspond to particular modules.
-
-| Session Commits                   | Module Ids    | Module Commits             |
-|-----------------------------------|---------------|----------------------------|
-| Commit1                           | ModId1        | ModCommit1                 |
-|                                   | ModId2        | ModCommit1                 |
-
-
-### After Session Commit 2
-
-After second commit, a map of maps is further enriched with second commit.
-A particular module id has different module commits assigned depending on the session
-commit id requested.
-
-| Session Commits                   | Module Ids    | Module Commits             |
-|-----------------------------------|---------------|----------------------------|
-| Commit1                           | ModId1        | ModCommit1                 |
-|                                   | ModId2        | ModCommit1                 |
-| Commit2                           | ModId1        | ModCommit2                 |
-|                                   | ModId2        | ModCommit2                 |
-
-
-### After VM Persist
-
-VM persist does not change the contents of Commits Store, it only saves it to disk
-into a file named 'commits'.
-
-### After VM Restore Commit 1
-
-VM restore does not change the contents of Commits Store. It loads the contents
-of a file named 'commits' into memory instance of Commits Store.
+- **Commit** - state after a session
+- **Genesis Session** - a session without a commit preceding it
+- **Memory** - a module's WASM linear memory
+- **Module** - the pair of WASM bytecode and memory
+- **Root** - the merkle root of all memories in the state
+- **State** - a collection of modules
+- **Session** - a series of modifications to a commit
+- **VM** - the `π-crust` virtual machine

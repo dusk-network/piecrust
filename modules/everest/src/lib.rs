@@ -10,22 +10,18 @@
 #![no_std]
 
 use piecrust_uplink as uplink;
-use uplink::{ModuleId, State};
+use uplink::State;
 
 /// Struct that describes the state of the everest module
 pub struct Height;
-
-/// Module ID, initialized by the host when the module is deployed
-#[no_mangle]
-static SELF_ID: ModuleId = ModuleId::uninitialized();
 
 /// State of the everest module
 static mut STATE: State<Height> = State::new(Height);
 
 impl Height {
     /// Query the host for the current block height
-    pub fn get_height(&self) -> u64 {
-        uplink::host_data::<u64>("height")
+    pub fn get_height(&self) -> Option<u64> {
+        uplink::meta_data::<u64>("height")
     }
 }
 

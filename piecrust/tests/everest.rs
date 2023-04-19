@@ -4,21 +4,34 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use piecrust::{module_bytecode, Error, VM};
+use piecrust::{module_bytecode, DeployData, Error, VM};
+
+const OWNER: [u8; 32] = [0u8; 32];
 
 #[test]
 pub fn height() -> Result<(), Error> {
-    let mut vm = VM::ephemeral()?;
+    let vm = VM::ephemeral()?;
 
-    let mut session = vm.session();
+    let mut session = vm.genesis_session();
 
-    let id = session.deploy(module_bytecode!("everest"))?;
+    let id = session
+        .deploy(module_bytecode!("everest"), DeployData::builder(OWNER))?;
 
     for h in 0u64..1024 {
         session.set_meta("height", h);
-        let height: u64 = session.transact(id, "get_height", &())?;
-        assert_eq!(height, h);
+        let height: Option<u64> = session.transact(id, "get_height", &())?;
+        assert_eq!(height.unwrap(), h);
     }
 
+    Ok(())
+}
+#[test]
+pub fn meta_data_optionality() -> Result<(), Error> {
+    let vm = VM::ephemeral()?;
+    let mut session = vm.genesis_session();
+    let id = session
+        .deploy(module_bytecode!("everest"), DeployData::builder(OWNER))?;
+    let height: Option<u64> = session.transact(id, "get_height", &())?;
+    assert!(height.is_none());
     Ok(())
 }

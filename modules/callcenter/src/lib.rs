@@ -18,10 +18,6 @@ use uplink::{
 /// Struct that describes the state of the Callcenter module
 pub struct Callcenter;
 
-/// Module ID, initialized by the host when the module is deployed
-#[no_mangle]
-static SELF_ID: ModuleId = ModuleId::uninitialized();
-
 /// State of the Callcenter module
 static mut STATE: State<Callcenter> = State::new(Callcenter);
 
@@ -82,7 +78,8 @@ impl Callcenter {
         let caller = uplink::caller();
 
         match caller.is_uninitialized() {
-            true => uplink::query(self_id, "call_self", &()),
+            true => uplink::query(self_id, "call_self", &())
+                .expect("querying self should succeed"),
             false => Ok(caller == self_id),
         }
     }

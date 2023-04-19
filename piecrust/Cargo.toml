@@ -1,10 +1,19 @@
 [package]
 name = "piecrust"
-version = "0.1.0"
+description = """
+Dusk's virtual machine for running WASM smart contracts.\
+"""
+categories = ["wasm", "no-std", "cryptography::cryptocurrencies"]
+keywords = ["virtual", "machine", "smart", "contract", "wasm"]
+
+repository = "https://github.com/dusk-network/piecrust"
+version = "0.2.0"
+
 edition = "2021"
+license = "MPL-2.0"
 
 [dependencies]
-piecrust-uplink = { path = "../piecrust-uplink" }
+piecrust-uplink = { version = "0.2.0", path = "../piecrust-uplink" }
 
 wasmer = "3.1"
 wasmer-vm = "3.1"
@@ -16,10 +25,13 @@ rkyv = { version = "0.7", features = ["size_32", "validation"] }
 parking_lot = "0.12"
 blake3 = "1"
 colored = "2"
-libc = { version = "^0.2", default-features = false }
-region = "3"
+libc = "0.2"
 tempfile = "3"
 thiserror = "1"
+rand = "0.8"
+qbsdiff = "1.4"
+flate2 = "1.0"
+hex = "0.4"
 
 [dev-dependencies]
 criterion = "0.4"

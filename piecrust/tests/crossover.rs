@@ -4,44 +4,62 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use piecrust::{module_bytecode, Error, RawTransaction, VM};
+use piecrust::{module_bytecode, DeployData, Error, VM};
+use piecrust_uplink::ModuleId;
+
+const OWNER: [u8; 32] = [0u8; 32];
+
+const CROSSOVER_ONE: ModuleId = {
+    let mut bytes = [0; 32];
+    bytes[0] = 0x01;
+    ModuleId::from_bytes(bytes)
+};
+
+const CROSSOVER_TWO: ModuleId = {
+    let mut bytes = [0; 32];
+    bytes[0] = 0x02;
+    ModuleId::from_bytes(bytes)
+};
 
 #[test]
 fn crossover() -> Result<(), Error> {
-    let mut vm = VM::ephemeral()?;
+    let vm = VM::ephemeral()?;
 
-    let mut session = vm.session();
+    let mut session = vm.genesis_session();
+    session.set_point_limit(u64::MAX / 100);
 
-    let contract_id = session.deploy(module_bytecode!("crossover"))?;
-
-    // Check that initial crossover value is 7, as hardcoded in the module
-    assert_eq!(7, session.query::<_, i32>(contract_id, "crossover", &())?);
-
-    // Update crossover, the result is the old value
-    let res = session.transact::<_, i32>(contract_id, "set_crossover", &9)?;
-    assert_eq!(res, 7);
-    assert_eq!(9, session.query::<_, i32>(contract_id, "crossover", &())?);
-
-    // Test self_call_test_a
-    let res =
-        session.transact::<_, i32>(contract_id, "self_call_test_a", &10)?;
-    assert_eq!(res, 9);
-    assert_eq!(10, session.query::<_, i32>(contract_id, "crossover", &())?);
-
-    // Test update_and_panic
-    let result =
-        session.transact::<_, ()>(contract_id, "update_and_panic", &11);
-    assert!(result.is_err());
-    assert_eq!(10, session.query::<_, i32>(contract_id, "crossover", &())?);
-
-    // Test set_crossover as RawTransaction
-    let raw = RawTransaction::new("set_crossover", 12);
-    session.transact::<_, ()>(
-        contract_id,
-        "self_call_test_b",
-        &(contract_id, raw),
+    session.deploy(
+        module_bytecode!("crossover"),
+        DeployData::builder(OWNER).module_id(CROSSOVER_ONE),
     )?;
-    assert_eq!(12, session.query::<_, i32>(contract_id, "crossover", &())?);
+    session.deploy(
+        module_bytecode!("crossover"),
+        DeployData::builder(OWNER).module_id(CROSSOVER_TWO),
+    )?;
+
+    // These value should not be set to `INITIAL_VALUE` in the contract.
+    const CROSSOVER_TO_SET: i32 = 42;
+    const CROSSOVER_TO_SET_FORWARD: i32 = 314;
+    const CROSSOVER_TO_SET_BACK: i32 = 272;
+
+    // This call will fail if the state is inconsistent. Check the contract for
+    // more details.
+    session.transact::<_, ()>(
+        CROSSOVER_ONE,
+        "check_consistent_state_on_errors",
+        &(
+            CROSSOVER_TWO,
+            CROSSOVER_TO_SET,
+            CROSSOVER_TO_SET_FORWARD,
+            CROSSOVER_TO_SET_BACK,
+        ),
+    )?;
+
+    assert_eq!(
+        session.query::<_, i32>(CROSSOVER_ONE, "crossover", &())?,
+        CROSSOVER_TO_SET,
+        "The crossover should still be set even though the other contract panicked"
+    );
 
     Ok(())
 }

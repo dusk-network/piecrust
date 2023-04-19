@@ -1,8 +1,15 @@
 [package]
 name = "piecrust-uplink"
-version = "0.1.0"
-edition = "2021"
+description = """
+Build smart contracts directly on top of Dusk's `piecrust` virtual machine.\
+"""
+categories = ["wasm", "no-std", "cryptography::cryptocurrencies"]
+keywords = ["virtual", "machine", "smart", "contract", "wasm"]
 
+repository = "https://github.com/dusk-network/piecrust"
+version = "0.2.0"
+
+edition = "2021"
 license = "MPL-2.0"
 
 [dependencies]

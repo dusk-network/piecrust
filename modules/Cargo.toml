@@ -2,6 +2,7 @@
 members = [
     "box",
     "callcenter",
+    "constructor",
     "counter",
     "debugger",
     "eventer",
@@ -9,6 +10,7 @@ members = [
     "fallible_counter",    
     "fibonacci",
     "host",
+    "metadata",
     "micro",
     "crossover",
     "spender",

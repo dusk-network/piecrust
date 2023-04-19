@@ -4,15 +4,18 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use piecrust::{module_bytecode, Error, VM};
+use piecrust::{module_bytecode, DeployData, Error, VM};
+
+const OWNER: [u8; 32] = [0u8; 32];
 
 #[test]
 pub fn push_pop() -> Result<(), Error> {
-    let mut vm = VM::ephemeral()?;
+    let vm = VM::ephemeral()?;
 
-    let mut session = vm.session();
+    let mut session = vm.genesis_session();
 
-    let id = session.deploy(module_bytecode!("stack"))?;
+    let id = session
+        .deploy(module_bytecode!("stack"), DeployData::builder(OWNER))?;
 
     let val = 42;
 
@@ -32,11 +35,12 @@ pub fn push_pop() -> Result<(), Error> {
 
 #[test]
 pub fn multi_push_pop() -> Result<(), Error> {
-    let mut vm = VM::ephemeral()?;
+    let vm = VM::ephemeral()?;
 
-    let mut session = vm.session();
+    let mut session = vm.genesis_session();
 
-    let id = session.deploy(module_bytecode!("stack"))?;
+    let id = session
+        .deploy(module_bytecode!("stack"), DeployData::builder(OWNER))?;
 
     const N: i32 = 16;
 
