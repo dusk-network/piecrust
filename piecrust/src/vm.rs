@@ -106,10 +106,10 @@ impl VM {
     ///
     /// [`Session`]: Session
     /// [`genesis_session`]: VM::genesis_session
-    pub fn session<D>(&self, data: D) -> Result<Session, Error>
-    where
-        D: Into<SessionData>,
-    {
+    pub fn session(
+        &self,
+        data: impl Into<SessionData>,
+    ) -> Result<Session, Error> {
         let data = data.into();
         let module_session = match data.base {
             Some(base) => self

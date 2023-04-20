@@ -12,7 +12,7 @@ const OWNER: [u8; 32] = [0u8; 32];
 pub fn height() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 
-    const HEIGHT: u64 = 384u64;
+    const HEIGHT: u64 = 29_000u64;
     let mut session =
         vm.session(SessionData::builder().insert("height", HEIGHT))?;
 
