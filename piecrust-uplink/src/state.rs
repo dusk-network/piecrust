@@ -82,7 +82,7 @@ use core::ops::{Deref, DerefMut};
 #[archive_attr(derive(CheckBytes))]
 pub enum ModuleError {
     PANIC,
-    OUT_OF_GAS,
+    OutOfGas,
     OTHER(i32),
 }
 
@@ -100,7 +100,7 @@ impl ModuleError {
 
         match code {
             -1 => Self::PANIC,
-            -2 => Self::OUT_OF_GAS,
+            -2 => Self::OutOfGas,
             v => Self::OTHER(v),
         }
     }
@@ -110,7 +110,7 @@ impl From<ModuleError> for i32 {
     fn from(err: ModuleError) -> Self {
         match err {
             ModuleError::PANIC => -1,
-            ModuleError::OUT_OF_GAS => -2,
+            ModuleError::OutOfGas => -2,
             ModuleError::OTHER(c) => c,
         }
     }
