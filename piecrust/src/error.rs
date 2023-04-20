@@ -120,8 +120,8 @@ impl From<Error> for ModuleError {
     fn from(err: Error) -> Self {
         // TODO implement this fully
         match err {
-            Error::OutOfPoints => Self::OutOfGas,
-            _ => Self::Other(OTHER_STATUS_CODE),
+            Error::OutOfPoints => Self::OUT_OF_GAS,
+            _ => Self::OTHER(OTHER_STATUS_CODE),
         }
     }
 }
