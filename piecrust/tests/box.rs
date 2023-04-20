@@ -4,7 +4,7 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use piecrust::{module_bytecode, DeployData, Error, VM};
+use piecrust::{module_bytecode, Error, ModuleData, SessionData, VM};
 
 const OWNER: [u8; 32] = [0u8; 32];
 
@@ -12,10 +12,10 @@ const OWNER: [u8; 32] = [0u8; 32];
 pub fn box_set_get() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 
-    let mut session = vm.genesis_session();
+    let mut session = vm.session(SessionData::builder())?;
 
     let id =
-        session.deploy(module_bytecode!("box"), DeployData::builder(OWNER))?;
+        session.deploy(module_bytecode!("box"), ModuleData::builder(OWNER))?;
 
     let value: Option<i16> = session.query(id, "get", &())?;
 

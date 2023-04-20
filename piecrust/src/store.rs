@@ -28,7 +28,7 @@ pub use bytecode::Bytecode;
 use diff::diff;
 pub use memory::Memory;
 pub use metadata::Metadata;
-use module_session::ModuleData;
+use module_session::ModuleDataEntry;
 pub use module_session::ModuleSession;
 pub use objectcode::Objectcode;
 use piecrust_uplink::ModuleId;
@@ -290,7 +290,7 @@ pub(crate) struct Commit {
 
 pub(crate) enum Call {
     Commit {
-        modules: BTreeMap<ModuleId, ModuleData>,
+        modules: BTreeMap<ModuleId, ModuleDataEntry>,
         base: Option<(Root, Commit)>,
         replier: mpsc::SyncSender<io::Result<(Root, Commit)>>,
     },
@@ -471,7 +471,7 @@ fn write_commit<P: AsRef<Path>>(
     root_dir: P,
     commits: &mut BTreeMap<Root, Commit>,
     base: Option<(Root, Commit)>,
-    commit_modules: BTreeMap<ModuleId, ModuleData>,
+    commit_modules: BTreeMap<ModuleId, ModuleDataEntry>,
 ) -> io::Result<(Root, Commit)> {
     let root_dir = root_dir.as_ref();
 
@@ -510,7 +510,7 @@ fn write_commit_inner<P: AsRef<Path>>(
     commit_dir: P,
     base: Option<(Root, Commit)>,
     modules: BTreeMap<ModuleId, Root>,
-    commit_modules: BTreeMap<ModuleId, ModuleData>,
+    commit_modules: BTreeMap<ModuleId, ModuleDataEntry>,
 ) -> io::Result<Commit> {
     let root_dir = root_dir.as_ref();
     let commit_dir = commit_dir.as_ref();
@@ -695,7 +695,7 @@ fn compute_root<'a, I>(
     modules: I,
 ) -> (Root, BTreeMap<ModuleId, Root>)
 where
-    I: IntoIterator<Item = (&'a ModuleId, &'a ModuleData)>,
+    I: IntoIterator<Item = (&'a ModuleId, &'a ModuleDataEntry)>,
 {
     let iter = modules.into_iter();
 

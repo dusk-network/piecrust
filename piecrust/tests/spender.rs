@@ -4,7 +4,7 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use piecrust::{module_bytecode, DeployData, Error, VM};
+use piecrust::{module_bytecode, Error, ModuleData, SessionData, VM};
 
 const OWNER: [u8; 32] = [0u8; 32];
 
@@ -12,12 +12,12 @@ const OWNER: [u8; 32] = [0u8; 32];
 pub fn points_get_used() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 
-    let mut session = vm.genesis_session();
+    let mut session = vm.session(SessionData::builder())?;
 
     let counter_id = session
-        .deploy(module_bytecode!("counter"), DeployData::builder(OWNER))?;
+        .deploy(module_bytecode!("counter"), ModuleData::builder(OWNER))?;
     let center_id = session
-        .deploy(module_bytecode!("callcenter"), DeployData::builder(OWNER))?;
+        .deploy(module_bytecode!("callcenter"), ModuleData::builder(OWNER))?;
 
     session.query::<_, i64>(counter_id, "read_value", &())?;
     let counter_spent = session.spent();
@@ -34,10 +34,10 @@ pub fn points_get_used() -> Result<(), Error> {
 pub fn fails_with_out_of_points() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 
-    let mut session = vm.genesis_session();
+    let mut session = vm.session(SessionData::builder())?;
 
     let counter_id = session
-        .deploy(module_bytecode!("counter"), DeployData::builder(OWNER))?;
+        .deploy(module_bytecode!("counter"), ModuleData::builder(OWNER))?;
 
     session.set_point_limit(0);
 
@@ -56,10 +56,10 @@ pub fn limit_and_spent() -> Result<(), Error> {
 
     const LIMIT: u64 = 10000;
 
-    let mut session = vm.genesis_session();
+    let mut session = vm.session(SessionData::builder())?;
 
     let spender_id = session
-        .deploy(module_bytecode!("spender"), DeployData::builder(OWNER))?;
+        .deploy(module_bytecode!("spender"), ModuleData::builder(OWNER))?;
 
     session.set_point_limit(LIMIT);
 

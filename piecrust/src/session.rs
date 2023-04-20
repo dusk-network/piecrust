@@ -26,7 +26,7 @@ use wasmer_types::WASM_PAGE_SIZE;
 
 use crate::event::Event;
 use crate::instance::WrappedInstance;
-use crate::module::{DeployData, ModuleMetadata, WrappedModule};
+use crate::module::{ModuleData, ModuleMetadata, WrappedModule};
 use crate::store::{ModuleSession, Objectcode};
 use crate::types::StandardBufSerializer;
 use crate::vm::HostQueries;
@@ -63,7 +63,7 @@ pub struct Session {
     instance_map: BTreeMap<ModuleId, (*mut WrappedInstance, u64)>,
     debug: Vec<String>,
     events: Vec<Event>,
-    data: SessionMetadata,
+    data: SessionData,
 
     module_session: ModuleSession,
     host_queries: HostQueries,
@@ -86,13 +86,14 @@ impl Session {
     pub(crate) fn new(
         module_session: ModuleSession,
         host_queries: HostQueries,
+        data: SessionData,
     ) -> Self {
         Session {
             call_stack: CallStack::new(),
             instance_map: BTreeMap::new(),
             debug: vec![],
             events: vec![],
-            data: SessionMetadata::new(),
+            data,
             module_session,
             host_queries,
             limit: DEFAULT_LIMIT,
@@ -120,7 +121,7 @@ impl Session {
     ) -> Result<ModuleId, Error>
     where
         A: 'a + for<'b> Serialize<StandardBufSerializer<'b>>,
-        D: Into<DeployData<'a, A>>,
+        D: Into<ModuleData<'a, A>>,
     {
         let mut deploy_data = deploy_data.into();
 
@@ -169,15 +170,15 @@ impl Session {
         }
 
         let wrapped_module = WrappedModule::new(bytecode, None::<Objectcode>)?;
-        let metadata = ModuleMetadata { module_id, owner };
-        let metadata_bytes = Self::serialize_data(&metadata);
+        let module_metadata = ModuleMetadata { module_id, owner };
+        let metadata_bytes = Self::serialize_data(&module_metadata);
 
         self.module_session
             .deploy(
                 module_id,
                 bytecode,
                 wrapped_module.as_bytes(),
-                metadata,
+                module_metadata,
                 metadata_bytes.as_slice(),
             )
             .map_err(|err| PersistenceError(Arc::new(err)))?;
@@ -529,9 +530,7 @@ impl Session {
         c(&self.debug)
     }
 
-    /// Returns the value of a metadata item previously set using [`set_meta`].
-    ///
-    /// [`set_meta`]: Session::set_meta
+    /// Returns the value of a metadata item.
     pub fn meta(&self, name: &str) -> Option<Vec<u8>> {
         self.data.get(name)
     }
@@ -553,17 +552,6 @@ impl Session {
         let pos = serializer.pos();
 
         buf[..pos].to_vec()
-    }
-
-    /// Sets a metadata item with the given `name` and `value`. These pieces of
-    /// data are then made available to modules for querying.
-    pub fn set_meta<S, V>(&mut self, name: S, value: V)
-    where
-        S: Into<Cow<'static, str>>,
-        V: for<'a> Serialize<StandardBufSerializer<'a>>,
-    {
-        let data = Self::serialize_data(&value);
-        self.data.insert(name, data);
     }
 
     /// Increment the call execution count.
@@ -757,8 +745,11 @@ impl Session {
         Ok(ret)
     }
 
-    pub fn metadata(&self, module_id: &ModuleId) -> Option<&ModuleMetadata> {
-        self.module_session.metadata(module_id)
+    pub fn module_metadata(
+        &self,
+        module_id: &ModuleId,
+    ) -> Option<&ModuleMetadata> {
+        self.module_session.module_metadata(module_id)
     }
 }
 
@@ -803,26 +794,56 @@ struct Call {
     limit: u64,
 }
 
-#[derive(Debug)]
-pub struct SessionMetadata {
+#[derive(Debug, Default)]
+pub struct SessionData {
     data: BTreeMap<Cow<'static, str>, Vec<u8>>,
+    pub base: Option<[u8; 32]>,
 }
 
-impl SessionMetadata {
-    fn new() -> Self {
-        Self {
+impl SessionData {
+    pub fn builder() -> SessionDataBuilder {
+        SessionDataBuilder {
             data: BTreeMap::new(),
+            base: None,
         }
-    }
-
-    fn insert<S>(&mut self, name: S, data: Vec<u8>)
-    where
-        S: Into<Cow<'static, str>>,
-    {
-        self.data.insert(name.into(), data);
     }
 
     fn get(&self, name: &str) -> Option<Vec<u8>> {
         self.data.get(name).cloned()
+    }
+}
+
+impl From<SessionDataBuilder> for SessionData {
+    fn from(builder: SessionDataBuilder) -> Self {
+        builder.build()
+    }
+}
+
+pub struct SessionDataBuilder {
+    data: BTreeMap<Cow<'static, str>, Vec<u8>>,
+    base: Option<[u8; 32]>,
+}
+
+impl SessionDataBuilder {
+    pub fn insert<S, V>(mut self, name: S, value: V) -> Self
+    where
+        S: Into<Cow<'static, str>>,
+        V: for<'a> Serialize<StandardBufSerializer<'a>>,
+    {
+        let data = Session::serialize_data(&value);
+        self.data.insert(name.into(), data);
+        self
+    }
+
+    pub fn base(mut self, base: [u8; 32]) -> Self {
+        self.base = Some(base);
+        self
+    }
+
+    fn build(&self) -> SessionData {
+        SessionData {
+            data: self.data.clone(),
+            base: self.base,
+        }
     }
 }

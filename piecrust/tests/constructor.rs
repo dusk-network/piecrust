@@ -4,7 +4,7 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use piecrust::{module_bytecode, DeployData, Error, VM};
+use piecrust::{module_bytecode, Error, ModuleData, SessionData, VM};
 
 const CONTRACT_INIT_METHOD: &str = "init";
 const OWNER: [u8; 32] = [0u8; 32];
@@ -13,11 +13,11 @@ const OWNER: [u8; 32] = [0u8; 32];
 fn constructor() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 
-    let mut session = vm.genesis_session();
+    let mut session = vm.session(SessionData::builder())?;
 
     let id = session.deploy(
         module_bytecode!("constructor"),
-        DeployData::builder(OWNER).constructor_arg(&0xabu8),
+        ModuleData::builder(OWNER).constructor_arg(&0xabu8),
     )?;
 
     assert_eq!(session.query::<(), u8>(id, "read_value", &())?, 0xab);
@@ -44,7 +44,7 @@ fn constructor() -> Result<(), Error> {
 
     // initialized state should live through across session boundaries
     let commit_id = session.commit()?;
-    let mut session = vm.session(commit_id)?;
+    let mut session = vm.session(SessionData::builder().base(commit_id))?;
     assert_eq!(session.query::<(), u8>(id, "read_value", &())?, 0xac);
 
     // not being able to call init directly should also be enforced across
@@ -62,11 +62,11 @@ fn constructor() -> Result<(), Error> {
 fn missing_init() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 
-    let mut session = vm.genesis_session();
+    let mut session = vm.session(SessionData::builder())?;
 
     let result = session.deploy(
         module_bytecode!("counter"),
-        DeployData::builder(OWNER).constructor_arg(&0xabu8),
+        ModuleData::builder(OWNER).constructor_arg(&0xabu8),
     );
 
     assert!(

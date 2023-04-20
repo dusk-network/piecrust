@@ -20,7 +20,7 @@ use crate::store::{
 };
 
 #[derive(Debug, Clone)]
-pub struct ModuleData {
+pub struct ModuleDataEntry {
     pub bytecode: Bytecode,
     pub objectcode: Objectcode,
     pub metadata: Metadata,
@@ -38,7 +38,7 @@ pub struct ModuleData {
 /// [`commit`]: ModuleSession::commit
 #[derive(Debug)]
 pub struct ModuleSession {
-    modules: BTreeMap<ModuleId, ModuleData>,
+    modules: BTreeMap<ModuleId, ModuleDataEntry>,
 
     base: Option<(Root, Commit)>,
     root_dir: PathBuf,
@@ -129,7 +129,7 @@ impl ModuleSession {
     pub fn module(
         &mut self,
         module: ModuleId,
-    ) -> io::Result<Option<ModuleData>> {
+    ) -> io::Result<Option<ModuleDataEntry>> {
         match self.modules.entry(module) {
             Vacant(entry) => match &self.base {
                 None => Ok(None),
@@ -166,7 +166,7 @@ impl ModuleSession {
                                 };
 
                             let module = entry
-                                .insert(ModuleData {
+                                .insert(ModuleDataEntry {
                                     bytecode,
                                     objectcode,
                                     metadata,
@@ -220,7 +220,7 @@ impl ModuleSession {
 
         self.modules.insert(
             module_id,
-            ModuleData {
+            ModuleDataEntry {
                 bytecode,
                 objectcode,
                 metadata,
@@ -232,7 +232,10 @@ impl ModuleSession {
     }
 
     /// Provides metadata of the module with a given `module_id`.
-    pub fn metadata(&self, module_id: &ModuleId) -> Option<&ModuleMetadata> {
+    pub fn module_metadata(
+        &self,
+        module_id: &ModuleId,
+    ) -> Option<&ModuleMetadata> {
         self.modules
             .get(module_id)
             .map(|store_data| store_data.metadata.data())

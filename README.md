@@ -14,7 +14,7 @@ let mut vm = VM::ephemeral().unwrap();
 
 let bytecode = /*load bytecode*/;
 
-let mut session = vm.genesis_session();
+let mut session = vm.session(SessionData::builder())?;
 let contract_id = session.deploy(bytecode).unwrap();
 
 let result = session.transact::<i16, i32>(contract_id, "function_name", &0x11)?;

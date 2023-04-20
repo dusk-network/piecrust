@@ -13,7 +13,7 @@ use std::thread;
 
 use tempfile::tempdir;
 
-use crate::session::Session;
+use crate::session::{Session, SessionData};
 use crate::store::ModuleStore;
 use crate::Error::{self, PersistenceError};
 
@@ -99,35 +99,30 @@ impl VM {
         self.host_queries.insert(name, query);
     }
 
-    /// Spawn a [`Session`] with the given commit as the `base`.
-    ///
-    /// Sessions spawned with a commit as a base are running modifications to
-    /// said commit. For sessions with no commit as base use
-    /// [`genesis_session`].
+    /// Spawn a [`Session`].
     ///
     /// # Errors
-    /// If the given base commit does not exist.
+    /// If base commit is provided but does not exist.
     ///
     /// [`Session`]: Session
     /// [`genesis_session`]: VM::genesis_session
-    pub fn session(&self, base: [u8; 32]) -> Result<Session, Error> {
-        let module_session = self
-            .store
-            .session(base)
-            .map_err(|err| PersistenceError(Arc::new(err)))?;
-        Ok(Session::new(module_session, self.host_queries.clone()))
-    }
-
-    /// Spawn a [`Session`] with no commit as a base.
-    ///
-    /// Genesis sessions are used for initial state deployment. For sessions
-    /// based on previous commits use [`session`].
-    ///
-    /// [`Session`]: Session
-    /// [`session`]: VM::session
-    pub fn genesis_session(&self) -> Session {
-        let module_session = self.store.genesis_session();
-        Session::new(module_session, self.host_queries.clone())
+    pub fn session(
+        &self,
+        data: impl Into<SessionData>,
+    ) -> Result<Session, Error> {
+        let data = data.into();
+        let module_session = match data.base {
+            Some(base) => self
+                .store
+                .session(base)
+                .map_err(|err| PersistenceError(Arc::new(err)))?,
+            _ => self.store.genesis_session(),
+        };
+        Ok(Session::new(
+            module_session,
+            self.host_queries.clone(),
+            data,
+        ))
     }
 
     /// Return all existing commits.

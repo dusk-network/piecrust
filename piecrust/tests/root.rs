@@ -4,16 +4,16 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use piecrust::{module_bytecode, DeployData, Error, VM};
+use piecrust::{module_bytecode, Error, ModuleData, SessionData, VM};
 
 const OWNER: [u8; 32] = [0u8; 32];
 
 #[test]
 pub fn state_root_calculation() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
-    let mut session = vm.genesis_session();
+    let mut session = vm.session(SessionData::builder())?;
     let id_1 = session
-        .deploy(module_bytecode!("counter"), DeployData::builder(OWNER))?;
+        .deploy(module_bytecode!("counter"), ModuleData::builder(OWNER))?;
 
     session.transact::<(), ()>(id_1, "increment", &())?;
 
@@ -25,9 +25,9 @@ pub fn state_root_calculation() -> Result<(), Error> {
         "The commit root is the same as the state root"
     );
 
-    let mut session = vm.session(commit_1)?;
+    let mut session = vm.session(SessionData::builder().base(commit_1))?;
     let id_2 =
-        session.deploy(module_bytecode!("box"), DeployData::builder(OWNER))?;
+        session.deploy(module_bytecode!("box"), ModuleData::builder(OWNER))?;
     session.transact::<i16, ()>(id_2, "set", &0x11)?;
     session.transact::<(), ()>(id_1, "increment", &())?;
 
@@ -43,7 +43,7 @@ pub fn state_root_calculation() -> Result<(), Error> {
         "The state root should change since the state changes"
     );
 
-    let session = vm.session(commit_2)?;
+    let session = vm.session(SessionData::builder().base(commit_2))?;
     let root_3 = session.root();
 
     assert_eq!(root_2, root_3, "The root of a session should be the same if no modifications were made");
