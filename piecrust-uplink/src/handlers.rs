@@ -37,9 +37,3 @@ extern "C" fn eh_personality() {}
 #[cfg(feature = "wee_alloc")]
 #[global_allocator]
 static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
-
-#[alloc_error_handler]
-fn foo(layout: core::alloc::Layout) -> ! {
-    crate::debug!("ALLOC ERROR {:?}", layout);
-    panic!("OOM");
-}
