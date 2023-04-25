@@ -33,3 +33,15 @@ sudo apt install -y make # ubuntu/debian - adapt to own system
 cargo install wasm-tools
 make test
 ```
+
+## Release History
+
+To see the release history for this crate, please see the [CHANGELOG](./CHANGELOG.md) file.
+
+## License
+
+This code is licensed under the Mozilla Public License Version 2.0 (MPL-2.0). Please see the [LICENSE](./LICENSE) for further details.
+
+## Contribute
+
+If you want to contribute to this project, please check the [CONTRIBUTING](https://github.com/dusk-network/.github/blob/main/.github/CONTRIBUTING.md) file.

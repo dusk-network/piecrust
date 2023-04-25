@@ -1,4 +1,4 @@
-# π-crust modules
+# π-crust Modules
 
 This workspace contains individual module examples. These examples demonstrate various functionalities and structures provided by the `piecrust` and `piecrust-uplink` libraries. 
 
