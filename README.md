@@ -19,22 +19,6 @@ The project is organized as follows:
 - `piecrust`: Contains the source code and README for the WASM virtual machine.
 - `piecrust-uplink`: Contains the source code and README for the smart contract development kit.
 
-## Usage
-
-```rust
-use piecrust::VM;
-let mut vm = VM::ephemeral().unwrap();
-
-let bytecode = /*load bytecode*/;
-
-let mut session = vm.session(SessionData::builder())?;
-let contract_id = session.deploy(bytecode).unwrap();
-
-let result = session.transact::<i16, i32>(contract_id, "function_name", &0x11)?;
-
-// use result
-```
-
 ## Build and Test
 
 To build and test the crate one will need a

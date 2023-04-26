@@ -15,7 +15,6 @@ use uplink::{ModuleId, State};
 /// Struct that describes the (empty) state of the Metadata module
 pub struct Metadata;
 
-
 /// State of the Metadata module
 static mut STATE: State<Metadata> = State::new(Metadata {});
 
