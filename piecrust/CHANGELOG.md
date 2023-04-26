@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Add crate-specific README. [#174]
+
 ## [0.3.0] - 2023-04-26
 
 ### Changed
@@ -47,6 +51,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 <!-- ISSUES -->
 [#181]: https://github.com/dusk-network/piecrust/issues/181
 [#178]: https://github.com/dusk-network/piecrust/issues/178
+[#174]: https://github.com/dusk-network/piecrust/issues/174
 [#167]: https://github.com/dusk-network/piecrust/issues/167
 [#162]: https://github.com/dusk-network/piecrust/issues/162
 [#158]: https://github.com/dusk-network/piecrust/issues/158
