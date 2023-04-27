@@ -8,7 +8,7 @@ Piecrust Uplink is the library that allows you to build smart contracts directly
 
 ## Usage
 
-`Piecrust::Uplink` allows users of the contract platform to manage the interface and state with the host environment of the modules. The example below describes a barebones module. For more detailed examples, see the [modules](https://github.com/dusk-network/piecrust/tree/main/modules) folder.
+The library allows users of the contract platform to manage the interface and state with the host environment of the modules. The example below describes a barebones module. For more detailed examples, see the [modules](https://github.com/dusk-network/piecrust/tree/main/modules) folder.
 
 Add `piecrust_uplink` as a dependency to your module project:
 ```sh
