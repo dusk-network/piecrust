@@ -4,20 +4,23 @@
 ![Build Status](https://github.com/dusk-network/piecrust/workflows/build/badge.svg)
 [![Documentation](https://img.shields.io/badge/docs-piecrust-blue?logo=rust)](https://docs.rs/piecrust/)
 
-`piecrust` is a Rust workspace containing two crates, `piecrust` and `piecrust-uplink`, that together form the WASM virtual machine for running, handling and creating Dusk smart contracts.
+WASM virtual machine for running Dusk's smart contracts.
 
-## Workspace Members
+## Usage
 
-- [piecrust](piecrust/README.md): WASM virtual machine for running Dusk's smart contracts.
-- [piecrust-uplink](piecrust-uplink/README.md): The library that allows you to create smart contracts directly on top of `piecrust`.
+```rust
+use piecrust::VM;
+let mut vm = VM::ephemeral().unwrap();
 
-## Project Structure
+let bytecode = /*load bytecode*/;
 
-The project is organized as follows:
+let mut session = vm.session(SessionData::builder())?;
+let contract_id = session.deploy(bytecode).unwrap();
 
-- `modules`: Contains a number of example smart contracts that can be ran against the `piecrust` virtual machine.
-- `piecrust`: Contains the source code and README for the WASM virtual machine.
-- `piecrust-uplink`: Contains the source code and README for the smart contract development kit.
+let result = session.transact::<i16, i32>(contract_id, "function_name", &0x11)?;
+
+// use result
+```
 
 ## Build and Test
 
@@ -33,7 +36,7 @@ make test
 
 ## Release History
 
-To see the release history for this project, please see the Changelogs of each individual workspace member.
+To see the release history for this crate, please see the [CHANGELOG](./CHANGELOG.md) file.
 
 ## License
 
