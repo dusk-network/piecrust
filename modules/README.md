@@ -15,6 +15,7 @@ This workspace contains individual module examples. These examples demonstrate v
 - [Fallible counter](fallible_counter/): Example of a counter that can panic if wanted.
 - [Fibonacci](fibonacci/): Fibonacci and in-module recursion example.
 - [Host](host/): Module that performs a simple host call.
+- [Merkle](merkle/): A Merkle tree in an example module.
 - [Metadata](metadata/): Example of module metadata retrieval.
 - [Micro](micro/): Minimal module example.
 - [Spender](spender/): Module testing the gas spending behavior.
