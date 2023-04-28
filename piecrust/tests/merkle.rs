@@ -20,6 +20,13 @@ pub fn merkle_root() -> Result<(), Error> {
     let id = session
         .deploy(module_bytecode!("merkle"), ModuleData::builder(OWNER))?;
 
+    let empty_root = [0u8; 32];
+    let root: [u8; 32] = session
+        .query(id, "root", &())
+        .expect("root query should succeed");
+
+    assert_eq!(root, empty_root, "The root should be empty value");
+
     let leaves: [u64; 8] = [42, 0xbeef, 0xf00, 0xba5, 314, 7297, 1, 0];
     let mut roots = [[0u8; 32]; 8];
 
