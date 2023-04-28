@@ -1,0 +1,17 @@
+[package]
+name = "merkle"
+version = "0.1.0"
+authors = [
+    "Eduardo Leegwater Simões <eduardo@dusk.network>",
+]
+edition = "2021"
+
+license = "MPL-2.0"
+
+[dependencies]
+piecrust-uplink = { path = "../../piecrust-uplink", default-features = false, features = ["wee_alloc"] }
+dusk-merkle = { version = "0.1", features = ["rkyv-impl"] }
+blake3 = { version = "1", default-features = false }
+
+[lib]
+crate-type = ["cdylib", "rlib"]

@@ -10,6 +10,7 @@ members = [
     "fallible_counter",    
     "fibonacci",
     "host",
+    "merkle",
     "metadata",
     "micro",
     "crossover",
