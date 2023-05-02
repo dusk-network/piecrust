@@ -32,6 +32,8 @@ rand = "0.8"
 qbsdiff = "1.4"
 flate2 = "1.0"
 hex = "0.4"
+dusk-merkle = { version = "0.1", features = ["rkyv-impl"] }
+const-decoder = "0.3"
 
 [dev-dependencies]
 criterion = "0.4"

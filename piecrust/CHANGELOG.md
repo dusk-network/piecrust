@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Store module Merkle tree [#166]
 - Rename `DeployData` to `ModuleData`
 
 ### Removed
@@ -53,6 +54,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [#178]: https://github.com/dusk-network/piecrust/issues/178
 [#174]: https://github.com/dusk-network/piecrust/issues/174
 [#167]: https://github.com/dusk-network/piecrust/issues/167
+[#166]: https://github.com/dusk-network/piecrust/issues/166
 [#162]: https://github.com/dusk-network/piecrust/issues/162
 [#158]: https://github.com/dusk-network/piecrust/issues/158
 [#93]: https://github.com/dusk-network/piecrust/issues/93

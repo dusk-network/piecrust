@@ -114,7 +114,7 @@ impl VM {
         let module_session = match data.base {
             Some(base) => self
                 .store
-                .session(base)
+                .session(base.into())
                 .map_err(|err| PersistenceError(Arc::new(err)))?,
             _ => self.store.genesis_session(),
         };
@@ -127,7 +127,7 @@ impl VM {
 
     /// Return all existing commits.
     pub fn commits(&self) -> Vec<[u8; 32]> {
-        self.store.commits()
+        self.store.commits().into_iter().map(Into::into).collect()
     }
 
     /// Remove the diff files from a commit by applying them to the base
@@ -147,14 +147,14 @@ impl VM {
     /// [`delete_commit`]: VM::delete_commit
     pub fn squash_commit(&self, root: [u8; 32]) -> Result<(), Error> {
         self.store
-            .squash_commit(root)
+            .squash_commit(root.into())
             .map_err(|err| PersistenceError(Arc::new(err)))
     }
 
     /// Deletes the given commit from disk.
     pub fn delete_commit(&self, root: [u8; 32]) -> Result<(), Error> {
         self.store
-            .delete_commit(root)
+            .delete_commit(root.into())
             .map_err(|err| PersistenceError(Arc::new(err)))
     }
 

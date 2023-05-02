@@ -13,8 +13,9 @@ use std::{io, mem};
 use crate::module::ModuleMetadata;
 use piecrust_uplink::ModuleId;
 
+use crate::store::tree::{position_from_module, Hash};
 use crate::store::{
-    compute_root, Bytecode, Call, Commit, Memory, Metadata, Objectcode, Root,
+    compute_tree, Bytecode, Call, Commit, Memory, Metadata, Objectcode,
     BYTECODE_DIR, DIFF_EXTENSION, MEMORY_DIR, METADATA_EXTENSION,
     OBJECTCODE_EXTENSION,
 };
@@ -40,7 +41,7 @@ pub struct ModuleDataEntry {
 pub struct ModuleSession {
     modules: BTreeMap<ModuleId, ModuleDataEntry>,
 
-    base: Option<(Root, Commit)>,
+    base: Option<Commit>,
     root_dir: PathBuf,
 
     call: mpsc::Sender<Call>,
@@ -49,7 +50,7 @@ pub struct ModuleSession {
 impl ModuleSession {
     pub(crate) fn new<P: AsRef<Path>>(
         root_dir: P,
-        base: Option<(Root, Commit)>,
+        base: Option<Commit>,
         call: mpsc::Sender<Call>,
     ) -> Self {
         Self {
@@ -69,9 +70,9 @@ impl ModuleSession {
     /// calling this function.
     ///
     /// [`module`]: ModuleSession::module
-    pub fn root(&self) -> Root {
-        let (root, _) = compute_root(&self.base, &self.modules);
-        root
+    pub fn root(&self) -> Hash {
+        let (_, tree) = compute_tree(&self.base, &self.modules);
+        *tree.root()
     }
 
     /// Commits the given session to disk, consuming the session and adding it
@@ -83,20 +84,16 @@ impl ModuleSession {
     /// calling this function.
     ///
     /// [`module`]: ModuleSession::module
-    pub fn commit(self) -> io::Result<Root> {
+    pub fn commit(self) -> io::Result<Hash> {
         let mut slef = self;
 
         let (replier, receiver) = mpsc::sync_channel(1);
 
         let mut modules = BTreeMap::new();
-        let mut base = slef.base.as_ref().map(|(root, _)| {
-            (
-                *root,
-                Commit {
-                    modules: BTreeMap::new(),
-                    diffs: BTreeSet::new(),
-                },
-            )
+        let mut base = slef.base.as_ref().map(|c| Commit {
+            modules: BTreeMap::new(),
+            diffs: BTreeSet::new(),
+            tree: c.tree.clone(),
         });
 
         mem::swap(&mut slef.modules, &mut modules);
@@ -113,7 +110,7 @@ impl ModuleSession {
         receiver
             .recv()
             .expect("The receiver should always receive a reply")
-            .map(|p| p.0)
+            .map(|c| *c.tree.root())
     }
 
     /// Return the bytecode and memory belonging to the given `module`, if it
@@ -133,7 +130,9 @@ impl ModuleSession {
         match self.modules.entry(module) {
             Vacant(entry) => match &self.base {
                 None => Ok(None),
-                Some((base, base_commit)) => {
+                Some(base_commit) => {
+                    let base = base_commit.tree.root();
+
                     match base_commit.modules.contains_key(&module) {
                         true => {
                             let base_hex = hex::encode(base);
@@ -193,7 +192,7 @@ impl ModuleSession {
     pub fn module_deployed(&mut self, module_id: ModuleId) -> bool {
         if self.modules.contains_key(&module_id) {
             true
-        } else if let Some((_, base_commit)) = &self.base {
+        } else if let Some(base_commit) = &self.base {
             base_commit.modules.contains_key(&module_id)
         } else {
             false
@@ -217,6 +216,18 @@ impl ModuleSession {
         let bytecode = Bytecode::new(bytecode)?;
         let objectcode = Objectcode::new(objectcode)?;
         let metadata = Metadata::new(metadata_bytes, metadata)?;
+
+        // If the position is already filled in the tree, the module cannot be
+        // inserted.
+        if let Some(base) = self.base.as_ref() {
+            let pos = position_from_module(&module_id);
+            if base.tree.contains(pos) {
+                return Err(io::Error::new(
+                    io::ErrorKind::Other,
+                    format!("Existing module at position '{pos}' in tree"),
+                ));
+            }
+        }
 
         self.modules.insert(
             module_id,
@@ -244,8 +255,9 @@ impl ModuleSession {
 
 impl Drop for ModuleSession {
     fn drop(&mut self) {
-        if let Some((base, _)) = self.base.take() {
-            let _ = self.call.send(Call::SessionDrop(base));
+        if let Some(base) = self.base.take() {
+            let root = base.tree.root();
+            let _ = self.call.send(Call::SessionDrop(*root));
         }
     }
 }

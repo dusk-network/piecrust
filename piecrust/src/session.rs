@@ -110,10 +110,15 @@ impl Session {
     /// Deploy a module, returning its [`ModuleId`]. The ID is computed using a
     /// `blake3` hash of the `bytecode`.
     ///
-    /// If one needs to specify the ID, [`deploy_with_id`] is available.
+    /// # Errors
+    /// It is possible that a collision between module IDs occurs, even for
+    /// different module IDs. This is due to the fact that all modules have to
+    /// fit into a sparse merkle tree with `2^32` positions, and as such a
+    /// 256-bit number has to be mapped into a 32-bit number.
+    ///
+    /// If such a collision occurs, [`Error::IO`] will be returned.
     ///
     /// [`ModuleId`]: ModuleId
-    /// [`deploy_with_id`]: `Session::deploy_with_id`
     pub fn deploy<'a, A, D>(
         &mut self,
         bytecode: &[u8],
@@ -404,7 +409,7 @@ impl Session {
     ///
     /// It also doubles as the ID of a commit - the commit root.
     pub fn root(&self) -> [u8; 32] {
-        self.module_session.root()
+        self.module_session.root().into()
     }
 
     pub(crate) fn push_event(&mut self, event: Event) {
@@ -512,6 +517,7 @@ impl Session {
     pub fn commit(self) -> Result<[u8; 32], Error> {
         self.module_session
             .commit()
+            .map(Into::into)
             .map_err(|err| PersistenceError(Arc::new(err)))
     }
 
