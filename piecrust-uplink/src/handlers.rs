@@ -34,6 +34,6 @@ fn panic(panic_info: &PanicInfo) -> ! {
 #[lang = "eh_personality"]
 extern "C" fn eh_personality() {}
 
-#[cfg(feature = "wee_alloc")]
+#[cfg(feature = "dlmalloc")]
 #[global_allocator]
-static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
+static ALLOC: dlmalloc::GlobalDlmalloc = dlmalloc::GlobalDlmalloc;
