@@ -20,7 +20,7 @@ use crate::Error::{self, PersistenceError};
 /// A handle to the piecrust virtual machine.
 ///
 /// It is instantiated using [`new`] or [`ephemeral`], and can be used to spawn
-/// multiple [`Session`]s using either [`session`] or [`genesis_session`].
+/// multiple [`Session`]s using [`session`].
 ///
 /// These sessions are synchronized with the help of a sync loop. [`Deletions`]
 /// and [`squashes`] are assured to not delete any commits used as a base for
@@ -34,7 +34,6 @@ use crate::Error::{self, PersistenceError};
 /// [`ephemeral`]: VM::ephemeral
 /// [`Session`]: Session
 /// [`session`]: VM::session
-/// [`genesis_session`]: VM::genesis_session
 /// [`Deletions`]: VM::delete_commit
 /// [`squashes`]: VM::squash_commit
 /// [`sync_thread`]: VM::sync_thread
@@ -105,7 +104,6 @@ impl VM {
     /// If base commit is provided but does not exist.
     ///
     /// [`Session`]: Session
-    /// [`genesis_session`]: VM::genesis_session
     pub fn session(
         &self,
         data: impl Into<SessionData>,

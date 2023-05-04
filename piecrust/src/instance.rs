@@ -40,20 +40,20 @@ pub struct WrappedInstance {
 
 pub(crate) struct Env {
     self_id: ModuleId,
-    session: &'static mut Session,
+    session: Session,
 }
 
 impl Deref for Env {
     type Target = Session;
 
     fn deref(&self) -> &Self::Target {
-        self.session
+        &self.session
     }
 }
 
 impl DerefMut for Env {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        self.session
+        &mut self.session
     }
 }
 
@@ -132,7 +132,7 @@ impl Store {
 
 impl WrappedInstance {
     pub fn new(
-        session: &mut Session,
+        session: Session,
         module_id: ModuleId,
         module: &WrappedModule,
         memory: Memory,
@@ -142,17 +142,7 @@ impl WrappedInstance {
 
         let env = Env {
             self_id: module_id,
-            /// # Safety
-            /// Wasmer API requires that Env has a static lifetime.
-            /// We can safely assume that Env won't outlive session
-            /// as Env lifetime is limited by module's lifetime.
-            /// Module's lifetime, in turn, won't exceed session's lifetime.
-            /// Hence, we can safely enforce Env's lifetime to be static.
-            session: unsafe {
-                std::mem::transmute::<&mut Session, &'static mut Session>(
-                    session,
-                )
-            },
+            session,
         };
 
         let imports = DefaultImports::default(&mut store, env);

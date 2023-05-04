@@ -83,23 +83,25 @@ impl ModuleSession {
     /// instance of [`Memory`] obtained via this session is being modified when
     /// calling this function.
     ///
+    /// # Safety
+    /// This method should only be called once, while immediately allowing the
+    /// `ModuleSession` to drop.
+    ///
     /// [`module`]: ModuleSession::module
-    pub fn commit(self) -> io::Result<Hash> {
-        let mut slef = self;
-
+    pub fn commit(&mut self) -> io::Result<Hash> {
         let (replier, receiver) = mpsc::sync_channel(1);
 
         let mut modules = BTreeMap::new();
-        let mut base = slef.base.as_ref().map(|c| Commit {
+        let mut base = self.base.as_ref().map(|c| Commit {
             modules: BTreeMap::new(),
             diffs: BTreeSet::new(),
             tree: c.tree.clone(),
         });
 
-        mem::swap(&mut slef.modules, &mut modules);
-        mem::swap(&mut slef.base, &mut base);
+        mem::swap(&mut self.modules, &mut modules);
+        mem::swap(&mut self.base, &mut base);
 
-        slef.call
+        self.call
             .send(Call::Commit {
                 modules,
                 base,
