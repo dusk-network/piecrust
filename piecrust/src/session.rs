@@ -58,7 +58,7 @@ unsafe impl Sync for Session {}
 #[derive(Debug)]
 pub struct Session {
     inner: &'static mut SessionInner,
-    ref_count: usize,
+    original: bool,
 }
 
 /// This implementation purposefully boxes and leaks the `SessionInner`.
@@ -66,7 +66,7 @@ impl From<SessionInner> for Session {
     fn from(inner: SessionInner) -> Self {
         Self {
             inner: Box::leak(Box::new(inner)),
-            ref_count: 0,
+            original: true,
         }
     }
 }
@@ -75,7 +75,7 @@ impl From<SessionInner> for Session {
 /// Therefore, the memory needs to be recovered.
 impl Drop for Session {
     fn drop(&mut self) {
-        if self.ref_count == 0 {
+        if self.original {
             // SAFETY: this is safe since we guarantee that there is no aliasing
             // when a session drops.
             unsafe {
@@ -148,7 +148,7 @@ impl Session {
         // use.
         Self {
             inner: unsafe { &mut *inner },
-            ref_count: self.ref_count + 1,
+            original: false,
         }
     }
 
