@@ -268,10 +268,10 @@ pub fn height() -> u64 {
 }
 
 /// Return the current module's owner.
-pub fn owner() -> [u8; 32] {
+pub fn owner<const N: usize>() -> [u8; N] {
     let len = unsafe { ext::owner() } as usize;
     with_arg_buf(|buf| {
-        let ret = unsafe { archived_root::<[u8; 32]>(&buf[..len]) };
+        let ret = unsafe { archived_root::<[u8; N]>(&buf[..len]) };
         ret.deserialize(&mut Infallible).expect("Infallible")
     })
 }
