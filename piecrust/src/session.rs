@@ -119,14 +119,14 @@ impl Session {
     /// If such a collision occurs, [`Error::IO`] will be returned.
     ///
     /// [`ModuleId`]: ModuleId
-    pub fn deploy<'a, A, D>(
+    pub fn deploy<'a, A, D, const N: usize>(
         &mut self,
         bytecode: &[u8],
         deploy_data: D,
     ) -> Result<ModuleId, Error>
     where
         A: 'a + for<'b> Serialize<StandardBufSerializer<'b>>,
-        D: Into<ModuleData<'a, A>>,
+        D: Into<ModuleData<'a, A, N>>,
     {
         let mut deploy_data = deploy_data.into();
 
@@ -155,7 +155,7 @@ impl Session {
             module_id,
             bytecode,
             constructor_arg,
-            deploy_data.owner,
+            deploy_data.owner.to_vec(),
         )?;
 
         Ok(module_id)
@@ -166,7 +166,7 @@ impl Session {
         module_id: ModuleId,
         bytecode: &[u8],
         arg: Option<Vec<u8>>,
-        owner: [u8; 32],
+        owner: Vec<u8>,
     ) -> Result<(), Error> {
         if self.module_session.module_deployed(module_id) {
             return Err(InitalizationError(
@@ -175,7 +175,10 @@ impl Session {
         }
 
         let wrapped_module = WrappedModule::new(bytecode, None::<Objectcode>)?;
-        let module_metadata = ModuleMetadata { module_id, owner };
+        let module_metadata = ModuleMetadata {
+            module_id,
+            owner: owner.clone(),
+        };
         let metadata_bytes = Self::serialize_data(&module_metadata);
 
         self.module_session
@@ -782,7 +785,7 @@ struct Deploy {
     module_id: ModuleId,
     bytecode: Vec<u8>,
     fdata: Option<Vec<u8>>,
-    owner: [u8; 32],
+    owner: Vec<u8>,
 }
 
 #[derive(Debug)]

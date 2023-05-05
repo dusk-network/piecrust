@@ -9,7 +9,7 @@ use piecrust_uplink::ModuleId;
 
 #[test]
 fn metadata() -> Result<(), Error> {
-    const EXPECTED_OWNER: [u8; 32] = [3u8; 32];
+    const EXPECTED_OWNER: [u8; 33] = [3u8; 33];
 
     let vm = VM::ephemeral()?;
 
@@ -21,7 +21,7 @@ fn metadata() -> Result<(), Error> {
     )?;
 
     // owner should be available after deployment
-    let owner = session.query::<(), [u8; 32]>(id, "read_owner", &())?;
+    let owner = session.query::<(), [u8; 33]>(id, "read_owner", &())?;
     let self_id = session.query::<(), ModuleId>(id, "read_id", &())?;
     assert_eq!(owner, EXPECTED_OWNER);
     assert_eq!(self_id, id);
@@ -29,7 +29,7 @@ fn metadata() -> Result<(), Error> {
     // owner should live across session boundaries
     let commit_id = session.commit()?;
     let mut session = vm.session(SessionData::builder().base(commit_id))?;
-    let owner = session.query::<(), [u8; 32]>(id, "read_owner", &())?;
+    let owner = session.query::<(), [u8; 33]>(id, "read_owner", &())?;
     let self_id = session.query::<(), ModuleId>(id, "read_id", &())?;
     assert_eq!(owner, EXPECTED_OWNER);
     assert_eq!(self_id, id);
