@@ -20,7 +20,7 @@ static mut STATE: State<Metadata> = State::new(Metadata {});
 
 impl Metadata {
     /// Read the value of the module's owner
-    pub fn read_owner(&self) -> [u8; 32] {
+    pub fn read_owner(&self) -> [u8; 33] {
         uplink::owner()
     }
 

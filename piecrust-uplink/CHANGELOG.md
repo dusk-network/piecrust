@@ -12,6 +12,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `dlmalloc` feature [#199]
 - Add crate-specific README [#174]
 
+### Changed
+
+- Change signature of `owner` to return `[u8; N]` instead of `[u8; 32]` [#201] 
+
 ### Removed
 
 - Remove `wee_alloc` feature [#199]
@@ -35,6 +39,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - First `piecrust-uplink` release
 
 <!-- ISSUES -->
+[#201]: https://github.com/dusk-network/piecrust/issues/201
 [#199]: https://github.com/dusk-network/piecrust/issues/199
 [#192]: https://github.com/dusk-network/piecrust/issues/192
 [#174]: https://github.com/dusk-network/piecrust/issues/174

@@ -14,20 +14,20 @@ use crate::error::Error;
 use crate::instance::Store;
 use piecrust_uplink::ModuleId;
 
-pub struct ModuleData<'a, A> {
+pub struct ModuleData<'a, A, const N: usize> {
     pub(crate) module_id: Option<ModuleId>,
     pub(crate) constructor_arg: Option<&'a A>,
-    pub(crate) owner: [u8; 32],
+    pub(crate) owner: [u8; N],
 }
 
 // `()` is done on purpose, since by default it should be that the constructor
 // takes no argument.
-impl<'a> ModuleData<'a, ()> {
+impl<'a, const N: usize> ModuleData<'a, (), N> {
     /// Build a deploy data structure.
     ///
     /// This function returns a builder that can be used to set optional fields
     /// in module deployment.
-    pub fn builder(owner: [u8; 32]) -> ModuleDataBuilder<'a, ()> {
+    pub fn builder(owner: [u8; N]) -> ModuleDataBuilder<'a, (), N> {
         ModuleDataBuilder {
             module_id: None,
             constructor_arg: None,
@@ -36,19 +36,21 @@ impl<'a> ModuleData<'a, ()> {
     }
 }
 
-impl<'a, A> From<ModuleDataBuilder<'a, A>> for ModuleData<'a, A> {
-    fn from(builder: ModuleDataBuilder<'a, A>) -> Self {
+impl<'a, A, const N: usize> From<ModuleDataBuilder<'a, A, N>>
+    for ModuleData<'a, A, N>
+{
+    fn from(builder: ModuleDataBuilder<'a, A, N>) -> Self {
         builder.build()
     }
 }
 
-pub struct ModuleDataBuilder<'a, A> {
+pub struct ModuleDataBuilder<'a, A, const N: usize> {
     module_id: Option<ModuleId>,
-    owner: [u8; 32],
+    owner: [u8; N],
     constructor_arg: Option<&'a A>,
 }
 
-impl<'a, A> ModuleDataBuilder<'a, A> {
+impl<'a, A, const N: usize> ModuleDataBuilder<'a, A, N> {
     /// Set the deployment module ID.
     pub fn module_id(mut self, id: ModuleId) -> Self {
         self.module_id = Some(id);
@@ -56,7 +58,7 @@ impl<'a, A> ModuleDataBuilder<'a, A> {
     }
 
     /// Set the constructor argument for deployment.
-    pub fn constructor_arg<B>(self, arg: &B) -> ModuleDataBuilder<B> {
+    pub fn constructor_arg<B>(self, arg: &B) -> ModuleDataBuilder<B, N> {
         ModuleDataBuilder {
             module_id: self.module_id,
             owner: self.owner,
@@ -64,7 +66,7 @@ impl<'a, A> ModuleDataBuilder<'a, A> {
         }
     }
 
-    pub fn build(self) -> ModuleData<'a, A> {
+    pub fn build(self) -> ModuleData<'a, A, N> {
         ModuleData {
             module_id: self.module_id,
             constructor_arg: self.constructor_arg,
@@ -77,7 +79,7 @@ impl<'a, A> ModuleDataBuilder<'a, A> {
 #[archive_attr(derive(CheckBytes))]
 pub struct ModuleMetadata {
     pub module_id: ModuleId,
-    pub owner: [u8; 32],
+    pub owner: Vec<u8>,
 }
 
 #[derive(Clone)]
