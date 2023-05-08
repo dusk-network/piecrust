@@ -15,6 +15,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Change `owner` parameter type in `ModuleData::builder` to be `[u8; N]` [#201] 
 
+### Fixed
+
+- Fix SIGSEGV caused by moving sessions with instantiate modules [#202]
+
 ## [0.3.0] - 2023-04-26
 
 ### Changed
@@ -54,6 +58,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - First `piecrust` release
 
 <!-- ISSUES -->
+[#202]: https://github.com/dusk-network/piecrust/issues/202
 [#201]: https://github.com/dusk-network/piecrust/issues/201
 [#181]: https://github.com/dusk-network/piecrust/issues/181
 [#178]: https://github.com/dusk-network/piecrust/issues/178

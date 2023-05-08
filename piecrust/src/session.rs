@@ -49,16 +49,44 @@ unsafe impl Sync for Session {}
 /// then be [`commit`]ed to, or discarded by simply allowing the session to
 /// drop.
 ///
-/// New modules are to be `deploy`ed in the context of a session. Metadata
-/// queryable by modules can be set using [`set_meta`].
+/// New modules are to be `deploy`ed in the context of a session.
 ///
 /// [`VM`]: crate::VM
 /// [`queried`]: Session::query
 /// [`transacted`]: Session::transact
 /// [`commit`]: Session::commit
-/// [`set_meta`]: Session::set_meta
 #[derive(Debug)]
 pub struct Session {
+    inner: &'static mut SessionInner,
+    original: bool,
+}
+
+/// This implementation purposefully boxes and leaks the `SessionInner`.
+impl From<SessionInner> for Session {
+    fn from(inner: SessionInner) -> Self {
+        Self {
+            inner: Box::leak(Box::new(inner)),
+            original: true,
+        }
+    }
+}
+
+/// A session is created by leaking an using `Box::leak` on a `SessionInner`.
+/// Therefore, the memory needs to be recovered.
+impl Drop for Session {
+    fn drop(&mut self) {
+        if self.original {
+            // SAFETY: this is safe since we guarantee that there is no aliasing
+            // when a session drops.
+            unsafe {
+                let _ = Box::from_raw(self.inner);
+            }
+        }
+    }
+}
+
+#[derive(Debug)]
+struct SessionInner {
     call_stack: CallStack,
     instance_map: BTreeMap<ModuleId, (*mut WrappedInstance, u64)>,
     debug: Vec<String>,
@@ -88,7 +116,7 @@ impl Session {
         host_queries: HostQueries,
         data: SessionData,
     ) -> Self {
-        Session {
+        Self::from(SessionInner {
             call_stack: CallStack::new(),
             instance_map: BTreeMap::new(),
             debug: vec![],
@@ -104,6 +132,23 @@ impl Session {
             icc_count: 0,
             icc_height: 0,
             icc_errors: BTreeMap::new(),
+        })
+    }
+
+    /// Clone the given session. We explicitly **do not** implement the
+    /// [`Clone`] trait here, since we don't want allow the user to clone a
+    /// session.
+    ///
+    /// This is done to allow us to guarantee there is no aliasing of the
+    /// reference to `&'static SessionInner`.
+    pub(crate) fn clone(&self) -> Self {
+        let inner = self.inner as *const SessionInner;
+        let inner = inner as *mut SessionInner;
+        // SAFETY: we explicitly allow aliasing of the session for internal
+        // use.
+        Self {
+            inner: unsafe { &mut *inner },
+            original: false,
         }
     }
 
@@ -116,9 +161,10 @@ impl Session {
     /// fit into a sparse merkle tree with `2^32` positions, and as such a
     /// 256-bit number has to be mapped into a 32-bit number.
     ///
-    /// If such a collision occurs, [`Error::IO`] will be returned.
+    /// If such a collision occurs, [`PersistenceError`] will be returned.
     ///
     /// [`ModuleId`]: ModuleId
+    /// [`PersistenceError`]: PersistenceError
     pub fn deploy<'a, A, D, const N: usize>(
         &mut self,
         bytecode: &[u8],
@@ -141,13 +187,13 @@ impl Session {
         let constructor_arg = deploy_data.constructor_arg.map(|arg| {
             let mut sbuf = [0u8; SCRATCH_BUF_BYTES];
             let scratch = BufferScratch::new(&mut sbuf);
-            let ser = BufferSerializer::new(&mut self.buffer[..]);
+            let ser = BufferSerializer::new(&mut self.inner.buffer[..]);
             let mut ser = CompositeSerializer::new(ser, scratch, Infallible);
 
             ser.serialize_value(arg).expect("Infallible");
             let pos = ser.pos();
 
-            self.buffer[0..pos].to_vec()
+            self.inner.buffer[0..pos].to_vec()
         });
 
         let module_id = deploy_data.module_id.unwrap();
@@ -168,7 +214,7 @@ impl Session {
         arg: Option<Vec<u8>>,
         owner: Vec<u8>,
     ) -> Result<(), Error> {
-        if self.module_session.module_deployed(module_id) {
+        if self.inner.module_session.module_deployed(module_id) {
             return Err(InitalizationError(
                 "Deployed error already exists".into(),
             ));
@@ -181,7 +227,8 @@ impl Session {
         };
         let metadata_bytes = Self::serialize_data(&module_metadata);
 
-        self.module_session
+        self.inner
+            .module_session
             .deploy(
                 module_id,
                 bytecode,
@@ -213,7 +260,7 @@ impl Session {
             self.initialize(module_id, arg.clone())?;
         }
 
-        self.call_history.push(From::from(Deploy {
+        self.inner.call_history.push(From::from(Deploy {
             module_id,
             bytecode: bytecode.to_vec(),
             fdata: arg,
@@ -258,7 +305,7 @@ impl Session {
 
         let mut sbuf = [0u8; SCRATCH_BUF_BYTES];
         let scratch = BufferScratch::new(&mut sbuf);
-        let ser = BufferSerializer::new(&mut self.buffer[..]);
+        let ser = BufferSerializer::new(&mut self.inner.buffer[..]);
         let mut ser = CompositeSerializer::new(ser, scratch, Infallible);
 
         ser.serialize_value(arg).expect("Infallible");
@@ -268,8 +315,8 @@ impl Session {
             ty: CallType::Q,
             module,
             fname: method_name.to_string(),
-            fdata: self.buffer[..pos].to_vec(),
-            limit: self.limit,
+            fdata: self.inner.buffer[..pos].to_vec(),
+            limit: self.inner.limit,
         })?;
 
         let ta = check_archived_root::<Ret>(&ret_bytes[..])?;
@@ -313,7 +360,7 @@ impl Session {
 
         let mut sbuf = [0u8; SCRATCH_BUF_BYTES];
         let scratch = BufferScratch::new(&mut sbuf);
-        let ser = BufferSerializer::new(&mut self.buffer[..]);
+        let ser = BufferSerializer::new(&mut self.inner.buffer[..]);
         let mut ser = CompositeSerializer::new(ser, scratch, Infallible);
 
         ser.serialize_value(arg).expect("Infallible");
@@ -323,8 +370,8 @@ impl Session {
             ty: CallType::T,
             module,
             fname: method_name.to_string(),
-            fdata: self.buffer[..pos].to_vec(),
-            limit: self.limit,
+            fdata: self.inner.buffer[..pos].to_vec(),
+            limit: self.inner.limit,
         })?;
 
         let ta = check_archived_root::<Ret>(&ret_bytes[..])?;
@@ -343,7 +390,7 @@ impl Session {
             module,
             fname: INIT_METHOD.to_string(),
             fdata: arg,
-            limit: self.limit,
+            limit: self.inner.limit,
         })?;
         Ok(())
     }
@@ -352,7 +399,7 @@ impl Session {
         &self,
         module_id: &ModuleId,
     ) -> Option<&'a mut WrappedInstance> {
-        self.instance_map.get(module_id).map(|(instance, _)| {
+        self.inner.instance_map.get(module_id).map(|(instance, _)| {
             // SAFETY: We guarantee that the instance exists since we're in
             // control over if it is dropped in `pop`
             unsafe { &mut **instance }
@@ -360,7 +407,7 @@ impl Session {
     }
 
     fn update_instance_count(&mut self, module_id: ModuleId, inc: bool) {
-        match self.instance_map.entry(module_id) {
+        match self.inner.instance_map.entry(module_id) {
             Entry::Occupied(mut entry) => {
                 let (_, count) = entry.get_mut();
                 if inc {
@@ -374,18 +421,19 @@ impl Session {
     }
 
     fn clear_stack_and_instances(&mut self) {
-        while self.call_stack.len() > 0 {
-            let popped = self.call_stack.pop().unwrap();
+        while self.inner.call_stack.len() > 0 {
+            let popped = self.inner.call_stack.pop().unwrap();
             self.remove_instance(&popped.module_id);
         }
-        let ids: Vec<ModuleId> = self.instance_map.keys().cloned().collect();
+        let ids: Vec<ModuleId> =
+            self.inner.instance_map.keys().cloned().collect();
         for module_id in ids.iter() {
             self.remove_instance(module_id);
         }
     }
 
     pub(crate) fn remove_instance(&mut self, module_id: &ModuleId) {
-        let mut entry = match self.instance_map.entry(*module_id) {
+        let mut entry = match self.inner.instance_map.entry(*module_id) {
             Entry::Occupied(e) => e,
             _ => unreachable!("map must have an instance here"),
         };
@@ -412,11 +460,11 @@ impl Session {
     ///
     /// It also doubles as the ID of a commit - the commit root.
     pub fn root(&self) -> [u8; 32] {
-        self.module_session.root().into()
+        self.inner.module_session.root().into()
     }
 
     pub(crate) fn push_event(&mut self, event: Event) {
-        self.events.push(event);
+        self.inner.events.push(event);
     }
 
     fn new_instance(
@@ -424,6 +472,7 @@ impl Session {
         module_id: ModuleId,
     ) -> Result<WrappedInstance, Error> {
         let store_data = self
+            .inner
             .module_session
             .module(module_id)
             .map_err(|err| PersistenceError(Arc::new(err)))?
@@ -433,8 +482,12 @@ impl Session {
             store_data.bytecode,
             Some(store_data.objectcode),
         )?;
-        let instance =
-            WrappedInstance::new(self, module_id, &module, store_data.memory)?;
+        let instance = WrappedInstance::new(
+            self.clone(),
+            module_id,
+            &module,
+            store_data.memory,
+        )?;
 
         Ok(instance)
     }
@@ -445,7 +498,7 @@ impl Session {
         buf: &mut [u8],
         arg_len: u32,
     ) -> Option<u32> {
-        self.host_queries.call(name, buf, arg_len)
+        self.inner.host_queries.call(name, buf, arg_len)
     }
 
     /// Sets the point limit for the next call to [`query`] or [`transact`].
@@ -453,7 +506,7 @@ impl Session {
     /// [`query`]: Session::query
     /// [`transact`]: Session::transact
     pub fn set_point_limit(&mut self, limit: u64) {
-        self.limit = limit
+        self.inner.limit = limit
     }
 
     /// Returns the number of points spent by the last call to [`query`] or
@@ -465,23 +518,23 @@ impl Session {
     /// [`query`]: Session::query
     /// [`transact`]: Session::transact
     pub fn spent(&self) -> u64 {
-        self.spent
+        self.inner.spent
     }
 
     pub(crate) fn nth_from_top(&self, n: usize) -> Option<StackElement> {
-        self.call_stack.nth_from_top(n)
+        self.inner.call_stack.nth_from_top(n)
     }
 
     fn create_instance(&mut self, module_id: ModuleId) -> Result<(), Error> {
         let instance = self.new_instance(module_id)?;
-        if self.instance_map.get(&module_id).is_some() {
+        if self.inner.instance_map.get(&module_id).is_some() {
             panic!("Module already in the stack: {module_id:?}");
         }
 
         let instance = Box::new(instance);
         let instance = Box::leak(instance) as *mut WrappedInstance;
 
-        self.instance_map.insert(module_id, (instance, 1));
+        self.inner.instance_map.insert(module_id, (instance, 1));
         Ok(())
     }
 
@@ -495,22 +548,23 @@ impl Session {
         match instance {
             Some(_) => {
                 self.update_instance_count(module_id, true);
-                self.call_stack.push(module_id, limit);
+                self.inner.call_stack.push(module_id, limit);
             }
             None => {
                 self.create_instance(module_id)?;
-                self.call_stack.push(module_id, limit);
+                self.inner.call_stack.push(module_id, limit);
             }
         }
 
         Ok(self
+            .inner
             .call_stack
             .nth_from_top(0)
             .expect("We just pushed an element to the stack"))
     }
 
     pub(crate) fn pop_callstack(&mut self) {
-        if let Some(element) = self.call_stack.pop() {
+        if let Some(element) = self.inner.call_stack.pop() {
             self.update_instance_count(element.module_id, false);
         }
     }
@@ -518,30 +572,31 @@ impl Session {
     /// Commits the given session to disk, consuming the session and returning
     /// its state root.
     pub fn commit(self) -> Result<[u8; 32], Error> {
-        self.module_session
+        self.inner
+            .module_session
             .commit()
             .map(Into::into)
             .map_err(|err| PersistenceError(Arc::new(err)))
     }
 
     pub(crate) fn register_debug<M: Into<String>>(&mut self, msg: M) {
-        self.debug.push(msg.into());
+        self.inner.debug.push(msg.into());
     }
 
     pub fn take_events(&mut self) -> Vec<Event> {
-        mem::take(&mut self.events)
+        mem::take(&mut self.inner.events)
     }
 
     pub fn with_debug<C, R>(&self, c: C) -> R
     where
         C: FnOnce(&[String]) -> R,
     {
-        c(&self.debug)
+        c(&self.inner.debug)
     }
 
     /// Returns the value of a metadata item.
     pub fn meta(&self, name: &str) -> Option<Vec<u8>> {
-        self.data.get(name)
+        self.inner.data.get(name)
     }
 
     pub fn serialize_data<V>(value: &V) -> Vec<u8>
@@ -567,9 +622,10 @@ impl Session {
     ///
     /// If the call errors on the first called module, return said error.
     pub(crate) fn increment_call_count(&mut self) -> Option<Error> {
-        self.call_count += 1;
-        self.icc_errors
-            .get(&self.call_count)
+        self.inner.call_count += 1;
+        self.inner
+            .icc_errors
+            .get(&self.inner.call_count)
             .and_then(|map| map.get(&0))
             .cloned()
     }
@@ -578,9 +634,11 @@ impl Session {
     /// was, previously, an error in the execution of the ic call with the
     /// current number count - meaning after iteration - it will be returned.
     pub(crate) fn increment_icc_count(&mut self) -> Option<Error> {
-        self.icc_count += 1;
-        match self.icc_errors.get(&self.call_count) {
-            Some(icc_results) => icc_results.get(&self.icc_count).cloned(),
+        self.inner.icc_count += 1;
+        match self.inner.icc_errors.get(&self.inner.call_count) {
+            Some(icc_results) => {
+                icc_results.get(&self.inner.icc_count).cloned()
+            }
             None => None,
         }
     }
@@ -592,21 +650,22 @@ impl Session {
     /// # Panics
     /// When the errors map is not present.
     pub(crate) fn decrement_icc_count(&mut self) {
-        self.icc_count -= 1;
-        self.icc_errors
-            .get_mut(&self.call_count)
+        self.inner.icc_count -= 1;
+        self.inner
+            .icc_errors
+            .get_mut(&self.inner.call_count)
             .expect("Map should always be there")
-            .retain(|c, _| c <= &self.icc_count);
+            .retain(|c, _| c <= &self.inner.icc_count);
     }
 
     /// Increments the height of an icc.
     pub(crate) fn increment_icc_height(&mut self) {
-        self.icc_height += 1;
+        self.inner.icc_height += 1;
     }
 
     /// Decrements the height of an icc.
     pub(crate) fn decrement_icc_height(&mut self) {
-        self.icc_height -= 1;
+        self.inner.icc_height -= 1;
     }
 
     /// Insert error at the current icc count.
@@ -614,15 +673,15 @@ impl Session {
     /// If there are errors at a larger ICC count than current, they will be
     /// forgotten.
     pub(crate) fn insert_icc_error(&mut self, err: Error) {
-        match self.icc_errors.entry(self.call_count) {
+        match self.inner.icc_errors.entry(self.inner.call_count) {
             Entry::Vacant(entry) => {
                 let mut map = BTreeMap::new();
-                map.insert(self.icc_count, err);
+                map.insert(self.inner.icc_count, err);
                 entry.insert(map);
             }
             Entry::Occupied(mut entry) => {
                 let map = entry.get_mut();
-                map.insert(self.icc_count, err);
+                map.insert(self.inner.icc_count, err);
             }
         }
     }
@@ -641,8 +700,8 @@ impl Session {
                 //
                 // This will ensure that the call is never really executed,
                 // keeping it atomic.
-                if self.icc_height == 0 {
-                    self.icc_count = 0;
+                if self.inner.icc_height == 0 {
+                    self.inner.icc_count = 0;
                     self.insert_icc_error(err);
                     return self.re_execute();
                 }
@@ -658,8 +717,8 @@ impl Session {
             match self.re_execute() {
                 Ok(awesome) => return Ok(awesome),
                 Err(err) => {
-                    if self.icc_height == 0 {
-                        self.icc_count = 0;
+                    if self.inner.icc_height == 0 {
+                        self.inner.icc_count = 0;
                         self.insert_icc_error(err);
                         return self.re_execute();
                     }
@@ -674,15 +733,16 @@ impl Session {
     fn re_execute(&mut self) -> Result<Vec<u8>, Error> {
         // Take all transaction history since we're going to re-add it back
         // anyway.
-        let mut call_history = Vec::with_capacity(self.call_history.len());
-        mem::swap(&mut call_history, &mut self.call_history);
+        let mut call_history =
+            Vec::with_capacity(self.inner.call_history.len());
+        mem::swap(&mut call_history, &mut self.inner.call_history);
 
         // Purge all other data that is set by performing transactions.
         self.clear_stack_and_instances();
-        self.debug.clear();
-        self.events.clear();
-        self.module_session.clear_modules();
-        self.call_count = 0;
+        self.inner.debug.clear();
+        self.inner.events.clear();
+        self.inner.module_session.clear_modules();
+        self.inner.call_count = 0;
 
         // TODO Figure out how to handle metadata and point limit.
         //      It is important to preserve their value per call.
@@ -715,19 +775,19 @@ impl Session {
     /// This will add the call to the call history as well.
     fn call_if_not_error(&mut self, call: Call) -> Result<Vec<u8>, Error> {
         // Set both the count and height of the ICCs to zero
-        self.icc_count = 0;
-        self.icc_height = 0;
+        self.inner.icc_count = 0;
+        self.inner.icc_height = 0;
 
         // If we already know of an error on this call, don't execute and just
         // return the error.
         if let Some(err) = self.increment_call_count() {
             // We also need it in the call history here.
-            self.call_history.push(call.into());
+            self.inner.call_history.push(call.into());
             return Err(err);
         }
 
         let res = self.call_inner(&call);
-        self.call_history.push(call.into());
+        self.inner.call_history.push(call.into());
         res
     }
 
@@ -744,7 +804,7 @@ impl Session {
         }?;
         let ret = instance.read_bytes_from_arg_buffer(ret_len as u32);
 
-        self.spent = call.limit
+        self.inner.spent = call.limit
             - instance
                 .get_remaining_points()
                 .expect("there should be remaining points");
@@ -758,7 +818,7 @@ impl Session {
         &self,
         module_id: &ModuleId,
     ) -> Option<&ModuleMetadata> {
-        self.module_session.module_metadata(module_id)
+        self.inner.module_session.module_metadata(module_id)
     }
 }
 

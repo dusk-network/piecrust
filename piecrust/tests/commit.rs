@@ -248,6 +248,28 @@ fn concurrent_sessions() -> Result<(), Error> {
     Ok(())
 }
 
+fn make_session(vm: &VM) -> Result<(Session, ModuleId), Error> {
+    const HEIGHT: u64 = 29_000u64;
+    let mut session =
+        vm.session(SessionData::builder().insert("height", HEIGHT))?;
+    let module_id = session
+        .deploy(module_bytecode!("everest"), ModuleData::builder(OWNER))?;
+    Ok((session, module_id))
+}
+
+#[test]
+fn session_move() -> Result<(), Error> {
+    let vm = VM::ephemeral()?;
+    let (mut session, module_id) = make_session(&vm)?;
+
+    // This tests that a session can be moved without subsequent calls producing
+    // a SIGSEGV. The pattern is very common downstream, and should be tested
+    // for.
+    session.query::<_, u64>(module_id, "get_height", &())?;
+
+    Ok(())
+}
+
 #[test]
 fn squashing() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
