@@ -237,23 +237,7 @@ impl WrappedInstance {
         })
     }
 
-    pub fn query(
-        &mut self,
-        method_name: &str,
-        arg_len: u32,
-        limit: u64,
-    ) -> Result<i32, Error> {
-        let fun: TypedFunction<u32, i32> = self
-            .instance
-            .exports
-            .get_typed_function(&self.store, method_name)?;
-
-        self.set_remaining_points(limit);
-        fun.call(&mut self.store, arg_len)
-            .map_err(|e| map_call_err(self, e))
-    }
-
-    pub fn transact(
+    pub fn call(
         &mut self,
         method_name: &str,
         arg_len: u32,

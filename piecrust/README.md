@@ -17,7 +17,7 @@ let bytecode = /*load bytecode*/;
 let mut session = vm.session(SessionData::builder())?;
 let contract_id = session.deploy(bytecode).unwrap();
 
-let result = session.transact::<i16, i32>(contract_id, "function_name", &0x11)?;
+let result = session.call::<i16, i32>(contract_id, "function_name", &0x11)?;
 
 // use result
 ```

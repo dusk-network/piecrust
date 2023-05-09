@@ -44,7 +44,7 @@ fn crossover() -> Result<(), Error> {
 
     // This call will fail if the state is inconsistent. Check the contract for
     // more details.
-    session.transact::<_, ()>(
+    session.call::<_, ()>(
         CROSSOVER_ONE,
         "check_consistent_state_on_errors",
         &(
@@ -56,7 +56,7 @@ fn crossover() -> Result<(), Error> {
     )?;
 
     assert_eq!(
-        session.query::<_, i32>(CROSSOVER_ONE, "crossover", &())?,
+        session.call::<_, i32>(CROSSOVER_ONE, "crossover", &())?,
         CROSSOVER_TO_SET,
         "The crossover should still be set even though the other contract panicked"
     );

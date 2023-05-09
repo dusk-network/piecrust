@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Add `RawCall` re-export [#136]
+- Add `Session::call` [#136]
 - Add crate-specific README. [#174]
 
 ### Changed
@@ -18,6 +20,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Fix SIGSEGV caused by moving sessions with instantiate modules [#202]
+
+### Removed
+
+- Remove `RawQuery/Transact` re-rexports [#136]
+- Remove `Session::query/transact` [#136]
+- Remove `query/transact` imports [#136]
 
 ## [0.3.0] - 2023-04-26
 
@@ -67,6 +75,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [#166]: https://github.com/dusk-network/piecrust/issues/166
 [#162]: https://github.com/dusk-network/piecrust/issues/162
 [#158]: https://github.com/dusk-network/piecrust/issues/158
+[#136]: https://github.com/dusk-network/piecrust/issues/136
 [#93]: https://github.com/dusk-network/piecrust/issues/93
 
 <!-- VERSIONS -->
