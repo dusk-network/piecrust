@@ -19,13 +19,13 @@ pub fn push_pop() -> Result<(), Error> {
 
     let val = 42;
 
-    session.transact(id, "push", &val)?;
+    session.call(id, "push", &val)?;
 
-    let len: u32 = session.query(id, "len", &())?;
+    let len: u32 = session.call(id, "len", &())?;
     assert_eq!(len, 1);
 
-    let popped: Option<i32> = session.transact(id, "pop", &())?;
-    let len: i32 = session.query(id, "len", &())?;
+    let popped: Option<i32> = session.call(id, "pop", &())?;
+    let len: i32 = session.call(id, "len", &())?;
 
     assert_eq!(len, 0);
     assert_eq!(popped, Some(val));
@@ -45,21 +45,21 @@ pub fn multi_push_pop() -> Result<(), Error> {
     const N: i32 = 16;
 
     for i in 0..N {
-        session.transact(id, "push", &i)?;
-        let len: i32 = session.query(id, "len", &())?;
+        session.call(id, "push", &i)?;
+        let len: i32 = session.call(id, "len", &())?;
 
         assert_eq!(len, i + 1);
     }
 
     for i in (0..N).rev() {
-        let popped: Option<i32> = session.transact(id, "pop", &())?;
-        let len: i32 = session.query(id, "len", &())?;
+        let popped: Option<i32> = session.call(id, "pop", &())?;
+        let len: i32 = session.call(id, "len", &())?;
 
         assert_eq!(len, i);
         assert_eq!(popped, Some(i));
     }
 
-    let popped: Option<i32> = session.transact(id, "pop", &())?;
+    let popped: Option<i32> = session.call(id, "pop", &())?;
     assert_eq!(popped, None);
 
     Ok(())

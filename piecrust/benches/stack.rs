@@ -25,7 +25,7 @@ fn push(c: &mut Criterion) {
     c.bench_function("push", |b| {
         b.iter(|| {
             session
-                .transact::<i32, ()>(id, "push", black_box(42))
+                .call::<i32, ()>(id, "push", black_box(42))
                 .expect("Pushing should succeed");
         });
     });
@@ -42,14 +42,14 @@ fn pop(c: &mut Criterion) {
 
     for _ in 0..SAMPLE_SIZE {
         session
-            .transact(id, "push", black_box(42))
+            .call(id, "push", black_box(42))
             .expect("Pushing should succeed")
     }
 
     c.bench_function("pop", |b| {
         b.iter(|| {
             session
-                .transact::<(), Option<i32>>(id, "pop", ())
+                .call::<(), Option<i32>>(id, "pop", ())
                 .expect("Popping should succeed");
         });
     });

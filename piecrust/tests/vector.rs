@@ -20,16 +20,16 @@ pub fn vector_push_pop() -> Result<(), Error> {
     const N: usize = 128;
 
     for i in 0..N {
-        session.transact::<_, ()>(id, "push", &(i as i16))?;
+        session.call::<_, ()>(id, "push", &(i as i16))?;
     }
 
     for i in 0..N {
-        let popped: Option<i16> = session.transact(id, "pop", &())?;
+        let popped: Option<i16> = session.call(id, "pop", &())?;
 
         assert_eq!(popped, Some((N - i - 1) as i16));
     }
 
-    let popped: Option<i16> = session.transact(id, "pop", &())?;
+    let popped: Option<i16> = session.call(id, "pop", &())?;
 
     assert_eq!(popped, None);
 

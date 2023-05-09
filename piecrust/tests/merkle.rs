@@ -22,7 +22,7 @@ pub fn merkle_root() -> Result<(), Error> {
 
     let empty_root = [0u8; 32];
     let root: [u8; 32] = session
-        .query(id, "root", &())
+        .call(id, "root", &())
         .expect("root query should succeed");
 
     assert_eq!(root, empty_root, "The root should be empty value");
@@ -36,11 +36,11 @@ pub fn merkle_root() -> Result<(), Error> {
         .enumerate()
         .for_each(|(i, (root, leaf))| {
             session
-                .transact::<_, ()>(id, "insert", &(i as u64, leaf))
+                .call::<_, ()>(id, "insert", &(i as u64, leaf))
                 .expect("tree insertion should succeed");
 
             *root = session
-                .query(id, "root", &())
+                .call(id, "root", &())
                 .expect("root query should succeed");
         });
 

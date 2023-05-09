@@ -31,7 +31,7 @@ fn initialize_counter<P: AsRef<Path>>(
         counter_bytecode,
         ModuleData::builder(OWNER).module_id(COUNTER_ID),
     )?;
-    session.transact::<(), ()>(COUNTER_ID, "increment", &())?;
+    session.call::<(), ()>(COUNTER_ID, "increment", &())?;
 
     let commit_root = session.commit()?;
     fs::write(commit_id_file_path, commit_root)
@@ -55,7 +55,7 @@ fn confirm_counter<P: AsRef<Path>>(
         .expect("Instantiating session from given root should succeed");
 
     assert_eq!(
-        session.query::<(), i64>(COUNTER_ID, "read_value", &())?,
+        session.call::<(), i64>(COUNTER_ID, "read_value", &())?,
         0xfd
     );
 

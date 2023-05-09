@@ -5,9 +5,7 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 use piecrust::{module_bytecode, Error, ModuleData, SessionData, VM};
-use piecrust_uplink::{
-    ModuleError, ModuleId, RawQuery, RawResult, RawTransaction,
-};
+use piecrust_uplink::{ModuleError, ModuleId, RawCall, RawResult};
 
 const OWNER: [u8; 32] = [0u8; 32];
 
@@ -22,14 +20,14 @@ pub fn cc_read_counter() -> Result<(), Error> {
 
     // read direct
 
-    let value: i64 = session.query(counter_id, "read_value", &())?;
+    let value: i64 = session.call(counter_id, "read_value", &())?;
     assert_eq!(value, 0xfc);
 
     let center_id = session
         .deploy(module_bytecode!("callcenter"), ModuleData::builder(OWNER))?;
 
     // read value through callcenter
-    let value: i64 = session.query(center_id, "query_counter", &counter_id)?;
+    let value: i64 = session.call(center_id, "query_counter", &counter_id)?;
     assert_eq!(value, 0xfc);
 
     Ok(())
@@ -45,25 +43,25 @@ pub fn cc_direct() -> Result<(), Error> {
         .deploy(module_bytecode!("counter"), ModuleData::builder(OWNER))?;
 
     // read value directly
-    let value: i64 = session.query(counter_id, "read_value", &())?;
+    let value: i64 = session.call(counter_id, "read_value", &())?;
     assert_eq!(value, 0xfc);
 
     let center_id = session
         .deploy(module_bytecode!("callcenter"), ModuleData::builder(OWNER))?;
 
     // read value through callcenter
-    let value: i64 = session.query(center_id, "query_counter", &counter_id)?;
+    let value: i64 = session.call(center_id, "query_counter", &counter_id)?;
     assert_eq!(value, 0xfc);
 
     // increment through call center
-    session.transact(center_id, "increment_counter", &counter_id)?;
+    session.call(center_id, "increment_counter", &counter_id)?;
 
     // read value directly
-    let value: i64 = session.query(counter_id, "read_value", &())?;
+    let value: i64 = session.call(counter_id, "read_value", &())?;
     assert_eq!(value, 0xfd);
 
     // read value through callcenter
-    let value: i64 = session.query(center_id, "query_counter", &counter_id)?;
+    let value: i64 = session.call(center_id, "query_counter", &counter_id)?;
     assert_eq!(value, 0xfd);
 
     Ok(())
@@ -78,9 +76,9 @@ pub fn cc_passthrough() -> Result<(), Error> {
     let center_id = session
         .deploy(module_bytecode!("callcenter"), ModuleData::builder(OWNER))?;
 
-    let rq = RawQuery::new("read_value", ());
+    let rq = RawCall::new("read_value", ());
 
-    let res: RawQuery = session.query(center_id, "query_passthrough", &rq)?;
+    let res: RawCall = session.call(center_id, "query_passthrough", &rq)?;
 
     assert_eq!(rq, res);
 
@@ -98,10 +96,10 @@ pub fn cc_delegated_read() -> Result<(), Error> {
     let center_id = session
         .deploy(module_bytecode!("callcenter"), ModuleData::builder(OWNER))?;
 
-    let rq = RawQuery::new("read_value", ());
+    let rq = RawCall::new("read_value", ());
 
     // read value through callcenter
-    let res = session.query::<_, RawResult>(
+    let res = session.call::<_, RawResult>(
         center_id,
         "delegate_query",
         &(counter_id, rq),
@@ -120,7 +118,7 @@ pub fn cc_delegated_write() -> Result<(), Error> {
 
     // increment through delegated transaction
 
-    let rt = RawTransaction::new("increment", ());
+    let rt = RawCall::new("increment", ());
 
     let mut session = vm.session(SessionData::builder())?;
     let counter_id = session
@@ -128,10 +126,10 @@ pub fn cc_delegated_write() -> Result<(), Error> {
     let center_id = session
         .deploy(module_bytecode!("callcenter"), ModuleData::builder(OWNER))?;
 
-    session.transact(center_id, "delegate_transaction", &(counter_id, rt))?;
+    session.call(center_id, "delegate_transaction", &(counter_id, rt))?;
 
     // read value directly
-    let value: i64 = session.query(counter_id, "read_value", &())?;
+    let value: i64 = session.call(counter_id, "read_value", &())?;
     assert_eq!(value, 0xfd);
 
     Ok(())
@@ -148,7 +146,7 @@ pub fn cc_self() -> Result<(), Error> {
 
     // am i calling myself
     let calling_self: bool =
-        session.query(center_id, "calling_self", &center_id)?;
+        session.call(center_id, "calling_self", &center_id)?;
     assert!(calling_self);
 
     Ok(())
@@ -164,7 +162,7 @@ pub fn cc_caller() -> Result<(), Error> {
         .deploy(module_bytecode!("callcenter"), ModuleData::builder(OWNER))?;
 
     let value: Result<bool, ModuleError> =
-        session.query(center_id, "call_self", &())?;
+        session.call(center_id, "call_self", &())?;
 
     assert!(value.expect("should succeed"));
 
@@ -180,7 +178,7 @@ pub fn cc_caller_uninit() -> Result<(), Error> {
     let center_id = session
         .deploy(module_bytecode!("callcenter"), ModuleData::builder(OWNER))?;
 
-    let caller: ModuleId = session.query(center_id, "return_caller", &())?;
+    let caller: ModuleId = session.call(center_id, "return_caller", &())?;
     assert_eq!(caller, ModuleId::uninitialized());
 
     Ok(())
@@ -195,7 +193,7 @@ pub fn cc_self_id() -> Result<(), Error> {
     let center_id = session
         .deploy(module_bytecode!("callcenter"), ModuleData::builder(OWNER))?;
 
-    let value: ModuleId = session.query(center_id, "return_self_id", &())?;
+    let value: ModuleId = session.call(center_id, "return_self_id", &())?;
     assert_eq!(value, center_id);
 
     Ok(())

@@ -21,16 +21,16 @@ fn metadata() -> Result<(), Error> {
     )?;
 
     // owner should be available after deployment
-    let owner = session.query::<(), [u8; 33]>(id, "read_owner", &())?;
-    let self_id = session.query::<(), ModuleId>(id, "read_id", &())?;
+    let owner = session.call::<(), [u8; 33]>(id, "read_owner", &())?;
+    let self_id = session.call::<(), ModuleId>(id, "read_id", &())?;
     assert_eq!(owner, EXPECTED_OWNER);
     assert_eq!(self_id, id);
 
     // owner should live across session boundaries
     let commit_id = session.commit()?;
     let mut session = vm.session(SessionData::builder().base(commit_id))?;
-    let owner = session.query::<(), [u8; 33]>(id, "read_owner", &())?;
-    let self_id = session.query::<(), ModuleId>(id, "read_id", &())?;
+    let owner = session.call::<(), [u8; 33]>(id, "read_owner", &())?;
+    let self_id = session.call::<(), ModuleId>(id, "read_id", &())?;
     assert_eq!(owner, EXPECTED_OWNER);
     assert_eq!(self_id, id);
 
