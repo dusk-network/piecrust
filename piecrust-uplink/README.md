@@ -50,16 +50,14 @@ impl Counter {
 Read and write operations need to be exposed to the host. Add the following below the implementation:
 ```rust
 unsafe fn read_value(arg_len: u32) -> u32 {
-    uplink::wrap_query(arg_len, |_: ()| STATE.read_value())
+    uplink::wrap_call(arg_len, |_: ()| STATE.read_value())
 }
 
 #[no_mangle]
 unsafe fn increment(arg_len: u32) -> u32 {
-    uplink::wrap_transaction(arg_len, |panic: bool| STATE.increment(panic))
+    uplink::wrap_call(arg_len, |panic: bool| STATE.increment(panic))
 }
 ```
-
-Note how a read operation is using `wrap_query`, while a state mutation uses `wrap_transaction.
 
 ## Release History
 

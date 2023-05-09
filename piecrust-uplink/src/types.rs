@@ -114,19 +114,19 @@ impl core::fmt::Display for ModuleId {
     }
 }
 
-/// A RawQuery is a contract call (or query) that doesn't care about types and
-/// only operates on raw data.
+/// A `RawCall` is a module call that doesn't care about types and only operates
+/// on raw data.
 #[derive(Archive, Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
 #[archive_attr(derive(CheckBytes))]
-pub struct RawQuery {
+pub struct RawCall {
     arg_len: u32,
     data: alloc::vec::Vec<u8>,
 }
 
-impl RawQuery {
-    /// Creates a new [`RawQuery`] by serializing an argument.
+impl RawCall {
+    /// Creates a new [`RawCall`] by serializing an argument.
     ///
-    /// The name of the [`RawQuery`] is stored in its `data` field after the
+    /// The name of the [`RawCall`] is stored in its `data` field after the
     /// arguments.
     pub fn new<A>(name: &str, arg: A) -> Self
     where
@@ -141,7 +141,7 @@ impl RawQuery {
         Self::from_parts(name, data)
     }
 
-    /// Create a new [`RawQuery`] from its parts without serializing data.
+    /// Create a new [`RawCall`] from its parts without serializing data.
     ///
     /// This assumes the `data` given has already been correctly serialized for
     /// the module to call.
@@ -154,76 +154,18 @@ impl RawQuery {
         Self { arg_len, data }
     }
 
-    /// Return a reference to the name of [`RawQuery`]
+    /// Return a reference to the name of [`RawCall`]
     pub fn name(&self) -> &str {
         core::str::from_utf8(self.name_bytes())
             .expect("always created from a valid &str")
     }
 
-    /// Return a reference to the raw name of [`RawQuery`]
+    /// Return a reference to the raw name of [`RawCall`]
     pub fn name_bytes(&self) -> &[u8] {
         &self.data[self.arg_len as usize..]
     }
 
-    /// Return a reference to the raw argument of [`RawQuery`]
-    pub fn arg_bytes(&self) -> &[u8] {
-        &self.data[..self.arg_len as usize]
-    }
-}
-
-/// A RawTransaction is a transaction that doesn't care about types and
-/// only operates on raw data.
-#[derive(Archive, Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
-#[archive_attr(derive(CheckBytes))]
-pub struct RawTransaction {
-    arg_len: u32,
-    // TODO: use AlignedVec
-    data: alloc::vec::Vec<u8>,
-}
-
-impl RawTransaction {
-    /// Creates a new [`RawTransaction`] by serializing an argument.
-    ///
-    /// The name of the [`RawTransaction`] is stored in its `data` field after
-    /// the arguments.
-    pub fn new<A>(name: &str, arg: A) -> Self
-    where
-        A: Serialize<AllocSerializer<64>>,
-    {
-        let mut ser = AllocSerializer::default();
-
-        ser.serialize_value(&arg)
-            .expect("We assume infallible serialization and allocation");
-
-        let data = ser.into_serializer().into_inner().to_vec();
-        Self::from_parts(name, data)
-    }
-
-    /// Create a new [`RawTransaction`] from its parts without serializing data.
-    ///
-    /// This assumes the `data` given has already been correctly serialized for
-    /// the module to call.
-    pub fn from_parts(name: &str, data: alloc::vec::Vec<u8>) -> Self {
-        let mut data = data;
-
-        let arg_len = data.len() as u32;
-        data.extend_from_slice(name.as_bytes());
-
-        Self { arg_len, data }
-    }
-
-    /// Return a reference to the name of [`RawTransaction`]
-    pub fn name(&self) -> &str {
-        core::str::from_utf8(self.name_bytes())
-            .expect("always created from a valid &str")
-    }
-
-    /// Return a reference to the raw name of [`RawTransaction`]
-    pub fn name_bytes(&self) -> &[u8] {
-        &self.data[self.arg_len as usize..]
-    }
-
-    /// Return a reference to raw argument of [`RawTransaction`]
+    /// Return a reference to the raw argument of [`RawCall`]
     pub fn arg_bytes(&self) -> &[u8] {
         &self.data[..self.arg_len as usize]
     }
@@ -263,28 +205,14 @@ mod test {
     use super::*;
 
     #[test]
-    fn raw_query() {
-        let q = RawQuery::new("hello", 42u128);
+    fn raw_call() {
+        let q = RawCall::new("hello", 42u128);
 
         assert_eq!(q.name(), "hello");
         assert_eq!(
             q.arg_bytes(),
             [
                 0x2a, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-                0x00, 0x00, 0x00, 0x00, 0x00, 0x00
-            ]
-        );
-    }
-
-    #[test]
-    fn raw_transaction() {
-        let q = RawQuery::new("world", 666u128);
-
-        assert_eq!(q.name(), "world");
-        assert_eq!(
-            q.arg_bytes(),
-            [
-                0x9a, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
                 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
             ]
         );

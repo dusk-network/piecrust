@@ -12,10 +12,7 @@ use rkyv::{
     Archive, Archived, Deserialize, Infallible, Serialize,
 };
 
-use crate::{
-    RawQuery, RawResult, RawTransaction, StandardBufSerializer,
-    SCRATCH_BUF_BYTES,
-};
+use crate::{RawCall, RawResult, StandardBufSerializer, SCRATCH_BUF_BYTES};
 
 mod arg_buf {
     use crate::ARGBUF_LEN;
@@ -42,15 +39,9 @@ pub(crate) use arg_buf::with_arg_buf;
 
 mod ext {
     extern "C" {
-        pub(crate) fn q(
-            mod_id_ofs: *const u8,
-            name: *const u8,
-            name_len: u32,
-            arg_len: u32,
-        ) -> i32;
         pub(crate) fn hq(name: *const u8, name_len: u32, arg_len: u32) -> u32;
         pub(crate) fn hd(name: *const u8, name_len: u32) -> u32;
-        pub(crate) fn t(
+        pub(crate) fn c(
             mod_id_ofs: *const u8,
             name: *const u8,
             name_len: u32,
@@ -168,7 +159,7 @@ where
     })
 }
 
-pub fn query<A, Ret>(
+pub fn call<A, Ret>(
     mod_id: ModuleId,
     name: &str,
     arg: &A,
@@ -191,7 +182,7 @@ where
     let name_slice = name.as_bytes();
 
     let ret_len = unsafe {
-        ext::q(
+        ext::c(
             &mod_id.as_bytes()[0],
             &name_slice[0],
             name_slice.len() as u32,
@@ -210,9 +201,9 @@ where
     })
 }
 
-pub fn query_raw(
+pub fn call_raw(
     mod_id: ModuleId,
-    raw: &RawQuery,
+    raw: &RawCall,
 ) -> Result<RawResult, ModuleError> {
     with_arg_buf(|buf| {
         let bytes = raw.arg_bytes();
@@ -223,7 +214,7 @@ pub fn query_raw(
     let arg_len = raw.arg_bytes().len() as u32;
 
     let ret_len = unsafe {
-        ext::q(&mod_id.as_bytes()[0], &name[0], name.len() as u32, arg_len)
+        ext::c(&mod_id.as_bytes()[0], &name[0], name.len() as u32, arg_len)
     };
 
     if ret_len < 0 {
@@ -327,81 +318,5 @@ impl<S> State<S> {
 
             unsafe { ext::emit(arg_len) }
         });
-    }
-
-    pub fn transact_raw(
-        &mut self,
-        mod_id: ModuleId,
-        raw: &RawTransaction,
-    ) -> Result<RawResult, ModuleError> {
-        // Necessary to avoid ruling out potential memory changes from recursive
-        // calls
-        core::hint::black_box(self);
-
-        with_arg_buf(|buf| {
-            let bytes = raw.arg_bytes();
-            buf[..bytes.len()].copy_from_slice(bytes);
-        });
-
-        let name = raw.name_bytes();
-        let arg_len = raw.arg_bytes().len() as u32;
-
-        let ret_len = unsafe {
-            ext::t(&mod_id.as_bytes()[0], &name[0], name.len() as u32, arg_len)
-        };
-
-        if ret_len < 0 {
-            return Err(ModuleError::from_code(ret_len));
-        }
-
-        with_arg_buf(|buf| Ok(RawResult::new(&buf[..ret_len as usize])))
-    }
-
-    pub fn transact<A, Ret>(
-        &mut self,
-        mod_id: ModuleId,
-        name: &str,
-        arg: &A,
-    ) -> Result<Ret, ModuleError>
-    where
-        A: for<'a> Serialize<StandardBufSerializer<'a>>,
-        Ret: Archive,
-        Ret::Archived: Deserialize<Ret, Infallible>,
-    {
-        // Necessary to avoid ruling out potential memory changes from recursive
-        // calls
-        core::hint::black_box(self);
-
-        let arg_len = with_arg_buf(|buf| {
-            let mut sbuf = [0u8; SCRATCH_BUF_BYTES];
-            let scratch = BufferScratch::new(&mut sbuf);
-            let ser = BufferSerializer::new(buf);
-            let mut composite =
-                CompositeSerializer::new(ser, scratch, rkyv::Infallible);
-            composite.serialize_value(arg).expect("infallible");
-
-            composite.pos() as u32
-        });
-
-        let name_slice = name.as_bytes();
-
-        let ret_len = unsafe {
-            ext::t(
-                &mod_id.as_bytes()[0],
-                &name_slice[0],
-                name_slice.len() as u32,
-                arg_len,
-            )
-        };
-
-        if ret_len < 0 {
-            return Err(ModuleError::from_code(ret_len));
-        }
-
-        with_arg_buf(|buf| {
-            let slice = &buf[..ret_len as usize];
-            let ret = unsafe { archived_root::<Ret>(slice) };
-            Ok(ret.deserialize(&mut Infallible).expect("Infallible"))
-        })
     }
 }

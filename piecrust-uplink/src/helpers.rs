@@ -15,10 +15,10 @@ use rkyv::{archived_root, Archive, Deserialize, Infallible, Serialize};
 
 use crate::types::StandardBufSerializer;
 
-/// Wrap a query with its respective (de)serializers.
+/// Wrap a call with its respective (de)serializers.
 ///
 /// Returns the length of result written to the buffer.
-pub fn wrap_query<A, R, F>(arg_len: u32, f: F) -> u32
+pub fn wrap_call<A, R, F>(arg_len: u32, f: F) -> u32
 where
     A: Archive,
     A::Archived: Deserialize<A, Infallible>,
@@ -31,31 +31,6 @@ where
         let aa: &A::Archived = unsafe { archived_root::<A>(slice) };
         let a: A = aa.deserialize(&mut Infallible).unwrap();
 
-        let ret = f(a);
-
-        let mut sbuf = [0u8; SCRATCH_BUF_BYTES];
-        let scratch = BufferScratch::new(&mut sbuf);
-        let ser = BufferSerializer::new(buf);
-        let mut composite = CompositeSerializer::new(ser, scratch, Infallible);
-        composite.serialize_value(&ret).expect("infallible");
-        composite.pos() as u32
-    })
-}
-
-/// Wrap a transaction with its respective (de)serializers.
-///
-/// Returns the length of result written to the buffer.
-pub fn wrap_transaction<A, R, F>(arg_len: u32, mut f: F) -> u32
-where
-    A: Archive,
-    A::Archived: Deserialize<A, Infallible>,
-    R: for<'a> Serialize<StandardBufSerializer<'a>>,
-    F: FnMut(A) -> R,
-{
-    with_arg_buf(|buf| {
-        let slice = &buf[..arg_len as usize];
-        let aa: &A::Archived = unsafe { archived_root::<A>(slice) };
-        let a: A = aa.deserialize(&mut Infallible).unwrap();
         let ret = f(a);
 
         let mut sbuf = [0u8; SCRATCH_BUF_BYTES];

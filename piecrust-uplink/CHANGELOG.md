@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Add `call` and associated functions and structs [#136]
 - Add `dlmalloc` feature [#199]
 - Add crate-specific README [#174]
 
@@ -18,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
+- Remove `query` and `transact` and associated functions and structs [#136]
 - Remove `wee_alloc` feature [#199]
 
 ## [0.3.0] - 2023-04-26
@@ -43,7 +45,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [#199]: https://github.com/dusk-network/piecrust/issues/199
 [#192]: https://github.com/dusk-network/piecrust/issues/192
 [#174]: https://github.com/dusk-network/piecrust/issues/174
-[#139]: https://github.com/dusk-network/piecrust/pull/139
+[#139]: https://github.com/dusk-network/piecrust/issues/139
+[#136]: https://github.com/dusk-network/piecrust/issues/136
 
 <!-- VERSIONS -->
 [Unreleased]: https://github.com/dusk-network/piecrust/compare/v0.3.0...HEAD
