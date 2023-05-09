@@ -37,11 +37,11 @@ impl Vector {
 /// Expose `Vector::push()` to the host
 #[no_mangle]
 unsafe fn push(arg_len: u32) -> u32 {
-    uplink::wrap_transaction(arg_len, |arg| STATE.push(arg))
+    uplink::wrap_call(arg_len, |arg| STATE.push(arg))
 }
 
 /// Expose `Vector::pop()` to the host
 #[no_mangle]
 unsafe fn pop(arg_len: u32) -> u32 {
-    uplink::wrap_transaction(arg_len, |_arg: ()| STATE.pop())
+    uplink::wrap_call(arg_len, |_arg: ()| STATE.pop())
 }

@@ -28,5 +28,5 @@ impl Height {
 /// Expose `Height::get_height()` to the host
 #[no_mangle]
 unsafe fn get_height(a: u32) -> u32 {
-    uplink::wrap_query(a, |_: ()| STATE.get_height())
+    uplink::wrap_call(a, |_: ()| STATE.get_height())
 }

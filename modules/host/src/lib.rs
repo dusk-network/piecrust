@@ -30,5 +30,5 @@ impl Hoster {
 /// Expose `Hoster::host_hash()` to the host
 #[no_mangle]
 unsafe fn host_hash(arg_len: u32) -> u32 {
-    uplink::wrap_query(arg_len, |num| STATE.host_hash(num))
+    uplink::wrap_call(arg_len, |num| STATE.host_hash(num))
 }

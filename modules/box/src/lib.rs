@@ -44,11 +44,11 @@ impl Boxen {
 /// Expose `Boxen::set()` to the host
 #[no_mangle]
 unsafe fn set(arg_len: u32) -> u32 {
-    uplink::wrap_transaction(arg_len, |to| STATE.set(to))
+    uplink::wrap_call(arg_len, |to| STATE.set(to))
 }
 
 /// Expose `Boxen::get()` to the host
 #[no_mangle]
 unsafe fn get(arg_len: u32) -> u32 {
-    uplink::wrap_query(arg_len, |_: ()| STATE.get())
+    uplink::wrap_call(arg_len, |_: ()| STATE.get())
 }

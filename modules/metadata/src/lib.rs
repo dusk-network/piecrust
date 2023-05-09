@@ -33,11 +33,11 @@ impl Metadata {
 /// Expose `Metadata::read_owner()` to the host
 #[no_mangle]
 unsafe fn read_owner(arg_len: u32) -> u32 {
-    uplink::wrap_query(arg_len, |_: ()| STATE.read_owner())
+    uplink::wrap_call(arg_len, |_: ()| STATE.read_owner())
 }
 
 /// Expose `Metadata::read_id()` to the host
 #[no_mangle]
 unsafe fn read_id(arg_len: u32) -> u32 {
-    uplink::wrap_query(arg_len, |_: ()| STATE.read_id())
+    uplink::wrap_call(arg_len, |_: ()| STATE.read_id())
 }

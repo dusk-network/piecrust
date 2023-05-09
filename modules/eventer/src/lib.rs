@@ -30,5 +30,5 @@ impl Eventer {
 /// Expose `Eventer::emit_num()` to the host
 #[no_mangle]
 unsafe fn emit_events(arg_len: u32) -> u32 {
-    uplink::wrap_query(arg_len, |num| STATE.emit_num(num))
+    uplink::wrap_call(arg_len, |num| STATE.emit_num(num))
 }
