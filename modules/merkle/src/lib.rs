@@ -75,11 +75,11 @@ impl Merkle {
 /// Expose `Merkle::insert()` to the host
 #[no_mangle]
 unsafe fn insert(a: u32) -> u32 {
-    uplink::wrap_transaction(a, |(pos, int)| STATE.insert_u64(pos, int))
+    uplink::wrap_call(a, |(pos, int)| STATE.insert_u64(pos, int))
 }
 
 /// Expose `Merkle::root()` to the host
 #[no_mangle]
 unsafe fn root(a: u32) -> u32 {
-    uplink::wrap_query(a, |_: ()| STATE.root())
+    uplink::wrap_call(a, |_: ()| STATE.root())
 }

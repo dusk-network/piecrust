@@ -45,17 +45,17 @@ impl Stack {
 /// Expose `Stack::push()` to the host
 #[no_mangle]
 unsafe fn push(arg_len: u32) -> u32 {
-    uplink::wrap_transaction(arg_len, |elem: i32| STATE.push(elem))
+    uplink::wrap_call(arg_len, |elem: i32| STATE.push(elem))
 }
 
 /// Expose `Stack::pop()` to the host
 #[no_mangle]
 unsafe fn pop(arg_len: u32) -> u32 {
-    uplink::wrap_transaction(arg_len, |_arg: ()| STATE.pop())
+    uplink::wrap_call(arg_len, |_arg: ()| STATE.pop())
 }
 
 /// Expose `Stack::len()` to the host
 #[no_mangle]
 unsafe fn len(arg_len: u32) -> u32 {
-    uplink::wrap_query(arg_len, |_arg: ()| STATE.len())
+    uplink::wrap_call(arg_len, |_arg: ()| STATE.len())
 }

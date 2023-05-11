@@ -44,7 +44,7 @@ impl Crossover {
         value_to_set_back: i32,
     ) {
         uplink::debug!("calling panicking module {module:?}");
-        self.transact::<_, ()>(
+        uplink::call::<_, ()>(
             module,
             "set_back_and_panic",
             &(value_to_set_forward, value_to_set_back),
@@ -58,7 +58,7 @@ impl Crossover {
 
         uplink::debug!("querying module {module:?} for their state");
         let other_crossover =
-            uplink::query::<_, i32>(module, "crossover", &()).unwrap();
+            uplink::call::<_, i32>(module, "crossover", &()).unwrap();
 
         assert_eq!(
             other_crossover, INITIAL_VALUE,
@@ -82,7 +82,8 @@ impl Crossover {
 
         let caller = uplink::caller();
         uplink::debug!("calling back {caller:?}");
-        self.transact::<_, ()>(caller, "set_crossover", &value_to_set_back)
+
+        uplink::call::<_, ()>(caller, "set_crossover", &value_to_set_back)
             .unwrap();
 
         uplink::debug!("panicking after setting the crossover");
@@ -107,19 +108,19 @@ impl Crossover {
 /// Expose `Crossover::crossover()` to the host
 #[no_mangle]
 unsafe fn crossover(arg_len: u32) -> u32 {
-    uplink::wrap_query(arg_len, |_: ()| STATE.crossover())
+    uplink::wrap_call(arg_len, |_: ()| STATE.crossover())
 }
 
 /// Expose `Crossover::set_crossover()` to the host
 #[no_mangle]
 unsafe fn set_crossover(arg_len: u32) -> u32 {
-    uplink::wrap_transaction(arg_len, |arg: i32| STATE.set_crossover(arg))
+    uplink::wrap_call(arg_len, |arg: i32| STATE.set_crossover(arg))
 }
 
 /// Expose `Crossover::check_consistent_state_on_errors()` to the host
 #[no_mangle]
 unsafe fn check_consistent_state_on_errors(arg_len: u32) -> u32 {
-    uplink::wrap_transaction(arg_len, |(module, s, sf, sb)| {
+    uplink::wrap_call(arg_len, |(module, s, sf, sb)| {
         STATE.check_consistent_state_on_errors(module, s, sf, sb)
     })
 }
@@ -127,5 +128,5 @@ unsafe fn check_consistent_state_on_errors(arg_len: u32) -> u32 {
 /// Expose `Crossover::set_back_and_panic()` to the host
 #[no_mangle]
 unsafe fn set_back_and_panic(arg_len: u32) -> u32 {
-    uplink::wrap_transaction(arg_len, |(v, vb)| STATE.set_back_and_panic(v, vb))
+    uplink::wrap_call(arg_len, |(v, vb)| STATE.set_back_and_panic(v, vb))
 }

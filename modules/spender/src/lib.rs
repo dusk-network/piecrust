@@ -40,7 +40,7 @@ impl Spender {
                     u64,
                     u64,
                     u64,
-                ) = uplink::query(self_id, "get_limit_and_spent", &())
+                ) = uplink::call(self_id, "get_limit_and_spent", &())
                     .expect("Self query should succeed");
 
                 let spent_after = uplink::spent();
@@ -57,5 +57,5 @@ impl Spender {
 /// Expose `Spender::get_limit_and_spent()` to the host
 #[no_mangle]
 unsafe fn get_limit_and_spent(a: u32) -> u32 {
-    uplink::wrap_query(a, |_: ()| STATE.get_limit_and_spent())
+    uplink::wrap_call(a, |_: ()| STATE.get_limit_and_spent())
 }

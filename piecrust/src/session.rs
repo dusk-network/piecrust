@@ -270,7 +270,7 @@ impl Session {
         Ok(())
     }
 
-    /// Execute a query on the current state of this session.
+    /// Execute a call on the current state of this session.
     ///
     /// Calls are atomic, meaning that on failure their execution doesn't modify
     /// the state. They are also metered, and will execute with the point limit
@@ -287,7 +287,7 @@ impl Session {
     ///
     /// [`set_point_limit`]: Session::set_point_limit
     /// [`spent`]: Session::spent
-    pub fn query<A, Ret>(
+    pub fn call<A, Ret>(
         &mut self,
         module: ModuleId,
         method_name: &str,
@@ -312,62 +312,6 @@ impl Session {
         let pos = ser.pos();
 
         let ret_bytes = self.execute_until_ok(Call {
-            ty: CallType::Q,
-            module,
-            fname: method_name.to_string(),
-            fdata: self.inner.buffer[..pos].to_vec(),
-            limit: self.inner.limit,
-        })?;
-
-        let ta = check_archived_root::<Ret>(&ret_bytes[..])?;
-        let ret = ta.deserialize(&mut Infallible).expect("Infallible");
-
-        Ok(ret)
-    }
-
-    /// Execute a transaction on the current state of this session.
-    ///
-    /// Calls are atomic, meaning that on failure their execution doesn't modify
-    /// the state. They are also metered, and will execute with the point limit
-    /// defined in [`set_point_limit`].
-    ///
-    /// To know how many points a call spent after execution use the [`spent`]
-    /// function.
-    ///
-    /// # Errors
-    /// The call may error during execution for a wide array of reasons, the
-    /// most common ones being running against the point limit and a module
-    /// panic. Calling the 'init' method is not allowed except for when
-    /// called from the deploy method.
-    ///
-    /// [`set_point_limit`]: Session::set_point_limit
-    /// [`spent`]: Session::spent
-    pub fn transact<A, Ret>(
-        &mut self,
-        module: ModuleId,
-        method_name: &str,
-        arg: &A,
-    ) -> Result<Ret, Error>
-    where
-        A: for<'b> Serialize<StandardBufSerializer<'b>>,
-        Ret: Archive,
-        Ret::Archived: Deserialize<Ret, Infallible>
-            + for<'b> CheckBytes<DefaultValidator<'b>>,
-    {
-        if method_name == INIT_METHOD {
-            return Err(InitalizationError("init call not allowed".into()));
-        }
-
-        let mut sbuf = [0u8; SCRATCH_BUF_BYTES];
-        let scratch = BufferScratch::new(&mut sbuf);
-        let ser = BufferSerializer::new(&mut self.inner.buffer[..]);
-        let mut ser = CompositeSerializer::new(ser, scratch, Infallible);
-
-        ser.serialize_value(arg).expect("Infallible");
-        let pos = ser.pos();
-
-        let ret_bytes = self.execute_until_ok(Call {
-            ty: CallType::T,
             module,
             fname: method_name.to_string(),
             fdata: self.inner.buffer[..pos].to_vec(),
@@ -386,7 +330,6 @@ impl Session {
         arg: Vec<u8>,
     ) -> Result<(), Error> {
         self.execute_until_ok(Call {
-            ty: CallType::T,
             module,
             fname: INIT_METHOD.to_string(),
             fdata: arg,
@@ -798,10 +741,7 @@ impl Session {
             .expect("instance should exist");
 
         let arg_len = instance.write_bytes_to_arg_buffer(&call.fdata);
-        let ret_len = match call.ty {
-            CallType::Q => instance.query(&call.fname, arg_len, call.limit),
-            CallType::T => instance.transact(&call.fname, arg_len, call.limit),
-        }?;
+        let ret_len = instance.call(&call.fname, arg_len, call.limit)?;
         let ret = instance.read_bytes_from_arg_buffer(ret_len as u32);
 
         self.inner.spent = call.limit
@@ -849,14 +789,7 @@ struct Deploy {
 }
 
 #[derive(Debug)]
-enum CallType {
-    Q,
-    T,
-}
-
-#[derive(Debug)]
 struct Call {
-    ty: CallType,
     module: ModuleId,
     fname: String,
     fdata: Vec<u8>,

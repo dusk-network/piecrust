@@ -84,9 +84,9 @@
 //! let mut session = vm.session(SessionData::builder()).unwrap();
 //! let counter_id = session.deploy(module_bytecode!("counter"), ModuleData::builder(OWNER)).unwrap();
 //!
-//! assert_eq!(session.query::<(), i64>(counter_id, "read_value", &()).unwrap(), 0xfc);
-//! session.transact::<(), ()>(counter_id, "increment", &()).unwrap();
-//! assert_eq!(session.query::<(), i64>(counter_id, "read_value", &()).unwrap(), 0xfd);
+//! assert_eq!(session.call::<(), i64>(counter_id, "read_value", &()).unwrap(), 0xfc);
+//! session.call::<(), ()>(counter_id, "increment", &()).unwrap();
+//! assert_eq!(session.call::<(), i64>(counter_id, "read_value", &()).unwrap(), 0xfd);
 //!
 //! let commit_root = session.commit().unwrap();
 //! assert_eq!(commit_root, vm.commits()[0]);
@@ -125,4 +125,4 @@ pub use vm::{HostQuery, VM};
 
 // re-exports
 
-pub use piecrust_uplink::{ModuleId, RawQuery, RawTransaction};
+pub use piecrust_uplink::{ModuleId, RawCall};

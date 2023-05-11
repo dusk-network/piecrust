@@ -15,7 +15,7 @@ pub fn state_root_calculation() -> Result<(), Error> {
     let id_1 = session
         .deploy(module_bytecode!("counter"), ModuleData::builder(OWNER))?;
 
-    session.transact::<(), ()>(id_1, "increment", &())?;
+    session.call::<(), ()>(id_1, "increment", &())?;
 
     let root_1 = session.root();
     let commit_1 = session.commit()?;
@@ -28,8 +28,8 @@ pub fn state_root_calculation() -> Result<(), Error> {
     let mut session = vm.session(SessionData::builder().base(commit_1))?;
     let id_2 =
         session.deploy(module_bytecode!("box"), ModuleData::builder(OWNER))?;
-    session.transact::<i16, ()>(id_2, "set", &0x11)?;
-    session.transact::<(), ()>(id_1, "increment", &())?;
+    session.call::<i16, ()>(id_2, "set", &0x11)?;
+    session.call::<(), ()>(id_1, "increment", &())?;
 
     let root_2 = session.root();
     let commit_2 = session.commit()?;

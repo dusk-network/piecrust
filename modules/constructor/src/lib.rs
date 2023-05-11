@@ -41,17 +41,17 @@ impl Constructor {
 /// Expose `Constructor::read_value()` to the host
 #[no_mangle]
 unsafe fn read_value(arg_len: u32) -> u32 {
-    uplink::wrap_query(arg_len, |_: ()| STATE.read_value())
+    uplink::wrap_call(arg_len, |_: ()| STATE.read_value())
 }
 
 /// Expose `Constructor::increment()` to the host
 #[no_mangle]
 unsafe fn increment(arg_len: u32) -> u32 {
-    uplink::wrap_transaction(arg_len, |_: ()| STATE.increment())
+    uplink::wrap_call(arg_len, |_: ()| STATE.increment())
 }
 
 /// Expose `Constructor::init()` to the host
 #[no_mangle]
 unsafe fn init(arg_len: u32) -> u32 {
-    uplink::wrap_transaction(arg_len, |arg: u8| STATE.init(arg))
+    uplink::wrap_call(arg_len, |arg: u8| STATE.init(arg))
 }

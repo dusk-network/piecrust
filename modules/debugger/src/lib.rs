@@ -35,5 +35,5 @@ impl Debug {
 /// Expose `Debug::debug()` to the host
 #[no_mangle]
 unsafe fn debug(arg_len: u32) -> u32 {
-    uplink::wrap_query(arg_len, |s: alloc::string::String| STATE.debug(s))
+    uplink::wrap_call(arg_len, |s: alloc::string::String| STATE.debug(s))
 }

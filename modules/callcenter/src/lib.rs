@@ -10,10 +10,7 @@
 #![no_std]
 
 use piecrust_uplink as uplink;
-use uplink::{
-    wrap_query, wrap_transaction, ModuleError, ModuleId, RawQuery, RawResult,
-    RawTransaction, State,
-};
+use uplink::{wrap_call, ModuleError, ModuleId, RawCall, RawResult, State};
 
 /// Struct that describes the state of the Callcenter module
 pub struct Callcenter;
@@ -24,26 +21,26 @@ static mut STATE: State<Callcenter> = State::new(Callcenter);
 impl Callcenter {
     /// Read the value of the counter
     pub fn query_counter(&self, counter_id: ModuleId) -> i64 {
-        uplink::query(counter_id, "read_value", &()).unwrap()
+        uplink::call(counter_id, "read_value", &()).unwrap()
     }
 
     /// Increment the counter
     pub fn increment_counter(self: &mut State<Self>, counter_id: ModuleId) {
-        self.transact(counter_id, "increment", &()).unwrap()
+        uplink::call(counter_id, "increment", &()).unwrap()
     }
 
     /// Query a module specified by its ID
     pub fn delegate_query(
         &self,
         module_id: ModuleId,
-        raw: RawQuery,
+        raw: RawCall,
     ) -> Result<RawResult, ModuleError> {
         uplink::debug!("raw query {:?} at {:?}", raw, module_id);
-        uplink::query_raw(module_id, &raw)
+        uplink::call_raw(module_id, &raw)
     }
 
     /// Pass the current query
-    pub fn query_passthrough(&mut self, raw: RawQuery) -> RawQuery {
+    pub fn query_passthrough(&mut self, raw: RawCall) -> RawCall {
         uplink::debug!("q passthrough {:?}", raw);
         raw
     }
@@ -52,9 +49,9 @@ impl Callcenter {
     pub fn delegate_transaction(
         self: &mut State<Self>,
         module_id: ModuleId,
-        raw: RawTransaction,
+        raw: RawCall,
     ) -> RawResult {
-        self.transact_raw(module_id, &raw).unwrap()
+        uplink::call_raw(module_id, &raw).unwrap()
     }
 
     /// Check whether the current caller is the module itself
@@ -78,7 +75,7 @@ impl Callcenter {
         let caller = uplink::caller();
 
         match caller.is_uninitialized() {
-            true => uplink::query(self_id, "call_self", &())
+            true => uplink::call(self_id, "call_self", &())
                 .expect("querying self should succeed"),
             false => Ok(caller == self_id),
         }
@@ -88,43 +85,43 @@ impl Callcenter {
 /// Expose `Callcenter::query_counter()` to the host
 #[no_mangle]
 unsafe fn query_counter(arg_len: u32) -> u32 {
-    wrap_query(arg_len, |counter_id| STATE.query_counter(counter_id))
+    wrap_call(arg_len, |counter_id| STATE.query_counter(counter_id))
 }
 
 /// Expose `Callcenter::increment_counter()` to the host
 #[no_mangle]
 unsafe fn increment_counter(arg_len: u32) -> u32 {
-    wrap_transaction(arg_len, |counter_id| STATE.increment_counter(counter_id))
+    wrap_call(arg_len, |counter_id| STATE.increment_counter(counter_id))
 }
 
 /// Expose `Callcenter::calling_self()` to the host
 #[no_mangle]
 unsafe fn calling_self(arg_len: u32) -> u32 {
-    wrap_query(arg_len, |self_id| STATE.calling_self(self_id))
+    wrap_call(arg_len, |self_id| STATE.calling_self(self_id))
 }
 
 /// Expose `Callcenter::call_self()` to the host
 #[no_mangle]
 unsafe fn call_self(arg_len: u32) -> u32 {
-    wrap_query(arg_len, |_: ()| STATE.call_self())
+    wrap_call(arg_len, |_: ()| STATE.call_self())
 }
 
 /// Expose `Callcenter::return_self_id()` to the host
 #[no_mangle]
 unsafe fn return_self_id(arg_len: u32) -> u32 {
-    wrap_query(arg_len, |_: ()| STATE.return_self_id())
+    wrap_call(arg_len, |_: ()| STATE.return_self_id())
 }
 
 /// Expose `Callcenter::return_caller()` to the host
 #[no_mangle]
 unsafe fn return_caller(arg_len: u32) -> u32 {
-    wrap_query(arg_len, |_: ()| STATE.return_caller())
+    wrap_call(arg_len, |_: ()| STATE.return_caller())
 }
 
 /// Expose `Callcenter::delegate_query()` to the host
 #[no_mangle]
 unsafe fn delegate_query(arg_len: u32) -> u32 {
-    wrap_query(arg_len, |(mod_id, rq): (ModuleId, RawQuery)| {
+    wrap_call(arg_len, |(mod_id, rq): (ModuleId, RawCall)| {
         STATE.delegate_query(mod_id, rq)
     })
 }
@@ -132,13 +129,13 @@ unsafe fn delegate_query(arg_len: u32) -> u32 {
 /// Expose `Callcenter::query_passthrough()` to the host
 #[no_mangle]
 unsafe fn query_passthrough(arg_len: u32) -> u32 {
-    wrap_query(arg_len, |rq: RawQuery| STATE.query_passthrough(rq))
+    wrap_call(arg_len, |rq: RawCall| STATE.query_passthrough(rq))
 }
 
 /// Expose `Callcenter::delegate_transaction()` to the host
 #[no_mangle]
 unsafe fn delegate_transaction(arg_len: u32) -> u32 {
-    wrap_transaction(arg_len, |(mod_id, rt): (ModuleId, RawTransaction)| {
+    wrap_call(arg_len, |(mod_id, rt): (ModuleId, RawCall)| {
         STATE.delegate_transaction(mod_id, rt)
     })
 }

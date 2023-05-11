@@ -20,17 +20,11 @@ pub fn deploy_with_id() -> Result<(), Error> {
     session
         .deploy(bytecode, ModuleData::builder(OWNER).module_id(module_id))?;
 
-    assert_eq!(
-        session.query::<(), i64>(module_id, "read_value", &())?,
-        0xfc
-    );
+    assert_eq!(session.call::<(), i64>(module_id, "read_value", &())?, 0xfc);
 
-    session.transact::<(), ()>(module_id, "increment", &())?;
+    session.call::<(), ()>(module_id, "increment", &())?;
 
-    assert_eq!(
-        session.query::<(), i64>(module_id, "read_value", &())?,
-        0xfd
-    );
+    assert_eq!(session.call::<(), i64>(module_id, "read_value", &())?, 0xfd);
 
     Ok(())
 }
