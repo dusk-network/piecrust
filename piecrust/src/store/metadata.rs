@@ -10,20 +10,20 @@ use std::sync::Arc;
 
 use rkyv::{archived_root, Deserialize, Infallible};
 
-use crate::module::ModuleMetadata;
+use crate::contract::ContractMetadata;
 use crate::store::mmap::Mmap;
 
-/// Module metadata pertaining to a given module but maintained by the host.
+/// Contract metadata pertaining to a given contract but maintained by the host.
 #[derive(Debug, Clone)]
 pub struct Metadata {
     mmap: Arc<Mmap>,
-    data: ModuleMetadata,
+    data: ContractMetadata,
 }
 
 impl Metadata {
     pub(crate) fn new<B: AsRef<[u8]>>(
         bytes: B,
-        data: ModuleMetadata,
+        data: ContractMetadata,
     ) -> io::Result<Self> {
         let mmap = Mmap::new(bytes)?;
 
@@ -35,7 +35,7 @@ impl Metadata {
 
     pub(crate) fn from_file<P: AsRef<Path>>(path: P) -> io::Result<Self> {
         let mmap = Mmap::map(path)?;
-        let ret = unsafe { archived_root::<ModuleMetadata>(&mmap) };
+        let ret = unsafe { archived_root::<ContractMetadata>(&mmap) };
         let data = ret.deserialize(&mut Infallible).expect("Infallible");
 
         Ok(Self {
@@ -44,7 +44,7 @@ impl Metadata {
         })
     }
 
-    pub(crate) fn data(&self) -> &ModuleMetadata {
+    pub(crate) fn data(&self) -> &ContractMetadata {
         &self.data
     }
 }

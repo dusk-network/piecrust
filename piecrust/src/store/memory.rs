@@ -31,7 +31,7 @@ struct MemoryInner {
     init_count: u8,
 }
 
-/// WASM memory belonging to a given module during a given session.
+/// WASM memory belonging to a given contract during a given session.
 #[derive(Debug, Clone)]
 pub struct Memory {
     inner: Arc<RwLock<MemoryInner>>,

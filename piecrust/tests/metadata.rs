@@ -4,8 +4,8 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use piecrust::{module_bytecode, Error, ModuleData, SessionData, VM};
-use piecrust_uplink::ModuleId;
+use piecrust::{contract_bytecode, ContractData, Error, SessionData, VM};
+use piecrust_uplink::ContractId;
 
 #[test]
 fn metadata() -> Result<(), Error> {
@@ -16,13 +16,13 @@ fn metadata() -> Result<(), Error> {
     let mut session = vm.session(SessionData::builder())?;
 
     let id = session.deploy(
-        module_bytecode!("metadata"),
-        ModuleData::builder(EXPECTED_OWNER),
+        contract_bytecode!("metadata"),
+        ContractData::builder(EXPECTED_OWNER),
     )?;
 
     // owner should be available after deployment
     let owner = session.call::<(), [u8; 33]>(id, "read_owner", &())?;
-    let self_id = session.call::<(), ModuleId>(id, "read_id", &())?;
+    let self_id = session.call::<(), ContractId>(id, "read_id", &())?;
     assert_eq!(owner, EXPECTED_OWNER);
     assert_eq!(self_id, id);
 
@@ -30,7 +30,7 @@ fn metadata() -> Result<(), Error> {
     let commit_id = session.commit()?;
     let mut session = vm.session(SessionData::builder().base(commit_id))?;
     let owner = session.call::<(), [u8; 33]>(id, "read_owner", &())?;
-    let self_id = session.call::<(), ModuleId>(id, "read_id", &())?;
+    let self_id = session.call::<(), ContractId>(id, "read_id", &())?;
     assert_eq!(owner, EXPECTED_OWNER);
     assert_eq!(self_id, id);
 

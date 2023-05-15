@@ -4,8 +4,8 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use piecrust::{module_bytecode, Error, ModuleData, SessionData, VM};
-use piecrust_uplink::ModuleId;
+use piecrust::{contract_bytecode, ContractData, Error, SessionData, VM};
+use piecrust_uplink::ContractId;
 
 const OWNER: [u8; 32] = [0u8; 32];
 
@@ -13,18 +13,26 @@ const OWNER: [u8; 32] = [0u8; 32];
 pub fn deploy_with_id() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 
-    let bytecode = module_bytecode!("counter");
+    let bytecode = contract_bytecode!("counter");
     let some_id = [1u8; 32];
-    let module_id = ModuleId::from(some_id);
+    let contract_id = ContractId::from(some_id);
     let mut session = vm.session(SessionData::builder())?;
-    session
-        .deploy(bytecode, ModuleData::builder(OWNER).module_id(module_id))?;
+    session.deploy(
+        bytecode,
+        ContractData::builder(OWNER).contract_id(contract_id),
+    )?;
 
-    assert_eq!(session.call::<(), i64>(module_id, "read_value", &())?, 0xfc);
+    assert_eq!(
+        session.call::<(), i64>(contract_id, "read_value", &())?,
+        0xfc
+    );
 
-    session.call::<(), ()>(module_id, "increment", &())?;
+    session.call::<(), ()>(contract_id, "increment", &())?;
 
-    assert_eq!(session.call::<(), i64>(module_id, "read_value", &())?, 0xfd);
+    assert_eq!(
+        session.call::<(), i64>(contract_id, "read_value", &())?,
+        0xfd
+    );
 
     Ok(())
 }

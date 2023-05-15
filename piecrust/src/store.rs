@@ -11,8 +11,8 @@ mod diff;
 mod memory;
 mod metadata;
 mod mmap;
-mod module_session;
 mod objectcode;
+mod session;
 mod tree;
 
 use std::collections::btree_map::Entry::*;
@@ -29,11 +29,11 @@ pub use bytecode::Bytecode;
 use diff::diff;
 pub use memory::Memory;
 pub use metadata::Metadata;
-use module_session::ModuleDataEntry;
-pub use module_session::ModuleSession;
 pub use objectcode::Objectcode;
-use piecrust_uplink::ModuleId;
-use tree::{position_from_module, Hash, Hasher, Tree};
+use piecrust_uplink::ContractId;
+use session::ContractDataEntry;
+pub use session::ContractSession;
+use tree::{position_from_contract, Hash, Hasher, Tree};
 
 const BYTECODE_DIR: &str = "bytecode";
 const MEMORY_DIR: &str = "memory";
@@ -43,24 +43,24 @@ const TREE_FILE: &str = "merkle";
 const OBJECTCODE_EXTENSION: &str = "a";
 const METADATA_EXTENSION: &str = "m";
 
-/// A store for all module commits.
+/// A store for all contract commits.
 #[derive(Debug)]
-pub struct ModuleStore {
+pub struct ContractStore {
     sync_loop: thread::JoinHandle<()>,
     call: mpsc::Sender<Call>,
     root_dir: PathBuf,
 }
 
-impl ModuleStore {
-    /// Loads a new module store from the given `dir`ectory.
+impl ContractStore {
+    /// Loads a new contract store from the given `dir`ectory.
     ///
     /// This also starts the synchronization loop, which is used to align
     /// [`commit`]s, [`delete`]s, and [`session spawning`] to avoid deleting
     /// commits in use by a session.
     ///
-    /// [`commit`]: ModuleSession::commit
-    /// [`delete`]: ModuleStore::delete_commit
-    /// [`session spawning`]: ModuleStore::session
+    /// [`commit`]: ContractSession::commit
+    /// [`delete`]: ContractStore::delete_commit
+    /// [`session spawning`]: ContractStore::session
     pub fn new<P: AsRef<Path>>(dir: P) -> io::Result<Self> {
         let root_dir = dir.as_ref();
 
@@ -84,10 +84,10 @@ impl ModuleStore {
         })
     }
 
-    /// Create a new [`ModuleSession`] with the given `base` commit.
+    /// Create a new [`ContractSession`] with the given `base` commit.
     ///
     /// Errors if the given base commit does not exist in the store.
-    pub fn session(&self, base: Hash) -> io::Result<ModuleSession> {
+    pub fn session(&self, base: Hash) -> io::Result<ContractSession> {
         let base_commit = self
             .call_with_replier(|replier| Call::CommitHold { base, replier })
             .ok_or_else(|| {
@@ -100,12 +100,12 @@ impl ModuleStore {
         Ok(self.session_with_base(Some(base_commit)))
     }
 
-    /// Create a new [`ModuleSession`] that has no base commit.
+    /// Create a new [`ContractSession`] that has no base commit.
     ///
     /// For session with a base commit, please see [`session`].
     ///
-    /// [`session`]: ModuleStore::session
-    pub fn genesis_session(&self) -> ModuleSession {
+    /// [`session`]: ContractStore::session
+    pub fn genesis_session(&self) -> ContractSession {
         self.session_with_base(None)
     }
 
@@ -128,9 +128,9 @@ impl ModuleStore {
 
     /// Deletes a given `commit` from the store.
     ///
-    /// If a `ModuleSession` is currently using the given commit as a base, the
-    /// operation will be queued for completion until the last session using the
-    /// commit has dropped.
+    /// If a `ContractSession` is currently using the given commit as a base,
+    /// the operation will be queued for completion until the last session
+    /// using the commit has dropped.
     ///
     /// It will block until the operation is completed.
     pub fn delete_commit(&self, commit: Hash) -> io::Result<()> {
@@ -163,8 +163,8 @@ impl ModuleStore {
             .expect("The sender should never be dropped without responding")
     }
 
-    fn session_with_base(&self, base: Option<Commit>) -> ModuleSession {
-        ModuleSession::new(&self.root_dir, base, self.call.clone())
+    fn session_with_base(&self, base: Option<Commit>) -> ContractSession {
+        ContractSession::new(&self.root_dir, base, self.call.clone())
     }
 }
 
@@ -197,7 +197,7 @@ fn commit_from_dir<P: AsRef<Path>>(dir: P) -> io::Result<Commit> {
     let index_path = dir.join(INDEX_FILE);
     let tree_path = dir.join(TREE_FILE);
 
-    let modules = index_from_path(index_path)?;
+    let contracts = index_from_path(index_path)?;
     let tree = tree_from_path(tree_path)?;
 
     let mut diffs = BTreeSet::new();
@@ -205,36 +205,36 @@ fn commit_from_dir<P: AsRef<Path>>(dir: P) -> io::Result<Commit> {
     let bytecode_dir = dir.join(BYTECODE_DIR);
     let memory_dir = dir.join(MEMORY_DIR);
 
-    for module in modules.keys() {
-        let module_hex = hex::encode(module);
+    for contract in contracts.keys() {
+        let contract_hex = hex::encode(contract);
 
-        // Check that all modules in the index file have a corresponding
+        // Check that all contracts in the index file have a corresponding
         // bytecode and memory.
-        let bytecode_path = bytecode_dir.join(&module_hex);
+        let bytecode_path = bytecode_dir.join(&contract_hex);
         if !bytecode_path.is_file() {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
-                format!("Non-existing bytecode for module: {module_hex}"),
+                format!("Non-existing bytecode for contract: {contract_hex}"),
             ));
         }
 
-        let memory_path = memory_dir.join(&module_hex);
+        let memory_path = memory_dir.join(&contract_hex);
         if !memory_path.is_file() {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
-                format!("Non-existing memory for module: {module_hex}"),
+                format!("Non-existing memory for contract: {contract_hex}"),
             ));
         }
 
-        // If there is a diff file for a given module, register it in the map.
+        // If there is a diff file for a given contract, register it in the map.
         let diff_path = memory_path.with_extension(DIFF_EXTENSION);
         if diff_path.is_file() {
-            diffs.insert(*module);
+            diffs.insert(*contract);
         }
     }
 
     Ok(Commit {
-        modules,
+        contracts,
         diffs,
         tree,
     })
@@ -242,18 +242,18 @@ fn commit_from_dir<P: AsRef<Path>>(dir: P) -> io::Result<Commit> {
 
 fn index_from_path<P: AsRef<Path>>(
     path: P,
-) -> io::Result<BTreeMap<ModuleId, Hash>> {
+) -> io::Result<BTreeMap<ContractId, Hash>> {
     let path = path.as_ref();
 
-    let modules_bytes = fs::read(path)?;
-    let modules = rkyv::from_bytes(&modules_bytes).map_err(|err| {
+    let contracts_bytes = fs::read(path)?;
+    let contracts = rkyv::from_bytes(&contracts_bytes).map_err(|err| {
         io::Error::new(
             io::ErrorKind::InvalidData,
             format!("Invalid index file \"{path:?}\": {err}"),
         )
     })?;
 
-    Ok(modules)
+    Ok(contracts)
 }
 
 fn tree_from_path<P: AsRef<Path>>(path: P) -> io::Result<Tree> {
@@ -272,14 +272,14 @@ fn tree_from_path<P: AsRef<Path>>(path: P) -> io::Result<Tree> {
 
 #[derive(Debug, Clone)]
 pub(crate) struct Commit {
-    modules: BTreeMap<ModuleId, Hash>,
-    diffs: BTreeSet<ModuleId>,
+    contracts: BTreeMap<ContractId, Hash>,
+    diffs: BTreeSet<ContractId>,
     tree: Tree,
 }
 
 pub(crate) enum Call {
     Commit {
-        modules: BTreeMap<ModuleId, ModuleDataEntry>,
+        contracts: BTreeMap<ContractId, ContractDataEntry>,
         base: Option<Commit>,
         replier: mpsc::SyncSender<io::Result<Commit>>,
     },
@@ -318,11 +318,11 @@ fn sync_loop<P: AsRef<Path>>(
         match call {
             // Writes a session to disk and adds it to the map of existing commits.
             Call::Commit {
-                modules,
+                contracts,
                 base,
                 replier,
             } => {
-                let io_result = write_commit(root_dir, &mut commits, base, modules);
+                let io_result = write_commit(root_dir, &mut commits, base, contracts);
                 let _ = replier.send(io_result);
             }
             // Copy all commits and send them back to the caller.
@@ -460,10 +460,10 @@ fn write_commit<P: AsRef<Path>>(
     root_dir: P,
     commits: &mut BTreeMap<Hash, Commit>,
     base: Option<Commit>,
-    commit_modules: BTreeMap<ModuleId, ModuleDataEntry>,
+    commit_contracts: BTreeMap<ContractId, ContractDataEntry>,
 ) -> io::Result<Commit> {
     let root_dir = root_dir.as_ref();
-    let (modules, tree) = compute_tree(&base, &commit_modules);
+    let (contracts, tree) = compute_tree(&base, &commit_contracts);
 
     let root = *tree.root();
     let root_hex = hex::encode(root);
@@ -480,8 +480,8 @@ fn write_commit<P: AsRef<Path>>(
         &commit_dir,
         tree,
         base,
-        modules,
-        commit_modules,
+        contracts,
+        commit_contracts,
     ) {
         Ok(commit) => {
             commits.insert(root, commit.clone());
@@ -500,8 +500,8 @@ fn write_commit_inner<P: AsRef<Path>>(
     commit_dir: P,
     tree: Tree,
     base: Option<Commit>,
-    modules: BTreeMap<ModuleId, Hash>,
-    commit_modules: BTreeMap<ModuleId, ModuleDataEntry>,
+    contracts: BTreeMap<ContractId, Hash>,
+    commit_contracts: BTreeMap<ContractId, ContractDataEntry>,
 ) -> io::Result<Commit> {
     let root_dir = root_dir.as_ref();
     let commit_dir = commit_dir.as_ref();
@@ -516,15 +516,15 @@ fn write_commit_inner<P: AsRef<Path>>(
 
     match base {
         None => {
-            for (module, store_data) in commit_modules {
-                let module_hex = hex::encode(module);
+            for (contract, store_data) in commit_contracts {
+                let contract_hex = hex::encode(contract);
 
-                let bytecode_path = bytecode_dir.join(&module_hex);
+                let bytecode_path = bytecode_dir.join(&contract_hex);
                 let objectcode_path =
                     bytecode_path.with_extension(OBJECTCODE_EXTENSION);
                 let metadata_path =
                     bytecode_path.with_extension(METADATA_EXTENSION);
-                let memory_path = memory_dir.join(&module_hex);
+                let memory_path = memory_dir.join(&contract_hex);
 
                 fs::write(bytecode_path, store_data.bytecode)?;
                 fs::write(objectcode_path, store_data.objectcode)?;
@@ -541,51 +541,52 @@ fn write_commit_inner<P: AsRef<Path>>(
             let base_bytecode_dir = base_dir.join(BYTECODE_DIR);
             let base_memory_dir = base_dir.join(MEMORY_DIR);
 
-            for module in base_commit.modules.keys() {
-                let module_hex = hex::encode(module);
+            for contract in base_commit.contracts.keys() {
+                let contract_hex = hex::encode(contract);
 
-                let bytecode_path = bytecode_dir.join(&module_hex);
+                let bytecode_path = bytecode_dir.join(&contract_hex);
                 let objectcode_path =
                     bytecode_path.with_extension(OBJECTCODE_EXTENSION);
                 let metadata_path =
                     bytecode_path.with_extension(METADATA_EXTENSION);
-                let memory_path = memory_dir.join(&module_hex);
+                let memory_path = memory_dir.join(&contract_hex);
 
-                let base_bytecode_path = base_bytecode_dir.join(&module_hex);
+                let base_bytecode_path = base_bytecode_dir.join(&contract_hex);
                 let base_objectcode_path =
                     base_bytecode_path.with_extension(OBJECTCODE_EXTENSION);
                 let base_metadata_path =
                     base_bytecode_path.with_extension(METADATA_EXTENSION);
-                let base_memory_path = base_memory_dir.join(&module_hex);
+                let base_memory_path = base_memory_dir.join(&contract_hex);
 
                 fs::hard_link(base_bytecode_path, bytecode_path)?;
                 fs::hard_link(base_objectcode_path, objectcode_path)?;
                 fs::hard_link(base_metadata_path, metadata_path)?;
                 fs::hard_link(&base_memory_path, &memory_path)?;
 
-                // If there is a diff of this memory in the base module, and it
-                // hasn't been touched in this commit, link it as well.
-                if base_commit.diffs.contains(module)
-                    && !commit_modules.contains_key(module)
+                // If there is a diff of this memory in the base contract, and
+                // it hasn't been touched in this commit, link
+                // it as well.
+                if base_commit.diffs.contains(contract)
+                    && !commit_contracts.contains_key(contract)
                 {
                     let base_diff_path =
                         base_memory_path.with_extension(DIFF_EXTENSION);
                     let diff_path = memory_path.with_extension(DIFF_EXTENSION);
 
                     fs::hard_link(base_diff_path, diff_path)?;
-                    diffs.insert(*module);
+                    diffs.insert(*contract);
                 }
             }
 
-            for (module, store_data) in commit_modules {
-                let module_hex = hex::encode(module);
+            for (contract, store_data) in commit_contracts {
+                let contract_hex = hex::encode(contract);
 
-                match base_commit.modules.contains_key(&module) {
+                match base_commit.contracts.contains_key(&contract) {
                     true => {
                         let base_memory_path =
-                            base_memory_dir.join(&module_hex);
+                            base_memory_dir.join(&contract_hex);
                         let memory_diff_path = memory_dir
-                            .join(&module_hex)
+                            .join(&contract_hex)
                             .with_extension(DIFF_EXTENSION);
 
                         let base_memory = Memory::from_file(base_memory_path)?;
@@ -602,15 +603,15 @@ fn write_commit_inner<P: AsRef<Path>>(
                             &mut encoder,
                         )?;
 
-                        diffs.insert(module);
+                        diffs.insert(contract);
                     }
                     false => {
-                        let bytecode_path = bytecode_dir.join(&module_hex);
+                        let bytecode_path = bytecode_dir.join(&contract_hex);
                         let objectcode_path =
                             bytecode_path.with_extension(OBJECTCODE_EXTENSION);
                         let metadata_path =
                             bytecode_path.with_extension(METADATA_EXTENSION);
-                        let memory_path = memory_dir.join(&module_hex);
+                        let memory_path = memory_dir.join(&contract_hex);
 
                         fs::write(bytecode_path, store_data.bytecode)?;
                         fs::write(objectcode_path, store_data.objectcode)?;
@@ -623,7 +624,7 @@ fn write_commit_inner<P: AsRef<Path>>(
     }
 
     let index_path = commit_dir.join(INDEX_FILE);
-    let index_bytes = rkyv::to_bytes::<_, 128>(&modules)
+    let index_bytes = rkyv::to_bytes::<_, 128>(&contracts)
         .map_err(|err| {
             io::Error::new(
                 io::ErrorKind::InvalidData,
@@ -645,7 +646,7 @@ fn write_commit_inner<P: AsRef<Path>>(
     fs::write(merkle_path, merkle_bytes)?;
 
     Ok(Commit {
-        modules,
+        contracts,
         diffs,
         tree,
     })
@@ -675,9 +676,9 @@ fn squash_commit<P: AsRef<Path>>(
 
     let memory_dir = commit_dir.join(MEMORY_DIR);
 
-    for module in &commit.diffs {
-        let module_hex = hex::encode(module);
-        let memory_path = memory_dir.join(module_hex);
+    for contract in &commit.diffs {
+        let contract_hex = hex::encode(contract);
+        let memory_path = memory_dir.join(contract_hex);
         let memory_diff_path = memory_path.with_extension(DIFF_EXTENSION);
 
         let memory =
@@ -692,16 +693,16 @@ fn squash_commit<P: AsRef<Path>>(
     Ok(())
 }
 
-/// Compute the new tree and modules map resulting from the changed `modules`,
-/// and originating from the given `base` commit.
+/// Compute the new tree and contracts map resulting from the changed
+/// `contracts`, and originating from the given `base` commit.
 fn compute_tree<'a, I>(
     base: &Option<Commit>,
-    modules: I,
-) -> (BTreeMap<ModuleId, Hash>, Tree)
+    contracts: I,
+) -> (BTreeMap<ContractId, Hash>, Tree)
 where
-    I: IntoIterator<Item = (&'a ModuleId, &'a ModuleDataEntry)>,
+    I: IntoIterator<Item = (&'a ContractId, &'a ContractDataEntry)>,
 {
-    let iter = modules.into_iter();
+    let iter = contracts.into_iter();
 
     let mut leaves_map = BTreeMap::new();
     let mut tree = match &base {
@@ -710,20 +711,20 @@ where
     };
 
     // Compute the hashes of changed memories
-    for (module, store_data) in iter {
+    for (contract, store_data) in iter {
         let mut hasher = Hasher::new();
         hasher.update(&store_data.memory.read());
         let hash = hasher.finalize();
 
-        tree.insert(position_from_module(module), hash);
-        leaves_map.insert(*module, hash);
+        tree.insert(position_from_contract(contract), hash);
+        leaves_map.insert(*contract, hash);
     }
 
     // Store the hashes of *un*changed memories
     if let Some(base_commit) = base {
-        for (module, hash) in &base_commit.modules {
-            if !leaves_map.contains_key(module) {
-                leaves_map.insert(*module, *hash);
+        for (contract, hash) in &base_commit.contracts {
+            if !leaves_map.contains_key(contract) {
+                leaves_map.insert(*contract, *hash);
             }
         }
     }

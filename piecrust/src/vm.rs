@@ -14,7 +14,7 @@ use std::thread;
 use tempfile::tempdir;
 
 use crate::session::{Session, SessionData};
-use crate::store::ModuleStore;
+use crate::store::ContractStore;
 use crate::Error::{self, PersistenceError};
 
 /// A handle to the piecrust virtual machine.
@@ -40,7 +40,7 @@ use crate::Error::{self, PersistenceError};
 #[derive(Debug)]
 pub struct VM {
     host_queries: HostQueries,
-    store: ModuleStore,
+    store: ContractStore,
 }
 
 impl VM {
@@ -56,7 +56,7 @@ impl VM {
     where
         P: Into<PathBuf>,
     {
-        let store = ModuleStore::new(root_dir)
+        let store = ContractStore::new(root_dir)
             .map_err(|err| PersistenceError(Arc::new(err)))?;
         Ok(Self {
             host_queries: HostQueries::default(),
@@ -75,7 +75,7 @@ impl VM {
         let tmp = tempdir().map_err(|err| PersistenceError(Arc::new(err)))?;
         let tmp = tmp.path().to_path_buf();
 
-        let store = ModuleStore::new(tmp)
+        let store = ContractStore::new(tmp)
             .map_err(|err| PersistenceError(Arc::new(err)))?;
 
         Ok(Self {
@@ -109,7 +109,7 @@ impl VM {
         data: impl Into<SessionData>,
     ) -> Result<Session, Error> {
         let data = data.into();
-        let module_session = match data.base {
+        let contract_session = match data.base {
             Some(base) => self
                 .store
                 .session(base.into())
@@ -117,7 +117,7 @@ impl VM {
             _ => self.store.genesis_session(),
         };
         Ok(Session::new(
-            module_session,
+            contract_session,
             self.host_queries.clone(),
             data,
         ))
@@ -200,7 +200,7 @@ impl HostQueries {
 
 /// A query executable on the host.
 ///
-/// The buffer containing the argument the module used to call the query,
+/// The buffer containing the argument the contract used to call the query,
 /// together with the argument's length, are passed as arguments to the
 /// function, and should be processed first. Once this is done, the implementor
 /// should emplace the return of the query in the same buffer, and return the

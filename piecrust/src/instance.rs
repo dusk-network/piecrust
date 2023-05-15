@@ -10,7 +10,7 @@ use std::sync::Arc;
 
 use colored::*;
 use piecrust_uplink as uplink;
-use uplink::ModuleId;
+use uplink::ContractId;
 use wasmer::wasmparser::Operator;
 use wasmer::{CompilerConfig, RuntimeError, Tunables, TypedFunction};
 use wasmer_compiler_singlepass::Singlepass;
@@ -23,9 +23,9 @@ use wasmer_types::{
 };
 use wasmer_vm::{LinearMemory, VMMemory, VMTable, VMTableDefinition};
 
+use crate::contract::WrappedContract;
 use crate::event::Event;
 use crate::imports::DefaultImports;
-use crate::module::WrappedModule;
 use crate::session::Session;
 use crate::store::Memory;
 use crate::Error;
@@ -39,7 +39,7 @@ pub struct WrappedInstance {
 }
 
 pub(crate) struct Env {
-    self_id: ModuleId,
+    self_id: ContractId,
     session: Session,
 }
 
@@ -63,15 +63,15 @@ impl Env {
             .session
             .nth_from_top(0)
             .expect("there should be at least one element in the call stack");
-        self.instance(&stack_element.module_id)
+        self.instance(&stack_element.contract_id)
             .expect("instance should exist")
     }
 
     pub fn instance<'b>(
         &self,
-        module_id: &ModuleId,
+        contract_id: &ContractId,
     ) -> Option<&'b mut WrappedInstance> {
-        self.session.instance(module_id)
+        self.session.instance(contract_id)
     }
 
     pub fn limit(&self) -> u64 {
@@ -91,7 +91,7 @@ impl Env {
         self.session.push_event(event);
     }
 
-    pub fn self_module_id(&self) -> &ModuleId {
+    pub fn self_contract_id(&self) -> &ContractId {
         &self.self_id
     }
 }
@@ -133,22 +133,23 @@ impl Store {
 impl WrappedInstance {
     pub fn new(
         session: Session,
-        module_id: ModuleId,
-        module: &WrappedModule,
+        contract_id: ContractId,
+        contract: &WrappedContract,
         memory: Memory,
     ) -> Result<Self, Error> {
         let tunables = InstanceTunables::new(memory);
         let mut store = Store::new_store_with_tunables(tunables);
 
         let env = Env {
-            self_id: module_id,
+            self_id: contract_id,
             session,
         };
 
         let imports = DefaultImports::default(&mut store, env);
 
-        let module =
-            unsafe { wasmer::Module::deserialize(&store, module.as_bytes())? };
+        let module = unsafe {
+            wasmer::Module::deserialize(&store, contract.as_bytes())?
+        };
 
         let instance = wasmer::Instance::new(&mut store, &module, &imports)?;
 
@@ -195,10 +196,9 @@ impl WrappedInstance {
     where
         F: FnOnce(&[u8]) -> R,
     {
-        let mem =
-            self.instance.exports.get_memory("memory").expect(
-                "memory export should be checked at module creation time",
-            );
+        let mem = self.instance.exports.get_memory("memory").expect(
+            "memory export should be checked at contract creation time",
+        );
         let view = mem.view(&self.store);
         let memory_bytes = unsafe { view.data_unchecked() };
         f(memory_bytes)
@@ -208,10 +208,9 @@ impl WrappedInstance {
     where
         F: FnOnce(&mut [u8]) -> R,
     {
-        let mem =
-            self.instance.exports.get_memory("memory").expect(
-                "memory export should be checked at module creation time",
-            );
+        let mem = self.instance.exports.get_memory("memory").expect(
+            "memory export should be checked at contract creation time",
+        );
         let view = mem.view(&self.store);
         let memory_bytes = unsafe { view.data_unchecked_mut() };
         f(memory_bytes)
@@ -274,7 +273,7 @@ impl WrappedInstance {
             .instance
             .exports
             .get_memory("memory")
-            .expect("memory export is checked at module creation time");
+            .expect("memory export is checked at contract creation time");
 
         let view = mem.view(&self.store);
         let maybe_interesting = unsafe { view.data_unchecked_mut() };

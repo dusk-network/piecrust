@@ -8,9 +8,9 @@ Piecrust Uplink is the library that allows you to build smart contracts directly
 
 ## Usage
 
-The library allows users of the contract platform to manage the interface and state with the host environment of the modules. The example below describes a barebones module. For more detailed examples, see the [modules](https://github.com/dusk-network/piecrust/tree/main/modules) folder.
+The library allows users of the contract platform to manage the interface and state with the host environment of the contracts. The example below describes a barebones contract. For more detailed examples, see the [contracts](https://github.com/dusk-network/piecrust/tree/main/contracts) folder.
 
-Add `piecrust_uplink` as a dependency to your module project:
+Add `piecrust_uplink` as a dependency to your contract project:
 ```sh
 cargo install piecrust_uplink
 ```
@@ -24,16 +24,16 @@ use piecrust_uplink as uplink;
 
 To attach state to a contract:
 ```rust
-/// Struct that describe the state for your module
+/// Struct that describe the state for your contract
 pub struct Counter {
     value: i64,
 };
 
-/// State of the module
+/// State of the contract
 static mut STATE: Counter = Counter { value: 0x1 };
 ```
 
-To define logic for your module, define an implementation:
+To define logic for your contract, define an implementation:
 ```rust
 impl Counter {
     pub fn read_value(&self) -> i64 {

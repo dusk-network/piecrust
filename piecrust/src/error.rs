@@ -8,7 +8,7 @@ use std::borrow::Cow;
 use std::sync::Arc;
 use thiserror::Error;
 
-use piecrust_uplink::ModuleError;
+use piecrust_uplink::ContractError;
 use rkyv::ser::serializers::{
     BufferSerializerError, CompositeSerializerError, FixedSizeScratchError,
 };
@@ -41,7 +41,7 @@ pub enum Error {
     #[error(transparent)]
     CompositeSerializerError(Arc<Compo>),
     #[error(transparent)]
-    ModuleCacheError(Arc<std::io::Error>),
+    ContractCacheError(Arc<std::io::Error>),
     #[error(transparent)]
     PersistenceError(Arc<std::io::Error>),
     #[error("Commit error: {0}")]
@@ -116,7 +116,7 @@ impl<A, B> From<rkyv::validation::CheckArchiveError<A, B>> for Error {
 
 const OTHER_STATUS_CODE: i32 = i32::MIN;
 
-impl From<Error> for ModuleError {
+impl From<Error> for ContractError {
     fn from(err: Error) -> Self {
         // TODO implement this fully
         match err {

@@ -11,10 +11,10 @@
 //!
 //! Once instantiation has been successful, [`Session`]s can be started using
 //! [`VM::session`]. A session represents the execution of a sequence of
-//! [`query`], [`transact`], and [`deploy`] calls, and stores mutations to the
-//! underlying state as a result. This sequence of mutations may be committed -
-//! meaning written to the VM's directory - using [`commit`]. After a commit,
-//! the resulting state may be used by starting a new session with it as a base.
+//! [`call`]  and [`deploy`] calls, and stores mutations to the underlying state
+//! as a result. This sequence of mutations may be committed - meaning written
+//! to the VM's directory - using [`commit`]. After a commit, the resulting
+//! state may be used by starting a new session with it as a base.
 //!
 //! Contract execution is metered in terms of `points`. To set a limit for the
 //! number of points for the next query or transact call use
@@ -77,12 +77,12 @@
 //!
 //! # Usage
 //! ```
-//! use piecrust::{module_bytecode, ModuleData, SessionData, VM};
+//! use piecrust::{contract_bytecode, ContractData, SessionData, VM};
 //! let mut vm = VM::ephemeral().unwrap();
 //!
 //! const OWNER: [u8; 32] = [0u8; 32];
 //! let mut session = vm.session(SessionData::builder()).unwrap();
-//! let counter_id = session.deploy(module_bytecode!("counter"), ModuleData::builder(OWNER)).unwrap();
+//! let counter_id = session.deploy(contract_bytecode!("counter"), ContractData::builder(OWNER)).unwrap();
 //!
 //! assert_eq!(session.call::<(), i64>(counter_id, "read_value", &()).unwrap(), 0xfc);
 //! session.call::<(), ()>(counter_id, "increment", &()).unwrap();
@@ -96,8 +96,7 @@
 //! [`VM::new`]: VM::new
 //! [`Session`]: Session
 //! [`VM::session`]: VM::session
-//! [`query`]: Session::query
-//! [`transact`]: Session::transact
+//! [`call`]: Session::call
 //! [`deploy`]: Session::deploy
 //! [`commit`]: Session::commit
 //! [`set_point_limit`]: Session::set_point_limit
@@ -108,21 +107,21 @@
 
 #[macro_use]
 mod bytecode_macro;
+mod contract;
 mod error;
 mod event;
 mod imports;
 mod instance;
-mod module;
 mod session;
 mod store;
 mod types;
 mod vm;
 
+pub use contract::{ContractData, ContractDataBuilder};
 pub use error::Error;
-pub use module::{ModuleData, ModuleDataBuilder};
 pub use session::{Session, SessionData};
 pub use vm::{HostQuery, VM};
 
 // re-exports
 
-pub use piecrust_uplink::{ModuleId, RawCall};
+pub use piecrust_uplink::{ContractId, RawCall};

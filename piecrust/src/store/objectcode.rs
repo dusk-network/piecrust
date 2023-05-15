@@ -10,7 +10,7 @@ use std::sync::Arc;
 
 use crate::store::mmap::Mmap;
 
-/// WASM object code belonging to a given module.
+/// WASM object code belonging to a given contract.
 #[derive(Debug, Clone)]
 pub struct Objectcode {
     mmap: Arc<Mmap>,

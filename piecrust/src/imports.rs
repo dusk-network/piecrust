@@ -7,7 +7,7 @@
 use wasmer::{imports, Function, FunctionEnv, FunctionEnvMut};
 
 use crate::Error;
-use piecrust_uplink::{ModuleError, ModuleId, ARGBUF_LEN};
+use piecrust_uplink::{ContractError, ContractId, ARGBUF_LEN};
 
 use crate::instance::Env;
 
@@ -41,10 +41,10 @@ fn caller(env: FunctionEnvMut<Env>) {
 
     let mod_id = env
         .nth_from_top(1)
-        .map_or(ModuleId::uninitialized(), |elem| elem.module_id);
+        .map_or(ContractId::uninitialized(), |elem| elem.contract_id);
 
     env.self_instance().with_arg_buffer(|arg| {
-        arg[..std::mem::size_of::<ModuleId>()]
+        arg[..std::mem::size_of::<ContractId>()]
             .copy_from_slice(mod_id.as_bytes())
     })
 }
@@ -67,14 +67,14 @@ fn c(
     let callee_limit = caller_remaining * POINT_PASS_PCT / 100;
 
     // If an error is returned then we are in a re-execution, and should signal
-    // the module without executing the call.
+    // the contract without executing the call.
     env.increment_icc_height();
     if let Some(err) = env.increment_icc_count() {
         env.decrement_icc_height();
         env.decrement_icc_count();
         // Consume all gas given to the callee on an error
         instance.set_remaining_points(caller_remaining - callee_limit);
-        return Ok(ModuleError::from(err).into());
+        return Ok(ContractError::from(err).into());
     }
 
     let (ret_len, callee_spent) = instance
@@ -86,17 +86,17 @@ fn c(
 
             let arg_buf = &memory[argbuf_ofs..][..ARGBUF_LEN];
 
-            let mut mod_id = ModuleId::uninitialized();
+            let mut mod_id = ContractId::uninitialized();
             mod_id.as_bytes_mut().copy_from_slice(
                 &memory[mod_id_ofs as usize..]
-                    [..std::mem::size_of::<ModuleId>()],
+                    [..std::mem::size_of::<ContractId>()],
             );
 
             let callee_stack_element = env
                 .push_callstack(mod_id, callee_limit)
                 .expect("pushing to the callstack should succeed");
             let callee = env
-                .instance(&callee_stack_element.module_id)
+                .instance(&callee_stack_element.contract_id)
                 .expect("callee instance should exist");
 
             let arg = &arg_buf[..arg_len as usize];
@@ -212,11 +212,11 @@ fn spent(fenv: FunctionEnvMut<Env>) -> u64 {
 
 fn owner(fenv: FunctionEnvMut<Env>) -> u32 {
     let env = fenv.data();
-    let self_id = env.self_module_id();
-    let module_metadata = env
-        .module_metadata(self_id)
-        .expect("module metadata should exist");
-    let slice = module_metadata.owner.as_slice();
+    let self_id = env.self_contract_id();
+    let contract_metadata = env
+        .contract_metadata(self_id)
+        .expect("contract metadata should exist");
+    let slice = contract_metadata.owner.as_slice();
     let len = slice.len();
     env.self_instance()
         .with_arg_buffer(|arg| arg[..len].copy_from_slice(slice));
@@ -225,11 +225,11 @@ fn owner(fenv: FunctionEnvMut<Env>) -> u32 {
 
 fn self_id(fenv: FunctionEnvMut<Env>) -> u32 {
     let env = fenv.data();
-    let self_id = env.self_module_id();
-    let module_metadata = env
-        .module_metadata(self_id)
-        .expect("module metadata should exist");
-    let slice = module_metadata.module_id.as_bytes();
+    let self_id = env.self_contract_id();
+    let contract_metadata = env
+        .contract_metadata(self_id)
+        .expect("contract metadata should exist");
+    let slice = contract_metadata.contract_id.as_bytes();
     let len = slice.len();
     env.self_instance()
         .with_arg_buffer(|arg| arg[..len].copy_from_slice(slice));

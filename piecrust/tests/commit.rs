@@ -4,8 +4,10 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use piecrust::{module_bytecode, Error, ModuleData, Session, SessionData, VM};
-use piecrust_uplink::ModuleId;
+use piecrust::{
+    contract_bytecode, ContractData, Error, Session, SessionData, VM,
+};
+use piecrust_uplink::ContractId;
 use std::thread;
 
 const OWNER: [u8; 32] = [0u8; 32];
@@ -16,8 +18,10 @@ fn read_write_session() -> Result<(), Error> {
 
     {
         let mut session = vm.session(SessionData::builder())?;
-        let id = session
-            .deploy(module_bytecode!("counter"), ModuleData::builder(OWNER))?;
+        let id = session.deploy(
+            contract_bytecode!("counter"),
+            ContractData::builder(OWNER),
+        )?;
 
         assert_eq!(session.call::<(), i64>(id, "read_value", &())?, 0xfc);
 
@@ -31,7 +35,7 @@ fn read_write_session() -> Result<(), Error> {
 
     let mut other_session = vm.session(SessionData::builder())?;
     let id = other_session
-        .deploy(module_bytecode!("counter"), ModuleData::builder(OWNER))?;
+        .deploy(contract_bytecode!("counter"), ContractData::builder(OWNER))?;
 
     assert_eq!(other_session.call::<(), i64>(id, "read_value", &())?, 0xfc);
 
@@ -52,7 +56,7 @@ fn commit_restore() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
     let mut session_1 = vm.session(SessionData::builder())?;
     let id = session_1
-        .deploy(module_bytecode!("counter"), ModuleData::builder(OWNER))?;
+        .deploy(contract_bytecode!("counter"), ContractData::builder(OWNER))?;
     // commit 1
     assert_eq!(session_1.call::<(), i64>(id, "read_value", &())?, 0xfc);
     session_1.call::<(), ()>(id, "increment", &())?;
@@ -78,14 +82,14 @@ fn commit_restore() -> Result<(), Error> {
 }
 
 #[test]
-fn commit_restore_two_modules_session() -> Result<(), Error> {
+fn commit_restore_two_contracts_session() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 
     let mut session = vm.session(SessionData::builder())?;
     let id_1 = session
-        .deploy(module_bytecode!("counter"), ModuleData::builder(OWNER))?;
-    let id_2 =
-        session.deploy(module_bytecode!("box"), ModuleData::builder(OWNER))?;
+        .deploy(contract_bytecode!("counter"), ContractData::builder(OWNER))?;
+    let id_2 = session
+        .deploy(contract_bytecode!("box"), ContractData::builder(OWNER))?;
 
     session.call::<(), ()>(id_1, "increment", &())?;
     session.call::<i16, ()>(id_2, "set", &0x11)?;
@@ -110,7 +114,7 @@ fn commit_restore_two_modules_session() -> Result<(), Error> {
 
     let mut session = vm.session(SessionData::builder().base(commit_1))?;
 
-    // check if both modules' state was restored
+    // check if both contracts' state was restored
     assert_eq!(session.call::<(), i64>(id_1, "read_value", &())?, 0xfd);
     assert_eq!(
         session.call::<_, Option<i16>>(id_2, "get", &())?,
@@ -125,7 +129,7 @@ fn multiple_commits() -> Result<(), Error> {
 
     let mut session = vm.session(SessionData::builder())?;
     let id = session
-        .deploy(module_bytecode!("counter"), ModuleData::builder(OWNER))?;
+        .deploy(contract_bytecode!("counter"), ContractData::builder(OWNER))?;
     // commit 1
     assert_eq!(session.call::<(), i64>(id, "read_value", &())?, 0xfc);
     session.call::<(), ()>(id, "increment", &())?;
@@ -152,7 +156,7 @@ fn multiple_commits() -> Result<(), Error> {
 
 fn increment_counter_and_commit(
     mut session: Session,
-    id: ModuleId,
+    id: ContractId,
     count: usize,
 ) -> Result<[u8; 32], Error> {
     for _ in 0..count {
@@ -167,7 +171,7 @@ fn concurrent_sessions() -> Result<(), Error> {
 
     let mut session = vm.session(SessionData::builder())?;
     let counter = session
-        .deploy(module_bytecode!("counter"), ModuleData::builder(OWNER))?;
+        .deploy(contract_bytecode!("counter"), ContractData::builder(OWNER))?;
 
     assert_eq!(session.call::<(), i64>(counter, "read_value", &())?, 0xfc);
 
@@ -248,24 +252,24 @@ fn concurrent_sessions() -> Result<(), Error> {
     Ok(())
 }
 
-fn make_session(vm: &VM) -> Result<(Session, ModuleId), Error> {
+fn make_session(vm: &VM) -> Result<(Session, ContractId), Error> {
     const HEIGHT: u64 = 29_000u64;
     let mut session =
         vm.session(SessionData::builder().insert("height", HEIGHT))?;
-    let module_id = session
-        .deploy(module_bytecode!("everest"), ModuleData::builder(OWNER))?;
-    Ok((session, module_id))
+    let contract_id = session
+        .deploy(contract_bytecode!("everest"), ContractData::builder(OWNER))?;
+    Ok((session, contract_id))
 }
 
 #[test]
 fn session_move() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
-    let (mut session, module_id) = make_session(&vm)?;
+    let (mut session, contract_id) = make_session(&vm)?;
 
     // This tests that a session can be moved without subsequent calls producing
     // a SIGSEGV. The pattern is very common downstream, and should be tested
     // for.
-    session.call::<_, u64>(module_id, "get_height", &())?;
+    session.call::<_, u64>(contract_id, "get_height", &())?;
 
     Ok(())
 }
@@ -276,7 +280,7 @@ fn squashing() -> Result<(), Error> {
 
     let mut session = vm.session(SessionData::builder())?;
     let counter = session
-        .deploy(module_bytecode!("counter"), ModuleData::builder(OWNER))?;
+        .deploy(contract_bytecode!("counter"), ContractData::builder(OWNER))?;
 
     assert_eq!(session.call::<(), i64>(counter, "read_value", &())?, 0xfc);
 

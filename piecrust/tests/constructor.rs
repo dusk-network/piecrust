@@ -4,7 +4,7 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use piecrust::{module_bytecode, Error, ModuleData, SessionData, VM};
+use piecrust::{contract_bytecode, ContractData, Error, SessionData, VM};
 
 const CONTRACT_INIT_METHOD: &str = "init";
 const OWNER: [u8; 32] = [0u8; 32];
@@ -16,8 +16,8 @@ fn constructor() -> Result<(), Error> {
     let mut session = vm.session(SessionData::builder())?;
 
     let id = session.deploy(
-        module_bytecode!("constructor"),
-        ModuleData::builder(OWNER).constructor_arg(&0xabu8),
+        contract_bytecode!("constructor"),
+        ContractData::builder(OWNER).constructor_arg(&0xabu8),
     )?;
 
     assert_eq!(session.call::<(), u8>(id, "read_value", &())?, 0xab);
@@ -65,8 +65,8 @@ fn missing_init() -> Result<(), Error> {
     let mut session = vm.session(SessionData::builder())?;
 
     let result = session.deploy(
-        module_bytecode!("counter"),
-        ModuleData::builder(OWNER).constructor_arg(&0xabu8),
+        contract_bytecode!("counter"),
+        ContractData::builder(OWNER).constructor_arg(&0xabu8),
     );
 
     assert!(

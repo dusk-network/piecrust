@@ -5,7 +5,7 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use piecrust::{module_bytecode, VM};
+use piecrust::{contract_bytecode, VM};
 
 const SAMPLE_SIZE: usize = 10240;
 
@@ -17,7 +17,7 @@ fn push(c: &mut Criterion) {
     let mut vm = VM::ephemeral().expect("Ephemeral VM should succeed");
 
     let id = vm
-        .deploy(module_bytecode!("stack"))
+        .deploy(contract_bytecode!("stack"))
         .expect("Deployment should succeed");
 
     let mut session = vm.session();
@@ -35,7 +35,7 @@ fn pop(c: &mut Criterion) {
     let mut vm = VM::ephemeral().expect("Ephemeral VM should succeed");
 
     let id = vm
-        .deploy(module_bytecode!("stack"))
+        .deploy(contract_bytecode!("stack"))
         .expect("Deployment should succeed");
 
     let mut session = vm.session();

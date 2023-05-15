@@ -4,7 +4,7 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use piecrust_uplink::ModuleId;
+use piecrust_uplink::ContractId;
 
 #[derive(Debug, Default)]
 pub struct CallStack {
@@ -24,9 +24,9 @@ impl CallStack {
     /// Push an element to the call stack.
     ///
     /// # Panics
-    /// If an instance of the given module ID is absent from the stack.
-    pub fn push(&mut self, module_id: ModuleId, limit: u64) {
-        self.stack.push(StackElement { module_id, limit });
+    /// If an instance of the given contract ID is absent from the stack.
+    pub fn push(&mut self, contract_id: ContractId, limit: u64) {
+        self.stack.push(StackElement { contract_id, limit });
     }
 
     /// Pops an element from the callstack.
@@ -45,7 +45,7 @@ impl CallStack {
         if len > n {
             let elem = &self.stack[len - (n + 1)];
             Some(StackElement {
-                module_id: elem.module_id,
+                contract_id: elem.contract_id,
                 limit: elem.limit,
             })
         } else {
@@ -56,6 +56,6 @@ impl CallStack {
 
 #[derive(Debug)]
 pub struct StackElement {
-    pub module_id: ModuleId,
+    pub contract_id: ContractId,
     pub limit: u64,
 }
