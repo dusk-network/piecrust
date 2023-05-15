@@ -5,7 +5,7 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 #[macro_export]
-macro_rules! module_bytecode {
+macro_rules! contract_bytecode {
     ($name:literal) => {
         include_bytes!(concat!("../../target/stripped/", $name, ".wasm"))
     };

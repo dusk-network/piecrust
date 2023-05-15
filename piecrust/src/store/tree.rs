@@ -5,10 +5,10 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 use bytecheck::CheckBytes;
-use piecrust_uplink::ModuleId;
+use piecrust_uplink::ContractId;
 use rkyv::{Archive, Deserialize, Serialize};
 
-// This means we have max `2^32` modules
+// This means we have max `2^32` contracts
 const HEIGHT: usize = 32;
 const ARITY: usize = 2;
 
@@ -93,19 +93,19 @@ impl Hasher {
     }
 }
 
-/// Returns the position of a `module` in the tree  given its ID. The position
+/// Returns the position of a `contract` in the tree  given its ID. The position
 /// is computed by dividing the 32-byte id into 8 4-byte slices, which are then
 /// summed up (`u32::wrapping_add`).
 ///
 /// # SAFETY:
 /// Since we're mapping from 32 bytes (256-bit) to 4 bytes it is possible to
-/// have collisions between different module IDs. To prevent filling the same
-/// position in the tree with different modules we check for collisions before
-/// inserting a new module. See [`deploy`] for details.
+/// have collisions between different contract IDs. To prevent filling the same
+/// position in the tree with different contracts we check for collisions before
+/// inserting a new contract. See [`deploy`] for details.
 ///
-/// [`deploy`]: crate::store::ModuleSession::deploy
-pub fn position_from_module(module: &ModuleId) -> u64 {
-    let pos = module
+/// [`deploy`]: crate::store::ContractSession::deploy
+pub fn position_from_contract(contract: &ContractId) -> u64 {
+    let pos = contract
         .as_bytes()
         .chunks(4)
         .map(|chunk| {

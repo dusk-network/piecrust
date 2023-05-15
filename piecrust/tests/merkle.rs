@@ -4,7 +4,7 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use piecrust::{module_bytecode, Error, ModuleData, SessionData, VM};
+use piecrust::{contract_bytecode, ContractData, Error, SessionData, VM};
 
 const OWNER: [u8; 32] = [0u8; 32];
 
@@ -18,7 +18,7 @@ pub fn merkle_root() -> Result<(), Error> {
     session.set_point_limit(147456);
 
     let id = session
-        .deploy(module_bytecode!("merkle"), ModuleData::builder(OWNER))?;
+        .deploy(contract_bytecode!("merkle"), ContractData::builder(OWNER))?;
 
     let empty_root = [0u8; 32];
     let root: [u8; 32] = session

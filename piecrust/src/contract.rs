@@ -5,70 +5,70 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 use std::sync::Arc;
-use wasmer::Module;
 
 use bytecheck::CheckBytes;
 use rkyv::{Archive, Deserialize, Serialize};
+use wasmer::Module;
 
 use crate::error::Error;
 use crate::instance::Store;
-use piecrust_uplink::ModuleId;
+use piecrust_uplink::ContractId;
 
-pub struct ModuleData<'a, A, const N: usize> {
-    pub(crate) module_id: Option<ModuleId>,
+pub struct ContractData<'a, A, const N: usize> {
+    pub(crate) contract_id: Option<ContractId>,
     pub(crate) constructor_arg: Option<&'a A>,
     pub(crate) owner: [u8; N],
 }
 
 // `()` is done on purpose, since by default it should be that the constructor
 // takes no argument.
-impl<'a, const N: usize> ModuleData<'a, (), N> {
+impl<'a, const N: usize> ContractData<'a, (), N> {
     /// Build a deploy data structure.
     ///
     /// This function returns a builder that can be used to set optional fields
-    /// in module deployment.
-    pub fn builder(owner: [u8; N]) -> ModuleDataBuilder<'a, (), N> {
-        ModuleDataBuilder {
-            module_id: None,
+    /// in contract deployment.
+    pub fn builder(owner: [u8; N]) -> ContractDataBuilder<'a, (), N> {
+        ContractDataBuilder {
+            contract_id: None,
             constructor_arg: None,
             owner,
         }
     }
 }
 
-impl<'a, A, const N: usize> From<ModuleDataBuilder<'a, A, N>>
-    for ModuleData<'a, A, N>
+impl<'a, A, const N: usize> From<ContractDataBuilder<'a, A, N>>
+    for ContractData<'a, A, N>
 {
-    fn from(builder: ModuleDataBuilder<'a, A, N>) -> Self {
+    fn from(builder: ContractDataBuilder<'a, A, N>) -> Self {
         builder.build()
     }
 }
 
-pub struct ModuleDataBuilder<'a, A, const N: usize> {
-    module_id: Option<ModuleId>,
+pub struct ContractDataBuilder<'a, A, const N: usize> {
+    contract_id: Option<ContractId>,
     owner: [u8; N],
     constructor_arg: Option<&'a A>,
 }
 
-impl<'a, A, const N: usize> ModuleDataBuilder<'a, A, N> {
-    /// Set the deployment module ID.
-    pub fn module_id(mut self, id: ModuleId) -> Self {
-        self.module_id = Some(id);
+impl<'a, A, const N: usize> ContractDataBuilder<'a, A, N> {
+    /// Set the deployment contract ID.
+    pub fn contract_id(mut self, id: ContractId) -> Self {
+        self.contract_id = Some(id);
         self
     }
 
     /// Set the constructor argument for deployment.
-    pub fn constructor_arg<B>(self, arg: &B) -> ModuleDataBuilder<B, N> {
-        ModuleDataBuilder {
-            module_id: self.module_id,
+    pub fn constructor_arg<B>(self, arg: &B) -> ContractDataBuilder<B, N> {
+        ContractDataBuilder {
+            contract_id: self.contract_id,
             owner: self.owner,
             constructor_arg: Some(arg),
         }
     }
 
-    pub fn build(self) -> ModuleData<'a, A, N> {
-        ModuleData {
-            module_id: self.module_id,
+    pub fn build(self) -> ContractData<'a, A, N> {
+        ContractData {
+            contract_id: self.contract_id,
             constructor_arg: self.constructor_arg,
             owner: self.owner,
         }
@@ -77,17 +77,17 @@ impl<'a, A, const N: usize> ModuleDataBuilder<'a, A, N> {
 
 #[derive(Archive, Serialize, Deserialize, Debug, Clone)]
 #[archive_attr(derive(CheckBytes))]
-pub struct ModuleMetadata {
-    pub module_id: ModuleId,
+pub struct ContractMetadata {
+    pub contract_id: ContractId,
     pub owner: Vec<u8>,
 }
 
 #[derive(Clone)]
-pub struct WrappedModule {
+pub struct WrappedContract {
     serialized: Arc<Vec<u8>>,
 }
 
-impl WrappedModule {
+impl WrappedContract {
     pub fn new<B: AsRef<[u8]>, C: AsRef<[u8]>>(
         bytecode: B,
         objectcode: Option<C>,
@@ -96,12 +96,12 @@ impl WrappedModule {
         let serialized = match objectcode {
             Some(obj) => obj.as_ref().to_vec(),
             _ => {
-                let module = Module::new(&store, bytecode.as_ref())?;
-                module.serialize()?.to_vec()
+                let contract = Module::new(&store, bytecode.as_ref())?;
+                contract.serialize()?.to_vec()
             }
         };
 
-        Ok(WrappedModule {
+        Ok(WrappedContract {
             serialized: Arc::new(serialized),
         })
     }

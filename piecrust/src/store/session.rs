@@ -10,10 +10,10 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 use std::{io, mem};
 
-use crate::module::ModuleMetadata;
-use piecrust_uplink::ModuleId;
+use crate::contract::ContractMetadata;
+use piecrust_uplink::ContractId;
 
-use crate::store::tree::{position_from_module, Hash};
+use crate::store::tree::{position_from_contract, Hash};
 use crate::store::{
     compute_tree, Bytecode, Call, Commit, Memory, Metadata, Objectcode,
     BYTECODE_DIR, DIFF_EXTENSION, MEMORY_DIR, METADATA_EXTENSION,
@@ -21,25 +21,25 @@ use crate::store::{
 };
 
 #[derive(Debug, Clone)]
-pub struct ModuleDataEntry {
+pub struct ContractDataEntry {
     pub bytecode: Bytecode,
     pub objectcode: Objectcode,
     pub metadata: Metadata,
     pub memory: Memory,
 }
 
-/// The representation of a session with a [`ModuleStore`].
+/// The representation of a session with a [`ContractStore`].
 ///
-/// A session tracks modifications to the modules' memories by keeping
-/// references to the set of instantiated modules.
+/// A session tracks modifications to the contracts' memories by keeping
+/// references to the set of instantiated contracts.
 ///
 /// The modifications are kept in memory and are only persisted to disk on a
 /// call to [`commit`].
 ///
-/// [`commit`]: ModuleSession::commit
+/// [`commit`]: ContractSession::commit
 #[derive(Debug)]
-pub struct ModuleSession {
-    modules: BTreeMap<ModuleId, ModuleDataEntry>,
+pub struct ContractSession {
+    contracts: BTreeMap<ContractId, ContractDataEntry>,
 
     base: Option<Commit>,
     root_dir: PathBuf,
@@ -47,14 +47,14 @@ pub struct ModuleSession {
     call: mpsc::Sender<Call>,
 }
 
-impl ModuleSession {
+impl ContractSession {
     pub(crate) fn new<P: AsRef<Path>>(
         root_dir: P,
         base: Option<Commit>,
         call: mpsc::Sender<Call>,
     ) -> Self {
         Self {
-            modules: BTreeMap::new(),
+            contracts: BTreeMap::new(),
             base,
             root_dir: root_dir.as_ref().into(),
             call,
@@ -64,46 +64,46 @@ impl ModuleSession {
     /// Returns the root that the session would have if one would decide to
     /// commit it.
     ///
-    /// Keep in mind that modifications to memories obtained using [`module`],
+    /// Keep in mind that modifications to memories obtained using [`contract`],
     /// may cause the root to be inconsistent. The caller should ensure that no
     /// instance of [`Memory`] obtained via this session is being modified when
     /// calling this function.
     ///
-    /// [`module`]: ModuleSession::module
+    /// [`contract`]: ContractSession::contract
     pub fn root(&self) -> Hash {
-        let (_, tree) = compute_tree(&self.base, &self.modules);
+        let (_, tree) = compute_tree(&self.base, &self.contracts);
         *tree.root()
     }
 
     /// Commits the given session to disk, consuming the session and adding it
-    /// to the [`ModuleStore`] it was created from.
+    /// to the [`ContractStore`] it was created from.
     ///
-    /// Keep in mind that modifications to memories obtained using [`module`],
+    /// Keep in mind that modifications to memories obtained using [`contract`],
     /// may cause the root to be inconsistent. The caller should ensure that no
     /// instance of [`Memory`] obtained via this session is being modified when
     /// calling this function.
     ///
     /// # Safety
     /// This method should only be called once, while immediately allowing the
-    /// `ModuleSession` to drop.
+    /// `ContractSession` to drop.
     ///
-    /// [`module`]: ModuleSession::module
+    /// [`contract`]: ContractSession::contract
     pub fn commit(&mut self) -> io::Result<Hash> {
         let (replier, receiver) = mpsc::sync_channel(1);
 
-        let mut modules = BTreeMap::new();
+        let mut contracts = BTreeMap::new();
         let mut base = self.base.as_ref().map(|c| Commit {
-            modules: BTreeMap::new(),
+            contracts: BTreeMap::new(),
             diffs: BTreeSet::new(),
             tree: c.tree.clone(),
         });
 
-        mem::swap(&mut self.modules, &mut modules);
+        mem::swap(&mut self.contracts, &mut contracts);
         mem::swap(&mut self.base, &mut base);
 
         self.call
             .send(Call::Commit {
-                modules,
+                contracts,
                 base,
                 replier,
             })
@@ -115,41 +115,41 @@ impl ModuleSession {
             .map(|c| *c.tree.root())
     }
 
-    /// Return the bytecode and memory belonging to the given `module`, if it
+    /// Return the bytecode and memory belonging to the given `contract`, if it
     /// exists.
     ///
-    /// The module is considered to exist if either of the following conditions
-    /// are met:
+    /// The contract is considered to exist if either of the following
+    /// conditions are met:
     ///
-    /// - The module has been [`deploy`]ed in this session
-    /// - The module was deployed to the base commit
+    /// - The contract has been [`deploy`]ed in this session
+    /// - The contract was deployed to the base commit
     ///
-    /// [`deploy`]: ModuleSession::deploy
-    pub fn module(
+    /// [`deploy`]: ContractSession::deploy
+    pub fn contract(
         &mut self,
-        module: ModuleId,
-    ) -> io::Result<Option<ModuleDataEntry>> {
-        match self.modules.entry(module) {
+        contract: ContractId,
+    ) -> io::Result<Option<ContractDataEntry>> {
+        match self.contracts.entry(contract) {
             Vacant(entry) => match &self.base {
                 None => Ok(None),
                 Some(base_commit) => {
                     let base = base_commit.tree.root();
 
-                    match base_commit.modules.contains_key(&module) {
+                    match base_commit.contracts.contains_key(&contract) {
                         true => {
                             let base_hex = hex::encode(base);
                             let base_dir = self.root_dir.join(base_hex);
 
-                            let module_hex = hex::encode(module);
+                            let contract_hex = hex::encode(contract);
 
                             let bytecode_path =
-                                base_dir.join(BYTECODE_DIR).join(&module_hex);
+                                base_dir.join(BYTECODE_DIR).join(&contract_hex);
                             let objectcode_path = bytecode_path
                                 .with_extension(OBJECTCODE_EXTENSION);
                             let metadata_path = bytecode_path
                                 .with_extension(METADATA_EXTENSION);
                             let memory_path =
-                                base_dir.join(MEMORY_DIR).join(module_hex);
+                                base_dir.join(MEMORY_DIR).join(contract_hex);
                             let memory_diff_path =
                                 memory_path.with_extension(DIFF_EXTENSION);
 
@@ -158,7 +158,7 @@ impl ModuleSession {
                                 Objectcode::from_file(objectcode_path)?;
                             let metadata = Metadata::from_file(metadata_path)?;
                             let memory =
-                                match base_commit.diffs.contains(&module) {
+                                match base_commit.diffs.contains(&contract) {
                                     true => Memory::from_file_and_diff(
                                         memory_path,
                                         memory_diff_path,
@@ -166,8 +166,8 @@ impl ModuleSession {
                                     false => Memory::from_file(memory_path)?,
                                 };
 
-                            let module = entry
-                                .insert(ModuleDataEntry {
+                            let contract = entry
+                                .insert(ContractDataEntry {
                                     bytecode,
                                     objectcode,
                                     metadata,
@@ -175,7 +175,7 @@ impl ModuleSession {
                                 })
                                 .clone();
 
-                            Ok(Some(module))
+                            Ok(Some(contract))
                         }
                         false => Ok(None),
                     }
@@ -185,33 +185,33 @@ impl ModuleSession {
         }
     }
 
-    /// Clear all deployed deployed or otherwise instantiated modules.
-    pub fn clear_modules(&mut self) {
-        self.modules.clear();
+    /// Clear all deployed deployed or otherwise instantiated contracts.
+    pub fn clear_contracts(&mut self) {
+        self.contracts.clear();
     }
 
-    /// Checks if module is deployed
-    pub fn module_deployed(&mut self, module_id: ModuleId) -> bool {
-        if self.modules.contains_key(&module_id) {
+    /// Checks if contract is deployed
+    pub fn contract_deployed(&mut self, contract_id: ContractId) -> bool {
+        if self.contracts.contains_key(&contract_id) {
             true
         } else if let Some(base_commit) = &self.base {
-            base_commit.modules.contains_key(&module_id)
+            base_commit.contracts.contains_key(&contract_id)
         } else {
             false
         }
     }
 
-    /// Deploys bytecode to the module store with the given its `module_id`.
+    /// Deploys bytecode to the contract store with the given its `contract_id`.
     ///
-    /// See [`deploy`] for deploying bytecode without specifying a module ID.
+    /// See [`deploy`] for deploying bytecode without specifying a contract ID.
     ///
-    /// [`deploy`]: ModuleSession::deploy
+    /// [`deploy`]: ContractSession::deploy
     pub fn deploy<B: AsRef<[u8]>>(
         &mut self,
-        module_id: ModuleId,
+        contract_id: ContractId,
         bytecode: B,
         objectcode: B,
-        metadata: ModuleMetadata,
+        metadata: ContractMetadata,
         metadata_bytes: B,
     ) -> io::Result<()> {
         let memory = Memory::new()?;
@@ -219,21 +219,21 @@ impl ModuleSession {
         let objectcode = Objectcode::new(objectcode)?;
         let metadata = Metadata::new(metadata_bytes, metadata)?;
 
-        // If the position is already filled in the tree, the module cannot be
+        // If the position is already filled in the tree, the contract cannot be
         // inserted.
         if let Some(base) = self.base.as_ref() {
-            let pos = position_from_module(&module_id);
+            let pos = position_from_contract(&contract_id);
             if base.tree.contains(pos) {
                 return Err(io::Error::new(
                     io::ErrorKind::Other,
-                    format!("Existing module at position '{pos}' in tree"),
+                    format!("Existing contract at position '{pos}' in tree"),
                 ));
             }
         }
 
-        self.modules.insert(
-            module_id,
-            ModuleDataEntry {
+        self.contracts.insert(
+            contract_id,
+            ContractDataEntry {
                 bytecode,
                 objectcode,
                 metadata,
@@ -244,18 +244,18 @@ impl ModuleSession {
         Ok(())
     }
 
-    /// Provides metadata of the module with a given `module_id`.
-    pub fn module_metadata(
+    /// Provides metadata of the contract with a given `contract_id`.
+    pub fn contract_metadata(
         &self,
-        module_id: &ModuleId,
-    ) -> Option<&ModuleMetadata> {
-        self.modules
-            .get(module_id)
+        contract_id: &ContractId,
+    ) -> Option<&ContractMetadata> {
+        self.contracts
+            .get(contract_id)
             .map(|store_data| store_data.metadata.data())
     }
 }
 
-impl Drop for ModuleSession {
+impl Drop for ContractSession {
     fn drop(&mut self) {
         if let Some(base) = self.base.take() {
             let root = base.tree.root();

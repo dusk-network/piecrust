@@ -13,7 +13,7 @@ use std::mem;
 use std::sync::Arc;
 
 use bytecheck::CheckBytes;
-use piecrust_uplink::{ModuleId, SCRATCH_BUF_BYTES};
+use piecrust_uplink::{ContractId, SCRATCH_BUF_BYTES};
 use rkyv::ser::serializers::{
     BufferScratch, BufferSerializer, CompositeSerializer,
 };
@@ -24,10 +24,10 @@ use rkyv::{
 };
 use wasmer_types::WASM_PAGE_SIZE;
 
+use crate::contract::{ContractData, ContractMetadata, WrappedContract};
 use crate::event::Event;
 use crate::instance::WrappedInstance;
-use crate::module::{ModuleData, ModuleMetadata, WrappedModule};
-use crate::store::{ModuleSession, Objectcode};
+use crate::store::{ContractSession, Objectcode};
 use crate::types::StandardBufSerializer;
 use crate::vm::HostQueries;
 use crate::Error;
@@ -44,16 +44,14 @@ unsafe impl Sync for Session {}
 
 /// A running mutation to a state.
 ///
-/// `Session`s are spawned using a [`VM`] instance, and can be [`queried`] or
-/// [`transacted`] with to modify their state. A sequence of these calls may
-/// then be [`commit`]ed to, or discarded by simply allowing the session to
-/// drop.
+/// `Session`s are spawned using a [`VM`] instance, and can be used to [`call`]
+/// contracts with to modify their state. A sequence of these calls may then be
+/// [`commit`]ed to, or discarded by simply allowing the session to drop.
 ///
-/// New modules are to be `deploy`ed in the context of a session.
+/// New contracts are to be `deploy`ed in the context of a session.
 ///
 /// [`VM`]: crate::VM
-/// [`queried`]: Session::query
-/// [`transacted`]: Session::transact
+/// [`call`]: Session::call
 /// [`commit`]: Session::commit
 #[derive(Debug)]
 pub struct Session {
@@ -88,12 +86,12 @@ impl Drop for Session {
 #[derive(Debug)]
 struct SessionInner {
     call_stack: CallStack,
-    instance_map: BTreeMap<ModuleId, (*mut WrappedInstance, u64)>,
+    instance_map: BTreeMap<ContractId, (*mut WrappedInstance, u64)>,
     debug: Vec<String>,
     events: Vec<Event>,
     data: SessionData,
 
-    module_session: ModuleSession,
+    contract_session: ContractSession,
     host_queries: HostQueries,
 
     limit: u64,
@@ -112,7 +110,7 @@ struct SessionInner {
 
 impl Session {
     pub(crate) fn new(
-        module_session: ModuleSession,
+        contract_session: ContractSession,
         host_queries: HostQueries,
         data: SessionData,
     ) -> Self {
@@ -122,7 +120,7 @@ impl Session {
             debug: vec![],
             events: vec![],
             data,
-            module_session,
+            contract_session,
             host_queries,
             limit: DEFAULT_LIMIT,
             spent: 0,
@@ -152,35 +150,36 @@ impl Session {
         }
     }
 
-    /// Deploy a module, returning its [`ModuleId`]. The ID is computed using a
-    /// `blake3` hash of the `bytecode`.
+    /// Deploy a contract, returning its [`ContractId`]. The ID is computed
+    /// using a `blake3` hash of the `bytecode`.
     ///
     /// # Errors
-    /// It is possible that a collision between module IDs occurs, even for
-    /// different module IDs. This is due to the fact that all modules have to
-    /// fit into a sparse merkle tree with `2^32` positions, and as such a
-    /// 256-bit number has to be mapped into a 32-bit number.
+    /// It is possible that a collision between contract IDs occurs, even for
+    /// different contract IDs. This is due to the fact that all contracts have
+    /// to fit into a sparse merkle tree with `2^32` positions, and as such
+    /// a 256-bit number has to be mapped into a 32-bit number.
     ///
     /// If such a collision occurs, [`PersistenceError`] will be returned.
     ///
-    /// [`ModuleId`]: ModuleId
+    /// [`ContractId`]: ContractId
     /// [`PersistenceError`]: PersistenceError
     pub fn deploy<'a, A, D, const N: usize>(
         &mut self,
         bytecode: &[u8],
         deploy_data: D,
-    ) -> Result<ModuleId, Error>
+    ) -> Result<ContractId, Error>
     where
         A: 'a + for<'b> Serialize<StandardBufSerializer<'b>>,
-        D: Into<ModuleData<'a, A, N>>,
+        D: Into<ContractData<'a, A, N>>,
     {
         let mut deploy_data = deploy_data.into();
 
-        match deploy_data.module_id {
+        match deploy_data.contract_id {
             Some(_) => (),
             _ => {
                 let hash = blake3::hash(bytecode);
-                deploy_data.module_id = Some(ModuleId::from_bytes(hash.into()));
+                deploy_data.contract_id =
+                    Some(ContractId::from_bytes(hash.into()));
             }
         };
 
@@ -196,72 +195,73 @@ impl Session {
             self.inner.buffer[0..pos].to_vec()
         });
 
-        let module_id = deploy_data.module_id.unwrap();
+        let contract_id = deploy_data.contract_id.unwrap();
         self.do_deploy(
-            module_id,
+            contract_id,
             bytecode,
             constructor_arg,
             deploy_data.owner.to_vec(),
         )?;
 
-        Ok(module_id)
+        Ok(contract_id)
     }
 
     fn do_deploy(
         &mut self,
-        module_id: ModuleId,
+        contract_id: ContractId,
         bytecode: &[u8],
         arg: Option<Vec<u8>>,
         owner: Vec<u8>,
     ) -> Result<(), Error> {
-        if self.inner.module_session.module_deployed(module_id) {
+        if self.inner.contract_session.contract_deployed(contract_id) {
             return Err(InitalizationError(
                 "Deployed error already exists".into(),
             ));
         }
 
-        let wrapped_module = WrappedModule::new(bytecode, None::<Objectcode>)?;
-        let module_metadata = ModuleMetadata {
-            module_id,
+        let wrapped_contract =
+            WrappedContract::new(bytecode, None::<Objectcode>)?;
+        let contract_metadata = ContractMetadata {
+            contract_id,
             owner: owner.clone(),
         };
-        let metadata_bytes = Self::serialize_data(&module_metadata);
+        let metadata_bytes = Self::serialize_data(&contract_metadata);
 
         self.inner
-            .module_session
+            .contract_session
             .deploy(
-                module_id,
+                contract_id,
                 bytecode,
-                wrapped_module.as_bytes(),
-                module_metadata,
+                wrapped_contract.as_bytes(),
+                contract_metadata,
                 metadata_bytes.as_slice(),
             )
             .map_err(|err| PersistenceError(Arc::new(err)))?;
 
-        self.create_instance(module_id)?;
+        self.create_instance(contract_id)?;
         let instance =
-            self.instance(&module_id).expect("instance should exist");
+            self.instance(&contract_id).expect("instance should exist");
 
         let has_init = instance.is_function_exported(INIT_METHOD);
         if has_init && arg.is_none() {
             return Err(InitalizationError(
-                "Module has constructor but no argument was provided".into(),
+                "Contract has constructor but no argument was provided".into(),
             ));
         }
 
         if let Some(arg) = &arg {
             if !has_init {
                 return Err(InitalizationError(
-                    "Argument was provided but module has no constructor"
+                    "Argument was provided but contract has no constructor"
                         .into(),
                 ));
             }
 
-            self.initialize(module_id, arg.clone())?;
+            self.initialize(contract_id, arg.clone())?;
         }
 
         self.inner.call_history.push(From::from(Deploy {
-            module_id,
+            contract_id,
             bytecode: bytecode.to_vec(),
             fdata: arg,
             owner,
@@ -281,7 +281,7 @@ impl Session {
     ///
     /// # Errors
     /// The call may error during execution for a wide array of reasons, the
-    /// most common ones being running against the point limit and a module
+    /// most common ones being running against the point limit and a contract
     /// panic. Calling the 'init' method is not allowed except for when
     /// called from the deploy method.
     ///
@@ -289,7 +289,7 @@ impl Session {
     /// [`spent`]: Session::spent
     pub fn call<A, Ret>(
         &mut self,
-        module: ModuleId,
+        contract: ContractId,
         method_name: &str,
         arg: &A,
     ) -> Result<Ret, Error>
@@ -312,7 +312,7 @@ impl Session {
         let pos = ser.pos();
 
         let ret_bytes = self.execute_until_ok(Call {
-            module,
+            contract,
             fname: method_name.to_string(),
             fdata: self.inner.buffer[..pos].to_vec(),
             limit: self.inner.limit,
@@ -326,11 +326,11 @@ impl Session {
 
     fn initialize(
         &mut self,
-        module: ModuleId,
+        contract: ContractId,
         arg: Vec<u8>,
     ) -> Result<(), Error> {
         self.execute_until_ok(Call {
-            module,
+            contract,
             fname: INIT_METHOD.to_string(),
             fdata: arg,
             limit: self.inner.limit,
@@ -340,17 +340,20 @@ impl Session {
 
     pub(crate) fn instance<'a>(
         &self,
-        module_id: &ModuleId,
+        contract_id: &ContractId,
     ) -> Option<&'a mut WrappedInstance> {
-        self.inner.instance_map.get(module_id).map(|(instance, _)| {
-            // SAFETY: We guarantee that the instance exists since we're in
-            // control over if it is dropped in `pop`
-            unsafe { &mut **instance }
-        })
+        self.inner
+            .instance_map
+            .get(contract_id)
+            .map(|(instance, _)| {
+                // SAFETY: We guarantee that the instance exists since we're in
+                // control over if it is dropped in `pop`
+                unsafe { &mut **instance }
+            })
     }
 
-    fn update_instance_count(&mut self, module_id: ModuleId, inc: bool) {
-        match self.inner.instance_map.entry(module_id) {
+    fn update_instance_count(&mut self, contract_id: ContractId, inc: bool) {
+        match self.inner.instance_map.entry(contract_id) {
             Entry::Occupied(mut entry) => {
                 let (_, count) = entry.get_mut();
                 if inc {
@@ -366,17 +369,17 @@ impl Session {
     fn clear_stack_and_instances(&mut self) {
         while self.inner.call_stack.len() > 0 {
             let popped = self.inner.call_stack.pop().unwrap();
-            self.remove_instance(&popped.module_id);
+            self.remove_instance(&popped.contract_id);
         }
-        let ids: Vec<ModuleId> =
+        let ids: Vec<ContractId> =
             self.inner.instance_map.keys().cloned().collect();
-        for module_id in ids.iter() {
-            self.remove_instance(module_id);
+        for contract_id in ids.iter() {
+            self.remove_instance(contract_id);
         }
     }
 
-    pub(crate) fn remove_instance(&mut self, module_id: &ModuleId) {
-        let mut entry = match self.inner.instance_map.entry(*module_id) {
+    pub(crate) fn remove_instance(&mut self, contract_id: &ContractId) {
+        let mut entry = match self.inner.instance_map.entry(*contract_id) {
             Entry::Occupied(e) => e,
             _ => unreachable!("map must have an instance here"),
         };
@@ -385,7 +388,7 @@ impl Session {
         *count -= 1;
 
         if *count == 0 {
-            // SAFETY: This is the last instance of the module in the
+            // SAFETY: This is the last instance of the contract in the
             // stack, therefore we should recoup the memory and drop
             //
             // Any pointers to it will be left dangling
@@ -399,11 +402,11 @@ impl Session {
     /// Return the state root of the current state of the session.
     ///
     /// The state root is the root of a merkle tree whose leaves are the hashes
-    /// of the state of of each module, ordered by their module ID.
+    /// of the state of of each contract, ordered by their contract ID.
     ///
     /// It also doubles as the ID of a commit - the commit root.
     pub fn root(&self) -> [u8; 32] {
-        self.inner.module_session.root().into()
+        self.inner.contract_session.root().into()
     }
 
     pub(crate) fn push_event(&mut self, event: Event) {
@@ -412,23 +415,23 @@ impl Session {
 
     fn new_instance(
         &mut self,
-        module_id: ModuleId,
+        contract_id: ContractId,
     ) -> Result<WrappedInstance, Error> {
         let store_data = self
             .inner
-            .module_session
-            .module(module_id)
+            .contract_session
+            .contract(contract_id)
             .map_err(|err| PersistenceError(Arc::new(err)))?
-            .expect("Module should exist");
+            .expect("Contract should exist");
 
-        let module = WrappedModule::new(
+        let contract = WrappedContract::new(
             store_data.bytecode,
             Some(store_data.objectcode),
         )?;
         let instance = WrappedInstance::new(
             self.clone(),
-            module_id,
-            &module,
+            contract_id,
+            &contract,
             store_data.memory,
         )?;
 
@@ -444,22 +447,19 @@ impl Session {
         self.inner.host_queries.call(name, buf, arg_len)
     }
 
-    /// Sets the point limit for the next call to [`query`] or [`transact`].
+    /// Sets the point limit for the next [`call`].
     ///
-    /// [`query`]: Session::query
-    /// [`transact`]: Session::transact
+    /// [`call`]: Session::call
     pub fn set_point_limit(&mut self, limit: u64) {
         self.inner.limit = limit
     }
 
-    /// Returns the number of points spent by the last call to [`query`] or
-    /// [`transact`].
+    /// Returns the number of points spent by the last [`call`].
     ///
     /// If neither have been called for the duration of the session, it will
     /// return 0.
     ///
-    /// [`query`]: Session::query
-    /// [`transact`]: Session::transact
+    /// [`call`]: Session::call
     pub fn spent(&self) -> u64 {
         self.inner.spent
     }
@@ -468,34 +468,37 @@ impl Session {
         self.inner.call_stack.nth_from_top(n)
     }
 
-    fn create_instance(&mut self, module_id: ModuleId) -> Result<(), Error> {
-        let instance = self.new_instance(module_id)?;
-        if self.inner.instance_map.get(&module_id).is_some() {
-            panic!("Module already in the stack: {module_id:?}");
+    fn create_instance(
+        &mut self,
+        contract_id: ContractId,
+    ) -> Result<(), Error> {
+        let instance = self.new_instance(contract_id)?;
+        if self.inner.instance_map.get(&contract_id).is_some() {
+            panic!("Contract already in the stack: {contract_id:?}");
         }
 
         let instance = Box::new(instance);
         let instance = Box::leak(instance) as *mut WrappedInstance;
 
-        self.inner.instance_map.insert(module_id, (instance, 1));
+        self.inner.instance_map.insert(contract_id, (instance, 1));
         Ok(())
     }
 
     pub(crate) fn push_callstack(
         &mut self,
-        module_id: ModuleId,
+        contract_id: ContractId,
         limit: u64,
     ) -> Result<StackElement, Error> {
-        let instance = self.instance(&module_id);
+        let instance = self.instance(&contract_id);
 
         match instance {
             Some(_) => {
-                self.update_instance_count(module_id, true);
-                self.inner.call_stack.push(module_id, limit);
+                self.update_instance_count(contract_id, true);
+                self.inner.call_stack.push(contract_id, limit);
             }
             None => {
-                self.create_instance(module_id)?;
-                self.inner.call_stack.push(module_id, limit);
+                self.create_instance(contract_id)?;
+                self.inner.call_stack.push(contract_id, limit);
             }
         }
 
@@ -508,7 +511,7 @@ impl Session {
 
     pub(crate) fn pop_callstack(&mut self) {
         if let Some(element) = self.inner.call_stack.pop() {
-            self.update_instance_count(element.module_id, false);
+            self.update_instance_count(element.contract_id, false);
         }
     }
 
@@ -516,7 +519,7 @@ impl Session {
     /// its state root.
     pub fn commit(self) -> Result<[u8; 32], Error> {
         self.inner
-            .module_session
+            .contract_session
             .commit()
             .map(Into::into)
             .map_err(|err| PersistenceError(Arc::new(err)))
@@ -563,7 +566,7 @@ impl Session {
 
     /// Increment the call execution count.
     ///
-    /// If the call errors on the first called module, return said error.
+    /// If the call errors on the first called contract, return said error.
     pub(crate) fn increment_call_count(&mut self) -> Option<Error> {
         self.inner.call_count += 1;
         self.inner
@@ -684,7 +687,7 @@ impl Session {
         self.clear_stack_and_instances();
         self.inner.debug.clear();
         self.inner.events.clear();
-        self.inner.module_session.clear_modules();
+        self.inner.contract_session.clear_contracts();
         self.inner.call_count = 0;
 
         // TODO Figure out how to handle metadata and point limit.
@@ -703,7 +706,7 @@ impl Session {
                     res = self.call_if_not_error(call);
                 }
                 CallOrDeploy::Deploy(deploy) => {
-                    self.do_deploy(deploy.module_id, &deploy.bytecode, deploy.fdata, deploy.owner)
+                    self.do_deploy(deploy.contract_id, &deploy.bytecode, deploy.fdata, deploy.owner)
                         .expect("Only deploys that succeed should be added to the history");
                 }
             }
@@ -735,9 +738,9 @@ impl Session {
     }
 
     fn call_inner(&mut self, call: &Call) -> Result<Vec<u8>, Error> {
-        let stack_element = self.push_callstack(call.module, call.limit)?;
+        let stack_element = self.push_callstack(call.contract, call.limit)?;
         let instance = self
-            .instance(&stack_element.module_id)
+            .instance(&stack_element.contract_id)
             .expect("instance should exist");
 
         let arg_len = instance.write_bytes_to_arg_buffer(&call.fdata);
@@ -754,11 +757,11 @@ impl Session {
         Ok(ret)
     }
 
-    pub fn module_metadata(
+    pub fn contract_metadata(
         &self,
-        module_id: &ModuleId,
-    ) -> Option<&ModuleMetadata> {
-        self.inner.module_session.module_metadata(module_id)
+        contract_id: &ContractId,
+    ) -> Option<&ContractMetadata> {
+        self.inner.contract_session.contract_metadata(contract_id)
     }
 }
 
@@ -782,7 +785,7 @@ impl From<Deploy> for CallOrDeploy {
 
 #[derive(Debug)]
 struct Deploy {
-    module_id: ModuleId,
+    contract_id: ContractId,
     bytecode: Vec<u8>,
     fdata: Option<Vec<u8>>,
     owner: Vec<u8>,
@@ -790,7 +793,7 @@ struct Deploy {
 
 #[derive(Debug)]
 struct Call {
-    module: ModuleId,
+    contract: ContractId,
     fname: String,
     fdata: Vec<u8>,
     limit: u64,

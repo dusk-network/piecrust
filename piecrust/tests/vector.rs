@@ -4,7 +4,7 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use piecrust::{module_bytecode, Error, ModuleData, SessionData, VM};
+use piecrust::{contract_bytecode, ContractData, Error, SessionData, VM};
 
 const OWNER: [u8; 32] = [0u8; 32];
 
@@ -15,7 +15,7 @@ pub fn vector_push_pop() -> Result<(), Error> {
     let mut session = vm.session(SessionData::builder())?;
 
     let id = session
-        .deploy(module_bytecode!("vector"), ModuleData::builder(OWNER))?;
+        .deploy(contract_bytecode!("vector"), ContractData::builder(OWNER))?;
 
     const N: usize = 128;
 

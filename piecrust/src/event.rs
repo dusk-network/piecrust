@@ -4,20 +4,20 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use piecrust_uplink::ModuleId;
+use piecrust_uplink::ContractId;
 
 #[derive(Debug)]
 pub struct Event {
-    source: ModuleId,
+    source: ContractId,
     data: Vec<u8>,
 }
 
 impl Event {
-    pub(crate) fn new(source: ModuleId, data: Vec<u8>) -> Self {
+    pub(crate) fn new(source: ContractId, data: Vec<u8>) -> Self {
         Self { source, data }
     }
 
-    pub fn source(&self) -> ModuleId {
+    pub fn source(&self) -> ContractId {
         self.source
     }
 

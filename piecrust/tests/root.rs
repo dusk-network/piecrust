@@ -4,7 +4,7 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use piecrust::{module_bytecode, Error, ModuleData, SessionData, VM};
+use piecrust::{contract_bytecode, ContractData, Error, SessionData, VM};
 
 const OWNER: [u8; 32] = [0u8; 32];
 
@@ -13,7 +13,7 @@ pub fn state_root_calculation() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
     let mut session = vm.session(SessionData::builder())?;
     let id_1 = session
-        .deploy(module_bytecode!("counter"), ModuleData::builder(OWNER))?;
+        .deploy(contract_bytecode!("counter"), ContractData::builder(OWNER))?;
 
     session.call::<(), ()>(id_1, "increment", &())?;
 
@@ -26,8 +26,8 @@ pub fn state_root_calculation() -> Result<(), Error> {
     );
 
     let mut session = vm.session(SessionData::builder().base(commit_1))?;
-    let id_2 =
-        session.deploy(module_bytecode!("box"), ModuleData::builder(OWNER))?;
+    let id_2 = session
+        .deploy(contract_bytecode!("box"), ContractData::builder(OWNER))?;
     session.call::<i16, ()>(id_2, "set", &0x11)?;
     session.call::<(), ()>(id_1, "increment", &())?;
 

@@ -4,8 +4,8 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use piecrust::{module_bytecode, Error, ModuleData, SessionData, VM};
-use piecrust_uplink::{ModuleError, ModuleId, RawCall, RawResult};
+use piecrust::{contract_bytecode, ContractData, Error, SessionData, VM};
+use piecrust_uplink::{ContractError, ContractId, RawCall, RawResult};
 
 const OWNER: [u8; 32] = [0u8; 32];
 
@@ -16,15 +16,17 @@ pub fn cc_read_counter() -> Result<(), Error> {
     let mut session = vm.session(SessionData::builder())?;
 
     let counter_id = session
-        .deploy(module_bytecode!("counter"), ModuleData::builder(OWNER))?;
+        .deploy(contract_bytecode!("counter"), ContractData::builder(OWNER))?;
 
     // read direct
 
     let value: i64 = session.call(counter_id, "read_value", &())?;
     assert_eq!(value, 0xfc);
 
-    let center_id = session
-        .deploy(module_bytecode!("callcenter"), ModuleData::builder(OWNER))?;
+    let center_id = session.deploy(
+        contract_bytecode!("callcenter"),
+        ContractData::builder(OWNER),
+    )?;
 
     // read value through callcenter
     let value: i64 = session.call(center_id, "query_counter", &counter_id)?;
@@ -40,14 +42,16 @@ pub fn cc_direct() -> Result<(), Error> {
     let mut session = vm.session(SessionData::builder())?;
 
     let counter_id = session
-        .deploy(module_bytecode!("counter"), ModuleData::builder(OWNER))?;
+        .deploy(contract_bytecode!("counter"), ContractData::builder(OWNER))?;
 
     // read value directly
     let value: i64 = session.call(counter_id, "read_value", &())?;
     assert_eq!(value, 0xfc);
 
-    let center_id = session
-        .deploy(module_bytecode!("callcenter"), ModuleData::builder(OWNER))?;
+    let center_id = session.deploy(
+        contract_bytecode!("callcenter"),
+        ContractData::builder(OWNER),
+    )?;
 
     // read value through callcenter
     let value: i64 = session.call(center_id, "query_counter", &counter_id)?;
@@ -73,8 +77,10 @@ pub fn cc_passthrough() -> Result<(), Error> {
 
     let mut session = vm.session(SessionData::builder())?;
 
-    let center_id = session
-        .deploy(module_bytecode!("callcenter"), ModuleData::builder(OWNER))?;
+    let center_id = session.deploy(
+        contract_bytecode!("callcenter"),
+        ContractData::builder(OWNER),
+    )?;
 
     let rq = RawCall::new("read_value", ());
 
@@ -92,9 +98,11 @@ pub fn cc_delegated_read() -> Result<(), Error> {
     let mut session = vm.session(SessionData::builder())?;
 
     let counter_id = session
-        .deploy(module_bytecode!("counter"), ModuleData::builder(OWNER))?;
-    let center_id = session
-        .deploy(module_bytecode!("callcenter"), ModuleData::builder(OWNER))?;
+        .deploy(contract_bytecode!("counter"), ContractData::builder(OWNER))?;
+    let center_id = session.deploy(
+        contract_bytecode!("callcenter"),
+        ContractData::builder(OWNER),
+    )?;
 
     let rq = RawCall::new("read_value", ());
 
@@ -122,9 +130,11 @@ pub fn cc_delegated_write() -> Result<(), Error> {
 
     let mut session = vm.session(SessionData::builder())?;
     let counter_id = session
-        .deploy(module_bytecode!("counter"), ModuleData::builder(OWNER))?;
-    let center_id = session
-        .deploy(module_bytecode!("callcenter"), ModuleData::builder(OWNER))?;
+        .deploy(contract_bytecode!("counter"), ContractData::builder(OWNER))?;
+    let center_id = session.deploy(
+        contract_bytecode!("callcenter"),
+        ContractData::builder(OWNER),
+    )?;
 
     session.call(center_id, "delegate_transaction", &(counter_id, rt))?;
 
@@ -141,8 +151,10 @@ pub fn cc_self() -> Result<(), Error> {
 
     let mut session = vm.session(SessionData::builder())?;
 
-    let center_id = session
-        .deploy(module_bytecode!("callcenter"), ModuleData::builder(OWNER))?;
+    let center_id = session.deploy(
+        contract_bytecode!("callcenter"),
+        ContractData::builder(OWNER),
+    )?;
 
     // am i calling myself
     let calling_self: bool =
@@ -158,10 +170,12 @@ pub fn cc_caller() -> Result<(), Error> {
 
     let mut session = vm.session(SessionData::builder())?;
 
-    let center_id = session
-        .deploy(module_bytecode!("callcenter"), ModuleData::builder(OWNER))?;
+    let center_id = session.deploy(
+        contract_bytecode!("callcenter"),
+        ContractData::builder(OWNER),
+    )?;
 
-    let value: Result<bool, ModuleError> =
+    let value: Result<bool, ContractError> =
         session.call(center_id, "call_self", &())?;
 
     assert!(value.expect("should succeed"));
@@ -175,11 +189,13 @@ pub fn cc_caller_uninit() -> Result<(), Error> {
 
     let mut session = vm.session(SessionData::builder())?;
 
-    let center_id = session
-        .deploy(module_bytecode!("callcenter"), ModuleData::builder(OWNER))?;
+    let center_id = session.deploy(
+        contract_bytecode!("callcenter"),
+        ContractData::builder(OWNER),
+    )?;
 
-    let caller: ModuleId = session.call(center_id, "return_caller", &())?;
-    assert_eq!(caller, ModuleId::uninitialized());
+    let caller: ContractId = session.call(center_id, "return_caller", &())?;
+    assert_eq!(caller, ContractId::uninitialized());
 
     Ok(())
 }
@@ -190,10 +206,12 @@ pub fn cc_self_id() -> Result<(), Error> {
 
     let mut session = vm.session(SessionData::builder())?;
 
-    let center_id = session
-        .deploy(module_bytecode!("callcenter"), ModuleData::builder(OWNER))?;
+    let center_id = session.deploy(
+        contract_bytecode!("callcenter"),
+        ContractData::builder(OWNER),
+    )?;
 
-    let value: ModuleId = session.call(center_id, "return_self_id", &())?;
+    let value: ContractId = session.call(center_id, "return_self_id", &())?;
     assert_eq!(value, center_id);
 
     Ok(())

@@ -10,7 +10,7 @@ use std::sync::Arc;
 
 use crate::store::mmap::Mmap;
 
-/// WASM bytecode belonging to a given module.
+/// WASM bytecode belonging to a given contract.
 #[derive(Debug, Clone)]
 pub struct Bytecode {
     mmap: Arc<Mmap>,
