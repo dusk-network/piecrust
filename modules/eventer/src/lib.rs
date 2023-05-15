@@ -10,19 +10,18 @@
 #![no_std]
 
 use piecrust_uplink as uplink;
-use uplink::State;
 
 /// Struct that describes the state of the eventer module
 pub struct Eventer;
 
 /// State of the eventer module
-static mut STATE: State<Eventer> = State::new(Eventer);
+static mut STATE: Eventer = Eventer;
 
 impl Eventer {
     /// Emits an event with the given number
-    pub fn emit_num(self: &mut State<Eventer>, num: u32) {
+    pub fn emit_num(&mut self, num: u32) {
         for i in 0..num {
-            self.emit(i);
+            uplink::emit(i);
         }
     }
 }

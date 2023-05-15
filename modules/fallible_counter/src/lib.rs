@@ -10,7 +10,6 @@
 #![no_std]
 
 use piecrust_uplink as uplink;
-use uplink::State;
 
 /// Struct that describes the state of the fallible counter module
 pub struct FallibleCounter {
@@ -18,8 +17,7 @@ pub struct FallibleCounter {
 }
 
 /// State of the fallible counter module
-static mut STATE: State<FallibleCounter> =
-    State::new(FallibleCounter { value: 0xfc });
+static mut STATE: FallibleCounter = FallibleCounter { value: 0xfc };
 
 impl FallibleCounter {
     /// Read the value of the counter

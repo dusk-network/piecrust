@@ -12,7 +12,6 @@ extern crate alloc;
 
 use alloc::vec::Vec;
 use piecrust_uplink as uplink;
-use uplink::State;
 
 /// Struct that describes the state of the vector module
 pub struct Vector {
@@ -20,7 +19,7 @@ pub struct Vector {
 }
 
 /// State of the vector module
-static mut STATE: State<Vector> = State::new(Vector { a: Vec::new() });
+static mut STATE: Vector = Vector { a: Vec::new() };
 
 impl Vector {
     /// Push an item to the vector

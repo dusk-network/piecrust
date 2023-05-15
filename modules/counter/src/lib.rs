@@ -11,7 +11,6 @@
 #![no_std]
 
 use piecrust_uplink as uplink;
-use uplink::State;
 
 /// Struct that describes the state of the Counter module
 pub struct Counter {
@@ -19,7 +18,7 @@ pub struct Counter {
 }
 
 /// State of the Counter module
-static mut STATE: State<Counter> = State::new(Counter { value: 0xfc });
+static mut STATE: Counter = Counter { value: 0xfc };
 
 impl Counter {
     /// Read the value of the counter

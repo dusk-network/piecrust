@@ -10,7 +10,6 @@
 #![no_std]
 
 use piecrust_uplink as uplink;
-use uplink::State;
 
 /// Struct that describes the state of the Constructor module
 pub struct Constructor {
@@ -24,7 +23,7 @@ impl Constructor {
 }
 
 /// State of the Constructor module
-static mut STATE: State<Constructor> = State::new(Constructor { value: 0x50 });
+static mut STATE: Constructor = Constructor { value: 0x50 };
 
 impl Constructor {
     /// Read the value of the constructor module state

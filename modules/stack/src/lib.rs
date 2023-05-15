@@ -13,7 +13,6 @@ use nstack::NStack;
 use ranno::Annotation;
 
 use piecrust_uplink as uplink;
-use uplink::State;
 
 /// Struct that describes the state of the stack module
 pub struct Stack {
@@ -21,9 +20,9 @@ pub struct Stack {
 }
 
 /// State of the stack module
-static mut STATE: State<Stack> = State::new(Stack {
+static mut STATE: Stack = Stack {
     inner: NStack::new(),
-});
+};
 
 impl Stack {
     /// Push a new item onto the stack

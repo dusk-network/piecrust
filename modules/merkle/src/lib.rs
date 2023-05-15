@@ -11,7 +11,6 @@
 #![no_std]
 
 use piecrust_uplink as uplink;
-use uplink::State;
 
 use blake3::Hasher;
 use dusk_merkle::{Aggregate, Tree};
@@ -57,7 +56,7 @@ impl Merkle {
 }
 
 /// State of the merkle module
-static mut STATE: State<Merkle> = State::new(Merkle::new());
+static mut STATE: Merkle = Merkle::new();
 
 impl Merkle {
     fn insert_u64(&mut self, pos: u64, int: u64) {

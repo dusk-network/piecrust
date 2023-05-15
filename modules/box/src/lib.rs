@@ -14,7 +14,6 @@ extern crate alloc;
 use alloc::boxed::Box;
 
 use piecrust_uplink as uplink;
-use uplink::State;
 
 /// Struct that describes the state of the box module
 // One Box, many `Boxen`
@@ -23,7 +22,7 @@ pub struct Boxen {
 }
 
 /// State of the box module
-static mut STATE: State<Boxen> = State::new(Boxen { a: None });
+static mut STATE: Boxen = Boxen { a: None };
 
 impl Boxen {
     /// Set the data pointed to by the `Box`, or create a new `Box` if it

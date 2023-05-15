@@ -13,11 +13,10 @@
 pub struct Fibonacci;
 
 use piecrust_uplink as uplink;
-use uplink::State;
 
 #[allow(unused)]
 /// State of the fibonacci module
-static mut STATE: State<Fibonacci> = State::new(Fibonacci);
+static mut STATE: Fibonacci = Fibonacci;
 
 impl Fibonacci {
     /// Calculate the nth number in the fibonacci sequence

@@ -10,13 +10,13 @@
 #![no_std]
 
 use piecrust_uplink as uplink;
-use uplink::{wrap_call, ModuleError, ModuleId, RawCall, RawResult, State};
+use uplink::{wrap_call, ModuleError, ModuleId, RawCall, RawResult};
 
 /// Struct that describes the state of the Callcenter module
 pub struct Callcenter;
 
 /// State of the Callcenter module
-static mut STATE: State<Callcenter> = State::new(Callcenter);
+static mut STATE: Callcenter = Callcenter;
 
 impl Callcenter {
     /// Read the value of the counter
@@ -25,7 +25,7 @@ impl Callcenter {
     }
 
     /// Increment the counter
-    pub fn increment_counter(self: &mut State<Self>, counter_id: ModuleId) {
+    pub fn increment_counter(&mut self, counter_id: ModuleId) {
         uplink::call(counter_id, "increment", &()).unwrap()
     }
 
@@ -47,7 +47,7 @@ impl Callcenter {
 
     /// Execute a module specified by its ID
     pub fn delegate_transaction(
-        self: &mut State<Self>,
+        &mut self,
         module_id: ModuleId,
         raw: RawCall,
     ) -> RawResult {
