@@ -58,33 +58,33 @@ mod ext {
     }
 }
 
-use crate::ModuleId;
+use crate::ContractId;
 
 /// The error possibly returned on an inter-contract-call.
 //
-// We do **not use rkyv** to pass it to the module from the VM. Instead, we use
-// use the calling convention being able to pass negative numbers to signal a
-// failure.
+// We do **not use rkyv** to pass it to the contract from the VM. Instead, we
+// use use the calling convention being able to pass negative numbers to signal
+// a failure.
 //
 // The contract writer, however, is free to pass it around and react to it if it
 // wishes.
 #[derive(Debug, Clone, Copy, Archive, Serialize, Deserialize)]
 #[archive_attr(derive(CheckBytes))]
-pub enum ModuleError {
+pub enum ContractError {
     PANIC,
     OUTOFGAS,
     OTHER(i32),
 }
 
-impl ModuleError {
-    /// Returns a module error from a return `code`.
+impl ContractError {
+    /// Returns a contract error from a return `code`.
     ///
     /// # Panic
     /// Panics if the value is larger than or equal to 0.
     pub fn from_code(code: i32) -> Self {
         if code >= 0 {
             panic!(
-                "A `ModuleError` is never equal or larger than 0, got {code}"
+                "A `ContractError` is never equal or larger than 0, got {code}"
             );
         }
 
@@ -96,12 +96,12 @@ impl ModuleError {
     }
 }
 
-impl From<ModuleError> for i32 {
-    fn from(err: ModuleError) -> Self {
+impl From<ContractError> for i32 {
+    fn from(err: ContractError) -> Self {
         match err {
-            ModuleError::PANIC => -1,
-            ModuleError::OUTOFGAS => -2,
-            ModuleError::OTHER(c) => c,
+            ContractError::PANIC => -1,
+            ContractError::OUTOFGAS => -2,
+            ContractError::OTHER(c) => c,
         }
     }
 }
@@ -135,10 +135,10 @@ where
 }
 
 pub fn call<A, Ret>(
-    mod_id: ModuleId,
+    mod_id: ContractId,
     name: &str,
     arg: &A,
-) -> Result<Ret, ModuleError>
+) -> Result<Ret, ContractError>
 where
     A: for<'a> Serialize<StandardBufSerializer<'a>>,
     Ret: Archive,
@@ -166,7 +166,7 @@ where
     };
 
     if ret_len < 0 {
-        return Err(ModuleError::from_code(ret_len));
+        return Err(ContractError::from_code(ret_len));
     }
 
     with_arg_buf(|buf| {
@@ -177,9 +177,9 @@ where
 }
 
 pub fn call_raw(
-    mod_id: ModuleId,
+    mod_id: ContractId,
     raw: &RawCall,
-) -> Result<RawResult, ModuleError> {
+) -> Result<RawResult, ContractError> {
     with_arg_buf(|buf| {
         let bytes = raw.arg_bytes();
         buf[..bytes.len()].copy_from_slice(bytes);
@@ -193,7 +193,7 @@ pub fn call_raw(
     };
 
     if ret_len < 0 {
-        return Err(ModuleError::from_code(ret_len));
+        return Err(ContractError::from_code(ret_len));
     }
 
     with_arg_buf(|buf| Ok(RawResult::new(&buf[..ret_len as usize])))
@@ -233,7 +233,7 @@ pub fn height() -> u64 {
     })
 }
 
-/// Return the current module's owner.
+/// Return the current contract's owner.
 pub fn owner<const N: usize>() -> [u8; N] {
     let len = unsafe { ext::owner() } as usize;
     with_arg_buf(|buf| {
@@ -242,25 +242,25 @@ pub fn owner<const N: usize>() -> [u8; N] {
     })
 }
 
-/// Return the current module's id.
-pub fn self_id() -> ModuleId {
+/// Return the current contract's id.
+pub fn self_id() -> ContractId {
     let len = unsafe { ext::self_id() } as usize;
     let id: [u8; 32] = with_arg_buf(|buf| {
         let ret = unsafe { archived_root::<[u8; 32]>(&buf[..len]) };
         ret.deserialize(&mut Infallible).expect("Infallible")
     });
-    ModuleId::from(id)
+    ContractId::from(id)
 }
 
-/// Return the ID of the calling module. The returned id will be
-/// uninitialized if there is no caller - meaning this is the first module
+/// Return the ID of the calling contract. The returned id will be
+/// uninitialized if there is no caller - meaning this is the first contract
 /// to be called.
-pub fn caller() -> ModuleId {
+pub fn caller() -> ContractId {
     unsafe { ext::caller() };
     with_arg_buf(|buf| {
         let ret = unsafe {
-            archived_root::<ModuleId>(
-                &buf[..core::mem::size_of::<Archived<ModuleId>>()],
+            archived_root::<ContractId>(
+                &buf[..core::mem::size_of::<Archived<ContractId>>()],
             )
         };
         ret.deserialize(&mut Infallible).expect("Infallible")

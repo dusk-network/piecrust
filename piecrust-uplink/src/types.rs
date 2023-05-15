@@ -21,10 +21,10 @@ pub type StandardBufSerializer<'a> = CompositeSerializer<
     BufferScratch<&'a mut [u8; SCRATCH_BUF_BYTES]>,
 >;
 
-/// The length of [`ModuleId`] in bytes
+/// The length of [`ContractId`] in bytes
 pub const MODULE_ID_BYTES: usize = 32;
 
-/// ID to identify the wasm modules after they have been deployed
+/// ID to identify the wasm contracts after they have been deployed
 #[derive(
     PartialEq,
     Eq,
@@ -40,69 +40,70 @@ pub const MODULE_ID_BYTES: usize = 32;
 )]
 #[archive(as = "Self")]
 #[repr(C)]
-pub struct ModuleId([u8; MODULE_ID_BYTES]);
+pub struct ContractId([u8; MODULE_ID_BYTES]);
 
-impl ModuleId {
-    /// Creates a placeholder [`ModuleId`] until the host deploys the module
-    /// and sets a real [`ModuleId`]. This can also be used to determine if a
-    /// module is the first to be called.
+impl ContractId {
+    /// Creates a placeholder [`ContractId`] until the host deploys the contract
+    /// and sets a real [`ContractId`]. This can also be used to determine if a
+    /// contract is the first to be called.
     pub const fn uninitialized() -> Self {
-        ModuleId([0u8; MODULE_ID_BYTES])
+        ContractId([0u8; MODULE_ID_BYTES])
     }
 
-    /// Creates a new [`ModuleId`] from an array of bytes
+    /// Creates a new [`ContractId`] from an array of bytes
     pub const fn from_bytes(bytes: [u8; MODULE_ID_BYTES]) -> Self {
         Self(bytes)
     }
 
-    /// Returns the array of bytes that make up the [`ModuleId`]
+    /// Returns the array of bytes that make up the [`ContractId`]
     pub const fn to_bytes(self) -> [u8; MODULE_ID_BYTES] {
         self.0
     }
 
-    /// Returns a reference to the array of bytes that make up the [`ModuleId`]
+    /// Returns a reference to the array of bytes that make up the
+    /// [`ContractId`]
     pub fn as_bytes(&self) -> &[u8] {
         &self.0
     }
 
     /// Returns a mutable reference to the array of bytes that make up the
-    /// [`ModuleId`]
+    /// [`ContractId`]
     pub fn as_bytes_mut(&mut self) -> &mut [u8] {
         &mut self.0
     }
 
-    /// Determines whether the [`ModuleId`] is uninitialized, which can be used
-    /// to check if this module is the first to be called.
+    /// Determines whether the [`ContractId`] is uninitialized, which can be
+    /// used to check if this contract is the first to be called.
     pub fn is_uninitialized(&self) -> bool {
         self == &Self::uninitialized()
     }
 }
 
-impl From<[u8; MODULE_ID_BYTES]> for ModuleId {
+impl From<[u8; MODULE_ID_BYTES]> for ContractId {
     fn from(bytes: [u8; MODULE_ID_BYTES]) -> Self {
         Self::from_bytes(bytes)
     }
 }
 
-impl AsRef<[u8]> for ModuleId {
+impl AsRef<[u8]> for ContractId {
     fn as_ref(&self) -> &[u8] {
         self.as_bytes()
     }
 }
 
-impl AsMut<[u8]> for ModuleId {
+impl AsMut<[u8]> for ContractId {
     fn as_mut(&mut self) -> &mut [u8] {
         self.as_bytes_mut()
     }
 }
 
-impl core::fmt::Debug for ModuleId {
+impl core::fmt::Debug for ContractId {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         core::fmt::Display::fmt(self, f)
     }
 }
 
-impl core::fmt::Display for ModuleId {
+impl core::fmt::Display for ContractId {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         if f.alternate() {
             write!(f, "0x")?
@@ -114,8 +115,8 @@ impl core::fmt::Display for ModuleId {
     }
 }
 
-/// A `RawCall` is a module call that doesn't care about types and only operates
-/// on raw data.
+/// A `RawCall` is a contract call that doesn't care about types and only
+/// operates on raw data.
 #[derive(Archive, Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
 #[archive_attr(derive(CheckBytes))]
 pub struct RawCall {
@@ -144,7 +145,7 @@ impl RawCall {
     /// Create a new [`RawCall`] from its parts without serializing data.
     ///
     /// This assumes the `data` given has already been correctly serialized for
-    /// the module to call.
+    /// the contract to call.
     pub fn from_parts(name: &str, data: alloc::vec::Vec<u8>) -> Self {
         let mut data = data;
 

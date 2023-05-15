@@ -16,7 +16,7 @@ pub use snap::snap;
 mod state;
 pub use state::{
     call, call_raw, caller, emit, height, host_query, limit, meta_data, owner,
-    self_id, spent, ModuleError,
+    self_id, spent, ContractError,
 };
 
 mod helpers;

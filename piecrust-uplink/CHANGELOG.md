@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Change `module` named functions and items to `contract` [#207]
 - Change signature of `owner` to return `[u8; N]` instead of `[u8; 32]` [#201] 
 
 ### Removed
@@ -43,6 +44,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- ISSUES -->
 [#209]: https://github.com/dusk-network/piecrust/issues/209
+[#207]: https://github.com/dusk-network/piecrust/issues/207
 [#201]: https://github.com/dusk-network/piecrust/issues/201
 [#199]: https://github.com/dusk-network/piecrust/issues/199
 [#192]: https://github.com/dusk-network/piecrust/issues/192
