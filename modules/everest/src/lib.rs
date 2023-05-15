@@ -10,13 +10,12 @@
 #![no_std]
 
 use piecrust_uplink as uplink;
-use uplink::State;
 
 /// Struct that describes the state of the everest module
 pub struct Height;
 
 /// State of the everest module
-static mut STATE: State<Height> = State::new(Height);
+static mut STATE: Height = Height;
 
 impl Height {
     /// Query the host for the current block height

@@ -11,13 +11,12 @@
 #![no_std]
 
 use piecrust_uplink as uplink;
-use uplink::State;
 
 /// Struct that describes the state of the spender module
 pub struct Spender;
 
 /// State of the spender module
-static mut STATE: State<Spender> = State::new(Spender);
+static mut STATE: Spender = Spender;
 
 impl Spender {
     /// Get the limit and spent points before and after an inter-contract call,

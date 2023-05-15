@@ -59,7 +59,6 @@ mod ext {
 }
 
 use crate::ModuleId;
-use core::ops::{Deref, DerefMut};
 
 /// The error possibly returned on an inter-contract-call.
 //
@@ -104,30 +103,6 @@ impl From<ModuleError> for i32 {
             ModuleError::OUTOFGAS => -2,
             ModuleError::OTHER(c) => c,
         }
-    }
-}
-
-pub struct State<S> {
-    inner: S,
-}
-
-impl<S> State<S> {
-    pub const fn new(inner: S) -> Self {
-        State { inner }
-    }
-}
-
-impl<S> Deref for State<S> {
-    type Target = S;
-
-    fn deref(&self) -> &Self::Target {
-        &self.inner
-    }
-}
-
-impl<S> DerefMut for State<S> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.inner
     }
 }
 
@@ -300,23 +275,21 @@ pub fn spent() -> u64 {
     unsafe { ext::spent() }
 }
 
-impl<S> State<S> {
-    /// Emits an event with the given data.
-    pub fn emit<D>(&mut self, data: D)
-    where
-        for<'a> D: Serialize<StandardBufSerializer<'a>>,
-    {
-        with_arg_buf(|buf| {
-            let mut sbuf = [0u8; SCRATCH_BUF_BYTES];
-            let scratch = BufferScratch::new(&mut sbuf);
-            let ser = BufferSerializer::new(buf);
-            let mut composite =
-                CompositeSerializer::new(ser, scratch, rkyv::Infallible);
+/// Emits an event with the given data.
+pub fn emit<D>(data: D)
+where
+    for<'a> D: Serialize<StandardBufSerializer<'a>>,
+{
+    with_arg_buf(|buf| {
+        let mut sbuf = [0u8; SCRATCH_BUF_BYTES];
+        let scratch = BufferScratch::new(&mut sbuf);
+        let ser = BufferSerializer::new(buf);
+        let mut composite =
+            CompositeSerializer::new(ser, scratch, rkyv::Infallible);
 
-            composite.serialize_value(&data).unwrap();
-            let arg_len = composite.pos() as u32;
+        composite.serialize_value(&data).unwrap();
+        let arg_len = composite.pos() as u32;
 
-            unsafe { ext::emit(arg_len) }
-        });
-    }
+        unsafe { ext::emit(arg_len) }
+    });
 }

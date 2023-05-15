@@ -10,7 +10,7 @@
 #![feature(core_intrinsics, lang_items, arbitrary_self_types)]
 
 use piecrust_uplink as uplink;
-use uplink::{ModuleId, State};
+use uplink::ModuleId;
 
 /// Struct that describes the state of the crossover module
 pub struct Crossover {
@@ -20,9 +20,9 @@ pub struct Crossover {
 const INITIAL_VALUE: i32 = 0;
 
 /// State of the crossover module
-static mut STATE: State<Crossover> = State::new(Crossover {
+static mut STATE: Crossover = Crossover {
     value: INITIAL_VALUE,
-});
+};
 
 impl Crossover {
     // Calls the [`set_back_and_panic`] method of the contract `module`,
@@ -37,7 +37,7 @@ impl Crossover {
     //
     // Before returning, the contract's `value` is set to `value_to_set`.
     pub fn check_consistent_state_on_errors(
-        self: &mut State<Self>,
+        &mut self,
         module: ModuleId,
         value_to_set: i32,
         value_to_set_forward: i32,
@@ -74,7 +74,7 @@ impl Crossover {
     //
     // It then proceeds to !!panic!!
     pub fn set_back_and_panic(
-        self: &mut State<Self>,
+        &mut self,
         value_to_set: i32,
         value_to_set_back: i32,
     ) {

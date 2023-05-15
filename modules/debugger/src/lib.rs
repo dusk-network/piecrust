@@ -12,13 +12,12 @@
 extern crate alloc;
 
 use piecrust_uplink as uplink;
-use uplink::State;
 
 /// Struct that describes the state of the debug module
 pub struct Debug;
 
 /// State of the debug module
-static mut STATE: State<Debug> = State::new(Debug);
+static mut STATE: Debug = Debug;
 
 impl Debug {
     /// Print debug information

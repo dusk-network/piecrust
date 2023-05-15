@@ -10,13 +10,13 @@
 #![no_std]
 
 use piecrust_uplink as uplink;
-use uplink::{ModuleId, State};
+use uplink::ModuleId;
 
 /// Struct that describes the (empty) state of the Metadata module
 pub struct Metadata;
 
 /// State of the Metadata module
-static mut STATE: State<Metadata> = State::new(Metadata {});
+static mut STATE: Metadata = Metadata;
 
 impl Metadata {
     /// Read the value of the module's owner

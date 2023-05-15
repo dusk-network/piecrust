@@ -12,13 +12,12 @@ extern crate alloc;
 
 use alloc::vec::Vec;
 use piecrust_uplink as uplink;
-use uplink::State;
 
 /// Struct that describes the state of the host module
 pub struct Hoster;
 
 /// State of the host module
-static mut STATE: State<Hoster> = State::new(Hoster);
+static mut STATE: Hoster = Hoster;
 
 impl Hoster {
     /// Call 'hash' function via the host

@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
+- Remove `State` struct [#209]
 - Remove `query` and `transact` and associated functions and structs [#136]
 - Remove `wee_alloc` feature [#199]
 
@@ -41,6 +42,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - First `piecrust-uplink` release
 
 <!-- ISSUES -->
+[#209]: https://github.com/dusk-network/piecrust/issues/209
 [#201]: https://github.com/dusk-network/piecrust/issues/201
 [#199]: https://github.com/dusk-network/piecrust/issues/199
 [#192]: https://github.com/dusk-network/piecrust/issues/192
