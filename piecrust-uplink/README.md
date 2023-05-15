@@ -20,7 +20,6 @@ To make use of `uplink`, import the dependency in your project and mark it as `n
 #![no_std]
 
 use piecrust_uplink as uplink;
-use uplink::State;
 ```
 
 To attach state to a contract:
@@ -31,7 +30,7 @@ pub struct Counter {
 };
 
 /// State of the module
-static mut STATE: State<Counter> = State::new(Counter { value: 0x1 });
+static mut STATE: Counter = Counter { value: 0x1 };
 ```
 
 To define logic for your module, define an implementation:
