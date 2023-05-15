@@ -6,7 +6,6 @@
 
 //! Contract to call another contract.
 
-#![feature(arbitrary_self_types)]
 #![no_std]
 
 use piecrust_uplink as uplink;

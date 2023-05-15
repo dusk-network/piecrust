@@ -6,7 +6,6 @@
 
 //! Contract of a counter that can panic if wanted.
 
-#![feature(arbitrary_self_types)]
 #![no_std]
 
 use piecrust_uplink as uplink;

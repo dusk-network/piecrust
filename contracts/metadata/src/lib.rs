@@ -6,7 +6,6 @@
 
 //! Contract that provides and example use of the metadata.
 
-#![feature(arbitrary_self_types)]
 #![no_std]
 
 use piecrust_uplink as uplink;

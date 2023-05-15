@@ -7,7 +7,6 @@
 //! Contract for testing the gas spending behavior, where the gas is measured in
 //! WASM points.
 
-#![feature(arbitrary_self_types)]
 #![no_std]
 
 use piecrust_uplink as uplink;

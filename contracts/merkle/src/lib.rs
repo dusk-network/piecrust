@@ -7,7 +7,6 @@
 //! Contract allowing for insertion of leaves into a merkle tree and retrieval
 //! of the root.
 
-#![feature(arbitrary_self_types)]
 #![no_std]
 
 use piecrust_uplink as uplink;
