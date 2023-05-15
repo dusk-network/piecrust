@@ -6,7 +6,6 @@
 
 //! Contract that calculates the nth number of the Fibonacci sequence
 
-#![feature(arbitrary_self_types)]
 #![no_std]
 
 /// Struct that describes the state of the fibonacci contract

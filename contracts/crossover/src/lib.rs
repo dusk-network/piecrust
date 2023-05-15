@@ -7,7 +7,6 @@
 //! Contract to test the crossover functionality.
 
 #![no_std]
-#![feature(core_intrinsics, lang_items, arbitrary_self_types)]
 
 use piecrust_uplink as uplink;
 use uplink::ContractId;

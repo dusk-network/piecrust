@@ -6,7 +6,6 @@
 
 //! Simple debug contract.
 
-#![feature(arbitrary_self_types)]
 #![no_std]
 
 extern crate alloc;

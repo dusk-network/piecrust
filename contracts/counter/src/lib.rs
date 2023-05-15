@@ -7,7 +7,6 @@
 //! Contract to implement a simple counter that can be read and incremented by
 //! one count.
 
-#![feature(arbitrary_self_types)]
 #![no_std]
 
 use piecrust_uplink as uplink;
