@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Add `MAP_NORESERVE` flag to `mmap` syscall [#213]
+
 ## [0.4.0] - 2023-05-17
 
 ### Added
@@ -69,6 +72,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - First `piecrust` release
 
 <!-- ISSUES -->
+[#213]: https://github.com/dusk-network/piecrust/issues/213
 [#207]: https://github.com/dusk-network/piecrust/issues/207
 [#202]: https://github.com/dusk-network/piecrust/issues/202
 [#201]: https://github.com/dusk-network/piecrust/issues/201
