@@ -9,6 +9,7 @@
 #![no_std]
 
 use piecrust_uplink as uplink;
+use piecrust_uplink::call_with_limit;
 use uplink::{wrap_call, ContractError, ContractId, RawCall, RawResult};
 
 /// Struct that describes the state of the Callcenter contract
@@ -79,6 +80,18 @@ impl Callcenter {
             false => Ok(caller == self_id),
         }
     }
+
+    /// Calls the `spend` function of the `contract` with no arguments, and the
+    /// given `points_limit`, assuming the called function returns `()`. It will
+    /// then return the call's result itself.
+    pub fn call_spend_with_limit(
+        &self,
+        contract: ContractId,
+        points_limit: u64,
+    ) -> Result<(), ContractError> {
+        call_with_limit(contract, "spend", &(), points_limit)?;
+        Ok(())
+    }
 }
 
 /// Expose `Callcenter::query_counter()` to the host
@@ -103,6 +116,14 @@ unsafe fn calling_self(arg_len: u32) -> u32 {
 #[no_mangle]
 unsafe fn call_self(arg_len: u32) -> u32 {
     wrap_call(arg_len, |_: ()| STATE.call_self())
+}
+
+/// Expose `Callcenter::call_spend_with_limit` to the host
+#[no_mangle]
+unsafe fn call_spend_with_limit(arg_len: u32) -> u32 {
+    wrap_call(arg_len, |(contract, points_limit)| {
+        STATE.call_spend_with_limit(contract, points_limit)
+    })
 }
 
 /// Expose `Callcenter::return_self_id()` to the host
