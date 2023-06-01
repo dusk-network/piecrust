@@ -5,6 +5,7 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 use piecrust::{contract_bytecode, ContractData, Error, SessionData, VM};
+use piecrust_uplink::ContractError;
 
 const OWNER: [u8; 32] = [0u8; 32];
 
@@ -48,6 +49,41 @@ pub fn fails_with_out_of_points() -> Result<(), Error> {
         .expect_err("should error with no gas");
 
     assert!(matches!(err, Error::OutOfPoints));
+
+    Ok(())
+}
+
+#[test]
+pub fn contract_sets_call_limit() -> Result<(), Error> {
+    let vm = VM::ephemeral()?;
+
+    let mut session = vm.session(SessionData::builder())?;
+
+    let spender_id = session
+        .deploy(contract_bytecode!("spender"), ContractData::builder(OWNER))?;
+    let callcenter_id = session.deploy(
+        contract_bytecode!("callcenter"),
+        ContractData::builder(OWNER),
+    )?;
+
+    const FIRST_LIMIT: u64 = 1000;
+    const SECOND_LIMIT: u64 = 2000;
+
+    let _: Result<(), ContractError> = session.call(
+        callcenter_id,
+        "call_spend_with_limit",
+        &(spender_id, FIRST_LIMIT),
+    )?;
+    let spent_first = session.spent();
+
+    let _: Result<(), ContractError> = session.call(
+        callcenter_id,
+        "call_spend_with_limit",
+        &(spender_id, SECOND_LIMIT),
+    )?;
+    let spent_second = session.spent();
+
+    assert_eq!(spent_second - spent_first, SECOND_LIMIT - FIRST_LIMIT);
 
     Ok(())
 }
