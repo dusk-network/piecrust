@@ -14,7 +14,8 @@ use std::ptr::NonNull;
 use std::{io, slice};
 
 use libc::{
-    MAP_ANONYMOUS, MAP_FAILED, MAP_FIXED, MAP_PRIVATE, PROT_READ, PROT_WRITE,
+    MAP_ANONYMOUS, MAP_FAILED, MAP_FIXED, MAP_NORESERVE, MAP_PRIVATE,
+    PROT_READ, PROT_WRITE,
 };
 use tempfile::tempfile;
 use wasmer_types::{MemoryError, MemoryStyle, MemoryType, Pages};
@@ -127,7 +128,7 @@ impl Mmap {
             len,
             len,
             PROT_READ | PROT_WRITE,
-            MAP_PRIVATE | MAP_ANONYMOUS,
+            MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE,
             -1,
         )?;
         inner.as_bytes_mut().copy_from_slice(bytes);
@@ -189,7 +190,7 @@ impl MmapMut {
             file_len,
             MMAP_SIZE,
             PROT_READ | PROT_WRITE,
-            MAP_PRIVATE,
+            MAP_PRIVATE | MAP_NORESERVE,
             fd,
         )?))
     }
@@ -206,7 +207,7 @@ impl MmapMut {
             file_len,
             MMAP_SIZE,
             PROT_READ | PROT_WRITE,
-            MAP_PRIVATE,
+            MAP_PRIVATE | MAP_NORESERVE,
             fd,
         )?))
     }
@@ -225,7 +226,7 @@ impl MmapMut {
             file_len,
             MMAP_SIZE,
             PROT_READ | PROT_WRITE,
-            MAP_PRIVATE | MAP_FIXED,
+            MAP_PRIVATE | MAP_FIXED | MAP_NORESERVE,
             fd,
         )?;
 
