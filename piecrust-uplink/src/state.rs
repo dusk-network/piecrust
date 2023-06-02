@@ -12,7 +12,9 @@ use rkyv::{
     Archive, Archived, Deserialize, Infallible, Serialize,
 };
 
-use crate::{RawCall, RawResult, StandardBufSerializer, SCRATCH_BUF_BYTES};
+use crate::{
+    ContractId, RawCall, RawResult, StandardBufSerializer, SCRATCH_BUF_BYTES,
+};
 
 mod arg_buf {
     use crate::ARGBUF_LEN;
@@ -41,11 +43,13 @@ mod ext {
     extern "C" {
         pub(crate) fn hq(name: *const u8, name_len: u32, arg_len: u32) -> u32;
         pub(crate) fn hd(name: *const u8, name_len: u32) -> u32;
+
         pub(crate) fn c(
-            mod_id_ofs: *const u8,
-            name: *const u8,
-            name_len: u32,
-            arg_len: u32,
+            contract_id: *const u8,
+            fn_name: *const u8,
+            fn_name_len: u32,
+            fn_arg_len: u32,
+            points_limit: u64,
         ) -> i32;
 
         pub(crate) fn height();
@@ -57,8 +61,6 @@ mod ext {
         pub(crate) fn self_id() -> u32;
     }
 }
-
-use crate::ContractId;
 
 /// The error possibly returned on an inter-contract-call.
 //
@@ -134,10 +136,38 @@ where
     })
 }
 
+/// Calls a `contract`'s `fn_name` function with the given argument `fn_arg`.
+/// The contract will have `93%` of the remaining points available to spend.
+///
+/// To specify the points allowed to be spent by the called contract, use
+/// [`call_with_limit`].
 pub fn call<A, Ret>(
-    mod_id: ContractId,
-    name: &str,
-    arg: &A,
+    contract: ContractId,
+    fn_name: &str,
+    fn_arg: &A,
+) -> Result<Ret, ContractError>
+where
+    A: for<'a> Serialize<StandardBufSerializer<'a>>,
+    Ret: Archive,
+    Ret::Archived: Deserialize<Ret, Infallible>,
+{
+    call_with_limit(contract, fn_name, fn_arg, 0)
+}
+
+/// Calls a `contract`'s `fn_name` function with the given argument `fn_arg`,
+/// allowing it to spend the given `points_limit`.
+///
+/// A points limit of `0` is equivalent to using [`call`], and will use the
+/// default behavior - i.e. the called contract gets `93%` of the remaining
+/// points.
+///
+/// If the points limit given is above or equal the remaining amount, the
+/// default behavior will be used instead.
+pub fn call_with_limit<A, Ret>(
+    contract: ContractId,
+    fn_name: &str,
+    fn_arg: &A,
+    points_limit: u64,
 ) -> Result<Ret, ContractError>
 where
     A: for<'a> Serialize<StandardBufSerializer<'a>>,
@@ -150,18 +180,17 @@ where
         let ser = BufferSerializer::new(buf);
         let mut composite =
             CompositeSerializer::new(ser, scratch, rkyv::Infallible);
-        composite.serialize_value(arg).expect("infallible");
+        composite.serialize_value(fn_arg).expect("infallible");
         composite.pos() as u32
     });
 
-    let name_slice = name.as_bytes();
-
     let ret_len = unsafe {
         ext::c(
-            &mod_id.as_bytes()[0],
-            &name_slice[0],
-            name_slice.len() as u32,
+            &contract.as_bytes()[0],
+            &fn_name.as_bytes()[0],
+            fn_name.len() as u32,
             arg_len,
+            points_limit,
         )
     };
 
@@ -176,20 +205,48 @@ where
     })
 }
 
+/// Calls a `contract` with the given [`RawCall`]. The contract will have `93%`
+/// of the remaining points available to spend.
+///
+/// To specify the points allowed to be spent by the called contract, use
+/// [`call_raw_with_limit`].
 pub fn call_raw(
-    mod_id: ContractId,
-    raw: &RawCall,
+    contract: ContractId,
+    raw_call: &RawCall,
+) -> Result<RawResult, ContractError> {
+    call_raw_with_limit(contract, raw_call, 0)
+}
+
+/// Calls a `contract` with the given [`RawCall`] allowing it to spend the given
+/// `points_limit`.
+///
+/// A point limit of `0` is equivalent to using [`call_raw`], and will use the
+/// default behavior - i.e. the called contract gets `93%` of the remaining
+/// points.
+///
+/// If the points limit given is above or equal the remaining amount, the
+/// default behavior will be used instead.
+pub fn call_raw_with_limit(
+    contract: ContractId,
+    raw_call: &RawCall,
+    points_limit: u64,
 ) -> Result<RawResult, ContractError> {
     with_arg_buf(|buf| {
-        let bytes = raw.arg_bytes();
+        let bytes = raw_call.arg_bytes();
         buf[..bytes.len()].copy_from_slice(bytes);
     });
 
-    let name = raw.name_bytes();
-    let arg_len = raw.arg_bytes().len() as u32;
+    let fn_name = raw_call.name_bytes();
+    let fn_arg_len = raw_call.arg_bytes().len() as u32;
 
     let ret_len = unsafe {
-        ext::c(&mod_id.as_bytes()[0], &name[0], name.len() as u32, arg_len)
+        ext::c(
+            &contract.as_bytes()[0],
+            &fn_name[0],
+            fn_name.len() as u32,
+            fn_arg_len,
+            points_limit,
+        )
     };
 
     if ret_len < 0 {

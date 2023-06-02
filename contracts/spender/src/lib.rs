@@ -50,6 +50,11 @@ impl Spender {
             false => (limit, spent_before, 0, 0, 0),
         }
     }
+
+    /// Spend all points that are given to the contract.
+    pub fn spend() {
+        panic!("I like spending");
+    }
 }
 
 /// Expose `Spender::get_limit_and_spent()` to the host

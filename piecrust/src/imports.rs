@@ -55,6 +55,7 @@ fn c(
     name_ofs: i32,
     name_len: u32,
     arg_len: u32,
+    points_limit: u64,
 ) -> Result<i32, Error> {
     let env = fenv.data_mut();
 
@@ -64,7 +65,12 @@ fn c(
     let caller_remaining = instance
         .get_remaining_points()
         .expect("there should be points remaining");
-    let callee_limit = caller_remaining * POINT_PASS_PCT / 100;
+
+    let callee_limit = if points_limit > 0 && points_limit < caller_remaining {
+        points_limit
+    } else {
+        caller_remaining * POINT_PASS_PCT / 100
+    };
 
     // If an error is returned then we are in a re-execution, and should signal
     // the contract without executing the call.

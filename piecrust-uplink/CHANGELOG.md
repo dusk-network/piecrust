@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Add `call_with_limit` and `call_raw_with_limit` [#216]
+
+### Changed
+
+- Include `points_limit` in the `c` external [#216]
+
 ## [0.4.0] - 2023-05-17
 
 ### Added
@@ -45,6 +53,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - First `piecrust-uplink` release
 
 <!-- ISSUES -->
+[#216]: https://github.com/dusk-network/piecrust/issues/216
 [#209]: https://github.com/dusk-network/piecrust/issues/209
 [#207]: https://github.com/dusk-network/piecrust/issues/207
 [#201]: https://github.com/dusk-network/piecrust/issues/201
