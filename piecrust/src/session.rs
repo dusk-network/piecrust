@@ -287,19 +287,19 @@ impl Session {
     ///
     /// [`set_point_limit`]: Session::set_point_limit
     /// [`spent`]: Session::spent
-    pub fn call<A, Ret>(
+    pub fn call<A, R>(
         &mut self,
         contract: ContractId,
-        method_name: &str,
-        arg: &A,
-    ) -> Result<Ret, Error>
+        fn_name: &str,
+        fn_arg: &A,
+    ) -> Result<R, Error>
     where
         A: for<'b> Serialize<StandardBufSerializer<'b>>,
-        Ret: Archive,
-        Ret::Archived: Deserialize<Ret, Infallible>
+        R: Archive,
+        R::Archived: Deserialize<R, Infallible>
             + for<'b> CheckBytes<DefaultValidator<'b>>,
     {
-        if method_name == INIT_METHOD {
+        if fn_name == INIT_METHOD {
             return Err(InitalizationError("init call not allowed".into()));
         }
 
@@ -308,23 +308,49 @@ impl Session {
         let ser = BufferSerializer::new(&mut self.inner.buffer[..]);
         let mut ser = CompositeSerializer::new(ser, scratch, Infallible);
 
-        ser.serialize_value(arg).expect("Infallible");
+        ser.serialize_value(fn_arg).expect("Infallible");
         let pos = ser.pos();
 
-        let ret_bytes = self.execute_until_ok(Call {
+        let ret_bytes = self.call_raw(
             contract,
-            fname: method_name.to_string(),
-            fdata: self.inner.buffer[..pos].to_vec(),
-            limit: self.inner.limit,
-        })?;
+            fn_name,
+            self.inner.buffer[..pos].to_vec(),
+        )?;
 
-        let ta = check_archived_root::<Ret>(&ret_bytes[..])?;
+        let ta = check_archived_root::<R>(&ret_bytes[..])?;
         let ret = ta.deserialize(&mut Infallible).expect("Infallible");
 
         Ok(ret)
     }
 
-    fn initialize(
+    /// Execute a raw call on the current state of this session.
+    ///
+    /// Raw calls do not specify the type of the argument or of the return. The
+    /// caller is responsible for serializing the argument as the target
+    /// `contract` expects.
+    ///
+    /// For more information about calls see [`call`].
+    ///
+    /// [`call`]: Session::call
+    pub fn call_raw<V: Into<Vec<u8>>>(
+        &mut self,
+        contract: ContractId,
+        fn_name: &str,
+        fn_arg: V,
+    ) -> Result<Vec<u8>, Error> {
+        if fn_name == INIT_METHOD {
+            return Err(InitalizationError("init call not allowed".into()));
+        }
+
+        self.execute_until_ok(Call {
+            contract,
+            fname: fn_name.to_string(),
+            fdata: fn_arg.into(),
+            limit: self.inner.limit,
+        })
+    }
+
+    pub fn initialize(
         &mut self,
         contract: ContractId,
         arg: Vec<u8>,

@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Add `Session::call_raw` allowing for deferred (de)serialization [#218]
 - Add `MAP_NORESERVE` flag to `mmap` syscall [#213]
 
 ### Changed
@@ -77,6 +78,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - First `piecrust` release
 
 <!-- ISSUES -->
+[#218]: https://github.com/dusk-network/piecrust/issues/218
 [#216]: https://github.com/dusk-network/piecrust/issues/216
 [#213]: https://github.com/dusk-network/piecrust/issues/213
 [#207]: https://github.com/dusk-network/piecrust/issues/207

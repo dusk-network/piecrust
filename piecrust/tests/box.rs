@@ -5,6 +5,7 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 use piecrust::{contract_bytecode, ContractData, Error, SessionData, VM};
+use rkyv::{check_archived_root, Deserialize, Infallible};
 
 const OWNER: [u8; 32] = [0u8; 32];
 
@@ -28,4 +29,41 @@ pub fn box_set_get() -> Result<(), Error> {
     assert_eq!(value, Some(0x11));
 
     Ok(())
+}
+
+#[test]
+pub fn box_set_get_raw() -> Result<(), Error> {
+    let vm = VM::ephemeral()?;
+
+    let mut session = vm.session(SessionData::builder())?;
+
+    let id = session
+        .deploy(contract_bytecode!("box"), ContractData::builder(OWNER))?;
+
+    let value_bytes = session.call_raw(id, "get", vec![])?;
+    let value = deserialize_value(&value_bytes)?;
+
+    assert_eq!(value, None);
+
+    let value_bytes = serialize_value(0x11)?;
+    session.call_raw(id, "set", value_bytes)?;
+
+    let value_bytes = session.call_raw(id, "get", vec![])?;
+    let value = deserialize_value(&value_bytes)?;
+
+    assert_eq!(value, Some(0x11));
+
+    Ok(())
+}
+
+fn deserialize_value(bytes: &[u8]) -> Result<Option<i16>, Error> {
+    let ta = check_archived_root::<Option<i16>>(bytes)?;
+    let ret = ta.deserialize(&mut Infallible).expect("Infallible");
+    Ok(ret)
+}
+
+fn serialize_value(value: i16) -> Result<Vec<u8>, Error> {
+    Ok(rkyv::to_bytes::<_, 16>(&value)
+        .map_err(|_| Error::ValidationError)?
+        .to_vec())
 }
