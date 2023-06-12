@@ -10,14 +10,10 @@
 
 extern crate alloc;
 
-mod state;
-pub use state::{
-    call, call_raw, call_raw_with_limit, call_with_limit, caller, emit,
-    host_query, limit, meta_data, owner, self_id, spent,
-};
-
-mod helpers;
-pub use helpers::*;
+#[cfg(feature = "abi")]
+mod abi;
+#[cfg(feature = "abi")]
+pub use abi::*;
 
 mod types;
 pub use types::*;
@@ -25,18 +21,8 @@ pub use types::*;
 mod error;
 pub use error::*;
 
-#[cfg(feature = "debug")]
-pub mod debug;
-#[cfg(feature = "debug")]
-pub use debug::*;
-
 /// How many bytes to use for scratch space when serializing
 pub const SCRATCH_BUF_BYTES: usize = 64;
 
 /// The size of the argument buffer in bytes
 pub const ARGBUF_LEN: usize = 64 * 1024;
-
-#[cfg(not(feature = "std"))]
-mod handlers;
-
-mod allocator;

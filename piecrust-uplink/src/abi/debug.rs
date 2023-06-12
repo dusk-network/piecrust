@@ -6,7 +6,8 @@
 
 use core::fmt::{self, Write};
 
-use crate::{state, ARGBUF_LEN};
+use crate::abi::state;
+use crate::ARGBUF_LEN;
 
 extern "C" {
     pub fn hdebug(arg_len: u32);
@@ -53,9 +54,9 @@ macro_rules! debug {
         #[allow(unused)]
         use core::fmt::Write as _;
 
-        let mut w = $crate::debug::ArgbufWriter::default();
+        let mut w = $crate::ArgbufWriter::default();
         write!(&mut w, $($tt)*).unwrap();
 
-        unsafe { $crate::debug::hdebug(w.ofs() as u32) };
+        unsafe { $crate::hdebug(w.ofs() as u32) };
     };
 }
