@@ -52,7 +52,6 @@ mod ext {
             points_limit: u64,
         ) -> i32;
 
-        pub(crate) fn height();
         pub(crate) fn caller();
         pub(crate) fn emit(arg_len: u32);
         pub(crate) fn limit() -> u64;
@@ -277,17 +276,6 @@ where
             })),
         }
     }
-}
-
-/// Return the current height.
-pub fn height() -> u64 {
-    unsafe { ext::height() };
-    with_arg_buf(|buf| {
-        let ret = unsafe {
-            archived_root::<u64>(&buf[..core::mem::size_of::<Archived<u64>>()])
-        };
-        ret.deserialize(&mut Infallible).expect("Infallible")
-    })
 }
 
 /// Return the current contract's owner.

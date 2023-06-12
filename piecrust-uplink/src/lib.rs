@@ -11,7 +11,7 @@ extern crate alloc;
 
 mod state;
 pub use state::{
-    call, call_raw, call_raw_with_limit, call_with_limit, caller, emit, height,
+    call, call_raw, call_raw_with_limit, call_with_limit, caller, emit,
     host_query, limit, meta_data, owner, self_id, spent, ContractError,
 };
 

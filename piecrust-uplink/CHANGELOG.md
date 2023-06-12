@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
+- Remove unused `height` extern [#222]
 - Remove unused `snap` extern [#222]
 
 ## [0.5.0] - 2023-06-07
