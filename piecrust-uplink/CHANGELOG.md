@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Add `debug` feature [#222]
 
+### Changed
+
+- Rename `host_debug` to `hdebug` and use arg buffer [#222]
+
 ### Removed
 
 - Remove unused `height` extern [#222]

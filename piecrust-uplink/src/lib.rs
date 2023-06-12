@@ -37,3 +37,5 @@ pub const ARGBUF_LEN: usize = 64 * 1024;
 
 #[cfg(not(feature = "std"))]
 mod handlers;
+
+mod allocator;

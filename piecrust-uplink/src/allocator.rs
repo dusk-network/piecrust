@@ -4,12 +4,6 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use core::panic::PanicInfo;
-
-#[panic_handler]
-fn panic(_: &PanicInfo) -> ! {
-    unreachable!()
-}
-
-#[lang = "eh_personality"]
-extern "C" fn eh_personality() {}
+#[cfg(feature = "dlmalloc")]
+#[global_allocator]
+static ALLOC: dlmalloc::GlobalDlmalloc = dlmalloc::GlobalDlmalloc;
