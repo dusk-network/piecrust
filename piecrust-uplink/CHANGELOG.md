@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Emit debug line on panic handler [#222]
 - Add `debug` feature [#222]
 
 ### Changed

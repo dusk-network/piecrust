@@ -7,7 +7,12 @@
 use core::panic::PanicInfo;
 
 #[panic_handler]
-fn panic(_: &PanicInfo) -> ! {
+fn panic(info: &PanicInfo) -> ! {
+    if cfg!(feature = "debug") {
+        if let Some(msg) = info.message() {
+            crate::debug!("{msg}");
+        }
+    }
     unreachable!()
 }
 

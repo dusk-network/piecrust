@@ -5,6 +5,7 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 #![feature(lang_items)]
+#![cfg_attr(feature = "debug", feature(panic_info_message))]
 #![no_std]
 
 extern crate alloc;
