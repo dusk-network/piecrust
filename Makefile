@@ -20,6 +20,7 @@ contracts: ## Build example contracts
 test: contracts cold-reboot assert-counter-contract-small ## Run all tests
 	@cargo test \
 	  --manifest-path=./piecrust/Cargo.toml \
+	  --all-features \
 	  --color=always
 
 cold-reboot: contracts ## Run the cold reboot test

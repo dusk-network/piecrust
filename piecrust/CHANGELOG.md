@@ -9,7 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Add `debug` feature [#222]
+- Add `debug` feature, gating debugging capabilities [#222]
+
+### Changed
+
+- Rename `host_debug` export to `hdebug` [#222]
 
 ## [0.5.0] - 2023-06-07
 

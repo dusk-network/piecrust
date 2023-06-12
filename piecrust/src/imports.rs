@@ -35,7 +35,11 @@ impl DefaultImports {
         };
 
         #[cfg(feature = "debug")]
-        imports.define("env", "host_debug", host_debug);
+        imports.define(
+            "env",
+            "hdebug",
+            Function::new_typed_with_env(store, &fenv, hdebug),
+        );
 
         imports
     }
@@ -192,11 +196,11 @@ fn emit(mut fenv: FunctionEnvMut<Env>, arg_len: u32) {
 }
 
 #[cfg(feature = "debug")]
-fn host_debug(mut fenv: FunctionEnvMut<Env>, msg_ofs: i32, msg_len: u32) {
+fn hdebug(mut fenv: FunctionEnvMut<Env>, msg_len: u32) {
     let env = fenv.data_mut();
 
-    env.self_instance().with_memory(|mem| {
-        let slice = &mem[msg_ofs as usize..][..msg_len as usize];
+    env.self_instance().with_arg_buffer(|buf| {
+        let slice = &buf[..msg_len as usize];
 
         let msg = std::str::from_utf8(slice).expect("Invalid debug string");
 
