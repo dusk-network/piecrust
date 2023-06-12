@@ -20,3 +20,4 @@ dlmalloc = { version = "0.2", optional = true, features = ["global"] }
 [features]
 default = ["std"]
 std = []
+debug = []

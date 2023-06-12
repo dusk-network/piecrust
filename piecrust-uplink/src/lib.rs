@@ -24,8 +24,10 @@ pub use types::*;
 mod error;
 pub use error::*;
 
-pub mod bufwriter;
+#[cfg(feature = "debug")]
 pub mod debug;
+#[cfg(feature = "debug")]
+pub use debug::*;
 
 /// How many bytes to use for scratch space when serializing
 pub const SCRATCH_BUF_BYTES: usize = 64;

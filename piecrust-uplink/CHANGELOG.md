@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Add `debug` feature [#222]
+
 ### Removed
 
 - Remove unused `height` extern [#222]

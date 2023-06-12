@@ -9,7 +9,7 @@ edition = "2021"
 license = "MPL-2.0"
 
 [dependencies]
-piecrust-uplink = { path = "../../piecrust-uplink", default-features = false, features = ["dlmalloc"] }
+piecrust-uplink = { path = "../../piecrust-uplink", default-features = false, features = ["debug", "dlmalloc"] }
 
 [lib]
 crate-type = ["cdylib", "rlib"]
