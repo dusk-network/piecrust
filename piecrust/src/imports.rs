@@ -19,20 +19,25 @@ impl DefaultImports {
     pub fn default(store: &mut wasmer::Store, env: Env) -> wasmer::Imports {
         let fenv = FunctionEnv::new(store, env);
 
-        imports! {
+        #[allow(unused_mut)]
+        let mut imports = imports! {
             "env" => {
                 "caller" => Function::new_typed_with_env(store, &fenv, caller),
                 "c" => Function::new_typed_with_env(store, &fenv, c),
                 "hq" => Function::new_typed_with_env(store, &fenv, hq),
                 "hd" => Function::new_typed_with_env(store, &fenv, hd),
-                "host_debug" => Function::new_typed_with_env(store, &fenv, host_debug),
                 "emit" => Function::new_typed_with_env(store, &fenv, emit),
                 "limit" => Function::new_typed_with_env(store, &fenv, limit),
                 "spent" => Function::new_typed_with_env(store, &fenv, spent),
                 "owner" => Function::new_typed_with_env(store, &fenv, owner),
                 "self_id" => Function::new_typed_with_env(store, &fenv, self_id),
             }
-        }
+        };
+
+        #[cfg(feature = "debug")]
+        imports.define("env", "host_debug", host_debug);
+
+        imports
     }
 }
 
@@ -186,6 +191,7 @@ fn emit(mut fenv: FunctionEnvMut<Env>, arg_len: u32) {
     env.emit(arg_len)
 }
 
+#[cfg(feature = "debug")]
 fn host_debug(mut fenv: FunctionEnvMut<Env>, msg_ofs: i32, msg_len: u32) {
     let env = fenv.data_mut();
 

@@ -38,6 +38,34 @@ const-decoder = "0.3"
 [dev-dependencies]
 criterion = "0.4"
 
+[features]
+debug = []
+
+[[test]]
+name = "callcenter"
+path = "tests/callcenter.rs"
+required-features = ["debug"]
+
+[[test]]
+name = "crossover"
+path = "tests/crossover.rs"
+required-features = ["debug"]
+
+[[test]]
+name = "debugger"
+path = "tests/debugger.rs"
+required-features = ["debug"]
+
+[[test]]
+name = "merkle"
+path = "tests/merkle.rs"
+required-features = ["debug"]
+
+[[test]]
+name = "spender"
+path = "tests/spender.rs"
+required-features = ["debug"]
+
 [[bench]]
 name = "stack"
 harness = false

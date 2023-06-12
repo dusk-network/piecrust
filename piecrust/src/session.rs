@@ -551,6 +551,7 @@ impl Session {
             .map_err(|err| PersistenceError(Arc::new(err)))
     }
 
+    #[cfg(feature = "debug")]
     pub(crate) fn register_debug<M: Into<String>>(&mut self, msg: M) {
         self.inner.debug.push(msg.into());
     }
