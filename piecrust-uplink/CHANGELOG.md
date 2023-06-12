@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed
+
+- Remove unused `snap` extern [#222]
+
 ## [0.5.0] - 2023-06-07
 
 ### Added
@@ -55,6 +59,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - First `piecrust-uplink` release
 
 <!-- ISSUES -->
+[#222]: https://github.com/dusk-network/piecrust/issues/222
 [#216]: https://github.com/dusk-network/piecrust/issues/216
 [#209]: https://github.com/dusk-network/piecrust/issues/209
 [#207]: https://github.com/dusk-network/piecrust/issues/207

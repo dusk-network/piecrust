@@ -9,10 +9,6 @@
 
 extern crate alloc;
 
-mod snap;
-
-pub use snap::snap;
-
 mod state;
 pub use state::{
     call, call_raw, call_raw_with_limit, call_with_limit, caller, emit, height,
