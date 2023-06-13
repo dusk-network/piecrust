@@ -7,7 +7,7 @@
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::fmt::{self, Debug, Formatter};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::Arc;
 use std::thread;
 
@@ -52,10 +52,7 @@ impl VM {
     ///
     /// # Errors
     /// If the directory contains unparseable or inconsistent data.
-    pub fn new<P: AsRef<Path>>(root_dir: P) -> Result<Self, Error>
-    where
-        P: Into<PathBuf>,
-    {
+    pub fn new<P: AsRef<Path>>(root_dir: P) -> Result<Self, Error> {
         let store = ContractStore::new(root_dir)
             .map_err(|err| PersistenceError(Arc::new(err)))?;
         Ok(Self {
