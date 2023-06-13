@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Rename `MODULE_ID_BYTES` to `CONTRACT_ID_BYTES`
 - Expose `extern`s only on feature `abi` [#222]
 - Rename `std` feature to `abi` [#222]
 - Rename `host_debug` to `hdebug` and use arg buffer [#222]
