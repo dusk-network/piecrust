@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Add `debug` feature, gating debugging capabilities [#222]
+
+### Changed
+
+- Rename `host_debug` export to `hdebug` [#222]
+
 ## [0.5.0] - 2023-06-07
 
 ### Added
@@ -80,6 +88,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - First `piecrust` release
 
 <!-- ISSUES -->
+[#222]: https://github.com/dusk-network/piecrust/issues/222
 [#218]: https://github.com/dusk-network/piecrust/issues/218
 [#216]: https://github.com/dusk-network/piecrust/issues/216
 [#213]: https://github.com/dusk-network/piecrust/issues/213

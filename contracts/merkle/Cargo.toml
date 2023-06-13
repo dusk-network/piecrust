@@ -9,7 +9,7 @@ edition = "2021"
 license = "MPL-2.0"
 
 [dependencies]
-piecrust-uplink = { path = "../../piecrust-uplink", default-features = false, features = ["dlmalloc"] }
+piecrust-uplink = { path = "../../piecrust-uplink", features = ["abi", "dlmalloc"] }
 dusk-merkle = { version = "0.1", features = ["rkyv-impl"] }
 blake3 = { version = "1", default-features = false }
 

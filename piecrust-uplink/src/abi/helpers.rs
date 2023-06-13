@@ -4,7 +4,7 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use crate::state::with_arg_buf;
+use crate::abi::state::with_arg_buf;
 use crate::SCRATCH_BUF_BYTES;
 
 use rkyv::ser::serializers::{

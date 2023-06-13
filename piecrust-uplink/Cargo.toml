@@ -18,5 +18,5 @@ bytecheck = { version = "0.6", default-features = false }
 dlmalloc = { version = "0.2", optional = true, features = ["global"] }
 
 [features]
-default = ["std"]
-std = []
+abi = []
+debug = []

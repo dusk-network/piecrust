@@ -4,12 +4,6 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-mod ext {
-    extern "C" {
-        pub(crate) fn snap();
-    }
-}
-
-pub fn snap() {
-    unsafe { ext::snap() };
-}
+#[cfg(feature = "dlmalloc")]
+#[global_allocator]
+static ALLOC: dlmalloc::GlobalDlmalloc = dlmalloc::GlobalDlmalloc;

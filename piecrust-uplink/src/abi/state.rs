@@ -4,7 +4,6 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use bytecheck::CheckBytes;
 use rkyv::{
     archived_root,
     ser::serializers::{BufferScratch, BufferSerializer, CompositeSerializer},
@@ -13,7 +12,8 @@ use rkyv::{
 };
 
 use crate::{
-    ContractId, RawCall, RawResult, StandardBufSerializer, SCRATCH_BUF_BYTES,
+    ContractError, ContractId, RawCall, RawResult, StandardBufSerializer,
+    SCRATCH_BUF_BYTES,
 };
 
 mod arg_buf {
@@ -52,59 +52,12 @@ mod ext {
             points_limit: u64,
         ) -> i32;
 
-        pub(crate) fn height();
         pub(crate) fn caller();
         pub(crate) fn emit(arg_len: u32);
         pub(crate) fn limit() -> u64;
         pub(crate) fn spent() -> u64;
         pub(crate) fn owner() -> u32;
         pub(crate) fn self_id() -> u32;
-    }
-}
-
-/// The error possibly returned on an inter-contract-call.
-//
-// We do **not use rkyv** to pass it to the contract from the VM. Instead, we
-// use use the calling convention being able to pass negative numbers to signal
-// a failure.
-//
-// The contract writer, however, is free to pass it around and react to it if it
-// wishes.
-#[derive(Debug, Clone, Copy, Archive, Serialize, Deserialize)]
-#[archive_attr(derive(CheckBytes))]
-pub enum ContractError {
-    PANIC,
-    OUTOFGAS,
-    OTHER(i32),
-}
-
-impl ContractError {
-    /// Returns a contract error from a return `code`.
-    ///
-    /// # Panic
-    /// Panics if the value is larger than or equal to 0.
-    pub fn from_code(code: i32) -> Self {
-        if code >= 0 {
-            panic!(
-                "A `ContractError` is never equal or larger than 0, got {code}"
-            );
-        }
-
-        match code {
-            -1 => Self::PANIC,
-            -2 => Self::OUTOFGAS,
-            v => Self::OTHER(v),
-        }
-    }
-}
-
-impl From<ContractError> for i32 {
-    fn from(err: ContractError) -> Self {
-        match err {
-            ContractError::PANIC => -1,
-            ContractError::OUTOFGAS => -2,
-            ContractError::OTHER(c) => c,
-        }
     }
 }
 
@@ -277,17 +230,6 @@ where
             })),
         }
     }
-}
-
-/// Return the current height.
-pub fn height() -> u64 {
-    unsafe { ext::height() };
-    with_arg_buf(|buf| {
-        let ret = unsafe {
-            archived_root::<u64>(&buf[..core::mem::size_of::<Archived<u64>>()])
-        };
-        ret.deserialize(&mut Infallible).expect("Infallible")
-    })
 }
 
 /// Return the current contract's owner.

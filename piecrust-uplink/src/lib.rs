@@ -5,34 +5,24 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 #![feature(lang_items)]
+#![cfg_attr(feature = "debug", feature(panic_info_message))]
 #![no_std]
 
 extern crate alloc;
 
-mod snap;
-
-pub use snap::snap;
-
-mod state;
-pub use state::{
-    call, call_raw, call_raw_with_limit, call_with_limit, caller, emit, height,
-    host_query, limit, meta_data, owner, self_id, spent, ContractError,
-};
-
-mod helpers;
-pub use helpers::*;
+#[cfg(feature = "abi")]
+mod abi;
+#[cfg(feature = "abi")]
+pub use abi::*;
 
 mod types;
 pub use types::*;
 
-pub mod bufwriter;
-pub mod debug;
+mod error;
+pub use error::*;
 
 /// How many bytes to use for scratch space when serializing
 pub const SCRATCH_BUF_BYTES: usize = 64;
 
 /// The size of the argument buffer in bytes
 pub const ARGBUF_LEN: usize = 64 * 1024;
-
-#[cfg(not(feature = "std"))]
-mod handlers;

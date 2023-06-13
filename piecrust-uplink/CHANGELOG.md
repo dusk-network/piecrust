@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Emit debug line on panic handler [#222]
+- Add `debug` feature [#222]
+
+### Changed
+
+- Expose `extern`s only on feature `abi` [#222]
+- Rename `std` feature to `abi` [#222]
+- Rename `host_debug` to `hdebug` and use arg buffer [#222]
+
+### Removed
+
+- Remove unused `height` extern [#222]
+- Remove unused `snap` extern [#222]
+
 ## [0.5.0] - 2023-06-07
 
 ### Added
@@ -55,6 +71,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - First `piecrust-uplink` release
 
 <!-- ISSUES -->
+[#222]: https://github.com/dusk-network/piecrust/issues/222
 [#216]: https://github.com/dusk-network/piecrust/issues/216
 [#209]: https://github.com/dusk-network/piecrust/issues/209
 [#207]: https://github.com/dusk-network/piecrust/issues/207
