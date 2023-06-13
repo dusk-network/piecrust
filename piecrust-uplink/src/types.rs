@@ -22,7 +22,7 @@ pub type StandardBufSerializer<'a> = CompositeSerializer<
 >;
 
 /// The length of [`ContractId`] in bytes
-pub const MODULE_ID_BYTES: usize = 32;
+pub const CONTRACT_ID_BYTES: usize = 32;
 
 /// ID to identify the wasm contracts after they have been deployed
 #[derive(
@@ -40,23 +40,23 @@ pub const MODULE_ID_BYTES: usize = 32;
 )]
 #[archive(as = "Self")]
 #[repr(C)]
-pub struct ContractId([u8; MODULE_ID_BYTES]);
+pub struct ContractId([u8; CONTRACT_ID_BYTES]);
 
 impl ContractId {
     /// Creates a placeholder [`ContractId`] until the host deploys the contract
     /// and sets a real [`ContractId`]. This can also be used to determine if a
     /// contract is the first to be called.
     pub const fn uninitialized() -> Self {
-        ContractId([0u8; MODULE_ID_BYTES])
+        ContractId([0u8; CONTRACT_ID_BYTES])
     }
 
     /// Creates a new [`ContractId`] from an array of bytes
-    pub const fn from_bytes(bytes: [u8; MODULE_ID_BYTES]) -> Self {
+    pub const fn from_bytes(bytes: [u8; CONTRACT_ID_BYTES]) -> Self {
         Self(bytes)
     }
 
     /// Returns the array of bytes that make up the [`ContractId`]
-    pub const fn to_bytes(self) -> [u8; MODULE_ID_BYTES] {
+    pub const fn to_bytes(self) -> [u8; CONTRACT_ID_BYTES] {
         self.0
     }
 
@@ -79,8 +79,8 @@ impl ContractId {
     }
 }
 
-impl From<[u8; MODULE_ID_BYTES]> for ContractId {
-    fn from(bytes: [u8; MODULE_ID_BYTES]) -> Self {
+impl From<[u8; CONTRACT_ID_BYTES]> for ContractId {
+    fn from(bytes: [u8; CONTRACT_ID_BYTES]) -> Self {
         Self::from_bytes(bytes)
     }
 }

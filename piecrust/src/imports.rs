@@ -206,7 +206,7 @@ fn hdebug(mut fenv: FunctionEnvMut<Env>, msg_len: u32) {
 
         env.register_debug(msg);
 
-        println!("MODULE DEBUG {msg}")
+        println!("CONTRACT DEBUG {msg}")
     })
 }
 
