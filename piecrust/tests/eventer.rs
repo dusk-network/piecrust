@@ -5,6 +5,9 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 use piecrust::{contract_bytecode, ContractData, Error, SessionData, VM};
+use std::sync::mpsc;
+use std::thread;
+use std::time::Duration;
 
 const OWNER: [u8; 32] = [0u8; 32];
 
@@ -29,6 +32,42 @@ pub fn vm_center_events() -> Result<(), Error> {
         assert_eq!(events[index].source(), eventer_id);
         assert_eq!(events[index].data(), i.to_le_bytes());
     }
+
+    Ok(())
+}
+
+#[test]
+pub fn vm_center_events_channel() -> Result<(), Error> {
+    let vm = VM::ephemeral()?;
+
+    let mut session = vm.session(SessionData::builder())?;
+
+    let eventer_id = session
+        .deploy(contract_bytecode!("eventer"), ContractData::builder(OWNER))?;
+
+    const EVENT_NUM: u32 = 5;
+
+    let (sender, receiver) = mpsc::channel();
+
+    let exec_handle = thread::spawn(move || {
+        session.call_raw_with_sender(
+            eventer_id,
+            "emit_events",
+            EVENT_NUM.to_le_bytes(),
+            sender,
+        )
+    });
+
+    let recv_handle = thread::spawn(move || {
+        let events = receiver.iter();
+        for event in events {
+            println!("{event:?}");
+            thread::sleep(Duration::from_secs(2));
+        }
+    });
+
+    exec_handle.join().expect("join should succeed")?;
+    recv_handle.join().expect("join should succeed");
 
     Ok(())
 }

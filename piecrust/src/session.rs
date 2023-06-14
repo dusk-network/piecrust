@@ -10,6 +10,7 @@ use std::borrow::Cow;
 use std::collections::btree_map::Entry;
 use std::collections::BTreeMap;
 use std::mem;
+use std::sync::mpsc::Sender;
 use std::sync::Arc;
 
 use bytecheck::CheckBytes;
@@ -40,6 +41,7 @@ const MAX_META_SIZE: usize = 65_536;
 pub const INIT_METHOD: &str = "init";
 
 unsafe impl Send for Session {}
+
 unsafe impl Sync for Session {}
 
 /// A running mutation to a state.
@@ -88,8 +90,10 @@ struct SessionInner {
     call_stack: CallStack,
     instance_map: BTreeMap<ContractId, (*mut WrappedInstance, u64)>,
     debug: Vec<String>,
-    events: Vec<Event>,
     data: SessionData,
+
+    events: Vec<Event>,
+    event_sender: Option<Sender<Event>>,
 
     contract_session: ContractSession,
     host_queries: HostQueries,
@@ -101,8 +105,10 @@ struct SessionInner {
     buffer: Vec<u8>,
 
     call_count: usize,
-    icc_count: usize, // inter-contract call - 0 is the main call
-    icc_height: usize, // height of an inter-contract call
+    icc_count: usize,
+    // inter-contract call - 0 is the main call
+    icc_height: usize,
+    // height of an inter-contract call
     // Keeps errors/successes that were found during the execution of a
     // particular inter-contract call in the context of a call.
     icc_errors: BTreeMap<usize, BTreeMap<usize, Error>>,
@@ -118,8 +124,9 @@ impl Session {
             call_stack: CallStack::new(),
             instance_map: BTreeMap::new(),
             debug: vec![],
-            events: vec![],
             data,
+            events: vec![],
+            event_sender: None,
             contract_session,
             host_queries,
             limit: DEFAULT_LIMIT,
@@ -350,6 +357,32 @@ impl Session {
         })
     }
 
+    /// Executes a raw call on the current state of this session in the same way
+    /// as [`call_raw`], with the exception that all emitted event are passed
+    /// through to the given `sender`.
+    ///
+    /// This is useful in the case that the sender wishes to have events
+    /// streamed through the channel, such as when the contract supports
+    /// emitting large amounts of data in a single execution of `fn_name`.
+    ///
+    /// It is important to note that events emitted during this call with *not*
+    /// be available in [`take_events`].
+    ///
+    /// [`call_raw`]: Session::call_raw
+    /// [`take_events`]: Session::take_events
+    pub fn call_raw_with_sender<V: Into<Vec<u8>>>(
+        &mut self,
+        contract: ContractId,
+        fn_name: &str,
+        fn_arg: V,
+        sender: Sender<Event>,
+    ) -> Result<Vec<u8>, Error> {
+        self.inner.event_sender = Some(sender);
+        let res = self.call_raw(contract, fn_name, fn_arg);
+        self.inner.event_sender = None;
+        res
+    }
+
     pub fn initialize(
         &mut self,
         contract: ContractId,
@@ -436,7 +469,13 @@ impl Session {
     }
 
     pub(crate) fn push_event(&mut self, event: Event) {
-        self.inner.events.push(event);
+        // If there is an event channel, then push the event through there,
+        // otherwise place it in the events vector.
+        if let Some(sender) = &self.inner.event_sender {
+            sender.send(event).expect("Channel has been dropped");
+        } else {
+            self.inner.events.push(event);
+        }
     }
 
     fn new_instance(

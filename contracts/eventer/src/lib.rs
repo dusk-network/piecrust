@@ -17,7 +17,7 @@ pub struct Eventer;
 static mut STATE: Eventer = Eventer;
 
 impl Eventer {
-    /// Emits an event with the given number
+    /// Emits `num` events with sequential numbers in the range `0..num`.
     pub fn emit_num(&mut self, num: u32) {
         for i in 0..num {
             uplink::emit(i);
