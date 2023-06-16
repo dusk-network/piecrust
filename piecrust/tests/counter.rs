@@ -39,3 +39,28 @@ fn counter_read_write_simple() -> Result<(), Error> {
 
     Ok(())
 }
+
+#[test]
+fn call_through_c() -> Result<(), Error> {
+    let vm = VM::ephemeral()?;
+
+    let mut session = vm.session(SessionData::builder())?;
+
+    let counter_id = session
+        .deploy(contract_bytecode!("counter"), ContractData::builder(OWNER))?;
+    let c_example_id = session.deploy(
+        contract_bytecode!("c-example"),
+        ContractData::builder(OWNER),
+    )?;
+
+    assert_eq!(
+        session.call::<_, i64>(
+            c_example_id,
+            "increment_and_read",
+            &counter_id
+        )?,
+        0xfd
+    );
+
+    Ok(())
+}
