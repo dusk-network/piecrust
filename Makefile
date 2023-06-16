@@ -10,6 +10,7 @@ contracts: ## Build example contracts
 	  -Z build-std=core,alloc,panic_abort \
 	  -Z build-std-features=panic_immediate_abort \
 	  --target wasm32-unknown-unknown
+	@contracts/c-example/build.sh
 	@mkdir -p target/stripped
 	@find target/wasm32-unknown-unknown/release -maxdepth 1 -name "*.wasm" \
 	    | xargs -I % basename % \
