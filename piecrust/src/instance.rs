@@ -33,8 +33,6 @@ use crate::Error;
 pub struct WrappedInstance {
     instance: wasmer::Instance,
     arg_buf_ofs: usize,
-    #[allow(unused)]
-    heap_base: usize,
     store: wasmer::Store,
 }
 
@@ -159,17 +157,10 @@ impl WrappedInstance {
                 _ => todo!("Missing `A` Argbuf export"),
             };
 
-        let heap_base =
-            match instance.exports.get_global("__heap_base")?.get(&mut store) {
-                wasmer::Value::I32(i) => i as usize,
-                _ => todo!("Missing heap base"),
-            };
-
         let wrapped = WrappedInstance {
             store,
             instance,
             arg_buf_ofs,
-            heap_base,
         };
 
         Ok(wrapped)
@@ -295,13 +286,10 @@ impl WrappedInstance {
 
                         let buf_start = self.arg_buf_ofs;
                         let buf_end = buf_start + uplink::ARGBUF_LEN;
-                        let heap_base = self.heap_base;
 
                         if ofs + i >= buf_start && ofs + i < buf_end {
-                            print!("{}", format!("{byte:02x}").red());
+                            print!("{}", format!("{byte:02x}").green());
                             print!(" ");
-                        } else if ofs + i >= heap_base {
-                            print!("{}", format!("{byte:02x} ").green());
                         } else {
                             print!("{byte:02x} ")
                         }
