@@ -7,6 +7,8 @@
 use bytecheck::CheckBytes;
 use rkyv::{Archive, Deserialize, Serialize};
 
+use core::fmt::{Display, Formatter};
+
 /// The error possibly returned on an inter-contract-call.
 //
 // We do **not use rkyv** to pass it to the contract from the VM. Instead, we
@@ -49,6 +51,16 @@ impl From<ContractError> for i32 {
             ContractError::PANIC => -1,
             ContractError::OUTOFGAS => -2,
             ContractError::OTHER(c) => c,
+        }
+    }
+}
+
+impl Display for ContractError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
+        match self {
+            ContractError::PANIC => write!(f, "CONTRACT PANIC"),
+            ContractError::OUTOFGAS => write!(f, "OUT OF GAS"),
+            ContractError::OTHER(c) => write!(f, "OTHER: {c}"),
         }
     }
 }
