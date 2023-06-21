@@ -74,6 +74,7 @@ impl From<SessionInner> for Session {
 impl Drop for Session {
     fn drop(&mut self) {
         if self.original {
+            self.clear_stack_and_instances();
             // SAFETY: this is safe since we guarantee that there is no aliasing
             // when a session drops.
             unsafe {
@@ -393,34 +394,13 @@ impl Session {
     }
 
     fn clear_stack_and_instances(&mut self) {
-        while self.inner.call_stack.len() > 0 {
-            let popped = self.inner.call_stack.pop().unwrap();
-            self.remove_instance(&popped.contract_id);
-        }
-        let ids: Vec<ContractId> =
-            self.inner.instance_map.keys().cloned().collect();
-        for contract_id in ids.iter() {
-            self.remove_instance(contract_id);
-        }
-    }
+        self.inner.call_stack.clear();
 
-    pub(crate) fn remove_instance(&mut self, contract_id: &ContractId) {
-        let mut entry = match self.inner.instance_map.entry(*contract_id) {
-            Entry::Occupied(e) => e,
-            _ => unreachable!("map must have an instance here"),
-        };
-
-        let (instance, count) = entry.get_mut();
-        *count -= 1;
-
-        if *count == 0 {
-            // SAFETY: This is the last instance of the contract in the
-            // stack, therefore we should recoup the memory and drop
-            //
-            // Any pointers to it will be left dangling
+        while !self.inner.instance_map.is_empty() {
+            let (_, (instance, _)) =
+                self.inner.instance_map.pop_first().unwrap();
             unsafe {
-                let _ = Box::from_raw(*instance);
-                entry.remove();
+                let _ = Box::from_raw(instance);
             };
         }
     }

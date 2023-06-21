@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Fix memleak due to last contract instance not being reclaimed
+  in session.
+
 ## [0.5.0] - 2023-06-07
 
 ### Added

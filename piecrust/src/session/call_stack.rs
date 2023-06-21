@@ -16,9 +16,9 @@ impl CallStack {
         Self::default()
     }
 
-    /// Return the length of the call stack.
-    pub fn len(&self) -> usize {
-        self.stack.len()
+    /// Clear the call stack.
+    pub fn clear(&mut self) {
+        self.stack.clear()
     }
 
     /// Push an element to the call stack.
