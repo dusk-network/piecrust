@@ -16,6 +16,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Remove `Into<PathBuf>` bound in `VM::new`
 - Rename `host_debug` export to `hdebug` [#222]
 
+### Fixed
+
+- Fix memleak due to last contract instance not being reclaimed
+  in session.
+
 ### Removed
 
 - Remove `__heap_base` requirement from contracts
