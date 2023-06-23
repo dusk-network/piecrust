@@ -9,8 +9,6 @@ use std::ptr::NonNull;
 use std::sync::Arc;
 
 use colored::*;
-use piecrust_uplink as uplink;
-use uplink::ContractId;
 use wasmer::wasmparser::Operator;
 use wasmer::{CompilerConfig, RuntimeError, Tunables, TypedFunction};
 use wasmer_compiler_singlepass::Singlepass;
@@ -23,8 +21,9 @@ use wasmer_types::{
 };
 use wasmer_vm::{LinearMemory, VMMemory, VMTable, VMTableDefinition};
 
+use piecrust_uplink::{ContractId, Event, EventTarget, ARGBUF_LEN};
+
 use crate::contract::WrappedContract;
-use crate::event::Event;
 use crate::imports::DefaultImports;
 use crate::session::Session;
 use crate::store::Memory;
@@ -79,13 +78,15 @@ impl Env {
             .limit
     }
 
-    pub fn emit(&mut self, arg_len: u32) {
-        let data = self.self_instance().with_arg_buffer(|buf| {
-            let arg_len = arg_len as usize;
-            Vec::from(&buf[..arg_len])
-        });
+    pub fn emit(&mut self, topic: String, data: Vec<u8>) {
+        let event = Event {
+            target: EventTarget::Contract(self.self_id),
+            topic,
+            data,
+            cancelable: false,
+            capturable: false,
+        };
 
-        let event = Event::new(self.self_id, data);
         self.session.push_event(event);
     }
 
@@ -213,7 +214,7 @@ impl WrappedInstance {
     {
         self.with_memory_mut(|memory_bytes| {
             let a = self.arg_buf_ofs;
-            let b = uplink::ARGBUF_LEN;
+            let b = ARGBUF_LEN;
             let begin = &mut memory_bytes[a..];
             let trimmed = &mut begin[..b];
             f(trimmed)
@@ -285,7 +286,7 @@ impl WrappedInstance {
                         }
 
                         let buf_start = self.arg_buf_ofs;
-                        let buf_end = buf_start + uplink::ARGBUF_LEN;
+                        let buf_end = buf_start + ARGBUF_LEN;
 
                         if ofs + i >= buf_start && ofs + i < buf_end {
                             print!("{}", format!("{byte:02x}").green());

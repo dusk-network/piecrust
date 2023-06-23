@@ -13,7 +13,7 @@ use std::mem;
 use std::sync::Arc;
 
 use bytecheck::CheckBytes;
-use piecrust_uplink::{ContractId, SCRATCH_BUF_BYTES};
+use piecrust_uplink::{ContractId, Event, SCRATCH_BUF_BYTES};
 use rkyv::ser::serializers::{
     BufferScratch, BufferSerializer, CompositeSerializer,
 };
@@ -25,7 +25,6 @@ use rkyv::{
 use wasmer_types::WASM_PAGE_SIZE;
 
 use crate::contract::{ContractData, ContractMetadata, WrappedContract};
-use crate::event::Event;
 use crate::instance::WrappedInstance;
 use crate::store::{ContractSession, Objectcode};
 use crate::types::StandardBufSerializer;

@@ -20,7 +20,7 @@ impl Eventer {
     /// Emits an event with the given number
     pub fn emit_num(&mut self, num: u32) {
         for i in 0..num {
-            uplink::emit(i);
+            uplink::emit("number", i);
         }
     }
 }

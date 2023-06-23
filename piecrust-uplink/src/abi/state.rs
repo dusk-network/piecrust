@@ -53,7 +53,7 @@ mod ext {
         ) -> i32;
 
         pub(crate) fn caller();
-        pub(crate) fn emit(arg_len: u32);
+        pub(crate) fn emit(topic: *const u8, topic_len: u32, arg_len: u32);
         pub(crate) fn limit() -> u64;
         pub(crate) fn spent() -> u64;
         pub(crate) fn owner() -> u32;
@@ -275,7 +275,7 @@ pub fn spent() -> u64 {
 }
 
 /// Emits an event with the given data.
-pub fn emit<D>(data: D)
+pub fn emit<D>(topic: &'static str, data: D)
 where
     for<'a> D: Serialize<StandardBufSerializer<'a>>,
 {
@@ -289,6 +289,9 @@ where
         composite.serialize_value(&data).unwrap();
         let arg_len = composite.pos() as u32;
 
-        unsafe { ext::emit(arg_len) }
+        let topic_ptr = topic.as_ptr();
+        let topic_len = topic.len() as u32;
+
+        unsafe { ext::emit(topic_ptr, topic_len, arg_len) }
     });
 }
