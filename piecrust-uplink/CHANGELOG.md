@@ -9,12 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Add `Event` struct according to spec
 - Impl `fmt::Display` for `ContractError`
 - Emit debug line on panic handler [#222]
 - Add `debug` feature [#222]
 
 ### Changed
 
+- Change `emit` extern to include topic
 - Rename `MODULE_ID_BYTES` to `CONTRACT_ID_BYTES`
 - Expose `extern`s only on feature `abi` [#222]
 - Rename `std` feature to `abi` [#222]
