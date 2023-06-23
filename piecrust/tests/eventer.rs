@@ -5,6 +5,7 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 use piecrust::{contract_bytecode, ContractData, Error, SessionData, VM};
+use piecrust_uplink::EventTarget;
 
 const OWNER: [u8; 32] = [0u8; 32];
 
@@ -26,8 +27,9 @@ pub fn vm_center_events() -> Result<(), Error> {
 
     for i in 0..EVENT_NUM {
         let index = i as usize;
-        assert_eq!(events[index].source(), eventer_id);
-        assert_eq!(events[index].data(), i.to_le_bytes());
+        assert_eq!(events[index].topic, "number");
+        assert_eq!(events[index].target, EventTarget::Contract(eventer_id));
+        assert_eq!(events[index].data, i.to_le_bytes());
     }
 
     Ok(())

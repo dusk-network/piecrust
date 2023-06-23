@@ -109,7 +109,6 @@
 mod bytecode_macro;
 mod contract;
 mod error;
-mod event;
 mod imports;
 mod instance;
 mod session;

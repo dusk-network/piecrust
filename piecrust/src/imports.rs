@@ -190,9 +190,31 @@ fn hd(mut fenv: FunctionEnvMut<Env>, name_ofs: i32, name_len: u32) -> u32 {
     }
 }
 
-fn emit(mut fenv: FunctionEnvMut<Env>, arg_len: u32) {
+fn emit(
+    mut fenv: FunctionEnvMut<Env>,
+    topic_ofs: i32,
+    topic_len: u32,
+    arg_len: u32,
+) {
     let env = fenv.data_mut();
-    env.emit(arg_len)
+    let instance = env.self_instance();
+
+    let data = instance.with_arg_buffer(|buf| {
+        let arg_len = arg_len as usize;
+        Vec::from(&buf[..arg_len])
+    });
+
+    let topic_ofs = topic_ofs as usize;
+    let topic_len = topic_len as usize;
+
+    let topic = instance.with_memory(|buf| {
+        // performance: use a dedicated buffer here?
+        core::str::from_utf8(&buf[topic_ofs..][..topic_len])
+            .expect("TODO, error out cleaner")
+            .to_owned()
+    });
+
+    env.emit(topic, data)
 }
 
 #[cfg(feature = "debug")]
