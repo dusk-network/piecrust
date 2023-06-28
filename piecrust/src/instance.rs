@@ -83,8 +83,6 @@ impl Env {
             target: EventTarget::Contract(self.self_id),
             topic,
             data,
-            cancelable: false,
-            capturable: false,
         };
 
         self.session.push_event(event);

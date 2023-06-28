@@ -62,8 +62,6 @@ pub struct Event {
     pub target: EventTarget,
     pub topic: String,
     pub data: Vec<u8>,
-    pub cancelable: bool,
-    pub capturable: bool,
 }
 
 /// Type with `rkyv` serialization capabilities for specific types.
