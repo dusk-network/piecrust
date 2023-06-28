@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Re-export the entirety of `piecrust-uplink` [#234]
+
+### Change
+
+- Allow for `piecrust-uplink` version variability [#234]
+
 ## [0.6.0] - 2023-06-28
 
 ### Added
@@ -101,6 +109,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.1.0] - 2023-03-15
 
 - First `piecrust` release
+
+<!-- PULLS -->
+[#234]: https://github.com/dusk-network/piecrust/pull/234
 
 <!-- ISSUES -->
 [#222]: https://github.com/dusk-network/piecrust/issues/222
