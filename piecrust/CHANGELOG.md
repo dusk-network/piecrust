@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Re-export the entirety of `piecrust-uplink` [#234]
 
+### Change
+
+- Allow for `piecrust-uplink` version variability [#234]
+
 ## [0.6.0] - 2023-06-28
 
 ### Added
