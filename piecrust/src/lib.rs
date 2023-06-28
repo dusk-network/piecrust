@@ -121,6 +121,6 @@ pub use error::Error;
 pub use session::{Session, SessionData};
 pub use vm::{HostQuery, VM};
 
-// re-exports
-
-pub use piecrust_uplink::{ContractId, RawCall};
+// re-export the contents of the `piecrust-uplink` crate wholesale, ensuring
+// this is the only crate we need to define and use a VM.
+pub use piecrust_uplink::*;
