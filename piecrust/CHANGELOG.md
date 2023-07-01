@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Add `ContractDoesNotExist` variant to the `Error` enum
+
+### Change
+
+- Error instead of panicking on making a call to non-existing contract
+
 ## [0.6.1] - 2023-06-28
 
 ### Added
