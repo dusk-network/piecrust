@@ -430,7 +430,7 @@ impl Session {
             .contract_session
             .contract(contract_id)
             .map_err(|err| PersistenceError(Arc::new(err)))?
-            .expect("Contract should exist");
+            .ok_or(Error::ContractDoesNotExist(contract_id))?;
 
         let contract = WrappedContract::new(
             store_data.bytecode,

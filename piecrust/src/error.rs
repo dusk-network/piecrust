@@ -8,7 +8,7 @@ use std::borrow::Cow;
 use std::sync::Arc;
 use thiserror::Error;
 
-use piecrust_uplink::ContractError;
+use piecrust_uplink::{ContractError, ContractId};
 use rkyv::ser::serializers::{
     BufferSerializerError, CompositeSerializerError, FixedSizeScratchError,
 };
@@ -42,6 +42,8 @@ pub enum Error {
     CompositeSerializerError(Arc<Compo>),
     #[error(transparent)]
     ContractCacheError(Arc<std::io::Error>),
+    #[error("Contract does not exist: {0}")]
+    ContractDoesNotExist(ContractId),
     #[error(transparent)]
     PersistenceError(Arc<std::io::Error>),
     #[error("Commit error: {0}")]
