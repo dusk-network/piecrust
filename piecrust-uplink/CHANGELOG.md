@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.1] - 2023-07-03
+
+### Fixed
+
+- Prevent macro expansion in panic handler without the debug feature
+
 ## [0.6.0] - 2023-06-28
 
 ### Added
@@ -89,7 +95,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [#136]: https://github.com/dusk-network/piecrust/issues/136
 
 <!-- VERSIONS -->
-[Unreleased]: https://github.com/dusk-network/piecrust/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/dusk-network/piecrust/compare/uplink-0.6.1...HEAD
+[0.6.1]: https://github.com/dusk-network/piecrust/compare/v0.6.0...uplink-0.6.1
 [0.6.0]: https://github.com/dusk-network/piecrust/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/dusk-network/piecrust/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/dusk-network/piecrust/compare/v0.3.0...v0.4.0
