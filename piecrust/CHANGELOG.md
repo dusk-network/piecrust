@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.2] - 2023-07-07
+
 ### Added
 
 - Add `ContractDoesNotExist` variant to the `Error` enum
@@ -142,7 +144,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [#93]: https://github.com/dusk-network/piecrust/issues/93
 
 <!-- VERSIONS -->
-[Unreleased]: https://github.com/dusk-network/piecrust/compare/piecrust-0.6.1...HEAD
+[Unreleased]: https://github.com/dusk-network/piecrust/compare/piecrust-0.6.2...HEAD
+[0.6.1]: https://github.com/dusk-network/piecrust/compare/piecrust-0.6.1...piecrust-0.6.2
 [0.6.1]: https://github.com/dusk-network/piecrust/compare/v0.6.0...piecrust-0.6.1
 [0.6.0]: https://github.com/dusk-network/piecrust/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/dusk-network/piecrust/compare/v0.4.0...v0.5.0
