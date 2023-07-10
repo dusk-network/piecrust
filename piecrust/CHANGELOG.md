@@ -16,6 +16,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Change signature of `Session::call` to return `CallReceipt`
 - Change signature of `Session::call_raw` to return `CallReceipt`
 
+### Removed
+
+- Remove `Session::take_events`
+
 ## [0.6.2] - 2023-07-07
 
 ### Added

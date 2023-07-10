@@ -543,10 +543,6 @@ impl Session {
         self.inner.debug.push(msg.into());
     }
 
-    pub fn take_events(&mut self) -> Vec<Event> {
-        mem::take(&mut self.inner.events)
-    }
-
     pub fn with_debug<C, R>(&self, c: C) -> R
     where
         C: FnOnce(&[String]) -> R,
