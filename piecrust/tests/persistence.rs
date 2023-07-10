@@ -25,11 +25,11 @@ fn session_commits_persistence() -> Result<(), Error> {
         id_2 = session
             .deploy(contract_bytecode!("box"), ContractData::builder(OWNER))?;
 
-        session.call::<(), ()>(id_1, "increment", &())?;
+        session.call::<_, ()>(id_1, "increment", &())?;
         session.call::<i16, ()>(id_2, "set", &0x11)?;
-        assert_eq!(session.call::<(), i64>(id_1, "read_value", &())?, 0xfd);
+        assert_eq!(session.call::<_, i64>(id_1, "read_value", &())?.data, 0xfd);
         assert_eq!(
-            session.call::<_, Option<i16>>(id_2, "get", &())?,
+            session.call::<_, Option<i16>>(id_2, "get", &())?.data,
             Some(0x11)
         );
         commit_1 = session.commit()?;
@@ -39,11 +39,11 @@ fn session_commits_persistence() -> Result<(), Error> {
     {
         let mut session = vm.session(SessionData::builder().base(commit_1))?;
 
-        session.call::<(), ()>(id_1, "increment", &())?;
+        session.call::<_, ()>(id_1, "increment", &())?;
         session.call::<i16, ()>(id_2, "set", &0x12)?;
-        assert_eq!(session.call::<(), i64>(id_1, "read_value", &())?, 0xfe);
+        assert_eq!(session.call::<_, i64>(id_1, "read_value", &())?.data, 0xfe);
         assert_eq!(
-            session.call::<_, Option<i16>>(id_2, "get", &())?,
+            session.call::<_, Option<i16>>(id_2, "get", &())?.data,
             Some(0x12)
         );
         commit_2 = session.commit()?;
@@ -54,9 +54,9 @@ fn session_commits_persistence() -> Result<(), Error> {
         let mut session = vm2.session(SessionData::builder().base(commit_1))?;
 
         // check if both contracts' state was restored
-        assert_eq!(session.call::<(), i64>(id_1, "read_value", &())?, 0xfd);
+        assert_eq!(session.call::<_, i64>(id_1, "read_value", &())?.data, 0xfd);
         assert_eq!(
-            session.call::<_, Option<i16>>(id_2, "get", &())?,
+            session.call::<_, Option<i16>>(id_2, "get", &())?.data,
             Some(0x11)
         );
     }
@@ -66,9 +66,9 @@ fn session_commits_persistence() -> Result<(), Error> {
         let mut session = vm3.session(SessionData::builder().base(commit_2))?;
 
         // check if both contracts' state was restored
-        assert_eq!(session.call::<(), i64>(id_1, "read_value", &())?, 0xfe);
+        assert_eq!(session.call::<_, i64>(id_1, "read_value", &())?.data, 0xfe);
         assert_eq!(
-            session.call::<_, Option<i16>>(id_2, "get", &())?,
+            session.call::<_, Option<i16>>(id_2, "get", &())?.data,
             Some(0x12)
         );
     }
@@ -84,11 +84,11 @@ fn contracts_persistence() -> Result<(), Error> {
     let id_2 = session
         .deploy(contract_bytecode!("box"), ContractData::builder(OWNER))?;
 
-    session.call::<(), ()>(id_1, "increment", &())?;
+    session.call::<_, ()>(id_1, "increment", &())?;
     session.call::<i16, ()>(id_2, "set", &0x11)?;
-    assert_eq!(session.call::<(), i64>(id_1, "read_value", &())?, 0xfd);
+    assert_eq!(session.call::<_, i64>(id_1, "read_value", &())?.data, 0xfd);
     assert_eq!(
-        session.call::<_, Option<i16>>(id_2, "get", &())?,
+        session.call::<_, Option<i16>>(id_2, "get", &())?.data,
         Some(0x11)
     );
 
@@ -98,9 +98,9 @@ fn contracts_persistence() -> Result<(), Error> {
     let mut session2 = vm2.session(SessionData::builder().base(commit_1))?;
 
     // check if both contracts' state was restored
-    assert_eq!(session2.call::<(), i64>(id_1, "read_value", &())?, 0xfd);
+    assert_eq!(session2.call::<_, i64>(id_1, "read_value", &())?.data, 0xfd);
     assert_eq!(
-        session2.call::<_, Option<i16>>(id_2, "get", &())?,
+        session2.call::<_, Option<i16>>(id_2, "get", &())?.data,
         Some(0x11)
     );
     Ok(())

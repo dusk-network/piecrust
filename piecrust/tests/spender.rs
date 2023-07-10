@@ -45,7 +45,7 @@ pub fn fails_with_out_of_points() -> Result<(), Error> {
     session.set_point_limit(0);
 
     let err = session
-        .call::<(), i64>(counter_id, "read_value", &())
+        .call::<_, i64>(counter_id, "read_value", &())
         .expect_err("should error with no gas");
 
     assert!(matches!(err, Error::OutOfPoints));
@@ -69,18 +69,22 @@ pub fn contract_sets_call_limit() -> Result<(), Error> {
     const FIRST_LIMIT: u64 = 1000;
     const SECOND_LIMIT: u64 = 2000;
 
-    let _: Result<(), ContractError> = session.call(
-        callcenter_id,
-        "call_spend_with_limit",
-        &(spender_id, FIRST_LIMIT),
-    )?;
+    let _: Result<(), ContractError> = session
+        .call(
+            callcenter_id,
+            "call_spend_with_limit",
+            &(spender_id, FIRST_LIMIT),
+        )?
+        .data;
     let spent_first = session.spent();
 
-    let _: Result<(), ContractError> = session.call(
-        callcenter_id,
-        "call_spend_with_limit",
-        &(spender_id, SECOND_LIMIT),
-    )?;
+    let _: Result<(), ContractError> = session
+        .call(
+            callcenter_id,
+            "call_spend_with_limit",
+            &(spender_id, SECOND_LIMIT),
+        )?
+        .data;
     let spent_second = session.spent();
 
     assert_eq!(spent_second - spent_first, SECOND_LIMIT - FIRST_LIMIT);
@@ -102,11 +106,13 @@ pub fn limit_and_spent() -> Result<(), Error> {
     session.set_point_limit(LIMIT);
 
     let (limit, spent_before, spent_after, called_limit, called_spent) =
-        session.call::<_, (u64, u64, u64, u64, u64)>(
-            spender_id,
-            "get_limit_and_spent",
-            &(),
-        )?;
+        session
+            .call::<_, (u64, u64, u64, u64, u64)>(
+                spender_id,
+                "get_limit_and_spent",
+                &(),
+            )?
+            .data;
     let spender_spent = session.spent();
 
     assert_eq!(limit, LIMIT, "should be the initial limit");

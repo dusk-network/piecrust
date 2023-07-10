@@ -23,14 +23,14 @@ pub fn deploy_with_id() -> Result<(), Error> {
     )?;
 
     assert_eq!(
-        session.call::<(), i64>(contract_id, "read_value", &())?,
+        session.call::<_, i64>(contract_id, "read_value", &())?.data,
         0xfc
     );
 
-    session.call::<(), ()>(contract_id, "increment", &())?;
+    session.call::<_, ()>(contract_id, "increment", &())?;
 
     assert_eq!(
-        session.call::<(), i64>(contract_id, "read_value", &())?,
+        session.call::<_, i64>(contract_id, "read_value", &())?.data,
         0xfd
     );
 

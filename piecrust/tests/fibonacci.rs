@@ -19,11 +19,11 @@ pub fn fibo() -> Result<(), Error> {
         ContractData::builder(OWNER),
     )?;
 
-    assert_eq!(session.call::<u32, u64>(id, "nth", &0)?, 1);
-    assert_eq!(session.call::<u32, u64>(id, "nth", &1)?, 1);
-    assert_eq!(session.call::<u32, u64>(id, "nth", &2)?, 2);
-    assert_eq!(session.call::<u32, u64>(id, "nth", &3)?, 3);
-    assert_eq!(session.call::<u32, u64>(id, "nth", &4)?, 5);
+    assert_eq!(session.call::<u32, u64>(id, "nth", &0)?.data, 1);
+    assert_eq!(session.call::<u32, u64>(id, "nth", &1)?.data, 1);
+    assert_eq!(session.call::<u32, u64>(id, "nth", &2)?.data, 2);
+    assert_eq!(session.call::<u32, u64>(id, "nth", &3)?.data, 3);
+    assert_eq!(session.call::<u32, u64>(id, "nth", &4)?.data, 5);
 
     Ok(())
 }

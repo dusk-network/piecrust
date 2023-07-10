@@ -23,11 +23,11 @@ fn read_write_session() -> Result<(), Error> {
             ContractData::builder(OWNER),
         )?;
 
-        assert_eq!(session.call::<(), i64>(id, "read_value", &())?, 0xfc);
+        assert_eq!(session.call::<_, i64>(id, "read_value", &())?.data, 0xfc);
 
-        session.call::<(), ()>(id, "increment", &())?;
+        session.call::<_, ()>(id, "increment", &())?;
 
-        assert_eq!(session.call::<(), i64>(id, "read_value", &())?, 0xfd);
+        assert_eq!(session.call::<_, i64>(id, "read_value", &())?.data, 0xfd);
     }
 
     // mutable session dropped without committing.
@@ -37,9 +37,12 @@ fn read_write_session() -> Result<(), Error> {
     let id = other_session
         .deploy(contract_bytecode!("counter"), ContractData::builder(OWNER))?;
 
-    assert_eq!(other_session.call::<(), i64>(id, "read_value", &())?, 0xfc);
+    assert_eq!(
+        other_session.call::<_, i64>(id, "read_value", &())?.data,
+        0xfc
+    );
 
-    other_session.call::<(), ()>(id, "increment", &())?;
+    other_session.call::<_, ()>(id, "increment", &())?;
 
     let _commit_id = other_session.commit()?;
 
@@ -47,7 +50,7 @@ fn read_write_session() -> Result<(), Error> {
 
     let mut session = vm.session(SessionData::builder().base(_commit_id))?;
 
-    assert_eq!(session.call::<(), i64>(id, "read_value", &())?, 0xfd);
+    assert_eq!(session.call::<_, i64>(id, "read_value", &())?.data, 0xfd);
     Ok(())
 }
 
@@ -58,26 +61,26 @@ fn commit_restore() -> Result<(), Error> {
     let id = session_1
         .deploy(contract_bytecode!("counter"), ContractData::builder(OWNER))?;
     // commit 1
-    assert_eq!(session_1.call::<(), i64>(id, "read_value", &())?, 0xfc);
-    session_1.call::<(), ()>(id, "increment", &())?;
+    assert_eq!(session_1.call::<_, i64>(id, "read_value", &())?.data, 0xfc);
+    session_1.call::<_, ()>(id, "increment", &())?;
     let commit_1 = session_1.commit()?;
 
     // commit 2
     let mut session_2 = vm.session(SessionData::builder().base(commit_1))?;
-    assert_eq!(session_2.call::<(), i64>(id, "read_value", &())?, 0xfd);
-    session_2.call::<(), ()>(id, "increment", &())?;
-    session_2.call::<(), ()>(id, "increment", &())?;
+    assert_eq!(session_2.call::<_, i64>(id, "read_value", &())?.data, 0xfd);
+    session_2.call::<_, ()>(id, "increment", &())?;
+    session_2.call::<_, ()>(id, "increment", &())?;
     let commit_2 = session_2.commit()?;
     let mut session_2 = vm.session(SessionData::builder().base(commit_2))?;
-    assert_eq!(session_2.call::<(), i64>(id, "read_value", &())?, 0xff);
+    assert_eq!(session_2.call::<_, i64>(id, "read_value", &())?.data, 0xff);
 
     // restore commit 1
     let mut session_3 = vm.session(SessionData::builder().base(commit_1))?;
-    assert_eq!(session_3.call::<(), i64>(id, "read_value", &())?, 0xfd);
+    assert_eq!(session_3.call::<_, i64>(id, "read_value", &())?.data, 0xfd);
 
     // restore commit 2
     let mut session_4 = vm.session(SessionData::builder().base(commit_2))?;
-    assert_eq!(session_4.call::<(), i64>(id, "read_value", &())?, 0xff);
+    assert_eq!(session_4.call::<_, i64>(id, "read_value", &())?.data, 0xff);
     Ok(())
 }
 
@@ -91,33 +94,33 @@ fn commit_restore_two_contracts_session() -> Result<(), Error> {
     let id_2 = session
         .deploy(contract_bytecode!("box"), ContractData::builder(OWNER))?;
 
-    session.call::<(), ()>(id_1, "increment", &())?;
+    session.call::<_, ()>(id_1, "increment", &())?;
     session.call::<i16, ()>(id_2, "set", &0x11)?;
-    assert_eq!(session.call::<(), i64>(id_1, "read_value", &())?, 0xfd);
+    assert_eq!(session.call::<_, i64>(id_1, "read_value", &())?.data, 0xfd);
     assert_eq!(
-        session.call::<_, Option<i16>>(id_2, "get", &())?,
+        session.call::<_, Option<i16>>(id_2, "get", &())?.data,
         Some(0x11)
     );
 
     let commit_1 = session.commit()?;
 
     let mut session = vm.session(SessionData::builder().base(commit_1))?;
-    session.call::<(), ()>(id_1, "increment", &())?;
+    session.call::<_, ()>(id_1, "increment", &())?;
     session.call::<i16, ()>(id_2, "set", &0x12)?;
     let commit_2 = session.commit()?;
     let mut session = vm.session(SessionData::builder().base(commit_2))?;
-    assert_eq!(session.call::<(), i64>(id_1, "read_value", &())?, 0xfe);
+    assert_eq!(session.call::<_, i64>(id_1, "read_value", &())?.data, 0xfe);
     assert_eq!(
-        session.call::<_, Option<i16>>(id_2, "get", &())?,
+        session.call::<_, Option<i16>>(id_2, "get", &())?.data,
         Some(0x12)
     );
 
     let mut session = vm.session(SessionData::builder().base(commit_1))?;
 
     // check if both contracts' state was restored
-    assert_eq!(session.call::<(), i64>(id_1, "read_value", &())?, 0xfd);
+    assert_eq!(session.call::<(), i64>(id_1, "read_value", &())?.data, 0xfd);
     assert_eq!(
-        session.call::<_, Option<i16>>(id_2, "get", &())?,
+        session.call::<_, Option<i16>>(id_2, "get", &())?.data,
         Some(0x11)
     );
     Ok(())
@@ -131,26 +134,26 @@ fn multiple_commits() -> Result<(), Error> {
     let id = session
         .deploy(contract_bytecode!("counter"), ContractData::builder(OWNER))?;
     // commit 1
-    assert_eq!(session.call::<(), i64>(id, "read_value", &())?, 0xfc);
+    assert_eq!(session.call::<(), i64>(id, "read_value", &())?.data, 0xfc);
     session.call::<(), ()>(id, "increment", &())?;
     let commit_1 = session.commit()?;
 
     // commit 2
     let mut session = vm.session(SessionData::builder().base(commit_1))?;
-    assert_eq!(session.call::<(), i64>(id, "read_value", &())?, 0xfd);
+    assert_eq!(session.call::<(), i64>(id, "read_value", &())?.data, 0xfd);
     session.call::<(), ()>(id, "increment", &())?;
     session.call::<(), ()>(id, "increment", &())?;
     let commit_2 = session.commit()?;
     let mut session = vm.session(SessionData::builder().base(commit_2))?;
-    assert_eq!(session.call::<(), i64>(id, "read_value", &())?, 0xff);
+    assert_eq!(session.call::<(), i64>(id, "read_value", &())?.data, 0xff);
 
     // restore commit 1
     let mut session = vm.session(SessionData::builder().base(commit_1))?;
-    assert_eq!(session.call::<(), i64>(id, "read_value", &())?, 0xfd);
+    assert_eq!(session.call::<(), i64>(id, "read_value", &())?.data, 0xfd);
 
     // restore commit 2
     let mut session = vm.session(SessionData::builder().base(commit_2))?;
-    assert_eq!(session.call::<(), i64>(id, "read_value", &())?, 0xff);
+    assert_eq!(session.call::<(), i64>(id, "read_value", &())?.data, 0xff);
     Ok(())
 }
 
@@ -173,7 +176,10 @@ fn concurrent_sessions() -> Result<(), Error> {
     let counter = session
         .deploy(contract_bytecode!("counter"), ContractData::builder(OWNER))?;
 
-    assert_eq!(session.call::<(), i64>(counter, "read_value", &())?, 0xfc);
+    assert_eq!(
+        session.call::<(), i64>(counter, "read_value", &())?.data,
+        0xfc
+    );
 
     let root = session.commit()?;
 
@@ -282,7 +288,10 @@ fn squashing() -> Result<(), Error> {
     let counter = session
         .deploy(contract_bytecode!("counter"), ContractData::builder(OWNER))?;
 
-    assert_eq!(session.call::<(), i64>(counter, "read_value", &())?, 0xfc);
+    assert_eq!(
+        session.call::<(), i64>(counter, "read_value", &())?.data,
+        0xfc
+    );
 
     let genesis_root = session.commit()?;
 

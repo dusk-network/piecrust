@@ -15,7 +15,7 @@ pub fn state_root_calculation() -> Result<(), Error> {
     let id_1 = session
         .deploy(contract_bytecode!("counter"), ContractData::builder(OWNER))?;
 
-    session.call::<(), ()>(id_1, "increment", &())?;
+    session.call::<_, ()>(id_1, "increment", &())?;
 
     let root_1 = session.root();
     let commit_1 = session.commit()?;
@@ -29,7 +29,7 @@ pub fn state_root_calculation() -> Result<(), Error> {
     let id_2 = session
         .deploy(contract_bytecode!("box"), ContractData::builder(OWNER))?;
     session.call::<i16, ()>(id_2, "set", &0x11)?;
-    session.call::<(), ()>(id_1, "increment", &())?;
+    session.call::<_, ()>(id_1, "increment", &())?;
 
     let root_2 = session.root();
     let commit_2 = session.commit()?;

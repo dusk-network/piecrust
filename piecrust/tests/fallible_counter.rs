@@ -20,16 +20,16 @@ fn fallible_read_write_panic() -> Result<(), Error> {
         ContractData::builder(OWNER),
     )?;
 
-    session.call::<bool, ()>(id, "increment", &false)?;
+    session.call::<_, ()>(id, "increment", &false)?;
 
-    assert_eq!(session.call::<(), i64>(id, "read_value", &())?, 0xfd);
+    assert_eq!(session.call::<_, i64>(id, "read_value", &())?.data, 0xfd);
 
-    let err = session.call::<bool, ()>(id, "increment", &true).is_err();
+    let err = session.call::<_, ()>(id, "increment", &true).is_err();
 
     assert!(err, "execution failed");
 
     assert_eq!(
-        session.call::<(), i64>(id, "read_value", &())?,
+        session.call::<_, i64>(id, "read_value", &())?.data,
         0xfd,
         "should remain unchanged, since panics revert any changes"
     );

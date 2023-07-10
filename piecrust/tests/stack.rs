@@ -19,13 +19,13 @@ pub fn push_pop() -> Result<(), Error> {
 
     let val = 42;
 
-    session.call(id, "push", &val)?;
+    session.call::<_, ()>(id, "push", &val)?;
 
-    let len: u32 = session.call(id, "len", &())?;
+    let len: u32 = session.call(id, "len", &())?.data;
     assert_eq!(len, 1);
 
-    let popped: Option<i32> = session.call(id, "pop", &())?;
-    let len: i32 = session.call(id, "len", &())?;
+    let popped: Option<i32> = session.call(id, "pop", &())?.data;
+    let len: i32 = session.call(id, "len", &())?.data;
 
     assert_eq!(len, 0);
     assert_eq!(popped, Some(val));
@@ -45,21 +45,21 @@ pub fn multi_push_pop() -> Result<(), Error> {
     const N: i32 = 16;
 
     for i in 0..N {
-        session.call(id, "push", &i)?;
-        let len: i32 = session.call(id, "len", &())?;
+        session.call::<_, ()>(id, "push", &i)?;
+        let len: i32 = session.call(id, "len", &())?.data;
 
         assert_eq!(len, i + 1);
     }
 
     for i in (0..N).rev() {
-        let popped: Option<i32> = session.call(id, "pop", &())?;
-        let len: i32 = session.call(id, "len", &())?;
+        let popped: Option<i32> = session.call(id, "pop", &())?.data;
+        let len: i32 = session.call(id, "len", &())?.data;
 
         assert_eq!(len, i);
         assert_eq!(popped, Some(i));
     }
 
-    let popped: Option<i32> = session.call(id, "pop", &())?;
+    let popped: Option<i32> = session.call(id, "pop", &())?.data;
     assert_eq!(popped, None);
 
     Ok(())

@@ -19,7 +19,7 @@ pub fn height() -> Result<(), Error> {
     let id = session
         .deploy(contract_bytecode!("everest"), ContractData::builder(OWNER))?;
 
-    let height: Option<u64> = session.call(id, "get_height", &())?;
+    let height: Option<u64> = session.call(id, "get_height", &())?.data;
     assert_eq!(height.unwrap(), HEIGHT);
 
     Ok(())
@@ -31,7 +31,7 @@ pub fn meta_data_optionality() -> Result<(), Error> {
     let mut session = vm.session(SessionData::builder())?;
     let id = session
         .deploy(contract_bytecode!("everest"), ContractData::builder(OWNER))?;
-    let height: Option<u64> = session.call(id, "get_height", &())?;
+    let height: Option<u64> = session.call(id, "get_height", &())?.data;
     assert!(height.is_none());
     Ok(())
 }

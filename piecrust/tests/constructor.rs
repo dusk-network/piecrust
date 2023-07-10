@@ -20,11 +20,11 @@ fn constructor() -> Result<(), Error> {
         ContractData::builder(OWNER).constructor_arg(&0xabu8),
     )?;
 
-    assert_eq!(session.call::<(), u8>(id, "read_value", &())?, 0xab);
+    assert_eq!(session.call::<_, u8>(id, "read_value", &())?.data, 0xab);
 
     // perform transaction and make sure that the contract works as expected
-    session.call::<(), ()>(id, "increment", &())?;
-    assert_eq!(session.call::<(), u8>(id, "read_value", &())?, 0xac);
+    session.call::<_, ()>(id, "increment", &())?;
+    assert_eq!(session.call::<_, u8>(id, "read_value", &())?.data, 0xac);
 
     // we should not be able to call init directly
     let result = session.call::<u8, ()>(id, CONTRACT_INIT_METHOD, &0xaa);
@@ -40,12 +40,12 @@ fn constructor() -> Result<(), Error> {
     );
 
     // make sure the state is still ok
-    assert_eq!(session.call::<(), u8>(id, "read_value", &())?, 0xac);
+    assert_eq!(session.call::<_, u8>(id, "read_value", &())?.data, 0xac);
 
     // initialized state should live through across session boundaries
     let commit_id = session.commit()?;
     let mut session = vm.session(SessionData::builder().base(commit_id))?;
-    assert_eq!(session.call::<(), u8>(id, "read_value", &())?, 0xac);
+    assert_eq!(session.call::<_, u8>(id, "read_value", &())?.data, 0xac);
 
     // not being able to call init directly should also be enforced across
     // session boundaries

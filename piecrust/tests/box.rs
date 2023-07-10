@@ -18,13 +18,13 @@ pub fn box_set_get() -> Result<(), Error> {
     let id = session
         .deploy(contract_bytecode!("box"), ContractData::builder(OWNER))?;
 
-    let value: Option<i16> = session.call(id, "get", &())?;
+    let value: Option<i16> = session.call(id, "get", &())?.data;
 
     assert_eq!(value, None);
 
     session.call::<i16, ()>(id, "set", &0x11)?;
 
-    let value = session.call::<_, Option<i16>>(id, "get", &())?;
+    let value = session.call::<_, Option<i16>>(id, "get", &())?.data;
 
     assert_eq!(value, Some(0x11));
 
@@ -40,7 +40,7 @@ pub fn box_set_get_raw() -> Result<(), Error> {
     let id = session
         .deploy(contract_bytecode!("box"), ContractData::builder(OWNER))?;
 
-    let value_bytes = session.call_raw(id, "get", vec![])?;
+    let value_bytes = session.call_raw(id, "get", vec![])?.data;
     let value = deserialize_value(&value_bytes)?;
 
     assert_eq!(value, None);
@@ -48,7 +48,7 @@ pub fn box_set_get_raw() -> Result<(), Error> {
     let value_bytes = serialize_value(0x11)?;
     session.call_raw(id, "set", value_bytes)?;
 
-    let value_bytes = session.call_raw(id, "get", vec![])?;
+    let value_bytes = session.call_raw(id, "get", vec![])?.data;
     let value = deserialize_value(&value_bytes)?;
 
     assert_eq!(value, Some(0x11));

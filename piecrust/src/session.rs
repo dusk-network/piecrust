@@ -295,7 +295,7 @@ impl Session {
         contract: ContractId,
         fn_name: &str,
         fn_arg: &A,
-    ) -> Result<R, Error>
+    ) -> Result<CallReceipt<R>, Error>
     where
         A: for<'b> Serialize<StandardBufSerializer<'b>>,
         R: Archive,
@@ -314,16 +314,13 @@ impl Session {
         ser.serialize_value(fn_arg).expect("Infallible");
         let pos = ser.pos();
 
-        let ret_bytes = self.call_raw(
+        let receipt = self.call_raw(
             contract,
             fn_name,
             self.inner.buffer[..pos].to_vec(),
         )?;
 
-        let ta = check_archived_root::<R>(&ret_bytes[..])?;
-        let ret = ta.deserialize(&mut Infallible).expect("Infallible");
-
-        Ok(ret)
+        receipt.deserialize()
     }
 
     /// Execute a raw call on the current state of this session.
@@ -340,16 +337,24 @@ impl Session {
         contract: ContractId,
         fn_name: &str,
         fn_arg: V,
-    ) -> Result<Vec<u8>, Error> {
+    ) -> Result<CallReceipt<Vec<u8>>, Error> {
         if fn_name == INIT_METHOD {
             return Err(InitalizationError("init call not allowed".into()));
         }
 
-        self.execute_until_ok(Call {
+        let data = self.execute_until_ok(Call {
             contract,
             fname: fn_name.to_string(),
             fdata: fn_arg.into(),
             limit: self.inner.limit,
+        })?;
+        let events = mem::take(&mut self.inner.events);
+
+        Ok(CallReceipt {
+            points_limit: self.inner.limit,
+            points_spent: self.inner.spent,
+            events,
+            data,
         })
     }
 
@@ -771,6 +776,42 @@ impl Session {
         contract_id: &ContractId,
     ) -> Option<&ContractMetadata> {
         self.inner.contract_session.contract_metadata(contract_id)
+    }
+}
+
+/// The receipt given for a call execution using one of either [`call`] or
+/// [`call_raw`].
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CallReceipt<T> {
+    /// The amount of points spent in the execution of the call.
+    pub points_spent: u64,
+    /// The limit used in during this execution.
+    pub points_limit: u64,
+
+    /// The events emitted during the execution of the call.
+    pub events: Vec<Event>,
+    /// The data returned by the called contract.
+    pub data: T,
+}
+
+impl CallReceipt<Vec<u8>> {
+    /// Deserializes a `CallReceipt<Vec<u8>> into a `CallReceipt<T>` using
+    /// `rkyv`.
+    fn deserialize<T>(self) -> Result<CallReceipt<T>, Error>
+    where
+        T: Archive,
+        T::Archived: Deserialize<T, Infallible>
+            + for<'b> CheckBytes<DefaultValidator<'b>>,
+    {
+        let ta = check_archived_root::<T>(&self.data[..])?;
+        let data = ta.deserialize(&mut Infallible).expect("Infallible");
+
+        Ok(CallReceipt {
+            points_spent: self.points_spent,
+            points_limit: self.points_limit,
+            events: self.events,
+            data,
+        })
     }
 }
 

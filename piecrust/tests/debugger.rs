@@ -17,7 +17,7 @@ pub fn debug() -> Result<(), Error> {
     let id = session
         .deploy(contract_bytecode!("debugger"), ContractData::builder(OWNER))?;
 
-    session.call(id, "debug", &String::from("Hello world"))?;
+    session.call::<_, ()>(id, "debug", &String::from("Hello world"))?;
 
     session.with_debug(|dbg| {
         assert_eq!(dbg, &[String::from("What a string! Hello world")])

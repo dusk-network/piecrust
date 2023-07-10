@@ -32,7 +32,8 @@ pub fn host_hash() -> Result<(), Error> {
     let v = vec![0u8, 1, 2];
     let h = session
         .call::<_, [u8; 32]>(id, "host_hash", &v)
-        .expect("query should succeed");
+        .expect("query should succeed")
+        .data;
     assert_eq!(blake3::hash(&[0u8, 1, 2]).as_bytes(), &h);
 
     Ok(())

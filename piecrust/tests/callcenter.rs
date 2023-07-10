@@ -20,7 +20,7 @@ pub fn cc_read_counter() -> Result<(), Error> {
 
     // read direct
 
-    let value: i64 = session.call(counter_id, "read_value", &())?;
+    let value: i64 = session.call(counter_id, "read_value", &())?.data;
     assert_eq!(value, 0xfc);
 
     let center_id = session.deploy(
@@ -29,7 +29,8 @@ pub fn cc_read_counter() -> Result<(), Error> {
     )?;
 
     // read value through callcenter
-    let value: i64 = session.call(center_id, "query_counter", &counter_id)?;
+    let value: i64 =
+        session.call(center_id, "query_counter", &counter_id)?.data;
     assert_eq!(value, 0xfc);
 
     Ok(())
@@ -45,7 +46,7 @@ pub fn cc_direct() -> Result<(), Error> {
         .deploy(contract_bytecode!("counter"), ContractData::builder(OWNER))?;
 
     // read value directly
-    let value: i64 = session.call(counter_id, "read_value", &())?;
+    let value: i64 = session.call(counter_id, "read_value", &())?.data;
     assert_eq!(value, 0xfc);
 
     let center_id = session.deploy(
@@ -54,18 +55,20 @@ pub fn cc_direct() -> Result<(), Error> {
     )?;
 
     // read value through callcenter
-    let value: i64 = session.call(center_id, "query_counter", &counter_id)?;
+    let value: i64 =
+        session.call(center_id, "query_counter", &counter_id)?.data;
     assert_eq!(value, 0xfc);
 
     // increment through call center
-    session.call(center_id, "increment_counter", &counter_id)?;
+    session.call::<_, ()>(center_id, "increment_counter", &counter_id)?;
 
     // read value directly
-    let value: i64 = session.call(counter_id, "read_value", &())?;
+    let value: i64 = session.call(counter_id, "read_value", &())?.data;
     assert_eq!(value, 0xfd);
 
     // read value through callcenter
-    let value: i64 = session.call(center_id, "query_counter", &counter_id)?;
+    let value: i64 =
+        session.call(center_id, "query_counter", &counter_id)?.data;
     assert_eq!(value, 0xfd);
 
     Ok(())
@@ -84,7 +87,7 @@ pub fn cc_passthrough() -> Result<(), Error> {
 
     let rq = RawCall::new("read_value", ());
 
-    let res: RawCall = session.call(center_id, "query_passthrough", &rq)?;
+    let res: RawCall = session.call(center_id, "query_passthrough", &rq)?.data;
 
     assert_eq!(rq, res);
 
@@ -107,11 +110,9 @@ pub fn cc_delegated_read() -> Result<(), Error> {
     let rq = RawCall::new("read_value", ());
 
     // read value through callcenter
-    let res = session.call::<_, RawResult>(
-        center_id,
-        "delegate_query",
-        &(counter_id, rq),
-    )?;
+    let res = session
+        .call::<_, RawResult>(center_id, "delegate_query", &(counter_id, rq))?
+        .data;
 
     let value: i64 = res.cast();
 
@@ -136,10 +137,14 @@ pub fn cc_delegated_write() -> Result<(), Error> {
         ContractData::builder(OWNER),
     )?;
 
-    session.call(center_id, "delegate_transaction", &(counter_id, rt))?;
+    session.call::<_, ()>(
+        center_id,
+        "delegate_transaction",
+        &(counter_id, rt),
+    )?;
 
     // read value directly
-    let value: i64 = session.call(counter_id, "read_value", &())?;
+    let value: i64 = session.call(counter_id, "read_value", &())?.data;
     assert_eq!(value, 0xfd);
 
     Ok(())
@@ -158,7 +163,7 @@ pub fn cc_self() -> Result<(), Error> {
 
     // am i calling myself
     let calling_self: bool =
-        session.call(center_id, "calling_self", &center_id)?;
+        session.call(center_id, "calling_self", &center_id)?.data;
     assert!(calling_self);
 
     Ok(())
@@ -176,7 +181,7 @@ pub fn cc_caller() -> Result<(), Error> {
     )?;
 
     let value: Result<bool, ContractError> =
-        session.call(center_id, "call_self", &())?;
+        session.call(center_id, "call_self", &())?.data;
 
     assert!(value.expect("should succeed"));
 
@@ -194,7 +199,8 @@ pub fn cc_caller_uninit() -> Result<(), Error> {
         ContractData::builder(OWNER),
     )?;
 
-    let caller: ContractId = session.call(center_id, "return_caller", &())?;
+    let caller: ContractId =
+        session.call(center_id, "return_caller", &())?.data;
     assert_eq!(caller, ContractId::uninitialized());
 
     Ok(())
@@ -211,7 +217,8 @@ pub fn cc_self_id() -> Result<(), Error> {
         ContractData::builder(OWNER),
     )?;
 
-    let value: ContractId = session.call(center_id, "return_self_id", &())?;
+    let value: ContractId =
+        session.call(center_id, "return_self_id", &())?.data;
     assert_eq!(value, center_id);
 
     Ok(())

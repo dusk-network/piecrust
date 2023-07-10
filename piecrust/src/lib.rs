@@ -84,9 +84,9 @@
 //! let mut session = vm.session(SessionData::builder()).unwrap();
 //! let counter_id = session.deploy(contract_bytecode!("counter"), ContractData::builder(OWNER)).unwrap();
 //!
-//! assert_eq!(session.call::<(), i64>(counter_id, "read_value", &()).unwrap(), 0xfc);
-//! session.call::<(), ()>(counter_id, "increment", &()).unwrap();
-//! assert_eq!(session.call::<(), i64>(counter_id, "read_value", &()).unwrap(), 0xfd);
+//! assert_eq!(session.call::<_, i64>(counter_id, "read_value", &()).unwrap().data, 0xfc);
+//! session.call::<_, ()>(counter_id, "increment", &()).unwrap();
+//! assert_eq!(session.call::<_, i64>(counter_id, "read_value", &()).unwrap().data, 0xfd);
 //!
 //! let commit_root = session.commit().unwrap();
 //! assert_eq!(commit_root, vm.commits()[0]);
@@ -118,7 +118,7 @@ mod vm;
 
 pub use contract::{ContractData, ContractDataBuilder};
 pub use error::Error;
-pub use session::{Session, SessionData};
+pub use session::{CallReceipt, Session, SessionData};
 pub use vm::{HostQuery, VM};
 
 // re-export the contents of the `piecrust-uplink` crate wholesale, ensuring

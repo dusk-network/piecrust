@@ -17,7 +17,7 @@ fn counter_read_simple() -> Result<(), Error> {
     let id = session
         .deploy(contract_bytecode!("counter"), ContractData::builder(OWNER))?;
 
-    assert_eq!(session.call::<(), i64>(id, "read_value", &())?, 0xfc);
+    assert_eq!(session.call::<_, i64>(id, "read_value", &())?.data, 0xfc);
 
     Ok(())
 }
@@ -31,11 +31,11 @@ fn counter_read_write_simple() -> Result<(), Error> {
     let id = session
         .deploy(contract_bytecode!("counter"), ContractData::builder(OWNER))?;
 
-    assert_eq!(session.call::<(), i64>(id, "read_value", &())?, 0xfc);
+    assert_eq!(session.call::<_, i64>(id, "read_value", &())?.data, 0xfc);
 
-    session.call::<(), ()>(id, "increment", &())?;
+    session.call::<_, ()>(id, "increment", &())?;
 
-    assert_eq!(session.call::<(), i64>(id, "read_value", &())?, 0xfd);
+    assert_eq!(session.call::<_, i64>(id, "read_value", &())?.data, 0xfd);
 
     Ok(())
 }
@@ -54,11 +54,9 @@ fn call_through_c() -> Result<(), Error> {
     )?;
 
     assert_eq!(
-        session.call::<_, i64>(
-            c_example_id,
-            "increment_and_read",
-            &counter_id
-        )?,
+        session
+            .call::<_, i64>(c_example_id, "increment_and_read", &counter_id)?
+            .data,
         0xfd
     );
 

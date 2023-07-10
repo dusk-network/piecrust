@@ -24,12 +24,12 @@ pub fn vector_push_pop() -> Result<(), Error> {
     }
 
     for i in 0..N {
-        let popped: Option<i16> = session.call(id, "pop", &())?;
+        let popped: Option<i16> = session.call(id, "pop", &())?.data;
 
         assert_eq!(popped, Some((N - i - 1) as i16));
     }
 
-    let popped: Option<i16> = session.call(id, "pop", &())?;
+    let popped: Option<i16> = session.call(id, "pop", &())?.data;
 
     assert_eq!(popped, None);
 

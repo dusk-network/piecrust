@@ -23,7 +23,8 @@ pub fn merkle_root() -> Result<(), Error> {
     let empty_root = [0u8; 32];
     let root: [u8; 32] = session
         .call(id, "root", &())
-        .expect("root query should succeed");
+        .expect("root query should succeed")
+        .data;
 
     assert_eq!(root, empty_root, "The root should be empty value");
 
@@ -41,7 +42,8 @@ pub fn merkle_root() -> Result<(), Error> {
 
             *root = session
                 .call(id, "root", &())
-                .expect("root query should succeed");
+                .expect("root query should succeed")
+                .data;
         });
 
     // All roots are different from each other

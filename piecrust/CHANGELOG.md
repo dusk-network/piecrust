@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Add `CallReceipt` struct
+
+### Changed
+
+- Change signature of `Session::call` to return `CallReceipt`
+- Change signature of `Session::call_raw` to return `CallReceipt`
+
 ## [0.6.2] - 2023-07-07
 
 ### Added

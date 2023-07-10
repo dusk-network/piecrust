@@ -56,7 +56,7 @@ fn crossover() -> Result<(), Error> {
     )?;
 
     assert_eq!(
-        session.call::<_, i32>(CROSSOVER_ONE, "crossover", &())?,
+        session.call::<_, i32>(CROSSOVER_ONE, "crossover", &())?.data,
         CROSSOVER_TO_SET,
         "The crossover should still be set even though the other contract panicked"
     );
