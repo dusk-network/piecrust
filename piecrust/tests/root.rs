@@ -7,15 +7,19 @@
 use piecrust::{contract_bytecode, ContractData, Error, SessionData, VM};
 
 const OWNER: [u8; 32] = [0u8; 32];
+const LIMIT: u64 = 1_000_000;
 
 #[test]
 pub fn state_root_calculation() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
     let mut session = vm.session(SessionData::builder())?;
-    let id_1 = session
-        .deploy(contract_bytecode!("counter"), ContractData::builder(OWNER))?;
+    let id_1 = session.deploy(
+        contract_bytecode!("counter"),
+        ContractData::builder(OWNER),
+        LIMIT,
+    )?;
 
-    session.call::<_, ()>(id_1, "increment", &())?;
+    session.call::<_, ()>(id_1, "increment", &(), LIMIT)?;
 
     let root_1 = session.root();
     let commit_1 = session.commit()?;
@@ -26,10 +30,13 @@ pub fn state_root_calculation() -> Result<(), Error> {
     );
 
     let mut session = vm.session(SessionData::builder().base(commit_1))?;
-    let id_2 = session
-        .deploy(contract_bytecode!("box"), ContractData::builder(OWNER))?;
-    session.call::<i16, ()>(id_2, "set", &0x11)?;
-    session.call::<_, ()>(id_1, "increment", &())?;
+    let id_2 = session.deploy(
+        contract_bytecode!("box"),
+        ContractData::builder(OWNER),
+        LIMIT,
+    )?;
+    session.call::<i16, ()>(id_2, "set", &0x11, LIMIT)?;
+    session.call::<_, ()>(id_1, "increment", &(), LIMIT)?;
 
     let root_2 = session.root();
     let commit_2 = session.commit()?;

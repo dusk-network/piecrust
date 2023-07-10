@@ -7,22 +7,26 @@
 use piecrust::{contract_bytecode, ContractData, Error, SessionData, VM};
 
 const OWNER: [u8; 32] = [0u8; 32];
+const LIMIT: u64 = 1_000_000;
 
 #[test]
 pub fn merkle_root() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
     let mut session = vm.session(SessionData::builder())?;
 
+    let id = session.deploy(
+        contract_bytecode!("merkle"),
+        ContractData::builder(OWNER),
+        LIMIT,
+    )?;
+
     // (measured) minimum points to pass - insertion in a merkle tree is
     // "expensive".
-    session.set_point_limit(147456);
-
-    let id = session
-        .deploy(contract_bytecode!("merkle"), ContractData::builder(OWNER))?;
+    const POINTS_LIMIT: u64 = 147456;
 
     let empty_root = [0u8; 32];
     let root: [u8; 32] = session
-        .call(id, "root", &())
+        .call(id, "root", &(), POINTS_LIMIT)
         .expect("root query should succeed")
         .data;
 
@@ -37,11 +41,11 @@ pub fn merkle_root() -> Result<(), Error> {
         .enumerate()
         .for_each(|(i, (root, leaf))| {
             session
-                .call::<_, ()>(id, "insert", &(i as u64, leaf))
+                .call::<_, ()>(id, "insert", &(i as u64, leaf), LIMIT)
                 .expect("tree insertion should succeed");
 
             *root = session
-                .call(id, "root", &())
+                .call(id, "root", &(), POINTS_LIMIT)
                 .expect("root query should succeed")
                 .data;
         });

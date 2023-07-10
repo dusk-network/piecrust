@@ -16,9 +16,9 @@
 //! to the VM's directory - using [`commit`]. After a commit, the resulting
 //! state may be used by starting a new session with it as a base.
 //!
-//! Contract execution is metered in terms of `points`. To set a limit for the
-//! number of points for the next query or transact call use
-//! [`set_point_limit`]. If the limit is exceeded during the call an error will
+//! Contract execution is metered in terms of `points`. The limit for the number
+//! of points used in a `call` or `deploy` is passed in their respective
+//! function signatures. If the limit is exceeded during the call an error will
 //! be returned. To learn the number of points spent after a successful call use
 //! [`spent`]. To learn more about the compiler middleware used to achieve this,
 //! please refer to the relevant [wasmer docs].
@@ -81,12 +81,14 @@
 //! let mut vm = VM::ephemeral().unwrap();
 //!
 //! const OWNER: [u8; 32] = [0u8; 32];
-//! let mut session = vm.session(SessionData::builder()).unwrap();
-//! let counter_id = session.deploy(contract_bytecode!("counter"), ContractData::builder(OWNER)).unwrap();
+//! const LIMIT: u64 = 1_000_000;
 //!
-//! assert_eq!(session.call::<_, i64>(counter_id, "read_value", &()).unwrap().data, 0xfc);
-//! session.call::<_, ()>(counter_id, "increment", &()).unwrap();
-//! assert_eq!(session.call::<_, i64>(counter_id, "read_value", &()).unwrap().data, 0xfd);
+//! let mut session = vm.session(SessionData::builder()).unwrap();
+//! let counter_id = session.deploy(contract_bytecode!("counter"), ContractData::builder(OWNER), LIMIT).unwrap();
+//!
+//! assert_eq!(session.call::<_, i64>(counter_id, "read_value", &(), LIMIT).unwrap().data, 0xfc);
+//! session.call::<_, ()>(counter_id, "increment", &(), LIMIT).unwrap();
+//! assert_eq!(session.call::<_, i64>(counter_id, "read_value", &(), LIMIT).unwrap().data, 0xfd);
 //!
 //! let commit_root = session.commit().unwrap();
 //! assert_eq!(commit_root, vm.commits()[0]);
@@ -99,7 +101,6 @@
 //! [`call`]: Session::call
 //! [`deploy`]: Session::deploy
 //! [`commit`]: Session::commit
-//! [`set_point_limit`]: Session::set_point_limit
 //! [`spent`]: Session::spent
 //! [wasmer docs]: wasmer_middlewares::metering
 //! [`deletions`]: VM::delete_commit

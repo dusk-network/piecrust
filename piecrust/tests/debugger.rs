@@ -7,6 +7,7 @@
 use piecrust::{contract_bytecode, ContractData, Error, SessionData, VM};
 
 const OWNER: [u8; 32] = [0u8; 32];
+const LIMIT: u64 = 1_000_000;
 
 #[test]
 pub fn debug() -> Result<(), Error> {
@@ -14,10 +15,13 @@ pub fn debug() -> Result<(), Error> {
 
     let mut session = vm.session(SessionData::builder())?;
 
-    let id = session
-        .deploy(contract_bytecode!("debugger"), ContractData::builder(OWNER))?;
+    let id = session.deploy(
+        contract_bytecode!("debugger"),
+        ContractData::builder(OWNER),
+        LIMIT,
+    )?;
 
-    session.call::<_, ()>(id, "debug", &String::from("Hello world"))?;
+    session.call::<_, ()>(id, "debug", &String::from("Hello world"), LIMIT)?;
 
     session.with_debug(|dbg| {
         assert_eq!(dbg, &[String::from("What a string! Hello world")])

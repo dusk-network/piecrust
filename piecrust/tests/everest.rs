@@ -7,6 +7,7 @@
 use piecrust::{contract_bytecode, ContractData, Error, SessionData, VM};
 
 const OWNER: [u8; 32] = [0u8; 32];
+const LIMIT: u64 = 1_000_000;
 
 #[test]
 pub fn height() -> Result<(), Error> {
@@ -16,10 +17,13 @@ pub fn height() -> Result<(), Error> {
     let mut session =
         vm.session(SessionData::builder().insert("height", HEIGHT))?;
 
-    let id = session
-        .deploy(contract_bytecode!("everest"), ContractData::builder(OWNER))?;
+    let id = session.deploy(
+        contract_bytecode!("everest"),
+        ContractData::builder(OWNER),
+        LIMIT,
+    )?;
 
-    let height: Option<u64> = session.call(id, "get_height", &())?.data;
+    let height: Option<u64> = session.call(id, "get_height", &(), LIMIT)?.data;
     assert_eq!(height.unwrap(), HEIGHT);
 
     Ok(())
@@ -29,9 +33,12 @@ pub fn height() -> Result<(), Error> {
 pub fn meta_data_optionality() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
     let mut session = vm.session(SessionData::builder())?;
-    let id = session
-        .deploy(contract_bytecode!("everest"), ContractData::builder(OWNER))?;
-    let height: Option<u64> = session.call(id, "get_height", &())?.data;
+    let id = session.deploy(
+        contract_bytecode!("everest"),
+        ContractData::builder(OWNER),
+        LIMIT,
+    )?;
+    let height: Option<u64> = session.call(id, "get_height", &(), LIMIT)?.data;
     assert!(height.is_none());
     Ok(())
 }

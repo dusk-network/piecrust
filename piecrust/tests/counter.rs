@@ -7,6 +7,7 @@
 use piecrust::{contract_bytecode, ContractData, Error, SessionData, VM};
 
 const OWNER: [u8; 32] = [0u8; 32];
+const LIMIT: u64 = 1_000_000;
 
 #[test]
 fn counter_read_simple() -> Result<(), Error> {
@@ -14,10 +15,16 @@ fn counter_read_simple() -> Result<(), Error> {
 
     let mut session = vm.session(SessionData::builder())?;
 
-    let id = session
-        .deploy(contract_bytecode!("counter"), ContractData::builder(OWNER))?;
+    let id = session.deploy(
+        contract_bytecode!("counter"),
+        ContractData::builder(OWNER),
+        LIMIT,
+    )?;
 
-    assert_eq!(session.call::<_, i64>(id, "read_value", &())?.data, 0xfc);
+    assert_eq!(
+        session.call::<_, i64>(id, "read_value", &(), LIMIT)?.data,
+        0xfc
+    );
 
     Ok(())
 }
@@ -28,14 +35,23 @@ fn counter_read_write_simple() -> Result<(), Error> {
 
     let mut session = vm.session(SessionData::builder())?;
 
-    let id = session
-        .deploy(contract_bytecode!("counter"), ContractData::builder(OWNER))?;
+    let id = session.deploy(
+        contract_bytecode!("counter"),
+        ContractData::builder(OWNER),
+        LIMIT,
+    )?;
 
-    assert_eq!(session.call::<_, i64>(id, "read_value", &())?.data, 0xfc);
+    assert_eq!(
+        session.call::<_, i64>(id, "read_value", &(), LIMIT)?.data,
+        0xfc
+    );
 
-    session.call::<_, ()>(id, "increment", &())?;
+    session.call::<_, ()>(id, "increment", &(), LIMIT)?;
 
-    assert_eq!(session.call::<_, i64>(id, "read_value", &())?.data, 0xfd);
+    assert_eq!(
+        session.call::<_, i64>(id, "read_value", &(), LIMIT)?.data,
+        0xfd
+    );
 
     Ok(())
 }
@@ -46,16 +62,25 @@ fn call_through_c() -> Result<(), Error> {
 
     let mut session = vm.session(SessionData::builder())?;
 
-    let counter_id = session
-        .deploy(contract_bytecode!("counter"), ContractData::builder(OWNER))?;
+    let counter_id = session.deploy(
+        contract_bytecode!("counter"),
+        ContractData::builder(OWNER),
+        LIMIT,
+    )?;
     let c_example_id = session.deploy(
         contract_bytecode!("c-example"),
         ContractData::builder(OWNER),
+        LIMIT,
     )?;
 
     assert_eq!(
         session
-            .call::<_, i64>(c_example_id, "increment_and_read", &counter_id)?
+            .call::<_, i64>(
+                c_example_id,
+                "increment_and_read",
+                &counter_id,
+                LIMIT
+            )?
             .data,
         0xfd
     );

@@ -8,6 +8,7 @@ use piecrust::{contract_bytecode, ContractData, Error, SessionData, VM};
 use piecrust_uplink::EventTarget;
 
 const OWNER: [u8; 32] = [0u8; 32];
+const LIMIT: u64 = 1_000_000;
 
 #[test]
 pub fn vm_center_events() -> Result<(), Error> {
@@ -15,13 +16,16 @@ pub fn vm_center_events() -> Result<(), Error> {
 
     let mut session = vm.session(SessionData::builder())?;
 
-    let eventer_id = session
-        .deploy(contract_bytecode!("eventer"), ContractData::builder(OWNER))?;
+    let eventer_id = session.deploy(
+        contract_bytecode!("eventer"),
+        ContractData::builder(OWNER),
+        LIMIT,
+    )?;
 
     const EVENT_NUM: u32 = 5;
 
     let receipt =
-        session.call::<_, ()>(eventer_id, "emit_events", &EVENT_NUM)?;
+        session.call::<_, ()>(eventer_id, "emit_events", &EVENT_NUM, LIMIT)?;
 
     let events = receipt.events;
     assert_eq!(events.len() as u32, EVENT_NUM);

@@ -8,6 +8,7 @@ use piecrust::{contract_bytecode, ContractData, Error, SessionData, VM};
 use piecrust_uplink::ContractId;
 
 const OWNER: [u8; 32] = [0u8; 32];
+const LIMIT: u64 = 1_000_000;
 
 #[test]
 pub fn deploy_with_id() -> Result<(), Error> {
@@ -20,17 +21,22 @@ pub fn deploy_with_id() -> Result<(), Error> {
     session.deploy(
         bytecode,
         ContractData::builder(OWNER).contract_id(contract_id),
+        LIMIT,
     )?;
 
     assert_eq!(
-        session.call::<_, i64>(contract_id, "read_value", &())?.data,
+        session
+            .call::<_, i64>(contract_id, "read_value", &(), LIMIT)?
+            .data,
         0xfc
     );
 
-    session.call::<_, ()>(contract_id, "increment", &())?;
+    session.call::<_, ()>(contract_id, "increment", &(), LIMIT)?;
 
     assert_eq!(
-        session.call::<_, i64>(contract_id, "read_value", &())?.data,
+        session
+            .call::<_, i64>(contract_id, "read_value", &(), LIMIT)?
+            .data,
         0xfd
     );
 

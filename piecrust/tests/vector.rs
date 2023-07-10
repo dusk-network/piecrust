@@ -7,6 +7,7 @@
 use piecrust::{contract_bytecode, ContractData, Error, SessionData, VM};
 
 const OWNER: [u8; 32] = [0u8; 32];
+const LIMIT: u64 = 1_000_000;
 
 #[test]
 pub fn vector_push_pop() -> Result<(), Error> {
@@ -14,22 +15,25 @@ pub fn vector_push_pop() -> Result<(), Error> {
 
     let mut session = vm.session(SessionData::builder())?;
 
-    let id = session
-        .deploy(contract_bytecode!("vector"), ContractData::builder(OWNER))?;
+    let id = session.deploy(
+        contract_bytecode!("vector"),
+        ContractData::builder(OWNER),
+        LIMIT,
+    )?;
 
     const N: usize = 128;
 
     for i in 0..N {
-        session.call::<_, ()>(id, "push", &(i as i16))?;
+        session.call::<_, ()>(id, "push", &(i as i16), LIMIT)?;
     }
 
     for i in 0..N {
-        let popped: Option<i16> = session.call(id, "pop", &())?.data;
+        let popped: Option<i16> = session.call(id, "pop", &(), LIMIT)?.data;
 
         assert_eq!(popped, Some((N - i - 1) as i16));
     }
 
-    let popped: Option<i16> = session.call(id, "pop", &())?.data;
+    let popped: Option<i16> = session.call(id, "pop", &(), LIMIT)?.data;
 
     assert_eq!(popped, None);
 

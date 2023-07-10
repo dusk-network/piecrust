@@ -8,6 +8,7 @@ use piecrust::{contract_bytecode, ContractData, Error, SessionData, VM};
 use piecrust_uplink::ContractError;
 
 const OWNER: [u8; 32] = [0u8; 32];
+const LIMIT: u64 = 1_000_000;
 
 #[test]
 pub fn points_get_used() -> Result<(), Error> {
@@ -15,18 +16,27 @@ pub fn points_get_used() -> Result<(), Error> {
 
     let mut session = vm.session(SessionData::builder())?;
 
-    let counter_id = session
-        .deploy(contract_bytecode!("counter"), ContractData::builder(OWNER))?;
+    let counter_id = session.deploy(
+        contract_bytecode!("counter"),
+        ContractData::builder(OWNER),
+        LIMIT,
+    )?;
     let center_id = session.deploy(
         contract_bytecode!("callcenter"),
         ContractData::builder(OWNER),
+        LIMIT,
     )?;
 
-    let receipt = session.call::<_, i64>(counter_id, "read_value", &())?;
+    let receipt =
+        session.call::<_, i64>(counter_id, "read_value", &(), LIMIT)?;
     let counter_spent = receipt.points_spent;
 
-    let receipt =
-        session.call::<_, i64>(center_id, "query_counter", &counter_id)?;
+    let receipt = session.call::<_, i64>(
+        center_id,
+        "query_counter",
+        &counter_id,
+        LIMIT,
+    )?;
     let center_spent = receipt.points_spent;
 
     assert!(counter_spent < center_spent);
@@ -40,13 +50,14 @@ pub fn fails_with_out_of_points() -> Result<(), Error> {
 
     let mut session = vm.session(SessionData::builder())?;
 
-    let counter_id = session
-        .deploy(contract_bytecode!("counter"), ContractData::builder(OWNER))?;
-
-    session.set_point_limit(0);
+    let counter_id = session.deploy(
+        contract_bytecode!("counter"),
+        ContractData::builder(OWNER),
+        LIMIT,
+    )?;
 
     let err = session
-        .call::<_, i64>(counter_id, "read_value", &())
+        .call::<_, i64>(counter_id, "read_value", &(), 0)
         .expect_err("should error with no gas");
 
     assert!(matches!(err, Error::OutOfPoints));
@@ -60,11 +71,15 @@ pub fn contract_sets_call_limit() -> Result<(), Error> {
 
     let mut session = vm.session(SessionData::builder())?;
 
-    let spender_id = session
-        .deploy(contract_bytecode!("spender"), ContractData::builder(OWNER))?;
+    let spender_id = session.deploy(
+        contract_bytecode!("spender"),
+        ContractData::builder(OWNER),
+        LIMIT,
+    )?;
     let callcenter_id = session.deploy(
         contract_bytecode!("callcenter"),
         ContractData::builder(OWNER),
+        LIMIT,
     )?;
 
     const FIRST_LIMIT: u64 = 1000;
@@ -74,6 +89,7 @@ pub fn contract_sets_call_limit() -> Result<(), Error> {
         callcenter_id,
         "call_spend_with_limit",
         &(spender_id, FIRST_LIMIT),
+        LIMIT,
     )?;
     let spent_first = receipt.points_spent;
 
@@ -81,6 +97,7 @@ pub fn contract_sets_call_limit() -> Result<(), Error> {
         callcenter_id,
         "call_spend_with_limit",
         &(spender_id, SECOND_LIMIT),
+        LIMIT,
     )?;
     let spent_second = receipt.points_spent;
 
@@ -97,15 +114,17 @@ pub fn limit_and_spent() -> Result<(), Error> {
 
     let mut session = vm.session(SessionData::builder())?;
 
-    let spender_id = session
-        .deploy(contract_bytecode!("spender"), ContractData::builder(OWNER))?;
-
-    session.set_point_limit(LIMIT);
+    let spender_id = session.deploy(
+        contract_bytecode!("spender"),
+        ContractData::builder(OWNER),
+        LIMIT,
+    )?;
 
     let receipt = session.call::<_, (u64, u64, u64, u64, u64)>(
         spender_id,
         "get_limit_and_spent",
         &(),
+        LIMIT,
     )?;
 
     let (limit, spent_before, spent_after, called_limit, called_spent) =

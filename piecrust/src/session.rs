@@ -34,7 +34,6 @@ use crate::Error::{InitalizationError, PersistenceError};
 
 use call_stack::{CallStack, StackElement};
 
-const DEFAULT_LIMIT: u64 = 65_536;
 const MAX_META_SIZE: usize = 65_536;
 pub const INIT_METHOD: &str = "init";
 
@@ -97,9 +96,6 @@ struct SessionInner {
     contract_session: ContractSession,
     host_queries: HostQueries,
 
-    limit: u64,
-    spent: u64,
-
     call_history: Vec<CallOrDeploy>,
     buffer: Vec<u8>,
 
@@ -125,8 +121,6 @@ impl Session {
             data,
             contract_session,
             host_queries,
-            limit: DEFAULT_LIMIT,
-            spent: 0,
             call_history: vec![],
             buffer: vec![0; WASM_PAGE_SIZE],
             call_count: 0,
@@ -156,6 +150,9 @@ impl Session {
     /// Deploy a contract, returning its [`ContractId`]. The ID is computed
     /// using a `blake3` hash of the `bytecode`.
     ///
+    /// Since a deployment may execute some contract initialization code, that
+    /// code will be metered and executed with the given `points_limit`.
+    ///
     /// # Errors
     /// It is possible that a collision between contract IDs occurs, even for
     /// different contract IDs. This is due to the fact that all contracts have
@@ -170,6 +167,7 @@ impl Session {
         &mut self,
         bytecode: &[u8],
         deploy_data: D,
+        points_limit: u64,
     ) -> Result<ContractId, Error>
     where
         A: 'a + for<'b> Serialize<StandardBufSerializer<'b>>,
@@ -204,6 +202,7 @@ impl Session {
             bytecode,
             constructor_arg,
             deploy_data.owner.to_vec(),
+            points_limit,
         )?;
 
         Ok(contract_id)
@@ -215,6 +214,7 @@ impl Session {
         bytecode: &[u8],
         arg: Option<Vec<u8>>,
         owner: Vec<u8>,
+        points_limit: u64,
     ) -> Result<(), Error> {
         if self.inner.contract_session.contract_deployed(contract_id) {
             return Err(InitalizationError(
@@ -260,7 +260,7 @@ impl Session {
                 ));
             }
 
-            self.initialize(contract_id, arg.clone())?;
+            self.initialize(contract_id, arg.clone(), points_limit)?;
         }
 
         self.inner.call_history.push(From::from(Deploy {
@@ -268,6 +268,7 @@ impl Session {
             bytecode: bytecode.to_vec(),
             fdata: arg,
             owner,
+            limit: points_limit,
         }));
 
         Ok(())
@@ -276,8 +277,8 @@ impl Session {
     /// Execute a call on the current state of this session.
     ///
     /// Calls are atomic, meaning that on failure their execution doesn't modify
-    /// the state. They are also metered, and will execute with the point limit
-    /// defined in [`set_point_limit`].
+    /// the state. They are also metered, and will execute with the given
+    /// `points_limit`.
     ///
     /// To know how many points a call spent after execution use the [`spent`]
     /// function.
@@ -288,13 +289,13 @@ impl Session {
     /// panic. Calling the 'init' method is not allowed except for when
     /// called from the deploy method.
     ///
-    /// [`set_point_limit`]: Session::set_point_limit
     /// [`spent`]: Session::spent
     pub fn call<A, R>(
         &mut self,
         contract: ContractId,
         fn_name: &str,
         fn_arg: &A,
+        points_limit: u64,
     ) -> Result<CallReceipt<R>, Error>
     where
         A: for<'b> Serialize<StandardBufSerializer<'b>>,
@@ -318,6 +319,7 @@ impl Session {
             contract,
             fn_name,
             self.inner.buffer[..pos].to_vec(),
+            points_limit,
         )?;
 
         receipt.deserialize()
@@ -337,22 +339,23 @@ impl Session {
         contract: ContractId,
         fn_name: &str,
         fn_arg: V,
+        points_limit: u64,
     ) -> Result<CallReceipt<Vec<u8>>, Error> {
         if fn_name == INIT_METHOD {
             return Err(InitalizationError("init call not allowed".into()));
         }
 
-        let data = self.execute_until_ok(Call {
+        let (data, points_spent) = self.execute_until_ok(Call {
             contract,
             fname: fn_name.to_string(),
             fdata: fn_arg.into(),
-            limit: self.inner.limit,
+            limit: points_limit,
         })?;
         let events = mem::take(&mut self.inner.events);
 
         Ok(CallReceipt {
-            points_limit: self.inner.limit,
-            points_spent: self.inner.spent,
+            points_limit,
+            points_spent,
             events,
             data,
         })
@@ -362,12 +365,13 @@ impl Session {
         &mut self,
         contract: ContractId,
         arg: Vec<u8>,
+        points_limit: u64,
     ) -> Result<(), Error> {
         self.execute_until_ok(Call {
             contract,
             fname: INIT_METHOD.to_string(),
             fdata: arg,
-            limit: self.inner.limit,
+            limit: points_limit,
         })?;
         Ok(())
     }
@@ -458,13 +462,6 @@ impl Session {
         arg_len: u32,
     ) -> Option<u32> {
         self.inner.host_queries.call(name, buf, arg_len)
-    }
-
-    /// Sets the point limit for the next [`call`].
-    ///
-    /// [`call`]: Session::call
-    pub fn set_point_limit(&mut self, limit: u64) {
-        self.inner.limit = limit
     }
 
     pub(crate) fn nth_from_top(&self, n: usize) -> Option<StackElement> {
@@ -634,7 +631,10 @@ impl Session {
 
     /// Execute the call and re-execute until the call errors with only itself
     /// in the call stack, or succeeds.
-    fn execute_until_ok(&mut self, call: Call) -> Result<Vec<u8>, Error> {
+    fn execute_until_ok(
+        &mut self,
+        call: Call,
+    ) -> Result<(Vec<u8>, u64), Error> {
         // If the call succeeds at first run, then we can proceed with adding it
         // to the call history and return.
         match self.call_if_not_error(call) {
@@ -676,7 +676,7 @@ impl Session {
 
     /// Purge all produced data and re-execute all transactions and deployments
     /// in order, returning the result of the last executed call.
-    fn re_execute(&mut self) -> Result<Vec<u8>, Error> {
+    fn re_execute(&mut self) -> Result<(Vec<u8>, u64), Error> {
         // Take all transaction history since we're going to re-add it back
         // anyway.
         let mut call_history =
@@ -698,7 +698,7 @@ impl Session {
 
         // This will always be set by the loop, so this one will never be
         // returned.
-        let mut res = Ok(vec![]);
+        let mut res = Ok((vec![], 0));
 
         for call in call_history {
             match call {
@@ -706,7 +706,7 @@ impl Session {
                     res = self.call_if_not_error(call);
                 }
                 CallOrDeploy::Deploy(deploy) => {
-                    self.do_deploy(deploy.contract_id, &deploy.bytecode, deploy.fdata, deploy.owner)
+                    self.do_deploy(deploy.contract_id, &deploy.bytecode, deploy.fdata, deploy.owner, deploy.limit)
                         .expect("Only deploys that succeed should be added to the history");
                 }
             }
@@ -719,7 +719,10 @@ impl Session {
     /// it instead.
     ///
     /// This will add the call to the call history as well.
-    fn call_if_not_error(&mut self, call: Call) -> Result<Vec<u8>, Error> {
+    fn call_if_not_error(
+        &mut self,
+        call: Call,
+    ) -> Result<(Vec<u8>, u64), Error> {
         // Set both the count and height of the ICCs to zero
         self.inner.icc_count = 0;
         self.inner.icc_height = 0;
@@ -737,7 +740,7 @@ impl Session {
         res
     }
 
-    fn call_inner(&mut self, call: &Call) -> Result<Vec<u8>, Error> {
+    fn call_inner(&mut self, call: &Call) -> Result<(Vec<u8>, u64), Error> {
         let stack_element = self.push_callstack(call.contract, call.limit)?;
         let instance = self
             .instance(&stack_element.contract_id)
@@ -747,14 +750,14 @@ impl Session {
         let ret_len = instance.call(&call.fname, arg_len, call.limit)?;
         let ret = instance.read_bytes_from_arg_buffer(ret_len as u32);
 
-        self.inner.spent = call.limit
+        let spent = call.limit
             - instance
                 .get_remaining_points()
                 .expect("there should be remaining points");
 
         self.pop_callstack();
 
-        Ok(ret)
+        Ok((ret, spent))
     }
 
     pub fn contract_metadata(
@@ -825,6 +828,7 @@ struct Deploy {
     bytecode: Vec<u8>,
     fdata: Option<Vec<u8>>,
     owner: Vec<u8>,
+    limit: u64,
 }
 
 #[derive(Debug)]

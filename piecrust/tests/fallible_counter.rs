@@ -7,6 +7,7 @@
 use piecrust::{contract_bytecode, ContractData, Error, SessionData, VM};
 
 const OWNER: [u8; 32] = [0u8; 32];
+const LIMIT: u64 = 1_000_000;
 
 #[test]
 #[ignore]
@@ -18,18 +19,24 @@ fn fallible_read_write_panic() -> Result<(), Error> {
     let id = session.deploy(
         contract_bytecode!("fallible_counter"),
         ContractData::builder(OWNER),
+        LIMIT,
     )?;
 
-    session.call::<_, ()>(id, "increment", &false)?;
+    session.call::<_, ()>(id, "increment", &false, LIMIT)?;
 
-    assert_eq!(session.call::<_, i64>(id, "read_value", &())?.data, 0xfd);
+    assert_eq!(
+        session.call::<_, i64>(id, "read_value", &(), LIMIT)?.data,
+        0xfd
+    );
 
-    let err = session.call::<_, ()>(id, "increment", &true).is_err();
+    let err = session
+        .call::<_, ()>(id, "increment", &true, LIMIT)
+        .is_err();
 
     assert!(err, "execution failed");
 
     assert_eq!(
-        session.call::<_, i64>(id, "read_value", &())?.data,
+        session.call::<_, i64>(id, "read_value", &(), LIMIT)?.data,
         0xfd,
         "should remain unchanged, since panics revert any changes"
     );

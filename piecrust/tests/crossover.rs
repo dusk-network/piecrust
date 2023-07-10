@@ -8,6 +8,7 @@ use piecrust::{contract_bytecode, ContractData, Error, SessionData, VM};
 use piecrust_uplink::ContractId;
 
 const OWNER: [u8; 32] = [0u8; 32];
+const LIMIT: u64 = 1_000_000;
 
 const CROSSOVER_ONE: ContractId = {
     let mut bytes = [0; 32];
@@ -26,15 +27,16 @@ fn crossover() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 
     let mut session = vm.session(SessionData::builder())?;
-    session.set_point_limit(u64::MAX / 100);
 
     session.deploy(
         contract_bytecode!("crossover"),
         ContractData::builder(OWNER).contract_id(CROSSOVER_ONE),
+        LIMIT,
     )?;
     session.deploy(
         contract_bytecode!("crossover"),
         ContractData::builder(OWNER).contract_id(CROSSOVER_TWO),
+        LIMIT,
     )?;
 
     // These value should not be set to `INITIAL_VALUE` in the contract.
@@ -53,10 +55,11 @@ fn crossover() -> Result<(), Error> {
             CROSSOVER_TO_SET_FORWARD,
             CROSSOVER_TO_SET_BACK,
         ),
+        LIMIT,
     )?;
 
     assert_eq!(
-        session.call::<_, i32>(CROSSOVER_ONE, "crossover", &())?.data,
+        session.call::<_, i32>(CROSSOVER_ONE, "crossover", &(), LIMIT)?.data,
         CROSSOVER_TO_SET,
         "The crossover should still be set even though the other contract panicked"
     );

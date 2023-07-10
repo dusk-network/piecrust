@@ -13,11 +13,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Change signature of `Session::deploy` to take `points_limit`
+- Change signature of `Session::call` to take `points_limit`
+- Change signature of `Session::call_raw` to take `points_limit`
 - Change signature of `Session::call` to return `CallReceipt`
 - Change signature of `Session::call_raw` to return `CallReceipt`
 
 ### Removed
 
+- Remove `Session::set_point_limit`
 - Remove `Session::take_events`
 - Remove `Session::spent`
 
