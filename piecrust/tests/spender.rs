@@ -22,11 +22,12 @@ pub fn points_get_used() -> Result<(), Error> {
         ContractData::builder(OWNER),
     )?;
 
-    session.call::<_, i64>(counter_id, "read_value", &())?;
-    let counter_spent = session.spent();
+    let receipt = session.call::<_, i64>(counter_id, "read_value", &())?;
+    let counter_spent = receipt.points_spent;
 
-    session.call::<_, i64>(center_id, "query_counter", &counter_id)?;
-    let center_spent = session.spent();
+    let receipt =
+        session.call::<_, i64>(center_id, "query_counter", &counter_id)?;
+    let center_spent = receipt.points_spent;
 
     assert!(counter_spent < center_spent);
 
@@ -69,23 +70,19 @@ pub fn contract_sets_call_limit() -> Result<(), Error> {
     const FIRST_LIMIT: u64 = 1000;
     const SECOND_LIMIT: u64 = 2000;
 
-    let _: Result<(), ContractError> = session
-        .call(
-            callcenter_id,
-            "call_spend_with_limit",
-            &(spender_id, FIRST_LIMIT),
-        )?
-        .data;
-    let spent_first = session.spent();
+    let receipt = session.call::<_, Result<(), ContractError>>(
+        callcenter_id,
+        "call_spend_with_limit",
+        &(spender_id, FIRST_LIMIT),
+    )?;
+    let spent_first = receipt.points_spent;
 
-    let _: Result<(), ContractError> = session
-        .call(
-            callcenter_id,
-            "call_spend_with_limit",
-            &(spender_id, SECOND_LIMIT),
-        )?
-        .data;
-    let spent_second = session.spent();
+    let receipt = session.call::<_, Result<(), ContractError>>(
+        callcenter_id,
+        "call_spend_with_limit",
+        &(spender_id, SECOND_LIMIT),
+    )?;
+    let spent_second = receipt.points_spent;
 
     assert_eq!(spent_second - spent_first, SECOND_LIMIT - FIRST_LIMIT);
 
@@ -105,15 +102,15 @@ pub fn limit_and_spent() -> Result<(), Error> {
 
     session.set_point_limit(LIMIT);
 
+    let receipt = session.call::<_, (u64, u64, u64, u64, u64)>(
+        spender_id,
+        "get_limit_and_spent",
+        &(),
+    )?;
+
     let (limit, spent_before, spent_after, called_limit, called_spent) =
-        session
-            .call::<_, (u64, u64, u64, u64, u64)>(
-                spender_id,
-                "get_limit_and_spent",
-                &(),
-            )?
-            .data;
-    let spender_spent = session.spent();
+        receipt.data;
+    let spender_spent = receipt.points_spent;
 
     assert_eq!(limit, LIMIT, "should be the initial limit");
 

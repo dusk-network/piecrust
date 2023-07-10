@@ -467,16 +467,6 @@ impl Session {
         self.inner.limit = limit
     }
 
-    /// Returns the number of points spent by the last [`call`].
-    ///
-    /// If neither have been called for the duration of the session, it will
-    /// return 0.
-    ///
-    /// [`call`]: Session::call
-    pub fn spent(&self) -> u64 {
-        self.inner.spent
-    }
-
     pub(crate) fn nth_from_top(&self, n: usize) -> Option<StackElement> {
         self.inner.call_stack.nth_from_top(n)
     }

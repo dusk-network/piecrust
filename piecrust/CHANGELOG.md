@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 
 - Remove `Session::take_events`
+- Remove `Session::spent`
 
 ## [0.6.2] - 2023-07-07
 
