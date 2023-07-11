@@ -58,8 +58,16 @@ pub enum Error {
     SessionError(Cow<'static, str>),
     #[error("WASMER TRAP")]
     Trap(Arc<wasmer_vm::Trap>),
+    #[error(transparent)]
+    Utf8(std::str::Utf8Error),
     #[error("ValidationError")]
     ValidationError,
+}
+
+impl From<std::str::Utf8Error> for Error {
+    fn from(err: std::str::Utf8Error) -> Self {
+        Self::Utf8(err)
+    }
 }
 
 impl From<wasmer::InstantiationError> for Error {
