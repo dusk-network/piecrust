@@ -7,6 +7,8 @@
 use piecrust::{contract_bytecode, ContractData, Error, SessionData, VM};
 use piecrust_uplink::ContractId;
 
+const LIMIT: u64 = 1_000_000;
+
 #[test]
 fn metadata() -> Result<(), Error> {
     const EXPECTED_OWNER: [u8; 33] = [3u8; 33];
@@ -18,19 +20,28 @@ fn metadata() -> Result<(), Error> {
     let id = session.deploy(
         contract_bytecode!("metadata"),
         ContractData::builder(EXPECTED_OWNER),
+        LIMIT,
     )?;
 
     // owner should be available after deployment
-    let owner = session.call::<(), [u8; 33]>(id, "read_owner", &())?;
-    let self_id = session.call::<(), ContractId>(id, "read_id", &())?;
+    let owner = session
+        .call::<_, [u8; 33]>(id, "read_owner", &(), LIMIT)?
+        .data;
+    let self_id = session
+        .call::<_, ContractId>(id, "read_id", &(), LIMIT)?
+        .data;
     assert_eq!(owner, EXPECTED_OWNER);
     assert_eq!(self_id, id);
 
     // owner should live across session boundaries
     let commit_id = session.commit()?;
     let mut session = vm.session(SessionData::builder().base(commit_id))?;
-    let owner = session.call::<(), [u8; 33]>(id, "read_owner", &())?;
-    let self_id = session.call::<(), ContractId>(id, "read_id", &())?;
+    let owner = session
+        .call::<_, [u8; 33]>(id, "read_owner", &(), LIMIT)?
+        .data;
+    let self_id = session
+        .call::<_, ContractId>(id, "read_id", &(), LIMIT)?
+        .data;
     assert_eq!(owner, EXPECTED_OWNER);
     assert_eq!(self_id, id);
 

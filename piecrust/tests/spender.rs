@@ -8,6 +8,7 @@ use piecrust::{contract_bytecode, ContractData, Error, SessionData, VM};
 use piecrust_uplink::ContractError;
 
 const OWNER: [u8; 32] = [0u8; 32];
+const LIMIT: u64 = 1_000_000;
 
 #[test]
 pub fn points_get_used() -> Result<(), Error> {
@@ -15,18 +16,28 @@ pub fn points_get_used() -> Result<(), Error> {
 
     let mut session = vm.session(SessionData::builder())?;
 
-    let counter_id = session
-        .deploy(contract_bytecode!("counter"), ContractData::builder(OWNER))?;
+    let counter_id = session.deploy(
+        contract_bytecode!("counter"),
+        ContractData::builder(OWNER),
+        LIMIT,
+    )?;
     let center_id = session.deploy(
         contract_bytecode!("callcenter"),
         ContractData::builder(OWNER),
+        LIMIT,
     )?;
 
-    session.call::<_, i64>(counter_id, "read_value", &())?;
-    let counter_spent = session.spent();
+    let receipt =
+        session.call::<_, i64>(counter_id, "read_value", &(), LIMIT)?;
+    let counter_spent = receipt.points_spent;
 
-    session.call::<_, i64>(center_id, "query_counter", &counter_id)?;
-    let center_spent = session.spent();
+    let receipt = session.call::<_, i64>(
+        center_id,
+        "query_counter",
+        &counter_id,
+        LIMIT,
+    )?;
+    let center_spent = receipt.points_spent;
 
     assert!(counter_spent < center_spent);
 
@@ -39,13 +50,14 @@ pub fn fails_with_out_of_points() -> Result<(), Error> {
 
     let mut session = vm.session(SessionData::builder())?;
 
-    let counter_id = session
-        .deploy(contract_bytecode!("counter"), ContractData::builder(OWNER))?;
-
-    session.set_point_limit(0);
+    let counter_id = session.deploy(
+        contract_bytecode!("counter"),
+        ContractData::builder(OWNER),
+        LIMIT,
+    )?;
 
     let err = session
-        .call::<(), i64>(counter_id, "read_value", &())
+        .call::<_, i64>(counter_id, "read_value", &(), 0)
         .expect_err("should error with no gas");
 
     assert!(matches!(err, Error::OutOfPoints));
@@ -59,29 +71,35 @@ pub fn contract_sets_call_limit() -> Result<(), Error> {
 
     let mut session = vm.session(SessionData::builder())?;
 
-    let spender_id = session
-        .deploy(contract_bytecode!("spender"), ContractData::builder(OWNER))?;
+    let spender_id = session.deploy(
+        contract_bytecode!("spender"),
+        ContractData::builder(OWNER),
+        LIMIT,
+    )?;
     let callcenter_id = session.deploy(
         contract_bytecode!("callcenter"),
         ContractData::builder(OWNER),
+        LIMIT,
     )?;
 
     const FIRST_LIMIT: u64 = 1000;
     const SECOND_LIMIT: u64 = 2000;
 
-    let _: Result<(), ContractError> = session.call(
+    let receipt = session.call::<_, Result<(), ContractError>>(
         callcenter_id,
         "call_spend_with_limit",
         &(spender_id, FIRST_LIMIT),
+        LIMIT,
     )?;
-    let spent_first = session.spent();
+    let spent_first = receipt.points_spent;
 
-    let _: Result<(), ContractError> = session.call(
+    let receipt = session.call::<_, Result<(), ContractError>>(
         callcenter_id,
         "call_spend_with_limit",
         &(spender_id, SECOND_LIMIT),
+        LIMIT,
     )?;
-    let spent_second = session.spent();
+    let spent_second = receipt.points_spent;
 
     assert_eq!(spent_second - spent_first, SECOND_LIMIT - FIRST_LIMIT);
 
@@ -96,18 +114,22 @@ pub fn limit_and_spent() -> Result<(), Error> {
 
     let mut session = vm.session(SessionData::builder())?;
 
-    let spender_id = session
-        .deploy(contract_bytecode!("spender"), ContractData::builder(OWNER))?;
+    let spender_id = session.deploy(
+        contract_bytecode!("spender"),
+        ContractData::builder(OWNER),
+        LIMIT,
+    )?;
 
-    session.set_point_limit(LIMIT);
+    let receipt = session.call::<_, (u64, u64, u64, u64, u64)>(
+        spender_id,
+        "get_limit_and_spent",
+        &(),
+        LIMIT,
+    )?;
 
     let (limit, spent_before, spent_after, called_limit, called_spent) =
-        session.call::<_, (u64, u64, u64, u64, u64)>(
-            spender_id,
-            "get_limit_and_spent",
-            &(),
-        )?;
-    let spender_spent = session.spent();
+        receipt.data;
+    let spender_spent = receipt.points_spent;
 
     assert_eq!(limit, LIMIT, "should be the initial limit");
 

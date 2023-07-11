@@ -8,6 +8,7 @@ use piecrust::{contract_bytecode, ContractData, Error, SessionData, VM};
 use rkyv::Deserialize;
 
 const OWNER: [u8; 32] = [0u8; 32];
+const LIMIT: u64 = 1_000_000;
 
 fn hash(buf: &mut [u8], len: u32) -> u32 {
     let a = unsafe { rkyv::archived_root::<Vec<u8>>(&buf[..len as usize]) };
@@ -26,13 +27,17 @@ pub fn host_hash() -> Result<(), Error> {
 
     let mut session = vm.session(SessionData::builder())?;
 
-    let id = session
-        .deploy(contract_bytecode!("host"), ContractData::builder(OWNER))?;
+    let id = session.deploy(
+        contract_bytecode!("host"),
+        ContractData::builder(OWNER),
+        LIMIT,
+    )?;
 
     let v = vec![0u8, 1, 2];
     let h = session
-        .call::<_, [u8; 32]>(id, "host_hash", &v)
-        .expect("query should succeed");
+        .call::<_, [u8; 32]>(id, "host_hash", &v, LIMIT)
+        .expect("query should succeed")
+        .data;
     assert_eq!(blake3::hash(&[0u8, 1, 2]).as_bytes(), &h);
 
     Ok(())
