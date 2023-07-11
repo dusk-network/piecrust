@@ -690,12 +690,6 @@ impl Session {
         self.inner.contract_session.clear_contracts();
         self.inner.call_count = 0;
 
-        // TODO Figure out how to handle metadata and point limit.
-        //      It is important to preserve their value per call.
-        //      Right now it probably won't bite us, since we're using it
-        //      "properly", and not setting these pieces of data during the
-        //      session, but only at the beginning.
-
         // This will always be set by the loop, so this one will never be
         // returned.
         let mut res = Ok((vec![], 0));
