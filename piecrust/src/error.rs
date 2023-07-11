@@ -22,22 +22,10 @@ pub type Compo = CompositeSerializerError<
 /// The error type returned by the piecrust VM.
 #[derive(Error, Debug, Clone)]
 pub enum Error {
-    #[error(transparent)]
-    InstantiationError(Arc<wasmer::InstantiationError>),
+    #[error("Commit error: {0}")]
+    CommitError(Cow<'static, str>),
     #[error(transparent)]
     CompileError(Arc<wasmer::CompileError>),
-    #[error(transparent)]
-    ExportError(Arc<wasmer::ExportError>),
-    #[error(transparent)]
-    RuntimeError(wasmer::RuntimeError),
-    #[error(transparent)]
-    SerializeError(Arc<wasmer::SerializeError>),
-    #[error(transparent)]
-    DeserializeError(Arc<wasmer::DeserializeError>),
-    #[error(transparent)]
-    ParsingError(wasmer::wasmparser::BinaryReaderError),
-    #[error("WASMER TRAP")]
-    Trap(Arc<wasmer_vm::Trap>),
     #[error(transparent)]
     CompositeSerializerError(Arc<Compo>),
     #[error(transparent)]
@@ -45,21 +33,33 @@ pub enum Error {
     #[error("Contract does not exist: {0}")]
     ContractDoesNotExist(ContractId),
     #[error(transparent)]
-    PersistenceError(Arc<std::io::Error>),
-    #[error("Commit error: {0}")]
-    CommitError(Cow<'static, str>),
+    DeserializeError(Arc<wasmer::DeserializeError>),
     #[error(transparent)]
-    RestoreError(Arc<std::io::Error>),
-    #[error("Session error: {0}")]
-    SessionError(Cow<'static, str>),
-    #[error(transparent)]
-    MemorySetupError(Arc<std::io::Error>),
-    #[error("ValidationError")]
-    ValidationError,
-    #[error("OutOfPoints")]
-    OutOfPoints,
+    ExportError(Arc<wasmer::ExportError>),
     #[error("InitalizationError: {0}")]
     InitalizationError(Cow<'static, str>),
+    #[error(transparent)]
+    InstantiationError(Arc<wasmer::InstantiationError>),
+    #[error(transparent)]
+    MemorySetupError(Arc<std::io::Error>),
+    #[error("OutOfPoints")]
+    OutOfPoints,
+    #[error(transparent)]
+    ParsingError(wasmer::wasmparser::BinaryReaderError),
+    #[error(transparent)]
+    PersistenceError(Arc<std::io::Error>),
+    #[error(transparent)]
+    RestoreError(Arc<std::io::Error>),
+    #[error(transparent)]
+    RuntimeError(wasmer::RuntimeError),
+    #[error(transparent)]
+    SerializeError(Arc<wasmer::SerializeError>),
+    #[error("Session error: {0}")]
+    SessionError(Cow<'static, str>),
+    #[error("WASMER TRAP")]
+    Trap(Arc<wasmer_vm::Trap>),
+    #[error("ValidationError")]
+    ValidationError,
 }
 
 impl From<wasmer::InstantiationError> for Error {
