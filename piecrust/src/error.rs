@@ -5,6 +5,7 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 use std::borrow::Cow;
+use std::convert::Infallible;
 use std::sync::Arc;
 use thiserror::Error;
 
@@ -36,6 +37,8 @@ pub enum Error {
     DeserializeError(Arc<wasmer::DeserializeError>),
     #[error(transparent)]
     ExportError(Arc<wasmer::ExportError>),
+    #[error(transparent)]
+    Infallible(std::convert::Infallible),
     #[error("InitalizationError: {0}")]
     InitalizationError(Cow<'static, str>),
     #[error(transparent)]
@@ -66,6 +69,12 @@ pub enum Error {
     Utf8(std::str::Utf8Error),
     #[error("ValidationError")]
     ValidationError,
+}
+
+impl From<std::convert::Infallible> for Error {
+    fn from(err: Infallible) -> Self {
+        Self::Infallible(err)
+    }
 }
 
 impl From<std::str::Utf8Error> for Error {
