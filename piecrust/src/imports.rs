@@ -96,8 +96,7 @@ fn c(
         .with_memory_mut::<_, Result<_, Error>>(|memory| {
             let name = core::str::from_utf8(
                 &memory[name_ofs as usize..][..name_len as usize],
-            )
-            .expect("TODO error handling");
+            )?;
 
             let arg_buf = &memory[argbuf_ofs..][..ARGBUF_LEN];
 
@@ -143,7 +142,7 @@ fn hq(
     name_ofs: i32,
     name_len: u32,
     arg_len: u32,
-) -> u32 {
+) -> Result<u32, Error> {
     let env = fenv.data_mut();
 
     let instance = env.self_instance();
@@ -154,16 +153,19 @@ fn hq(
     let name = instance.with_memory(|buf| {
         // performance: use a dedicated buffer here?
         core::str::from_utf8(&buf[name_ofs..][..name_len])
-            .expect("TODO, error out cleaner")
-            .to_owned()
-    });
+            .map(ToOwned::to_owned)
+    })?;
 
     instance
         .with_arg_buffer(|buf| env.host_query(&name, buf, arg_len))
-        .expect("TODO: error handling")
+        .ok_or(Error::MissingHostQuery(name))
 }
 
-fn hd(mut fenv: FunctionEnvMut<Env>, name_ofs: i32, name_len: u32) -> u32 {
+fn hd(
+    mut fenv: FunctionEnvMut<Env>,
+    name_ofs: i32,
+    name_len: u32,
+) -> Result<u32, Error> {
     let env = fenv.data_mut();
 
     let instance = env.self_instance();
@@ -174,20 +176,16 @@ fn hd(mut fenv: FunctionEnvMut<Env>, name_ofs: i32, name_len: u32) -> u32 {
     let name = instance.with_memory(|buf| {
         // performance: use a dedicated buffer here?
         core::str::from_utf8(&buf[name_ofs..][..name_len])
-            .expect("TODO, error out cleaner")
-            .to_owned()
+            .map(ToOwned::to_owned)
+    })?;
+
+    let data = env.meta(&name).unwrap_or_default();
+
+    instance.with_arg_buffer(|buf| {
+        buf[..data.len()].copy_from_slice(&data);
     });
 
-    match env.meta(&name) {
-        Some(data) => {
-            instance.with_arg_buffer(|buf| {
-                buf[..data.len()].copy_from_slice(&data);
-            });
-
-            data.len() as u32
-        }
-        _ => 0u32,
-    }
+    Ok(data.len() as u32)
 }
 
 fn emit(
@@ -195,7 +193,7 @@ fn emit(
     topic_ofs: i32,
     topic_len: u32,
     arg_len: u32,
-) {
+) -> Result<(), Error> {
     let env = fenv.data_mut();
     let instance = env.self_instance();
 
@@ -210,25 +208,30 @@ fn emit(
     let topic = instance.with_memory(|buf| {
         // performance: use a dedicated buffer here?
         core::str::from_utf8(&buf[topic_ofs..][..topic_len])
-            .expect("TODO, error out cleaner")
-            .to_owned()
-    });
+            .map(ToOwned::to_owned)
+    })?;
 
-    env.emit(topic, data)
+    env.emit(topic, data);
+
+    Ok(())
 }
 
 #[cfg(feature = "debug")]
-fn hdebug(mut fenv: FunctionEnvMut<Env>, msg_len: u32) {
+fn hdebug(mut fenv: FunctionEnvMut<Env>, msg_len: u32) -> Result<(), Error> {
     let env = fenv.data_mut();
 
     env.self_instance().with_arg_buffer(|buf| {
         let slice = &buf[..msg_len as usize];
 
-        let msg = std::str::from_utf8(slice).expect("Invalid debug string");
+        let msg = match std::str::from_utf8(slice) {
+            Ok(msg) => msg,
+            Err(err) => return Err(Error::Utf8(err)),
+        };
 
         env.register_debug(msg);
+        println!("CONTRACT DEBUG {msg}");
 
-        println!("CONTRACT DEBUG {msg}")
+        Ok(())
     })
 }
 

@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Handle possible errors in imports
 - Handle error on deserializing contract metadata
 - Change signature of `Session::deploy` to take `points_limit`
 - Change signature of `Session::call` to take `points_limit`
