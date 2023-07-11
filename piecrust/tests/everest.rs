@@ -15,7 +15,7 @@ pub fn height() -> Result<(), Error> {
 
     const HEIGHT: u64 = 29_000u64;
     let mut session =
-        vm.session(SessionData::builder().insert("height", HEIGHT))?;
+        vm.session(SessionData::builder().insert("height", HEIGHT)?)?;
 
     let id = session.deploy(
         contract_bytecode!("everest"),

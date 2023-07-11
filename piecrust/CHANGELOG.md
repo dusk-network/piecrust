@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Change signature of `SessionDataBuilder::insert` to return an error on serialization
 - Handle possible errors in imports
 - Handle error on deserializing contract metadata
 - Change signature of `Session::deploy` to take `points_limit`

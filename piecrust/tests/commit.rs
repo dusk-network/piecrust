@@ -341,7 +341,7 @@ fn concurrent_sessions() -> Result<(), Error> {
 fn make_session(vm: &VM) -> Result<(Session, ContractId), Error> {
     const HEIGHT: u64 = 29_000u64;
     let mut session =
-        vm.session(SessionData::builder().insert("height", HEIGHT))?;
+        vm.session(SessionData::builder().insert("height", HEIGHT)?)?;
     let contract_id = session.deploy(
         contract_bytecode!("everest"),
         ContractData::builder(OWNER),
