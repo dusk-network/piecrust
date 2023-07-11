@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Add `Error::MissingHostData` variant
+- Add `Error::MissingHostQuery` variant
 - Add `Error::Utf8` variant
 - Add `CallReceipt` struct
 

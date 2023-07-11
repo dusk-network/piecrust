@@ -42,6 +42,10 @@ pub enum Error {
     InstantiationError(Arc<wasmer::InstantiationError>),
     #[error(transparent)]
     MemorySetupError(Arc<std::io::Error>),
+    #[error("Missing host data: {0}")]
+    MissingHostData(String),
+    #[error("Missing host query: {0}")]
+    MissingHostQuery(String),
     #[error("OutOfPoints")]
     OutOfPoints,
     #[error(transparent)]
