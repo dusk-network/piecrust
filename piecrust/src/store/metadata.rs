@@ -8,8 +8,6 @@ use std::io;
 use std::path::Path;
 use std::sync::Arc;
 
-use rkyv::{archived_root, Deserialize, Infallible};
-
 use crate::contract::ContractMetadata;
 use crate::store::mmap::Mmap;
 
@@ -35,8 +33,12 @@ impl Metadata {
 
     pub(crate) fn from_file<P: AsRef<Path>>(path: P) -> io::Result<Self> {
         let mmap = Mmap::map(path)?;
-        let ret = unsafe { archived_root::<ContractMetadata>(&mmap) };
-        let data = ret.deserialize(&mut Infallible).expect("Infallible");
+        let data = rkyv::from_bytes(mmap.as_bytes()).map_err(|_| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                "contract metadata invalid in file",
+            )
+        })?;
 
         Ok(Self {
             mmap: Arc::new(mmap),

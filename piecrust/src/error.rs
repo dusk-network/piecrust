@@ -5,6 +5,7 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 use std::borrow::Cow;
+use std::convert::Infallible;
 use std::sync::Arc;
 use thiserror::Error;
 
@@ -22,22 +23,10 @@ pub type Compo = CompositeSerializerError<
 /// The error type returned by the piecrust VM.
 #[derive(Error, Debug, Clone)]
 pub enum Error {
-    #[error(transparent)]
-    InstantiationError(Arc<wasmer::InstantiationError>),
+    #[error("Commit error: {0}")]
+    CommitError(Cow<'static, str>),
     #[error(transparent)]
     CompileError(Arc<wasmer::CompileError>),
-    #[error(transparent)]
-    ExportError(Arc<wasmer::ExportError>),
-    #[error(transparent)]
-    RuntimeError(wasmer::RuntimeError),
-    #[error(transparent)]
-    SerializeError(Arc<wasmer::SerializeError>),
-    #[error(transparent)]
-    DeserializeError(Arc<wasmer::DeserializeError>),
-    #[error(transparent)]
-    ParsingError(wasmer::wasmparser::BinaryReaderError),
-    #[error("WASMER TRAP")]
-    Trap(Arc<wasmer_vm::Trap>),
     #[error(transparent)]
     CompositeSerializerError(Arc<Compo>),
     #[error(transparent)]
@@ -45,21 +34,53 @@ pub enum Error {
     #[error("Contract does not exist: {0}")]
     ContractDoesNotExist(ContractId),
     #[error(transparent)]
-    PersistenceError(Arc<std::io::Error>),
-    #[error("Commit error: {0}")]
-    CommitError(Cow<'static, str>),
+    DeserializeError(Arc<wasmer::DeserializeError>),
     #[error(transparent)]
-    RestoreError(Arc<std::io::Error>),
-    #[error("Session error: {0}")]
-    SessionError(Cow<'static, str>),
+    ExportError(Arc<wasmer::ExportError>),
     #[error(transparent)]
-    MemorySetupError(Arc<std::io::Error>),
-    #[error("ValidationError")]
-    ValidationError,
-    #[error("OutOfPoints")]
-    OutOfPoints,
+    Infallible(std::convert::Infallible),
     #[error("InitalizationError: {0}")]
     InitalizationError(Cow<'static, str>),
+    #[error(transparent)]
+    InstantiationError(Arc<wasmer::InstantiationError>),
+    #[error(transparent)]
+    MemorySetupError(Arc<std::io::Error>),
+    #[error("Missing host data: {0}")]
+    MissingHostData(String),
+    #[error("Missing host query: {0}")]
+    MissingHostQuery(String),
+    #[error("OutOfPoints")]
+    OutOfPoints,
+    #[error(transparent)]
+    ParsingError(wasmer::wasmparser::BinaryReaderError),
+    #[error(transparent)]
+    PersistenceError(Arc<std::io::Error>),
+    #[error(transparent)]
+    RestoreError(Arc<std::io::Error>),
+    #[error(transparent)]
+    RuntimeError(wasmer::RuntimeError),
+    #[error(transparent)]
+    SerializeError(Arc<wasmer::SerializeError>),
+    #[error("Session error: {0}")]
+    SessionError(Cow<'static, str>),
+    #[error("WASMER TRAP")]
+    Trap(Arc<wasmer_vm::Trap>),
+    #[error(transparent)]
+    Utf8(std::str::Utf8Error),
+    #[error("ValidationError")]
+    ValidationError,
+}
+
+impl From<std::convert::Infallible> for Error {
+    fn from(err: Infallible) -> Self {
+        Self::Infallible(err)
+    }
+}
+
+impl From<std::str::Utf8Error> for Error {
+    fn from(err: std::str::Utf8Error) -> Self {
+        Self::Utf8(err)
+    }
 }
 
 impl From<wasmer::InstantiationError> for Error {

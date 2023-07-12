@@ -9,10 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Add `Error::Infallible` variant
+- Add `Error::MissingHostData` variant
+- Add `Error::MissingHostQuery` variant
+- Add `Error::Utf8` variant
 - Add `CallReceipt` struct
 
 ### Changed
 
+- Change signature of `SessionDataBuilder::insert` to return an error on serialization
+- Handle possible errors in imports
+- Handle error on deserializing contract metadata
 - Change signature of `Session::deploy` to take `points_limit`
 - Change signature of `Session::call` to take `points_limit`
 - Change signature of `Session::call_raw` to take `points_limit`

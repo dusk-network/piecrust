@@ -13,7 +13,7 @@ use std::mem;
 use std::sync::Arc;
 
 use bytecheck::CheckBytes;
-use piecrust_uplink::{ContractId, Event, SCRATCH_BUF_BYTES};
+use piecrust_uplink::{ContractId, Event, ARGBUF_LEN, SCRATCH_BUF_BYTES};
 use rkyv::ser::serializers::{
     BufferScratch, BufferSerializer, CompositeSerializer,
 };
@@ -34,7 +34,7 @@ use crate::Error::{InitalizationError, PersistenceError};
 
 use call_stack::{CallStack, StackElement};
 
-const MAX_META_SIZE: usize = 65_536;
+const MAX_META_SIZE: usize = ARGBUF_LEN;
 pub const INIT_METHOD: &str = "init";
 
 unsafe impl Send for Session {}
@@ -184,17 +184,18 @@ impl Session {
             }
         };
 
-        let constructor_arg = deploy_data.constructor_arg.map(|arg| {
+        let mut constructor_arg = None;
+        if let Some(arg) = deploy_data.constructor_arg {
             let mut sbuf = [0u8; SCRATCH_BUF_BYTES];
             let scratch = BufferScratch::new(&mut sbuf);
             let ser = BufferSerializer::new(&mut self.inner.buffer[..]);
             let mut ser = CompositeSerializer::new(ser, scratch, Infallible);
 
-            ser.serialize_value(arg).expect("Infallible");
+            ser.serialize_value(arg)?;
             let pos = ser.pos();
 
-            self.inner.buffer[0..pos].to_vec()
-        });
+            constructor_arg = Some(self.inner.buffer[0..pos].to_vec());
+        }
 
         let contract_id = deploy_data.contract_id.unwrap();
         self.do_deploy(
@@ -228,7 +229,7 @@ impl Session {
             contract_id,
             owner: owner.clone(),
         };
-        let metadata_bytes = Self::serialize_data(&contract_metadata);
+        let metadata_bytes = Self::serialize_data(&contract_metadata)?;
 
         self.inner
             .contract_session
@@ -312,7 +313,7 @@ impl Session {
         let ser = BufferSerializer::new(&mut self.inner.buffer[..]);
         let mut ser = CompositeSerializer::new(ser, scratch, Infallible);
 
-        ser.serialize_value(fn_arg).expect("Infallible");
+        ser.serialize_value(fn_arg)?;
         let pos = ser.pos();
 
         let receipt = self.call_raw(
@@ -542,7 +543,7 @@ impl Session {
         self.inner.data.get(name)
     }
 
-    pub fn serialize_data<V>(value: &V) -> Vec<u8>
+    pub fn serialize_data<V>(value: &V) -> Result<Vec<u8>, Error>
     where
         V: for<'a> Serialize<StandardBufSerializer<'a>>,
     {
@@ -554,11 +555,11 @@ impl Session {
 
         let mut serializer =
             StandardBufSerializer::new(ser, scratch, Infallible);
-        serializer.serialize_value(value).expect("Infallible");
+        serializer.serialize_value(value)?;
 
         let pos = serializer.pos();
 
-        buf[..pos].to_vec()
+        Ok(buf[..pos].to_vec())
     }
 
     /// Increment the call execution count.
@@ -778,7 +779,7 @@ pub struct CallReceipt<T> {
 }
 
 impl CallReceipt<Vec<u8>> {
-    /// Deserializes a `CallReceipt<Vec<u8>> into a `CallReceipt<T>` using
+    /// Deserializes a `CallReceipt<Vec<u8>>` into a `CallReceipt<T>` using
     /// `rkyv`.
     fn deserialize<T>(self) -> Result<CallReceipt<T>, Error>
     where
@@ -787,7 +788,7 @@ impl CallReceipt<Vec<u8>> {
             + for<'b> CheckBytes<DefaultValidator<'b>>,
     {
         let ta = check_archived_root::<T>(&self.data[..])?;
-        let data = ta.deserialize(&mut Infallible).expect("Infallible");
+        let data = ta.deserialize(&mut Infallible)?;
 
         Ok(CallReceipt {
             points_spent: self.points_spent,
@@ -864,14 +865,14 @@ pub struct SessionDataBuilder {
 }
 
 impl SessionDataBuilder {
-    pub fn insert<S, V>(mut self, name: S, value: V) -> Self
+    pub fn insert<S, V>(mut self, name: S, value: V) -> Result<Self, Error>
     where
         S: Into<Cow<'static, str>>,
         V: for<'a> Serialize<StandardBufSerializer<'a>>,
     {
-        let data = Session::serialize_data(&value);
+        let data = Session::serialize_data(&value)?;
         self.data.insert(name.into(), data);
-        self
+        Ok(self)
     }
 
     pub fn base(mut self, base: [u8; 32]) -> Self {
