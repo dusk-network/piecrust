@@ -1,0 +1,15 @@
+[package]
+name = "feeder"
+version = "0.1.0"
+authors = [
+    "Eduardo Leegwater Simões <eduardo@dusk.network>",
+]
+edition = "2021"
+
+license = "MPL-2.0"
+
+[dependencies]
+piecrust-uplink = { path = "../../piecrust-uplink", features = ["abi", "dlmalloc"] }
+
+[lib]
+crate-type = ["cdylib", "rlib"]
