@@ -21,7 +21,7 @@ use wasmer_types::{
 };
 use wasmer_vm::{LinearMemory, VMMemory, VMTable, VMTableDefinition};
 
-use piecrust_uplink::{ContractId, Event, EventTarget, ARGBUF_LEN};
+use piecrust_uplink::{ContractId, Event, ARGBUF_LEN};
 
 use crate::contract::WrappedContract;
 use crate::imports::DefaultImports;
@@ -80,7 +80,7 @@ impl Env {
 
     pub fn emit(&mut self, topic: String, data: Vec<u8>) {
         let event = Event {
-            target: EventTarget::Contract(self.self_id),
+            source: self.self_id,
             topic,
             data,
         };
