@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Add support for the `feed` import [#243]
 - Add `Error::Infallible` variant
 - Add `Error::MissingHostData` variant
 - Add `Error::MissingHostQuery` variant
@@ -151,6 +152,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [#234]: https://github.com/dusk-network/piecrust/pull/234
 
 <!-- ISSUES -->
+[#243]: https://github.com/dusk-network/piecrust/issues/243
 [#222]: https://github.com/dusk-network/piecrust/issues/222
 [#218]: https://github.com/dusk-network/piecrust/issues/218
 [#216]: https://github.com/dusk-network/piecrust/issues/216
