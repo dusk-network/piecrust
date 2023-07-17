@@ -19,9 +19,8 @@
 //! Contract execution is metered in terms of `points`. The limit for the number
 //! of points used in a `call` or `deploy` is passed in their respective
 //! function signatures. If the limit is exceeded during the call an error will
-//! be returned. To learn the number of points spent after a successful call use
-//! [`spent`]. To learn more about the compiler middleware used to achieve this,
-//! please refer to the relevant [wasmer docs].
+//! be returned. To learn more about the compiler middleware used to achieve
+//! this, please refer to the relevant [wasmer docs].
 //!
 //! # State Representation and Session/Commit Mechanism
 //!
@@ -101,7 +100,6 @@
 //! [`call`]: Session::call
 //! [`deploy`]: Session::deploy
 //! [`commit`]: Session::commit
-//! [`spent`]: Session::spent
 //! [wasmer docs]: wasmer_middlewares::metering
 //! [`deletions`]: VM::delete_commit
 //! [`squashes`]: VM::squash_commit

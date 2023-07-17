@@ -284,16 +284,11 @@ impl Session {
     /// the state. They are also metered, and will execute with the given
     /// `points_limit`.
     ///
-    /// To know how many points a call spent after execution use the [`spent`]
-    /// function.
-    ///
     /// # Errors
     /// The call may error during execution for a wide array of reasons, the
     /// most common ones being running against the point limit and a contract
     /// panic. Calling the 'init' method is not allowed except for when
     /// called from the deploy method.
-    ///
-    /// [`spent`]: Session::spent
     pub fn call<A, R>(
         &mut self,
         contract: ContractId,
