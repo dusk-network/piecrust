@@ -41,10 +41,10 @@ pub(crate) use arg_buf::with_arg_buf;
 
 mod ext {
     extern "C" {
-        pub(crate) fn hq(name: *const u8, name_len: u32, arg_len: u32) -> u32;
-        pub(crate) fn hd(name: *const u8, name_len: u32) -> u32;
+        pub fn hq(name: *const u8, name_len: u32, arg_len: u32) -> u32;
+        pub fn hd(name: *const u8, name_len: u32) -> u32;
 
-        pub(crate) fn c(
+        pub fn c(
             contract_id: *const u8,
             fn_name: *const u8,
             fn_name_len: u32,
@@ -52,12 +52,12 @@ mod ext {
             points_limit: u64,
         ) -> i32;
 
-        pub(crate) fn caller();
-        pub(crate) fn emit(topic: *const u8, topic_len: u32, arg_len: u32);
-        pub(crate) fn limit() -> u64;
-        pub(crate) fn spent() -> u64;
-        pub(crate) fn owner() -> u32;
-        pub(crate) fn self_id() -> u32;
+        pub fn caller();
+        pub fn emit(topic: *const u8, topic_len: u32, arg_len: u32);
+        pub fn limit() -> u64;
+        pub fn spent() -> u64;
+        pub fn owner() -> u32;
+        pub fn self_id() -> u32;
     }
 }
 
