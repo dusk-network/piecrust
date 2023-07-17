@@ -10,7 +10,7 @@ use std::borrow::Cow;
 use std::collections::btree_map::Entry;
 use std::collections::BTreeMap;
 use std::mem;
-use std::sync::Arc;
+use std::sync::{mpsc, Arc};
 
 use bytecheck::CheckBytes;
 use piecrust_uplink::{ContractId, Event, ARGBUF_LEN, SCRATCH_BUF_BYTES};
@@ -90,7 +90,6 @@ struct SessionInner {
     call_stack: CallStack,
     instance_map: BTreeMap<ContractId, (*mut WrappedInstance, u64)>,
     debug: Vec<String>,
-    events: Vec<Event>,
     data: SessionData,
 
     contract_session: ContractSession,
@@ -98,6 +97,9 @@ struct SessionInner {
 
     call_history: Vec<CallOrDeploy>,
     buffer: Vec<u8>,
+
+    feeder: Option<mpsc::Sender<Vec<u8>>>,
+    events: Vec<Event>,
 
     call_count: usize,
     icc_count: usize, // inter-contract call - 0 is the main call
@@ -117,12 +119,13 @@ impl Session {
             call_stack: CallStack::new(),
             instance_map: BTreeMap::new(),
             debug: vec![],
-            events: vec![],
             data,
             contract_session,
             host_queries,
             call_history: vec![],
             buffer: vec![0; WASM_PAGE_SIZE],
+            feeder: None,
+            events: vec![],
             call_count: 0,
             icc_count: 0,
             icc_height: 0,
@@ -281,16 +284,11 @@ impl Session {
     /// the state. They are also metered, and will execute with the given
     /// `points_limit`.
     ///
-    /// To know how many points a call spent after execution use the [`spent`]
-    /// function.
-    ///
     /// # Errors
     /// The call may error during execution for a wide array of reasons, the
     /// most common ones being running against the point limit and a contract
     /// panic. Calling the 'init' method is not allowed except for when
     /// called from the deploy method.
-    ///
-    /// [`spent`]: Session::spent
     pub fn call<A, R>(
         &mut self,
         contract: ContractId,
@@ -362,6 +360,53 @@ impl Session {
         })
     }
 
+    /// Execute a *feeder* call on the current state of this session.
+    ///
+    /// Feeder calls are used to have the contract be able to report larger
+    /// amounts of data to the host via the channel included in this call.
+    ///
+    /// These calls are always performed with the maximum amount of points,
+    /// since the contracts may spend quite a large amount in an effort to
+    /// report data.
+    pub fn feeder_call<A, R>(
+        &mut self,
+        contract: ContractId,
+        fn_name: &str,
+        fn_arg: &A,
+        feeder: mpsc::Sender<Vec<u8>>,
+    ) -> Result<CallReceipt<R>, Error>
+    where
+        A: for<'b> Serialize<StandardBufSerializer<'b>>,
+        R: Archive,
+        R::Archived: Deserialize<R, Infallible>
+            + for<'b> CheckBytes<DefaultValidator<'b>>,
+    {
+        self.inner.feeder = Some(feeder);
+        let r = self.call(contract, fn_name, fn_arg, u64::MAX);
+        self.inner.feeder = None;
+        r
+    }
+
+    /// Execute a raw *feeder* call on the current state of this session.
+    ///
+    /// See [`feeder_call`] and [`call_raw`] for more information of this type
+    /// of call.
+    ///
+    /// [`feeder_call`]: [`Session::feeder_call`]
+    /// [`call_raw`]: [`Session::call_raw`]
+    pub fn feeder_call_raw<V: Into<Vec<u8>>>(
+        &mut self,
+        contract: ContractId,
+        fn_name: &str,
+        fn_arg: V,
+        feeder: mpsc::Sender<Vec<u8>>,
+    ) -> Result<CallReceipt<Vec<u8>>, Error> {
+        self.inner.feeder = Some(feeder);
+        let r = self.call_raw(contract, fn_name, fn_arg, u64::MAX);
+        self.inner.feeder = None;
+        r
+    }
+
     pub fn initialize(
         &mut self,
         contract: ContractId,
@@ -429,6 +474,11 @@ impl Session {
 
     pub(crate) fn push_event(&mut self, event: Event) {
         self.inner.events.push(event);
+    }
+
+    pub(crate) fn push_feed(&mut self, data: Vec<u8>) -> Result<(), Error> {
+        let feed = self.inner.feeder.as_ref().ok_or(Error::MissingFeed)?;
+        feed.send(data).map_err(Error::FeedPulled)
     }
 
     fn new_instance(
@@ -765,6 +815,9 @@ impl Session {
 
 /// The receipt given for a call execution using one of either [`call`] or
 /// [`call_raw`].
+///
+/// [`call`]: [`Session::call`]
+/// [`call_raw`]: [`Session::call_raw`]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CallReceipt<T> {
     /// The amount of points spent in the execution of the call.

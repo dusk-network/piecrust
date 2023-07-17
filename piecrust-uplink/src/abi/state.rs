@@ -41,10 +41,10 @@ pub(crate) use arg_buf::with_arg_buf;
 
 mod ext {
     extern "C" {
-        pub(crate) fn hq(name: *const u8, name_len: u32, arg_len: u32) -> u32;
-        pub(crate) fn hd(name: *const u8, name_len: u32) -> u32;
+        pub fn hq(name: *const u8, name_len: u32, arg_len: u32) -> u32;
+        pub fn hd(name: *const u8, name_len: u32) -> u32;
 
-        pub(crate) fn c(
+        pub fn c(
             contract_id: *const u8,
             fn_name: *const u8,
             fn_name_len: u32,
@@ -52,12 +52,14 @@ mod ext {
             points_limit: u64,
         ) -> i32;
 
-        pub(crate) fn caller();
-        pub(crate) fn emit(topic: *const u8, topic_len: u32, arg_len: u32);
-        pub(crate) fn limit() -> u64;
-        pub(crate) fn spent() -> u64;
-        pub(crate) fn owner() -> u32;
-        pub(crate) fn self_id() -> u32;
+        pub fn emit(topic: *const u8, topic_len: u32, arg_len: u32);
+        pub fn feed(arg_len: u32);
+
+        pub fn caller();
+        pub fn limit() -> u64;
+        pub fn spent() -> u64;
+        pub fn owner() -> u32;
+        pub fn self_id() -> u32;
     }
 }
 
@@ -293,5 +295,28 @@ where
         let topic_len = topic.len() as u32;
 
         unsafe { ext::emit(topic_ptr, topic_len, arg_len) }
+    });
+}
+
+/// Feeds the host with data.
+///
+/// This is only allowed to be called in the context of a `feed_call`, and
+/// will error out otherwise. It is meant for contracts to be able to report
+/// large amounts of data to the host, in the span of a single call.
+pub fn feed<D>(data: D)
+where
+    for<'a> D: Serialize<StandardBufSerializer<'a>>,
+{
+    with_arg_buf(|buf| {
+        let mut sbuf = [0u8; SCRATCH_BUF_BYTES];
+        let scratch = BufferScratch::new(&mut sbuf);
+        let ser = BufferSerializer::new(buf);
+        let mut composite =
+            CompositeSerializer::new(ser, scratch, rkyv::Infallible);
+
+        composite.serialize_value(&data).unwrap();
+        let arg_len = composite.pos() as u32;
+
+        unsafe { ext::feed(arg_len) }
     });
 }

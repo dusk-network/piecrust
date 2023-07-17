@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Add `feed` extern [#243]
+
+### Changed
+
+- Rename `Event::target` to `Event::source` [#243]
+
+### Removed
+
+- Remove `EventTarget` struct [#243]
+
 ## [0.6.1] - 2023-07-03
 
 ### Fixed
@@ -83,6 +95,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - First `piecrust-uplink` release
 
 <!-- ISSUES -->
+[#243]: https://github.com/dusk-network/piecrust/issues/243
 [#222]: https://github.com/dusk-network/piecrust/issues/222
 [#216]: https://github.com/dusk-network/piecrust/issues/216
 [#209]: https://github.com/dusk-network/piecrust/issues/209

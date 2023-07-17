@@ -27,6 +27,7 @@ impl DefaultImports {
                 "hq" => Function::new_typed_with_env(store, &fenv, hq),
                 "hd" => Function::new_typed_with_env(store, &fenv, hd),
                 "emit" => Function::new_typed_with_env(store, &fenv, emit),
+                "feed" => Function::new_typed_with_env(store, &fenv, feed),
                 "limit" => Function::new_typed_with_env(store, &fenv, limit),
                 "spent" => Function::new_typed_with_env(store, &fenv, spent),
                 "owner" => Function::new_typed_with_env(store, &fenv, owner),
@@ -214,6 +215,18 @@ fn emit(
     env.emit(topic, data);
 
     Ok(())
+}
+
+fn feed(mut fenv: FunctionEnvMut<Env>, arg_len: u32) -> Result<(), Error> {
+    let env = fenv.data_mut();
+    let instance = env.self_instance();
+
+    let data = instance.with_arg_buffer(|buf| {
+        let arg_len = arg_len as usize;
+        Vec::from(&buf[..arg_len])
+    });
+
+    env.push_feed(data)
 }
 
 #[cfg(feature = "debug")]

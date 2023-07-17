@@ -6,7 +6,7 @@
 
 use std::borrow::Cow;
 use std::convert::Infallible;
-use std::sync::Arc;
+use std::sync::{mpsc, Arc};
 use thiserror::Error;
 
 use piecrust_uplink::{ContractError, ContractId};
@@ -38,6 +38,8 @@ pub enum Error {
     #[error(transparent)]
     ExportError(Arc<wasmer::ExportError>),
     #[error(transparent)]
+    FeedPulled(mpsc::SendError<Vec<u8>>),
+    #[error(transparent)]
     Infallible(std::convert::Infallible),
     #[error("InitalizationError: {0}")]
     InitalizationError(Cow<'static, str>),
@@ -45,6 +47,8 @@ pub enum Error {
     InstantiationError(Arc<wasmer::InstantiationError>),
     #[error(transparent)]
     MemorySetupError(Arc<std::io::Error>),
+    #[error("Missing feed")]
+    MissingFeed,
     #[error("Missing host data: {0}")]
     MissingHostData(String),
     #[error("Missing host query: {0}")]
