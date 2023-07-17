@@ -18,33 +18,6 @@ use rkyv::{
 
 use crate::SCRATCH_BUF_BYTES;
 
-/// The target of an event.
-///
-/// Events emitted by contracts are always of the [`Contract`] variant.
-///
-/// [`Contract`]: [`EventTarget::Contract`]
-#[derive(
-    Debug,
-    Clone,
-    PartialEq,
-    Eq,
-    PartialOrd,
-    Ord,
-    Hash,
-    Archive,
-    Serialize,
-    Deserialize,
-)]
-#[archive_attr(derive(CheckBytes))]
-pub enum EventTarget {
-    /// The event targets a contract.
-    Contract(ContractId),
-    /// The event targets the host machine.
-    Host(String),
-    /// The event is a debug event.
-    Debugger(String),
-}
-
 #[derive(
     Debug,
     Clone,
@@ -59,7 +32,7 @@ pub enum EventTarget {
 )]
 #[archive_attr(derive(CheckBytes))]
 pub struct Event {
-    pub target: EventTarget,
+    pub source: ContractId,
     pub topic: String,
     pub data: Vec<u8>,
 }

@@ -11,6 +11,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Add `feed` extern [#243]
 
+### Changed
+
+- Rename `Event::target` to `Event::source` [#243]
+
+### Removed
+
+- Remove `EventTarget` struct [#243]
+
 ## [0.6.1] - 2023-07-03
 
 ### Fixed
