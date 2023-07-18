@@ -666,7 +666,7 @@ fn delete_commit_dir<P: AsRef<Path>>(
 fn squash_commit<P: AsRef<Path>>(
     root_dir: P,
     root: Hash,
-    commit: &mut Commit,
+    commit: &Commit,
 ) -> io::Result<()> {
     let root_dir = root_dir.as_ref();
 
