@@ -15,6 +15,7 @@ mod state;
 pub use state::*;
 
 #[cfg(feature = "debug")]
+#[cfg_attr(docsrs, doc(cfg(feature = "debug")))]
 mod debug;
 #[cfg(feature = "debug")]
 pub use debug::*;

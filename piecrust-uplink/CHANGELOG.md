@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Add more comprehensive documentation of the whole crate [#189]&[#190]
 - Add `feed` extern [#243]
 
 ### Changed
@@ -103,6 +104,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [#201]: https://github.com/dusk-network/piecrust/issues/201
 [#199]: https://github.com/dusk-network/piecrust/issues/199
 [#192]: https://github.com/dusk-network/piecrust/issues/192
+[#190]: https://github.com/dusk-network/piecrust/issues/190
+[#189]: https://github.com/dusk-network/piecrust/issues/189
 [#174]: https://github.com/dusk-network/piecrust/issues/174
 [#139]: https://github.com/dusk-network/piecrust/issues/139
 [#136]: https://github.com/dusk-network/piecrust/issues/136

@@ -18,6 +18,7 @@ use rkyv::{
 
 use crate::SCRATCH_BUF_BYTES;
 
+/// And event emitted by a contract.
 #[derive(
     Debug,
     Clone,

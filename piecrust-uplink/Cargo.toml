@@ -20,3 +20,7 @@ dlmalloc = { version = "0.2", optional = true, features = ["global"] }
 [features]
 abi = []
 debug = []
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]

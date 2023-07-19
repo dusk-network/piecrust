@@ -63,6 +63,7 @@ mod ext {
     }
 }
 
+/// Execute some code that the host provides under the given name.
 pub fn host_query<A, Ret>(name: &str, arg: A) -> Ret
 where
     A: for<'a> Serialize<StandardBufSerializer<'a>>,
@@ -268,10 +269,12 @@ pub fn caller() -> ContractId {
     })
 }
 
+/// Returns the points limit with which the contact was called.
 pub fn limit() -> u64 {
     unsafe { ext::limit() }
 }
 
+/// Returns the amount of points the contact has spent.
 pub fn spent() -> u64 {
     unsafe { ext::spent() }
 }
