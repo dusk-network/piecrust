@@ -4,7 +4,7 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-//! Piecrust VM for WASM smart-contract execution.
+//! Piecrust VM for WASM smart contract execution.
 //!
 //! A [`VM`] is instantiated by calling [`VM::new`] using a directory for
 //! storage of commits.
