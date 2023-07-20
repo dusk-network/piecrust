@@ -47,6 +47,7 @@ impl DefaultImports {
 }
 
 fn caller(env: FunctionEnvMut<Env>) {
+    println!("caller");
     let env = env.data();
 
     let mod_id = env
@@ -67,6 +68,7 @@ fn c(
     arg_len: u32,
     points_limit: u64,
 ) -> Result<i32, Error> {
+    println!("c");
     let env = fenv.data_mut();
 
     let instance = env.self_instance();
@@ -144,6 +146,7 @@ fn hq(
     name_len: u32,
     arg_len: u32,
 ) -> Result<u32, Error> {
+    println!("hq");
     let env = fenv.data_mut();
 
     let instance = env.self_instance();
@@ -167,6 +170,7 @@ fn hd(
     name_ofs: i32,
     name_len: u32,
 ) -> Result<u32, Error> {
+    println!("hd");
     let env = fenv.data_mut();
 
     let instance = env.self_instance();
@@ -195,6 +199,7 @@ fn emit(
     topic_len: u32,
     arg_len: u32,
 ) -> Result<(), Error> {
+    println!("emit");
     let env = fenv.data_mut();
     let instance = env.self_instance();
 
@@ -218,6 +223,7 @@ fn emit(
 }
 
 fn feed(mut fenv: FunctionEnvMut<Env>, arg_len: u32) -> Result<(), Error> {
+    println!("feed");
     let env = fenv.data_mut();
     let instance = env.self_instance();
 
@@ -249,10 +255,12 @@ fn hdebug(mut fenv: FunctionEnvMut<Env>, msg_len: u32) -> Result<(), Error> {
 }
 
 fn limit(fenv: FunctionEnvMut<Env>) -> u64 {
+    println!("limit");
     fenv.data().limit()
 }
 
 fn spent(fenv: FunctionEnvMut<Env>) -> u64 {
+    println!("spent");
     let env = fenv.data();
     let instance = env.self_instance();
 
@@ -265,6 +273,7 @@ fn spent(fenv: FunctionEnvMut<Env>) -> u64 {
 }
 
 fn owner(fenv: FunctionEnvMut<Env>) -> u32 {
+    println!("owner");
     let env = fenv.data();
     let self_id = env.self_contract_id();
     let contract_metadata = env
@@ -278,6 +287,7 @@ fn owner(fenv: FunctionEnvMut<Env>) -> u32 {
 }
 
 fn self_id(fenv: FunctionEnvMut<Env>) -> u32 {
+    println!("self_id");
     let env = fenv.data();
     let self_id = env.self_contract_id();
     let contract_metadata = env
