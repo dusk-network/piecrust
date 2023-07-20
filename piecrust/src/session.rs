@@ -143,11 +143,17 @@ impl Session {
         let inner = self.inner as *const SessionInner;
         let inner = inner as *mut SessionInner;
         // SAFETY: we explicitly allow aliasing of the session for internal
-        // use.
-        Self {
+        // use
+        println!("Dereferencing {:p}", inner);
+
+        let hello = Self {
             inner: unsafe { &mut *inner },
             original: false,
-        }
+        };
+
+        println!("Dereferencing success");
+
+        hello
     }
 
     /// Deploy a contract, returning its [`ContractId`]. The ID is computed

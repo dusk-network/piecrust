@@ -8,7 +8,7 @@ use std::fs::{File, OpenOptions};
 use std::io::Write;
 use std::ops::{Deref, DerefMut};
 use std::os::fd::AsRawFd;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::ptr;
 use std::ptr::NonNull;
 use std::{io, slice};
