@@ -95,6 +95,7 @@ fn c(
 
     check_memory(instance, mod_id_ofs, 32)?;
     check_memory(instance, name_ofs, name_len)?;
+    // TODO: CHECK ARG_LEN
 
     let caller_remaining = instance
         .get_remaining_points()
@@ -174,6 +175,7 @@ fn hq(
     let instance = env.self_instance();
 
     check_memory(instance, name_ofs, name_len)?;
+    // TODO: CHECK ARG_LEN
 
     let name_ofs = name_ofs as usize;
     let name_len = name_len as usize;
@@ -184,20 +186,23 @@ fn hq(
             .map(ToOwned::to_owned)
     })?;
 
-    instance
+    let ret = instance
         .with_arg_buffer(|buf| env.host_query(&name, buf, arg_len))
-        .ok_or(Error::MissingHostQuery(name))
+        .ok_or(Error::MissingHostQuery(name));
+    println!("hq done");
+    ret
 }
 
 fn hd(
     mut fenv: FunctionEnvMut<Env>,
-    name_ofs: i32,
+    name_ofs: u32,
     name_len: u32,
 ) -> Result<u32, Error> {
     println!("hd");
     let env = fenv.data_mut();
 
     let instance = env.self_instance();
+    check_memory(instance, name_ofs, name_len)?;
 
     let name_ofs = name_ofs as usize;
     let name_len = name_len as usize;
@@ -219,13 +224,15 @@ fn hd(
 
 fn emit(
     mut fenv: FunctionEnvMut<Env>,
-    topic_ofs: i32,
+    topic_ofs: u32,
     topic_len: u32,
     arg_len: u32,
 ) -> Result<(), Error> {
     println!("emit");
     let env = fenv.data_mut();
     let instance = env.self_instance();
+    check_memory(instance, topic_ofs, topic_len)?;
+    // TODO: CHECK ARG_LEN
 
     let data = instance.with_arg_buffer(|buf| {
         let arg_len = arg_len as usize;
@@ -250,6 +257,7 @@ fn feed(mut fenv: FunctionEnvMut<Env>, arg_len: u32) -> Result<(), Error> {
     println!("feed");
     let env = fenv.data_mut();
     let instance = env.self_instance();
+    // TODO: CHECK ARG_LEN
 
     let data = instance.with_arg_buffer(|buf| {
         let arg_len = arg_len as usize;
