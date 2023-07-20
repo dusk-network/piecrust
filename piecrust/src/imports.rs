@@ -6,7 +6,7 @@
 
 use wasmer::{imports, Function, FunctionEnv, FunctionEnvMut};
 
-use crate::Error;
+use crate::{instance::WrappedInstance, Error};
 use piecrust_uplink::{ContractError, ContractId, ARGBUF_LEN};
 
 use crate::instance::Env;
@@ -60,19 +60,41 @@ fn caller(env: FunctionEnvMut<Env>) {
     })
 }
 
+fn check_memory(
+    instance: &WrappedInstance,
+    offset: u32,
+    len: u32,
+) -> Result<(), Error> {
+    let offset = offset as u32;
+    let len = len as u32;
+    let current_length = instance.with_memory(|f| f.len() as u32);
+    if current_length <= (offset + len) {
+        return Err(Error::InvalidMemoryPtr {
+            current_length,
+            offset,
+            len,
+        });
+    }
+    Ok(())
+}
+
 fn c(
     mut fenv: FunctionEnvMut<Env>,
-    mod_id_ofs: i32,
-    name_ofs: i32,
+    mod_id_ofs: u32,
+    name_ofs: u32,
     name_len: u32,
     arg_len: u32,
     points_limit: u64,
 ) -> Result<i32, Error> {
     println!("c");
+
     let env = fenv.data_mut();
 
     let instance = env.self_instance();
     let argbuf_ofs = instance.arg_buffer_offset();
+
+    check_memory(instance, mod_id_ofs, 32)?;
+    check_memory(instance, name_ofs, name_len)?;
 
     let caller_remaining = instance
         .get_remaining_points()
@@ -142,7 +164,7 @@ fn c(
 
 fn hq(
     mut fenv: FunctionEnvMut<Env>,
-    name_ofs: i32,
+    name_ofs: u32,
     name_len: u32,
     arg_len: u32,
 ) -> Result<u32, Error> {
@@ -150,6 +172,8 @@ fn hq(
     let env = fenv.data_mut();
 
     let instance = env.self_instance();
+
+    check_memory(instance, name_ofs, name_len)?;
 
     let name_ofs = name_ofs as usize;
     let name_len = name_len as usize;

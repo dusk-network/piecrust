@@ -47,6 +47,12 @@ pub enum Error {
     InstantiationError(Arc<wasmer::InstantiationError>),
     #[error(transparent)]
     MemorySetupError(Arc<std::io::Error>),
+    #[error("Invalid Memory Access: length {current_length} - offset {offset} - len {len}")]
+    InvalidMemoryPtr {
+        current_length: u32,
+        offset: u32,
+        len: u32
+    },
     #[error("Missing feed")]
     MissingFeed,
     #[error("Missing host data: {0}")]
