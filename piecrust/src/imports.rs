@@ -188,8 +188,8 @@ fn hq(
 
     let ret = instance
         .with_arg_buffer(|buf| env.host_query(&name, buf, arg_len))
-        .ok_or(Error::MissingHostQuery(name));
-    println!("hq done");
+        .ok_or(Error::MissingHostQuery(name.clone()));
+    println!("hq {name} done");
     ret
 }
 
