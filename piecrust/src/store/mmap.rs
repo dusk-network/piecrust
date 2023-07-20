@@ -51,11 +51,17 @@ impl MmapInner {
         flags: libc::c_int,
         fd: libc::c_int,
     ) -> io::Result<Self> {
-        Ok(Self {
+        println!("map [{addr:p}, {len}, {mmap_len}, {prot}, {flags}, {fd}]");
+
+        let mmap = Self {
             ptr: Self::_mmap(addr, mmap_len, prot, flags, fd)?,
             len,
             mmap_len,
-        })
+        };
+
+        println!("map success");
+
+        Ok(mmap)
     }
 
     /// Remap the mmap - meaning use the same address.
@@ -67,8 +73,15 @@ impl MmapInner {
         flags: libc::c_int,
         fd: libc::c_int,
     ) -> io::Result<()> {
+        println!(
+            "remap call [{:p}, {len}, {mmap_len}, {prot}, {flags}, {fd}]",
+            self.ptr
+        );
+
         self.ptr = Self::_mmap(self.ptr, mmap_len, prot, flags, fd)?;
         self.len = len;
+
+        println!("remap success");
 
         Ok(())
     }
