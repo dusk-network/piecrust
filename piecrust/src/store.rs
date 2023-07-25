@@ -10,7 +10,6 @@ mod bytecode;
 mod diff;
 mod memory;
 mod metadata;
-mod mmap;
 mod objectcode;
 mod session;
 mod tree;

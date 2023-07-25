@@ -10,7 +10,7 @@ use std::io::{Read, Write};
 use qbsdiff::bsdiff::Bsdiff;
 use qbsdiff::bspatch::Bspatch;
 
-use crate::store::mmap::MmapMut;
+use crate::store::memory::MemoryMmap;
 
 /// Compute the diff between an `old` and a `new` buffer, and write it to thee
 /// given writer. The length of new buffer is written first, in the form of a
@@ -34,7 +34,7 @@ pub fn diff<T: Write>(
 pub fn patch<T: Read>(
     old: &[u8],
     patch: &mut T,
-    mmap: &mut MmapMut,
+    mmap: &mut MemoryMmap,
 ) -> io::Result<u64> {
     let mut new_len_bytes = [0u8; 8];
 
