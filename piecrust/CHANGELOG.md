@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Change diffing algorithm to not delegate growth to `bsdiff`
 - Change memory growth algorithm to not require copying to temp file
 
 ### Fixed

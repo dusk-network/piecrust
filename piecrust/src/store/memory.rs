@@ -25,7 +25,6 @@ use libc::{
     off_t, MAP_ANONYMOUS, MAP_FAILED, MAP_FIXED, MAP_NORESERVE, MAP_PRIVATE,
     PROT_READ, PROT_WRITE,
 };
-use memmap2::Mmap;
 
 use crate::store::diff::patch;
 
@@ -64,19 +63,15 @@ impl Memory {
         path: P,
         diff_path: P,
     ) -> io::Result<Self> {
-        let mmap_old_file = File::open(&path)?;
-
-        let mmap_old = unsafe { Mmap::map(&mmap_old_file)? };
-        let mut mmap = MemoryMmap::map(path)?;
+        let mut mmap_old = Self::from_file(&path)?;
+        let mut mmap = Self::from_file(&path)?;
 
         let diff_file = File::open(diff_path)?;
         let mut decoder = DeflateDecoder::new(diff_file);
 
-        patch(&mmap_old, &mut decoder, &mut mmap)?;
+        patch(&mut mmap_old, &mut mmap, &mut decoder)?;
 
-        Ok(Self {
-            inner: Arc::new(RwLock::new(MemoryInner { mmap, init: true })),
-        })
+        Ok(mmap)
     }
 
     pub fn read(&self) -> MemoryReadGuard {

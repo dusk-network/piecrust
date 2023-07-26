@@ -588,7 +588,8 @@ fn write_commit_inner<P: AsRef<Path>>(
                             .join(&contract_hex)
                             .with_extension(DIFF_EXTENSION);
 
-                        let base_memory = Memory::from_file(base_memory_path)?;
+                        let mut base_memory =
+                            Memory::from_file(base_memory_path)?;
                         let memory_diff = File::create(memory_diff_path)?;
 
                         let mut encoder = DeflateEncoder::new(
@@ -597,8 +598,8 @@ fn write_commit_inner<P: AsRef<Path>>(
                         );
 
                         diff(
-                            &base_memory.read(),
-                            &store_data.memory.read(),
+                            &mut base_memory,
+                            &store_data.memory,
                             &mut encoder,
                         )?;
 
