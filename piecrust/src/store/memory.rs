@@ -63,13 +63,13 @@ impl Memory {
         path: P,
         diff_path: P,
     ) -> io::Result<Self> {
-        let mut mmap_old = Self::from_file(&path)?;
-        let mut mmap = Self::from_file(&path)?;
+        let mmap_old = Self::from_file(&path)?;
+        let mmap = Self::from_file(&path)?;
 
         let diff_file = File::open(diff_path)?;
         let mut decoder = DeflateDecoder::new(diff_file);
 
-        patch(&mut mmap_old, &mut mmap, &mut decoder)?;
+        patch(&mmap_old, &mmap, &mut decoder)?;
 
         Ok(mmap)
     }
@@ -333,9 +333,7 @@ impl MemoryMmap {
 
     /// Return the mmap as a mutable byte slice.
     pub fn as_bytes_mut(&mut self) -> &mut [u8] {
-        let ptr = self.ptr as *mut u8;
-        // The size of the guard page is subtracted to prevent access
-        unsafe { slice::from_raw_parts_mut(ptr, self.len) }
+        unsafe { slice::from_raw_parts_mut(self.ptr, self.len) }
     }
 }
 
