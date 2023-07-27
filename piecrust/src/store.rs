@@ -10,7 +10,6 @@ mod bytecode;
 mod diff;
 mod memory;
 mod metadata;
-mod mmap;
 mod objectcode;
 mod session;
 mod tree;
@@ -597,11 +596,7 @@ fn write_commit_inner<P: AsRef<Path>>(
                             Compression::default(),
                         );
 
-                        diff(
-                            &base_memory.read(),
-                            &store_data.memory.read(),
-                            &mut encoder,
-                        )?;
+                        diff(base_memory, &store_data.memory, &mut encoder)?;
 
                         diffs.insert(contract);
                     }

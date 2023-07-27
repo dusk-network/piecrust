@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Add `memmap2` dependency
+
+### Changed
+
+- Change diffing algorithm to not delegate growth to `bsdiff`
+- Change memory growth algorithm to not require copying to temp file
+
+### Fixed
+
+- Fix SIGBUS caused by improper memory growth
+
 ## [0.7.0] - 2023-07-19
 
 ### Added

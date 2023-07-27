@@ -4,12 +4,14 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
+use std::fs::File;
 use std::io;
 use std::path::Path;
 use std::sync::Arc;
 
+use memmap2::{Mmap, MmapOptions};
+
 use crate::contract::ContractMetadata;
-use crate::store::mmap::Mmap;
 
 /// Contract metadata pertaining to a given contract but maintained by the host.
 #[derive(Debug, Clone)]
@@ -23,7 +25,11 @@ impl Metadata {
         bytes: B,
         data: ContractMetadata,
     ) -> io::Result<Self> {
-        let mmap = Mmap::new(bytes)?;
+        let bytes = bytes.as_ref();
+
+        let mut mmap = MmapOptions::new().len(bytes.len()).map_anon()?;
+        mmap.copy_from_slice(bytes);
+        let mmap = mmap.make_read_only()?;
 
         Ok(Self {
             mmap: Arc::new(mmap),
@@ -32,8 +38,10 @@ impl Metadata {
     }
 
     pub(crate) fn from_file<P: AsRef<Path>>(path: P) -> io::Result<Self> {
-        let mmap = Mmap::map(path)?;
-        let data = rkyv::from_bytes(mmap.as_bytes()).map_err(|_| {
+        let file = File::open(path)?;
+
+        let mmap = unsafe { Mmap::map(&file)? };
+        let data = rkyv::from_bytes(&mmap).map_err(|_| {
             io::Error::new(
                 io::ErrorKind::InvalidData,
                 "contract metadata invalid in file",
