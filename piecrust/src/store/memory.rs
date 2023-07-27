@@ -187,7 +187,7 @@ impl From<Memory> for VMMemory {
 /// It consists of one large mmap that doesn't reserve swap space - see
 /// [MAP_NORESERVE]. The memory region mapped will always be the maximum
 /// possible, since virtual address space is cheap, but the writable area is
-/// controlled bu `len`.
+/// controlled by `len`.
 ///
 /// [MAP_NORESERVE]: https://www.man7.org/linux/man-pages/man2/mmap.2.html
 #[derive(Debug)]
