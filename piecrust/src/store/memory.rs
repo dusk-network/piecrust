@@ -232,7 +232,7 @@ impl MemoryMmap {
     /// [`grow_by`] is called.
     ///
     /// [`grow_by`]: MemoryMap::grow_by
-    pub fn new() -> io::Result<Self> {
+    fn new() -> io::Result<Self> {
         let len = MIN_MEM_SIZE;
 
         let ptr = mmap(
@@ -260,7 +260,7 @@ impl MemoryMmap {
     /// # Errors
     /// If the file already exists, and it has a length that is not a multiple
     /// of WASM_PAGE_SIZE, the function will error.
-    pub fn map<P: AsRef<Path>>(file: P) -> io::Result<Self> {
+    fn map<P: AsRef<Path>>(file: P) -> io::Result<Self> {
         let file = fs::OpenOptions::new()
             .create(true)
             .read(true)
