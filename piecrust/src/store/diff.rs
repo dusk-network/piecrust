@@ -22,7 +22,7 @@ use crate::store::memory::Memory;
 /// # Important
 /// The old memory should be discarded (dropped) after this operation.
 pub fn diff<T: Write>(
-    old: &Memory,
+    old: Memory,
     new: &Memory,
     writer: &mut T,
 ) -> io::Result<()> {
@@ -61,7 +61,7 @@ pub fn diff<T: Write>(
 /// # Important
 /// The old memory should be discarded (dropped) after this operation.
 pub fn patch<T: Read>(
-    old: &Memory,
+    old: Memory,
     new: &Memory,
     patch: &mut T,
 ) -> io::Result<()> {

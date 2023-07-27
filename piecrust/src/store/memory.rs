@@ -69,7 +69,7 @@ impl Memory {
         let diff_file = File::open(diff_path)?;
         let mut decoder = DeflateDecoder::new(diff_file);
 
-        patch(&mmap_old, &mmap, &mut decoder)?;
+        patch(mmap_old, &mmap, &mut decoder)?;
 
         Ok(mmap)
     }

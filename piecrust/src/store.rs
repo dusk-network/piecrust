@@ -596,7 +596,7 @@ fn write_commit_inner<P: AsRef<Path>>(
                             Compression::default(),
                         );
 
-                        diff(&base_memory, &store_data.memory, &mut encoder)?;
+                        diff(base_memory, &store_data.memory, &mut encoder)?;
 
                         diffs.insert(contract);
                     }
