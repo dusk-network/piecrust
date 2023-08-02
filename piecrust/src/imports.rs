@@ -7,9 +7,11 @@
 use wasmer::{imports, Function, FunctionEnv, FunctionEnvMut};
 
 use crate::Error;
-use piecrust_uplink::{ContractError, ContractId, ARGBUF_LEN};
+use piecrust_uplink::{
+    ContractError, ContractId, ARGBUF_LEN, CONTRACT_ID_BYTES,
+};
 
-use crate::instance::Env;
+use crate::instance::{Env, WrappedInstance};
 
 const POINT_PASS_PCT: u64 = 93;
 
@@ -46,6 +48,40 @@ impl DefaultImports {
     }
 }
 
+fn check_ptr(
+    instance: &WrappedInstance,
+    offset: u32,
+    len: u32,
+) -> Result<(), Error> {
+    let mem_len = instance.with_memory(|mem| mem.len());
+
+    let offset = offset as usize;
+    let len = len as usize;
+
+    if offset + len > mem_len {
+        return Err(Error::MemoryAccessOutOfBounds {
+            offset,
+            len,
+            mem_len,
+        });
+    }
+
+    Ok(())
+}
+
+fn check_arg(instance: &WrappedInstance, arg_len: u32) -> Result<(), Error> {
+    let arg_len = arg_len as usize;
+    if arg_len > ARGBUF_LEN {
+        return Err(Error::MemoryAccessOutOfBounds {
+            offset: instance.arg_buffer_offset(),
+            len: arg_len,
+            mem_len: instance.with_memory(|mem| mem.len()),
+        });
+    }
+
+    Ok(())
+}
+
 fn caller(env: FunctionEnvMut<Env>) {
     let env = env.data();
 
@@ -61,8 +97,8 @@ fn caller(env: FunctionEnvMut<Env>) {
 
 fn c(
     mut fenv: FunctionEnvMut<Env>,
-    mod_id_ofs: i32,
-    name_ofs: i32,
+    mod_id_ofs: u32,
+    name_ofs: u32,
     name_len: u32,
     arg_len: u32,
     points_limit: u64,
@@ -70,6 +106,11 @@ fn c(
     let env = fenv.data_mut();
 
     let instance = env.self_instance();
+
+    check_ptr(instance, mod_id_ofs, CONTRACT_ID_BYTES as u32)?;
+    check_ptr(instance, name_ofs, name_len)?;
+    check_arg(instance, arg_len)?;
+
     let argbuf_ofs = instance.arg_buffer_offset();
 
     let caller_remaining = instance
@@ -118,6 +159,7 @@ fn c(
 
             callee.write_argument(arg);
             let ret_len = callee.call(name, arg.len() as u32, callee_limit)?;
+            check_arg(callee, ret_len as u32)?;
 
             // copy back result
             callee.read_argument(&mut memory[argbuf_ofs..][..ret_len as usize]);
@@ -140,13 +182,16 @@ fn c(
 
 fn hq(
     mut fenv: FunctionEnvMut<Env>,
-    name_ofs: i32,
+    name_ofs: u32,
     name_len: u32,
     arg_len: u32,
 ) -> Result<u32, Error> {
     let env = fenv.data_mut();
 
     let instance = env.self_instance();
+
+    check_ptr(instance, name_ofs, arg_len)?;
+    check_arg(instance, arg_len)?;
 
     let name_ofs = name_ofs as usize;
     let name_len = name_len as usize;
@@ -164,12 +209,14 @@ fn hq(
 
 fn hd(
     mut fenv: FunctionEnvMut<Env>,
-    name_ofs: i32,
+    name_ofs: u32,
     name_len: u32,
 ) -> Result<u32, Error> {
     let env = fenv.data_mut();
 
     let instance = env.self_instance();
+
+    check_ptr(instance, name_ofs, name_len)?;
 
     let name_ofs = name_ofs as usize;
     let name_len = name_len as usize;
@@ -191,12 +238,15 @@ fn hd(
 
 fn emit(
     mut fenv: FunctionEnvMut<Env>,
-    topic_ofs: i32,
+    topic_ofs: u32,
     topic_len: u32,
     arg_len: u32,
 ) -> Result<(), Error> {
     let env = fenv.data_mut();
     let instance = env.self_instance();
+
+    check_ptr(instance, topic_ofs, topic_len)?;
+    check_arg(instance, arg_len)?;
 
     let data = instance.with_arg_buffer(|buf| {
         let arg_len = arg_len as usize;
@@ -221,6 +271,8 @@ fn feed(mut fenv: FunctionEnvMut<Env>, arg_len: u32) -> Result<(), Error> {
     let env = fenv.data_mut();
     let instance = env.self_instance();
 
+    check_arg(instance, arg_len)?;
+
     let data = instance.with_arg_buffer(|buf| {
         let arg_len = arg_len as usize;
         Vec::from(&buf[..arg_len])
@@ -232,8 +284,11 @@ fn feed(mut fenv: FunctionEnvMut<Env>, arg_len: u32) -> Result<(), Error> {
 #[cfg(feature = "debug")]
 fn hdebug(mut fenv: FunctionEnvMut<Env>, msg_len: u32) -> Result<(), Error> {
     let env = fenv.data_mut();
+    let instance = env.self_instance();
 
-    env.self_instance().with_arg_buffer(|buf| {
+    check_arg(instance, msg_len)?;
+
+    instance.with_arg_buffer(|buf| {
         let slice = &buf[..msg_len as usize];
 
         let msg = match std::str::from_utf8(slice) {
