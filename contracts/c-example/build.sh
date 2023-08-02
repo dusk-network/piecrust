@@ -8,5 +8,6 @@ clang -nostdlib -Os \
    -Wl,--no-entry \
    -Wl,--export=A \
    -Wl,--export=increment_and_read \
+   -Wl,--export=out_of_bounds \
    "$BASEDIR/contract.c" \
    -o "$BASEDIR/../../target/wasm32-unknown-unknown/release/c-example.wasm"

@@ -18,6 +18,11 @@ extern uint32_t c(
     uint64_t points_limit
 );
 
+extern uint32_t hd(
+    uint8_t *name,
+    uint32_t name_len
+);
+
 inline static void memcpy(void *target, void *source, uint32_t len) {
     uint8_t *t = (uint8_t*) target;
     uint8_t *s = (uint8_t*) source;
@@ -77,4 +82,11 @@ int32_t increment_and_read(int32_t _arg_len) {
     int64_t i = read_counter(counter_id);
     write_integer(i);
     return 8;
+}
+
+// Calls the "hd" extern with an (almost) certainly out of bounds pointer, in an
+// effort to trigger an error.
+int32_t out_of_bounds(int32_t _arg_len) {
+    hd((uint8_t*)1000000, 2000000);
+    return 0;
 }
