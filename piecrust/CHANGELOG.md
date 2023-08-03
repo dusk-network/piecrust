@@ -9,15 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Add `Error::MemoryAccessOutOfBounds` [#249]
 - Add `memmap2` dependency
 
 ### Changed
 
+- Change imports 
 - Change diffing algorithm to not delegate growth to `bsdiff`
 - Change memory growth algorithm to not require copying to temp file
 
 ### Fixed
 
+- Fix  behavior of imports on  out of bounds pointers [#249]
 - Fix SIGBUS caused by improper memory growth
 
 ## [0.7.0] - 2023-07-19
@@ -167,6 +170,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [#234]: https://github.com/dusk-network/piecrust/pull/234
 
 <!-- ISSUES -->
+[#249]: https://github.com/dusk-network/piecrust/issues/249
 [#243]: https://github.com/dusk-network/piecrust/issues/243
 [#222]: https://github.com/dusk-network/piecrust/issues/222
 [#218]: https://github.com/dusk-network/piecrust/issues/218

@@ -47,6 +47,12 @@ pub enum Error {
     InstantiationError(Arc<wasmer::InstantiationError>),
     #[error(transparent)]
     MemorySetupError(Arc<std::io::Error>),
+    #[error("Memory access out of bounds: offset {offset}, length {len}, memory length {mem_len}")]
+    MemoryAccessOutOfBounds {
+        offset: usize,
+        len: usize,
+        mem_len: usize,
+    },
     #[error("Missing feed")]
     MissingFeed,
     #[error("Missing host data: {0}")]
