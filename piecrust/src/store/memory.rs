@@ -29,7 +29,7 @@ use libc::{
 use crate::store::diff::patch;
 
 const WASM_MIN_PAGES: usize = 4;
-const MIN_MEM_SIZE: usize = WASM_PAGE_SIZE * WASM_MIN_PAGES;
+pub const MIN_MEM_SIZE: usize = WASM_PAGE_SIZE * WASM_MIN_PAGES;
 const MAX_MEM_SIZE: usize = WASM_PAGE_SIZE * WASM_MAX_PAGES as usize;
 
 #[derive(Debug)]

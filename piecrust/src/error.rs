@@ -45,6 +45,10 @@ pub enum Error {
     InitalizationError(Cow<'static, str>),
     #[error(transparent)]
     InstantiationError(Arc<wasmer::InstantiationError>),
+    #[error("Invalid global")]
+    InvalidArgumentBuffer,
+    #[error("Invalid memory")]
+    InvalidFunctionSignature(String),
     #[error(transparent)]
     MemorySetupError(Arc<std::io::Error>),
     #[error("Memory access out of bounds: offset {offset}, length {len}, memory length {mem_len}")]
@@ -73,6 +77,8 @@ pub enum Error {
     SerializeError(Arc<wasmer::SerializeError>),
     #[error("Session error: {0}")]
     SessionError(Cow<'static, str>),
+    #[error("Too many memories: {0}")]
+    TooManyMemories(usize),
     #[error("WASMER TRAP")]
     Trap(Arc<wasmer_vm::Trap>),
     #[error(transparent)]
