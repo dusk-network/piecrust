@@ -26,7 +26,7 @@ use piecrust_uplink::{ContractId, Event, ARGBUF_LEN};
 use crate::contract::WrappedContract;
 use crate::imports::DefaultImports;
 use crate::session::Session;
-use crate::store::Memory;
+use crate::store::{Memory, MIN_MEM_SIZE};
 use crate::Error;
 
 pub struct WrappedInstance {
@@ -150,11 +150,35 @@ impl WrappedInstance {
 
         let instance = wasmer::Instance::new(&mut store, &module, &imports)?;
 
+        // Ensure there is a global exported named `A`, whose value is in the
+        // first few pages of memory.
         let arg_buf_ofs =
             match instance.exports.get_global("A")?.get(&mut store) {
                 wasmer::Value::I32(i) => i as usize,
-                _ => todo!("Missing `A` Argbuf export"),
+                _ => return Err(Error::InvalidArgumentBuffer),
             };
+        if arg_buf_ofs > MIN_MEM_SIZE - ARGBUF_LEN {
+            return Err(Error::InvalidArgumentBuffer);
+        }
+
+        // Ensure there is at most one memory exported, and that it is called
+        // "memory".
+        let n_memories = instance.exports.iter().memories().count();
+        if n_memories > 1 {
+            return Err(Error::TooManyMemories(n_memories));
+        }
+        let _ = instance.exports.get_memory("memory")?;
+
+        // Ensure that every exported function has a signature that matches the
+        // calling convention `F: I32 -> I32`.
+        for (fname, func) in instance.exports.iter().functions() {
+            let func_ty = func.ty(&store);
+            if func_ty.params() != [wasmer::Type::I32]
+                || func_ty.results() != [wasmer::Type::I32]
+            {
+                return Err(Error::InvalidFunctionSignature(fname.clone()));
+            }
+        }
 
         let wrapped = WrappedInstance {
             store,

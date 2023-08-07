@@ -26,7 +26,7 @@ use flate2::Compression;
 
 pub use bytecode::Bytecode;
 use diff::diff;
-pub use memory::Memory;
+pub use memory::{Memory, MIN_MEM_SIZE};
 pub use metadata::Metadata;
 pub use objectcode::Objectcode;
 use piecrust_uplink::ContractId;
