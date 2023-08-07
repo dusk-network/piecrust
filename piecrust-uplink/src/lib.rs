@@ -59,6 +59,7 @@
 //! [contracts/]: https://github.com/dusk-network/piecrust/tree/main/contracts
 //! [externs]: https://github.com/dusk-network/piecrust/blob/c2dadaa8dec210bdbbc72619a687eb8c6f693877/piecrust-uplink/src/abi/state.rs#L42-L64
 
+#![allow(internal_features)]
 #![feature(lang_items)]
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![cfg_attr(feature = "debug", feature(panic_info_message))]
