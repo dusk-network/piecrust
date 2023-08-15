@@ -270,7 +270,7 @@ impl MmapInner {
         })
     }
 
-    pub unsafe fn with_files<I>(files_and_offsets: I) -> io::Result<Self>
+    unsafe fn with_files<I>(files_and_offsets: I) -> io::Result<Self>
     where
         I: IntoIterator<Item = io::Result<(File, usize)>>,
     {
