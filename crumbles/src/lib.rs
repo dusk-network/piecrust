@@ -31,7 +31,7 @@
 #![deny(clippy::pedantic)]
 
 use std::{
-    collections::BTreeSet,
+    collections::BTreeMap,
     fs::File,
     mem::{self, MaybeUninit},
     ops::{Deref, DerefMut},
@@ -138,8 +138,8 @@ impl Mmap {
         })
     }
 
-    /// Returns an iterator over the dirty pages of the memory, together with
-    /// their offsets.
+    /// Returns an iterator over dirty memory pages and their clean
+    /// counterparts, together with their offsets.
     ///
     /// # Example
     /// ```rust
@@ -151,13 +151,20 @@ impl Mmap {
     /// let dirty_pages: Vec<_> = mmap.dirty_pages().collect();
     ///
     /// assert_eq!(dirty_pages.len(), 1);
-    /// assert_eq!(dirty_pages[0].1, 0x10_000, "Offset to the first page");
+    /// assert_eq!(dirty_pages[0].2, 0x10_000, "Offset to the first page");
     /// ```
-    pub fn dirty_pages(&self) -> impl Iterator<Item = (&[u8], usize)> {
-        self.0.dirty_pages.iter().map(move |page_num| {
-            let offset = page_num * PAGE_SIZE;
-            (&self.0.bytes[offset..][..PAGE_SIZE], offset)
-        })
+    pub fn dirty_pages(&self) -> impl Iterator<Item = (&[u8], &[u8], usize)> {
+        self.0
+            .last_snapshot()
+            .iter()
+            .map(move |(page_num, clean_page)| {
+                let offset = page_num * PAGE_SIZE;
+                (
+                    &self.0.bytes[offset..][..PAGE_SIZE],
+                    &clean_page[..],
+                    offset,
+                )
+            })
     }
 }
 
@@ -235,12 +242,14 @@ where
     closure(&mut global_map)
 }
 
+/// A map from dirty page numbers to their "clean" contents.
+type Snapshot = BTreeMap<usize, Vec<u8>>;
+
 /// Contains the actual memory region, together with the set of dirty pages.
 #[derive(Debug)]
 struct MmapInner {
     bytes: &'static mut [u8],
-    // Set of dirty page numbers.
-    dirty_pages: BTreeSet<usize>,
+    snapshots: Vec<Snapshot>,
 }
 
 impl MmapInner {
@@ -266,7 +275,8 @@ impl MmapInner {
 
         Ok(Self {
             bytes,
-            dirty_pages: BTreeSet::new(),
+            // There should always be at least one snapshot
+            snapshots: vec![BTreeMap::new()],
         })
     }
 
@@ -315,16 +325,30 @@ impl MmapInner {
 
     unsafe fn set_dirty(&mut self, page_num: usize) -> io::Result<()> {
         let start_addr = self.bytes.as_ptr() as usize;
-        let dirty_addr = start_addr + page_num * PAGE_SIZE;
 
-        if libc::mprotect(dirty_addr as _, PAGE_SIZE, PROT_READ | PROT_WRITE)
+        let page_offset = page_num * PAGE_SIZE;
+        let page_addr = start_addr + page_offset;
+
+        if libc::mprotect(page_addr as _, PAGE_SIZE, PROT_READ | PROT_WRITE)
             != 0
         {
             return Err(io::Error::last_os_error());
         }
-        self.dirty_pages.insert(page_num);
+
+        let mut clean_page = vec![0; PAGE_SIZE];
+        clean_page.copy_from_slice(&self.bytes[page_offset..][..PAGE_SIZE]);
+
+        self.last_snapshot_mut().insert(page_num, clean_page);
 
         Ok(())
+    }
+
+    fn last_snapshot(&self) -> &Snapshot {
+        self.snapshots.last().unwrap()
+    }
+
+    fn last_snapshot_mut(&mut self) -> &mut Snapshot {
+        self.snapshots.last_mut().unwrap()
     }
 }
 
