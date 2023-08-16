@@ -53,9 +53,12 @@ const PAGE_SIZE: usize = 0x10_000;
 /// which pages have been written to. Each page is 64KiB in size.
 ///
 /// A `Mmap` may be backed by a set of files, physical memory, or a combination
-/// of both. Use [`Mmap::new`] to create a new mmap backed entirely by physical
-/// memory, and [`Mmap::with_files`] to create a new mmap backed by the given
+/// of both. Use [`new`] to create a new mmap backed entirely by physical
+/// memory, and [`with_files`] to create a new mmap backed by the given
 /// set of files, at the given offsets.
+///
+/// It is possible to create snapshots of the memory, which can be used to
+/// revert to a previous state. See [`snap`] for more details.
 ///
 /// Writes are tracked at the page level. This functions as follows:
 ///
@@ -66,6 +69,10 @@ const PAGE_SIZE: usize = 0x10_000;
 ///   marking it as dirty.
 ///
 /// `Mmap` is [`Sync`] and [`Send`].
+///
+/// [`new`]: Mmap::new
+/// [`with_files`]: Mmap::with_files
+/// [`snap`]: Mmap::snap
 #[derive(Debug)]
 pub struct Mmap(&'static mut MmapInner);
 
@@ -136,6 +143,100 @@ impl Mmap {
 
             Ok(Self(inner))
         })
+    }
+
+    /// Snapshot the current state of the memory.
+    ///
+    /// Snapshotting the memory should be done when the user wants to create a
+    /// point in time to which they can revert to. This is useful when they
+    /// want to perform a series of operations, and either [`revert`] back to
+    /// the original or [`apply`] to keep the changes.
+    ///
+    /// # Errors
+    /// If the underlying call to the protect the memory region fails, this
+    /// function will error. When this happens, the memory region will be left
+    /// in an inconsistent state, and the caller is encouraged to drop the
+    /// structure.
+    ///
+    /// # Example
+    /// ```rust
+    /// use crumbles::Mmap;
+    ///
+    /// let mut mmap = Mmap::new().unwrap();
+    ///
+    /// mmap[0] = 1;
+    /// mmap.snap().unwrap();
+    ///
+    /// // Snapshotting the memory keeps the current state, and also resets
+    /// // dirty pages to clean.
+    /// assert_eq!(mmap[0], 1);
+    /// assert_eq!(mmap.dirty_pages().count(), 0);
+    /// ```
+    ///
+    /// [`revert`]: Mmap::revert
+    /// [`apply`]: Mmap::apply
+    pub fn snap(&mut self) -> io::Result<()> {
+        unsafe { self.0.snap() }
+    }
+
+    /// Revert to the last snapshot.
+    ///
+    /// Reverting means discarding all changes made since the last snapshot was
+    /// taken using [`snap`]. If no snapshot was taken, this will reset the
+    /// memory to its initial state on instantiation.
+    ///
+    /// # Errors
+    /// If the underlying call to the protect the memory region fails, this
+    /// function will error. When this happens, the memory region will be left
+    /// in an inconsistent state, and the caller is encouraged to drop the
+    /// structure.
+    ///
+    /// # Example
+    /// ```rust
+    /// use crumbles::Mmap;
+    ///
+    /// let mut mmap = Mmap::new().unwrap();
+    ///
+    /// mmap[0] = 1;
+    /// mmap.revert().unwrap();
+    ///
+    /// assert_eq!(mmap[0], 0);
+    /// assert_eq!(mmap.dirty_pages().count(), 0);
+    /// ```
+    ///
+    /// [`snap`]: Mmap::snap
+    pub fn revert(&mut self) -> io::Result<()> {
+        unsafe { self.0.revert() }
+    }
+
+    /// Apply current changes to the last snapshot.
+    ///
+    /// Applying the current changes means keeping them and merging them with
+    /// the changes made since the last snapshot was taken using [`snap`].
+    /// If no snapshot was taken, this call will have no effect.
+    ///
+    /// # Errors
+    /// If the underlying call to the protect the memory region fails, this
+    /// function will error. When this happens, the memory region will be left
+    /// in an inconsistent state, and the caller is encouraged to drop the
+    /// structure.
+    ///
+    /// # Example
+    /// ```rust
+    /// use crumbles::Mmap;
+    ///
+    /// let mut mmap = Mmap::new().unwrap();
+    ///
+    /// mmap[0] = 1;
+    /// mmap.apply().unwrap();
+    ///
+    /// assert_eq!(mmap[0], 1);
+    /// assert_eq!(mmap.dirty_pages().count(), 1);
+    /// ```
+    ///
+    /// [`snap`]: Mmap::snap
+    pub fn apply(&mut self) -> io::Result<()> {
+        unsafe { self.0.apply() }
     }
 
     /// Returns an iterator over dirty memory pages and their clean
@@ -276,7 +377,7 @@ impl MmapInner {
         Ok(Self {
             bytes,
             // There should always be at least one snapshot
-            snapshots: vec![BTreeMap::new()],
+            snapshots: vec![Snapshot::new()],
         })
     }
 
@@ -335,10 +436,65 @@ impl MmapInner {
             return Err(io::Error::last_os_error());
         }
 
-        let mut clean_page = vec![0; PAGE_SIZE];
-        clean_page.copy_from_slice(&self.bytes[page_offset..][..PAGE_SIZE]);
+        if !self.last_snapshot().contains_key(&page_num) {
+            let mut clean_page = vec![0; PAGE_SIZE];
+            clean_page.copy_from_slice(&self.bytes[page_offset..][..PAGE_SIZE]);
 
-        self.last_snapshot_mut().insert(page_num, clean_page);
+            self.last_snapshot_mut().insert(page_num, clean_page);
+        }
+
+        Ok(())
+    }
+
+    unsafe fn snap(&mut self) -> io::Result<()> {
+        if libc::mprotect(self.bytes.as_mut_ptr().cast(), PAGE_SIZE, PROT_READ)
+            != 0
+        {
+            return Err(io::Error::last_os_error());
+        }
+
+        self.snapshots.push(Snapshot::new());
+
+        Ok(())
+    }
+
+    unsafe fn apply(&mut self) -> io::Result<()> {
+        if libc::mprotect(self.bytes.as_mut_ptr().cast(), PAGE_SIZE, PROT_READ)
+            != 0
+        {
+            return Err(io::Error::last_os_error());
+        }
+
+        let popped_snapshot = self.snapshots.pop().unwrap();
+        if self.snapshots.is_empty() {
+            self.snapshots.push(Snapshot::new());
+        }
+        let snapshot = self.last_snapshot_mut();
+
+        for (page_num, clean_page) in popped_snapshot {
+            snapshot.entry(page_num).or_insert(clean_page);
+        }
+
+        Ok(())
+    }
+
+    unsafe fn revert(&mut self) -> io::Result<()> {
+        let popped_snapshot = self.snapshots.pop().unwrap();
+        if self.snapshots.is_empty() {
+            self.snapshots.push(Snapshot::new());
+        }
+
+        for (page_num, clean_page) in popped_snapshot {
+            let page_offset = page_num * PAGE_SIZE;
+            self.bytes[page_offset..][..PAGE_SIZE]
+                .copy_from_slice(&clean_page[..]);
+        }
+
+        if libc::mprotect(self.bytes.as_mut_ptr().cast(), PAGE_SIZE, PROT_READ)
+            != 0
+        {
+            return Err(io::Error::last_os_error());
+        }
 
         Ok(())
     }
