@@ -159,10 +159,9 @@ impl Mmap {
     /// the original or [`apply`] to keep the changes.
     ///
     /// # Errors
-    /// If the underlying call to the protect the memory region fails, this
-    /// function will error. When this happens, the memory region will be left
-    /// in an inconsistent state, and the caller is encouraged to drop the
-    /// structure.
+    /// If the underlying call to protect the memory region fails, this function
+    /// will error. When this happens, the memory region will be left in an
+    /// inconsistent state, and the caller is encouraged to drop the structure.
     ///
     /// # Example
     /// ```rust
@@ -192,10 +191,9 @@ impl Mmap {
     /// memory to its initial state on instantiation.
     ///
     /// # Errors
-    /// If the underlying call to the protect the memory region fails, this
-    /// function will error. When this happens, the memory region will be left
-    /// in an inconsistent state, and the caller is encouraged to drop the
-    /// structure.
+    /// If the underlying call to protect the memory region fails, this function
+    /// will error. When this happens, the memory region will be left in an
+    /// inconsistent state, and the caller is encouraged to drop the structure.
     ///
     /// # Example
     /// ```rust
@@ -222,10 +220,9 @@ impl Mmap {
     /// If no snapshot was taken, this call will have no effect.
     ///
     /// # Errors
-    /// If the underlying call to the protect the memory region fails, this
-    /// function will error. When this happens, the memory region will be left
-    /// in an inconsistent state, and the caller is encouraged to drop the
-    /// structure.
+    /// If the underlying call to protect the memory region fails, this function
+    /// will error. When this happens, the memory region will be left in an
+    /// inconsistent state, and the caller is encouraged to drop the structure.
     ///
     /// # Example
     /// ```rust
