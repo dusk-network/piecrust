@@ -4,15 +4,16 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-//! Library for creating and managing 4GiB copy-on-write memory-mapped regions.
+//! Library for creating and managing [`MEM_SIZE`] bytes copy-on-write
+//! memory-mapped regions.
 //!
 //! The core functionality is offered by the [`Mmap`] struct, which is a
 //! read-write memory region that keeps track of which pages have been written
 //! to.
 //!
-//! Each `Mmap` is 4GiB in size, and can be backed by physical memory, a set of
-//! files, or a combination of both. Each page is 64KiB in size, meaning that
-//! each mmap contains 65536 pages.
+//! Each `Mmap` is `MEM_SIZE` in size, and can be backed by physical memory, a
+//! set of files, or a combination of both. Each page is [`PAGE_SIZE`] in size,
+//! meaning that each mmap contains 65536 pages.
 //!
 //! # Example
 //! ```rust
@@ -52,11 +53,14 @@ use libc::{
     SA_SIGINFO,
 };
 
-const MEM_SIZE: usize = 0x100_000_000;
-const PAGE_SIZE: usize = 0x10_000;
+/// Size of each memory region in bytes. 4GiB.
+pub const MEM_SIZE: usize = 0x100_000_000;
+/// Size of each memory page in bytes. 64KiB.
+pub const PAGE_SIZE: usize = 0x10_000;
 
-/// A handle to a 4GiB copy-on-write memory-mapped region that keeps track of
-/// which pages have been written to. Each page is 64KiB in size.
+/// A handle to a [`MEM_SIZE`] copy-on-write memory-mapped region that keeps
+/// track of which pages have been written to. Each page is [`PAGE_SIZE`] in
+/// size.
 ///
 /// A `Mmap` may be backed by a set of files, physical memory, or a combination
 /// of both. Use [`new`] to create a new mmap backed entirely by physical
@@ -105,10 +109,10 @@ impl Mmap {
     /// Regions of the memory not covered
     ///
     /// # Errors
-    /// If the given files are too large for the 4GiB memory region, or at an
-    /// offset where they wouldn't fit within said region, the function will
-    /// return an error. Also, if any of the files' size or offsets is not a
-    /// multiple of the page size, the function will return an error.
+    /// If the given files are too large for the [`MEM_SIZE`] memory region, or
+    /// at an offset where they wouldn't fit within said region, the function
+    /// will return an error. Also, if any of the files' size or offsets is not
+    /// a multiple of the page size, the function will return an error.
     ///
     /// # Safety
     /// The caller must ensure that the given files are not modified while
@@ -159,9 +163,10 @@ impl Mmap {
     /// the original or [`apply`] to keep the changes.
     ///
     /// # Errors
-    /// If the underlying call to protect the memory region fails, this function
-    /// will error. When this happens, the memory region will be left in an
-    /// inconsistent state, and the caller is encouraged to drop the structure.
+    /// If the given files are too large for the [`MEM_SIZE`] memory region, or
+    /// at an offset where they wouldn't fit within said region, the function
+    /// will return an error. Also, if any of the files' size or offsets is not
+    /// a multiple of the page size, the function will return an error.
     ///
     /// # Example
     /// ```rust
@@ -191,9 +196,10 @@ impl Mmap {
     /// memory to its initial state on instantiation.
     ///
     /// # Errors
-    /// If the underlying call to protect the memory region fails, this function
-    /// will error. When this happens, the memory region will be left in an
-    /// inconsistent state, and the caller is encouraged to drop the structure.
+    /// If the given files are too large for the [`MEM_SIZE`] memory region, or
+    /// at an offset where they wouldn't fit within said region, the function
+    /// will return an error. Also, if any of the files' size or offsets is not
+    /// a multiple of the page size, the function will return an error.
     ///
     /// # Example
     /// ```rust
