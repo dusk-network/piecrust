@@ -70,9 +70,9 @@ const PAGE_SIZE: usize = 0x10_000;
 ///
 /// - When a region is first mapped, its permissions are set to read-only,
 ///   resulting in a segmentation fault when a write is attempted.
-/// - The segmentation fault is then caught using a signal handler, which
-///   proceeds to set the permissions of the page to read-write while also
-///   marking it as dirty.
+/// - When a write is attempted the segmentation fault is caught using a signal
+///   handler, which proceeds to set the permissions of the page to read-write
+///   while also marking it as dirty in the mmap.
 ///
 /// `Mmap` is [`Sync`] and [`Send`].
 ///
