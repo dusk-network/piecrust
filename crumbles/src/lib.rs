@@ -415,13 +415,15 @@ impl MmapInner {
                     ));
                 }
 
+                let addr = inner.bytes.as_mut_ptr().add(offset);
+
                 let ptr = libc::mmap(
-                    inner.bytes.as_mut_ptr().cast(),
+                    addr.cast(),
                     file_len,
                     PROT_READ,
                     MAP_PRIVATE | MAP_FIXED,
                     file.into_raw_fd(),
-                    offset as _,
+                    0,
                 );
 
                 if ptr == MAP_FAILED {
