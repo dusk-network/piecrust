@@ -4,15 +4,101 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
+use std::collections::{BTreeMap, BTreeSet};
+
 use bytecheck::CheckBytes;
+use crumbles::PAGE_SIZE;
 use piecrust_uplink::ContractId;
 use rkyv::{Archive, Deserialize, Serialize};
 
-// This means we have max `2^32` contracts
-const HEIGHT: usize = 32;
-const ARITY: usize = 2;
+use crate::store::Memory;
 
-pub type Tree = dusk_merkle::Tree<Hash, HEIGHT, ARITY>;
+// There are `2^16` pages in a memory
+const P_HEIGHT: usize = 16;
+const P_ARITY: usize = 2;
+
+pub type PageTree = dusk_merkle::Tree<Hash, P_HEIGHT, P_ARITY>;
+
+// This means we have max `2^32` contracts
+const C_HEIGHT: usize = 32;
+const C_ARITY: usize = 2;
+
+pub type Tree = dusk_merkle::Tree<Hash, C_HEIGHT, C_ARITY>;
+
+#[derive(Debug, Clone, Archive, Deserialize, Serialize)]
+#[archive_attr(derive(CheckBytes))]
+pub struct ContractIndex {
+    tree: Tree,
+    contracts: BTreeMap<ContractId, ContractIndexElement>,
+}
+
+impl Default for ContractIndex {
+    fn default() -> Self {
+        Self {
+            tree: Tree::new(),
+            contracts: BTreeMap::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Archive, Deserialize, Serialize)]
+#[archive_attr(derive(CheckBytes))]
+pub struct ContractIndexElement {
+    pub tree: PageTree,
+    pub len: usize,
+    pub offsets: BTreeSet<usize>,
+}
+
+impl ContractIndex {
+    pub fn insert(&mut self, contract: ContractId, memory: &Memory) {
+        if self.contracts.get(&contract).is_none() {
+            self.contracts.insert(
+                contract,
+                ContractIndexElement {
+                    tree: PageTree::new(),
+                    len: 0,
+                    offsets: BTreeSet::new(),
+                },
+            );
+        }
+        let element = self.contracts.get_mut(&contract).unwrap();
+
+        let memory = memory.read();
+        let memory_inner = memory.inner;
+
+        element.len = memory_inner.current_len;
+
+        for (dirty_page, _, page_offset) in memory_inner.mmap.dirty_pages() {
+            element.offsets.insert(page_offset);
+
+            let hash = Hash::new(dirty_page);
+            let page_pos = page_offset / PAGE_SIZE;
+
+            element.tree.insert(page_pos as u64, hash);
+        }
+
+        self.tree
+            .insert(position_from_contract(&contract), *element.tree.root());
+    }
+
+    pub fn root(&self) -> &Hash {
+        self.tree.root()
+    }
+
+    pub fn get(&self, contract: &ContractId) -> Option<&ContractIndexElement> {
+        self.contracts.get(contract)
+    }
+
+    pub fn contains_key(&self, contract: &ContractId) -> bool {
+        self.contracts.contains_key(contract)
+    }
+
+    pub fn iter(
+        &self,
+    ) -> impl Iterator<Item = (&ContractId, &ContractIndexElement)> {
+        self.contracts.iter()
+    }
+}
 
 #[derive(
     Debug,
@@ -32,6 +118,12 @@ pub type Tree = dusk_merkle::Tree<Hash, HEIGHT, ARITY>;
 pub struct Hash([u8; blake3::OUT_LEN]);
 
 impl Hash {
+    pub fn new(bytes: &[u8]) -> Self {
+        let mut hasher = Hasher::new();
+        hasher.update(bytes);
+        hasher.finalize()
+    }
+
     pub fn as_bytes(&self) -> &[u8; blake3::OUT_LEN] {
         &self.0
     }
@@ -55,8 +147,24 @@ impl AsRef<[u8]> for Hash {
     }
 }
 
-impl dusk_merkle::Aggregate<HEIGHT, ARITY> for Hash {
-    const EMPTY_SUBTREES: [Hash; HEIGHT] = EMPTY_SUBTREES;
+impl dusk_merkle::Aggregate<C_HEIGHT, C_ARITY> for Hash {
+    const EMPTY_SUBTREES: [Hash; C_HEIGHT] = C_EMPTY_SUBTREES;
+
+    fn aggregate<'a, I>(items: I) -> Self
+    where
+        Self: 'a,
+        I: Iterator<Item = &'a Self>,
+    {
+        let mut hasher = Hasher::new();
+        for item in items {
+            hasher.update(item.as_bytes());
+        }
+        hasher.finalize()
+    }
+}
+
+impl dusk_merkle::Aggregate<P_HEIGHT, P_ARITY> for Hash {
+    const EMPTY_SUBTREES: [Hash; P_HEIGHT] = P_EMPTY_SUBTREES;
 
     fn aggregate<'a, I>(items: I) -> Self
     where
@@ -118,7 +226,22 @@ pub fn position_from_contract(contract: &ContractId) -> u64 {
     pos as u64
 }
 
-const EMPTY_SUBTREES: [Hash; HEIGHT] = [
+const P_EMPTY_SUBTREES: [Hash; P_HEIGHT] = subtrees();
+const C_EMPTY_SUBTREES: [Hash; C_HEIGHT] = subtrees();
+
+const fn subtrees<const N: usize>() -> [Hash; N] {
+    let mut subtrees = [Hash([0; blake3::OUT_LEN]); N];
+
+    let mut i = 0;
+    while i < N {
+        subtrees[i] = EMPTY_SUBTREES[i];
+        i += 1;
+    }
+
+    subtrees
+}
+
+const EMPTY_SUBTREES: [Hash; C_HEIGHT] = [
     h2h("452b8b91767b270a61db2159db2dd6d411ce560f4a34230d70928950fdda3a88"),
     h2h("f588290692a4d73ba016dee67a00e928f38e381b8eb5ca8c01d8b8c9bee32211"),
     h2h("0b69ae637dbf590e15b9e06b4195341087cb3f60e95a43a1a8c459a5d321b1ff"),

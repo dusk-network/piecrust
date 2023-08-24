@@ -23,9 +23,8 @@ use crate::Error::{self, PersistenceError};
 /// multiple [`Session`]s using [`session`].
 ///
 /// These sessions are synchronized with the help of a sync loop. [`Deletions`]
-/// and [`squashes`] are assured to not delete any commits used as a base for
-/// sessions until these are dropped. A handle to this loop is available at
-/// [`sync_thread`].
+/// are assured to not delete any commits used as a base for sessions until
+/// these are dropped. A handle to this loop is available at [`sync_thread`].
 ///
 /// Users are encouraged to instantiate a `VM` once during the lifetime of their
 /// program and spawn sessions as needed.
@@ -35,7 +34,6 @@ use crate::Error::{self, PersistenceError};
 /// [`Session`]: Session
 /// [`session`]: VM::session
 /// [`Deletions`]: VM::delete_commit
-/// [`squashes`]: VM::squash_commit
 /// [`sync_thread`]: VM::sync_thread
 #[derive(Debug)]
 pub struct VM {
@@ -123,27 +121,6 @@ impl VM {
     /// Return all existing commits.
     pub fn commits(&self) -> Vec<[u8; 32]> {
         self.store.commits().into_iter().map(Into::into).collect()
-    }
-
-    /// Remove the diff files from a commit by applying them to the base
-    /// memories, and writing them back to disk.
-    ///
-    /// # Errors
-    /// If this function fails, it may be due to any number of reasons:
-    ///
-    /// - [`remove_file`] may fail
-    /// - [`write`] may fail
-    ///
-    /// Failing may result in a corrupted commit, and the user is encouraged to
-    /// call [`delete_commit`].
-    ///
-    /// [`remove_file`]: std::fs::remove_file
-    /// [`write`]: std::fs::write
-    /// [`delete_commit`]: VM::delete_commit
-    pub fn squash_commit(&self, root: [u8; 32]) -> Result<(), Error> {
-        self.store
-            .squash_commit(root.into())
-            .map_err(|err| PersistenceError(Arc::new(err)))
     }
 
     /// Deletes the given commit from disk.

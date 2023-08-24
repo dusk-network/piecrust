@@ -37,7 +37,7 @@
 //!
 //! Using copy-on-write mappings of linear memories ensures that each commit is
 //! never mutated in place by a session, with the important exception of
-//! [`deletions`] and [`squashes`].
+//! [`deletions`].
 //!
 //! # Session Concurrency
 //!
@@ -56,7 +56,7 @@
 //! assert_send::<Session>();
 //! ```
 //!
-//! This is achieved by synchronizing commit deletions, squashes, and session
+//! This is achieved by synchronizing commit deletions, and session
 //! spawns/commits using a synchronization loop started on VM instantiation.
 //!
 //! # Call Atomicity
@@ -102,7 +102,6 @@
 //! [`commit`]: Session::commit
 //! [wasmer docs]: wasmer_middlewares::metering
 //! [`deletions`]: VM::delete_commit
-//! [`squashes`]: VM::squash_commit
 
 #[macro_use]
 mod bytecode_macro;

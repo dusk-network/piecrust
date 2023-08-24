@@ -69,14 +69,14 @@ fn initialize<P: AsRef<str>>(vm_data_path: P) -> Result<(), piecrust::Error> {
     let commit_id_file_path =
         PathBuf::from(vm_data_path.as_ref()).join("commit_id");
     let vm = VM::new(vm_data_path.as_ref())?;
-    initialize_counter(&vm, &commit_id_file_path)
+    initialize_counter(&vm, commit_id_file_path)
 }
 
 fn confirm<P: AsRef<str>>(vm_data_path: P) -> Result<(), piecrust::Error> {
     let commit_id_file_path =
         PathBuf::from(vm_data_path.as_ref()).join("commit_id");
     let vm = VM::new(vm_data_path.as_ref())?;
-    confirm_counter(&vm, &commit_id_file_path)
+    confirm_counter(&vm, commit_id_file_path)
 }
 
 fn main() -> Result<(), piecrust::Error> {

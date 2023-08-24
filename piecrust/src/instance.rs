@@ -26,7 +26,7 @@ use piecrust_uplink::{ContractId, Event, ARGBUF_LEN};
 use crate::contract::WrappedContract;
 use crate::imports::DefaultImports;
 use crate::session::Session;
-use crate::store::{Memory, MIN_MEM_SIZE};
+use crate::store::{Memory, MAX_MEM_SIZE};
 use crate::Error;
 
 pub struct WrappedInstance {
@@ -151,13 +151,13 @@ impl WrappedInstance {
         let instance = wasmer::Instance::new(&mut store, &module, &imports)?;
 
         // Ensure there is a global exported named `A`, whose value is in the
-        // first few pages of memory.
+        // memory.
         let arg_buf_ofs =
             match instance.exports.get_global("A")?.get(&mut store) {
                 wasmer::Value::I32(i) => i as usize,
                 _ => return Err(Error::InvalidArgumentBuffer),
             };
-        if arg_buf_ofs > MIN_MEM_SIZE - ARGBUF_LEN {
+        if arg_buf_ofs + ARGBUF_LEN >= MAX_MEM_SIZE {
             return Err(Error::InvalidArgumentBuffer);
         }
 

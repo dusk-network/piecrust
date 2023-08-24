@@ -58,7 +58,7 @@ fn check_ptr(
     let offset = offset as usize;
     let len = len as usize;
 
-    if offset + len > mem_len {
+    if offset + len >= mem_len {
         return Err(Error::MemoryAccessOutOfBounds {
             offset,
             len,
@@ -70,12 +70,24 @@ fn check_ptr(
 }
 
 fn check_arg(instance: &WrappedInstance, arg_len: u32) -> Result<(), Error> {
+    let mem_len = instance.with_memory(|mem| mem.len());
+
+    let arg_ofs = instance.arg_buffer_offset();
     let arg_len = arg_len as usize;
+
     if arg_len > ARGBUF_LEN {
         return Err(Error::MemoryAccessOutOfBounds {
-            offset: instance.arg_buffer_offset(),
+            offset: arg_ofs,
             len: arg_len,
-            mem_len: instance.with_memory(|mem| mem.len()),
+            mem_len,
+        });
+    }
+
+    if arg_ofs + arg_len > mem_len {
+        return Err(Error::MemoryAccessOutOfBounds {
+            offset: arg_ofs,
+            len: arg_len,
+            mem_len,
         });
     }
 
