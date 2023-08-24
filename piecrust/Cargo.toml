@@ -38,6 +38,8 @@ const-decoder = "0.3"
 
 [dev-dependencies]
 criterion = "0.4"
+dusk-plonk = { version = "0.14", features = ["rkyv-impl"] }
+once_cell = "1.18"
 
 [features]
 debug = []
