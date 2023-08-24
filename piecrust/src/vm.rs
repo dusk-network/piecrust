@@ -12,6 +12,7 @@ use std::sync::Arc;
 use std::thread;
 
 use tempfile::tempdir;
+use wasmer_vm::init_traps;
 
 use crate::session::{Session, SessionData};
 use crate::store::ContractStore;
@@ -51,6 +52,8 @@ impl VM {
     /// # Errors
     /// If the directory contains unparseable or inconsistent data.
     pub fn new<P: AsRef<Path>>(root_dir: P) -> Result<Self, Error> {
+        init_traps();
+
         let store = ContractStore::new(root_dir)
             .map_err(|err| PersistenceError(Arc::new(err)))?;
         Ok(Self {
@@ -67,6 +70,8 @@ impl VM {
     /// # Errors
     /// If creating a temporary directory fails.
     pub fn ephemeral() -> Result<Self, Error> {
+        init_traps();
+
         let tmp = tempdir().map_err(|err| PersistenceError(Arc::new(err)))?;
         let tmp = tmp.path().to_path_buf();
 
