@@ -476,7 +476,10 @@ impl MmapInner {
             return Err(io::Error::last_os_error());
         }
 
-        let popped_snapshot = self.snapshots.pop().unwrap();
+        let popped_snapshot = self
+            .snapshots
+            .pop()
+            .expect("There should always be at least one snapshot");
         if self.snapshots.is_empty() {
             self.snapshots.push(Snapshot::new());
         }
@@ -490,7 +493,10 @@ impl MmapInner {
     }
 
     unsafe fn revert(&mut self) -> io::Result<()> {
-        let popped_snapshot = self.snapshots.pop().unwrap();
+        let popped_snapshot = self
+            .snapshots
+            .pop()
+            .expect("There should always be at least one snapshot");
         if self.snapshots.is_empty() {
             self.snapshots.push(Snapshot::new());
         }
@@ -511,11 +517,15 @@ impl MmapInner {
     }
 
     fn last_snapshot(&self) -> &Snapshot {
-        self.snapshots.last().unwrap()
+        self.snapshots
+            .last()
+            .expect("There should always be at least one snapshot")
     }
 
     fn last_snapshot_mut(&mut self) -> &mut Snapshot {
-        self.snapshots.last_mut().unwrap()
+        self.snapshots
+            .last_mut()
+            .expect("There should always be at least one snapshot")
     }
 }
 
