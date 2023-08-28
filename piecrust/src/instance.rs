@@ -4,6 +4,7 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
+use std::io;
 use std::ops::{Deref, DerefMut};
 use std::ptr::NonNull;
 use std::sync::Arc;
@@ -191,6 +192,24 @@ impl WrappedInstance {
         Ok(wrapped)
     }
 
+    pub(crate) fn snap(&self) -> io::Result<()> {
+        let mut memory = self.memory.write();
+        memory.snap()?;
+        Ok(())
+    }
+
+    pub(crate) fn revert(&self) -> io::Result<()> {
+        let mut memory = self.memory.write();
+        memory.revert()?;
+        Ok(())
+    }
+
+    pub(crate) fn apply(&self) -> io::Result<()> {
+        let mut memory = self.memory.write();
+        memory.apply()?;
+        Ok(())
+    }
+
     // Write argument into instance
     pub(crate) fn write_argument(&mut self, arg: &[u8]) {
         self.with_arg_buffer(|buf| buf[..arg.len()].copy_from_slice(arg))
@@ -284,7 +303,7 @@ impl WrappedInstance {
     }
 
     #[allow(unused)]
-    pub fn snap(&self) {
+    pub fn print_state(&self) {
         let mem = self
             .instance
             .exports
