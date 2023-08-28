@@ -132,12 +132,12 @@ impl Mmap {
     /// let mut contents = Vec::new();
     /// file.read_to_end(&mut contents).unwrap();
     ///
-    /// let mmap = unsafe { Mmap::with_files(iter::once(Ok((file, 0)))) }.unwrap();
+    /// let mmap = unsafe { Mmap::with_files(iter::once(Ok((0, file)))) }.unwrap();
     /// assert_eq!(mmap[..contents.len()], contents[..]);
     /// ```
     pub unsafe fn with_files<I>(files_and_offsets: I) -> io::Result<Self>
     where
-        I: IntoIterator<Item = io::Result<(File, usize)>>,
+        I: IntoIterator<Item = io::Result<(usize, File)>>,
     {
         let inner = MmapInner::with_files(files_and_offsets)?;
 
@@ -392,12 +392,12 @@ impl MmapInner {
 
     unsafe fn with_files<I>(files_and_offsets: I) -> io::Result<Self>
     where
-        I: IntoIterator<Item = io::Result<(File, usize)>>,
+        I: IntoIterator<Item = io::Result<(usize, File)>>,
     {
         let inner = MmapInner::new()?;
 
         for r in files_and_offsets {
-            let (file, offset) = r?;
+            let (offset, file) = r?;
 
             // Since we only build for 64-bit targets, we can safely assume
             // *neither* truncation *nor* wrapping will happen.
