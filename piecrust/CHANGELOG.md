@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Change commit write behavior to  write dirty pages instead of diffs [#253]
+- Change memory backend  to use `crumbles` instead of `libc` directly  [#253]
+
+### Removed
+
+- Remove `Session::squash_commit`  since it's irrelevant with the new commit behavior [#253]
+- Remove `libc` dependency [#253]
+- Remove `flate2` dependency [#253]
+- Remove `qbsdiff` dependency [#253]
+
 ## [0.8.0] - 2023-08-09
 
 ### Added
@@ -172,6 +184,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [#234]: https://github.com/dusk-network/piecrust/pull/234
 
 <!-- ISSUES -->
+[#253]: https://github.com/dusk-network/piecrust/issues/253
 [#249]: https://github.com/dusk-network/piecrust/issues/249
 [#243]: https://github.com/dusk-network/piecrust/issues/243
 [#222]: https://github.com/dusk-network/piecrust/issues/222
