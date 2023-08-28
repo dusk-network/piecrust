@@ -49,8 +49,8 @@ use std::{
 
 use libc::{
     c_int, sigaction, sigemptyset, siginfo_t, sigset_t, ucontext_t,
-    MAP_ANONYMOUS, MAP_FAILED, MAP_FIXED, MAP_PRIVATE, PROT_READ, PROT_WRITE,
-    SA_SIGINFO,
+    MAP_ANONYMOUS, MAP_FAILED, MAP_FIXED, MAP_NORESERVE, MAP_PRIVATE,
+    PROT_READ, PROT_WRITE, SA_SIGINFO,
 };
 
 /// Size of each memory region in bytes. 4GiB.
@@ -371,7 +371,7 @@ impl MmapInner {
                 ptr::null_mut(),
                 MEM_SIZE,
                 PROT_READ,
-                MAP_PRIVATE | MAP_ANONYMOUS,
+                MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE,
                 -1,
                 0,
             );
@@ -421,7 +421,7 @@ impl MmapInner {
                     addr.cast(),
                     file_len,
                     PROT_READ,
-                    MAP_PRIVATE | MAP_FIXED,
+                    MAP_PRIVATE | MAP_FIXED | MAP_NORESERVE,
                     file.into_raw_fd(),
                     0,
                 );
