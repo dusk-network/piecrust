@@ -17,9 +17,11 @@
 //!
 //! # Example
 //! ```rust
+//! # use std::io;
+//! # fn main() -> io::Result<()> {
 //! use crumbles::Mmap;
 //!
-//! let mut mmap = Mmap::new().unwrap();
+//! let mut mmap = Mmap::new()?;
 //!
 //! // When first created, the mmap is not dirty.
 //! assert_eq!(mmap.dirty_pages().count(), 0);
@@ -27,6 +29,8 @@
 //! mmap[24] = 42;
 //! // After writing a single byte, the page it's on is dirty.
 //! assert_eq!(mmap.dirty_pages().count(), 1);
+//! # Ok(())
+//! # }
 //! ```
 //!
 //! # Limitations
@@ -96,10 +100,14 @@ impl Mmap {
     ///
     /// # Example
     /// ```rust
+    /// # use std::io;
+    /// # fn main() -> io::Result<()> {
     /// use crumbles::Mmap;
     ///
-    /// let mmap = Mmap::new().unwrap();
+    /// let mmap = Mmap::new()?;
     /// assert_eq!(mmap[..0x10_000], [0; 0x10_000]);
+    /// # Ok(())
+    /// # }
     /// ```
     pub fn new() -> io::Result<Self> {
         unsafe { Self::with_files(None) }
@@ -121,19 +129,23 @@ impl Mmap {
     ///
     /// # Example
     /// ```rust
+    /// # use std::io;
+    /// # fn main() -> io::Result<()> {
     /// use std::fs::File;
     /// use std::io::Read;
     /// use std::iter;
     ///
     /// use crumbles::Mmap;
     ///
-    /// let mut file = File::open("LICENSE").unwrap();
+    /// let mut file = File::open("LICENSE")?;
     ///
     /// let mut contents = Vec::new();
-    /// file.read_to_end(&mut contents).unwrap();
+    /// file.read_to_end(&mut contents)?;
     ///
-    /// let mmap = unsafe { Mmap::with_files(iter::once(Ok((0, file)))) }.unwrap();
+    /// let mmap = unsafe { Mmap::with_files(iter::once(Ok((0, file))))? };
     /// assert_eq!(mmap[..contents.len()], contents[..]);
+    /// # Ok(())
+    /// # }
     /// ```
     pub unsafe fn with_files<I>(files_and_offsets: I) -> io::Result<Self>
     where
@@ -170,17 +182,21 @@ impl Mmap {
     ///
     /// # Example
     /// ```rust
+    /// # use std::io;
+    /// # fn main() -> io::Result<()> {
     /// use crumbles::Mmap;
     ///
-    /// let mut mmap = Mmap::new().unwrap();
+    /// let mut mmap = Mmap::new()?;
     ///
     /// mmap[0] = 1;
-    /// mmap.snap().unwrap();
+    /// mmap.snap()?;
     ///
     /// // Snapshotting the memory keeps the current state, and also resets
     /// // dirty pages to clean.
     /// assert_eq!(mmap[0], 1);
     /// assert_eq!(mmap.dirty_pages().count(), 0);
+    /// # Ok(())
+    /// # }
     /// ```
     ///
     /// [`revert`]: Mmap::revert
@@ -203,15 +219,19 @@ impl Mmap {
     ///
     /// # Example
     /// ```rust
+    /// # use std::io;
+    /// # fn main() -> io::Result<()> {
     /// use crumbles::Mmap;
     ///
-    /// let mut mmap = Mmap::new().unwrap();
+    /// let mut mmap = Mmap::new()?;
     ///
     /// mmap[0] = 1;
-    /// mmap.revert().unwrap();
+    /// mmap.revert()?;
     ///
     /// assert_eq!(mmap[0], 0);
     /// assert_eq!(mmap.dirty_pages().count(), 0);
+    /// # Ok(())
+    /// # }
     /// ```
     ///
     /// [`snap`]: Mmap::snap
@@ -232,15 +252,19 @@ impl Mmap {
     ///
     /// # Example
     /// ```rust
+    /// # use std::io;
+    /// # fn main() -> io::Result<()> {
     /// use crumbles::Mmap;
     ///
-    /// let mut mmap = Mmap::new().unwrap();
+    /// let mut mmap = Mmap::new()?;
     ///
     /// mmap[0] = 1;
-    /// mmap.apply().unwrap();
+    /// mmap.apply()?;
     ///
     /// assert_eq!(mmap[0], 1);
     /// assert_eq!(mmap.dirty_pages().count(), 1);
+    /// # Ok(())
+    /// # }
     /// ```
     ///
     /// [`snap`]: Mmap::snap
@@ -253,15 +277,19 @@ impl Mmap {
     ///
     /// # Example
     /// ```rust
+    /// # use std::io;
+    /// # fn main() -> io::Result<()> {
     /// use crumbles::Mmap;
     ///
-    /// let mut mmap = Mmap::new().unwrap();
+    /// let mut mmap = Mmap::new()?;
     /// mmap[0x10_000] = 1; // second page
     ///
     /// let dirty_pages: Vec<_> = mmap.dirty_pages().collect();
     ///
     /// assert_eq!(dirty_pages.len(), 1);
     /// assert_eq!(dirty_pages[0].2, 0x10_000, "Offset to the first page");
+    /// # Ok(())
+    /// # }
     /// ```
     pub fn dirty_pages(&self) -> impl Iterator<Item = (&[u8], &[u8], usize)> {
         self.0
