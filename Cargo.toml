@@ -1,5 +1,6 @@
 [workspace]
 members = [
+    "crumbles",
     "piecrust-uplink",
     "piecrust",
 ]
