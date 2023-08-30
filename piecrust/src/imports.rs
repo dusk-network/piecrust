@@ -135,17 +135,6 @@ fn c(
         caller_remaining * POINT_PASS_PCT / 100
     };
 
-    // If an error is returned then we are in a re-execution, and should signal
-    // the contract without executing the call.
-    env.increment_icc_height();
-    if let Some(err) = env.increment_icc_count() {
-        env.decrement_icc_height();
-        env.decrement_icc_count();
-        // Consume all gas given to the callee on an error
-        instance.set_remaining_points(caller_remaining - callee_limit);
-        return Ok(ContractError::from(err).into());
-    }
-
     let (ret_len, callee_spent) = instance
         .with_memory_mut::<_, Result<_, Error>>(|memory| {
             let name = core::str::from_utf8(
@@ -186,7 +175,6 @@ fn c(
             Ok((ret_len, callee_spent))
         })?;
 
-    env.decrement_icc_height();
     instance.set_remaining_points(caller_remaining - callee_spent);
 
     Ok(ret_len)
