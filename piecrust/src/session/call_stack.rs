@@ -58,6 +58,23 @@ impl CallStack {
         self.tree.clear();
         self.stack.clear();
     }
+
+    /// Returns an iterator over the call tree, starting from the rightmost
+    /// leaf, and proceeding to the top of the current position of the tree.
+    pub fn iter_tree(&self) -> impl Iterator<Item = StackElement> {
+        let mut v = Vec::new();
+        if let Some(inner) = self.tree.0 {
+            right_fill(&mut v, unsafe { &*inner });
+        }
+        v.into_iter()
+    }
+}
+
+fn right_fill(v: &mut Vec<StackElement>, tree: &CallTreeInner) {
+    for child in tree.children.iter().rev() {
+        right_fill(v, unsafe { &**child });
+    }
+    v.push(tree.elem);
 }
 
 #[derive(Debug, Default)]
