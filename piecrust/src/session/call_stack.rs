@@ -4,45 +4,50 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
+use std::mem;
+
 use piecrust_uplink::ContractId;
 
+#[derive(Debug, Clone, Copy)]
+pub struct StackElement {
+    pub contract_id: ContractId,
+    pub limit: u64,
+}
+
+/// A stack of contract calls.
 #[derive(Debug, Default)]
 pub struct CallStack {
     stack: Vec<StackElement>,
+    tree: CallTree,
 }
 
 impl CallStack {
-    pub fn new() -> Self {
-        Self::default()
+    pub const fn new() -> Self {
+        Self {
+            stack: Vec::new(),
+            tree: CallTree::new(),
+        }
     }
 
     /// Push an element to the call stack.
-    ///
-    /// # Panics
-    /// If an instance of the given contract ID is absent from the stack.
     pub fn push(&mut self, contract_id: ContractId, limit: u64) {
-        self.stack.push(StackElement { contract_id, limit });
+        let se = StackElement { contract_id, limit };
+        self.tree.push(se);
+        self.stack.push(se);
     }
 
     /// Pops an element from the callstack.
     pub fn pop(&mut self) -> Option<StackElement> {
+        self.tree.pop();
         self.stack.pop()
     }
 
     /// Returns a view of the stack to the `n`th element from the top.
-    ///
-    /// # Safety
-    /// The reference to the instance available in the returned element is only
-    /// guaranteed to be valid before the stack is called.
     pub fn nth_from_top(&self, n: usize) -> Option<StackElement> {
         let len = self.stack.len();
 
         if len > n {
-            let elem = &self.stack[len - (n + 1)];
-            Some(StackElement {
-                contract_id: elem.contract_id,
-                limit: elem.limit,
-            })
+            Some(self.stack[len - (n + 1)])
         } else {
             None
         }
@@ -50,12 +55,87 @@ impl CallStack {
 
     /// Clear the call stack of all elements.
     pub fn clear(&mut self) {
+        self.tree.clear();
         self.stack.clear();
     }
 }
 
-#[derive(Debug)]
-pub struct StackElement {
-    pub contract_id: ContractId,
-    pub limit: u64,
+#[derive(Debug, Default)]
+struct CallTree(Option<*mut CallTreeInner>);
+
+impl CallTree {
+    /// Creates a new empty call tree, starting with at the given contract.
+    const fn new() -> Self {
+        Self(None)
+    }
+
+    /// Pushes a new child to the current node, and advances to it.
+    fn push(&mut self, elem: StackElement) {
+        match self.0 {
+            None => self.0 = Some(CallTreeInner::new(elem)),
+            Some(inner) => unsafe {
+                let node = CallTreeInner::with_prev(elem, inner);
+                (*inner).children.push(node);
+                self.0 = Some(node)
+            },
+        }
+    }
+
+    /// Moves to the previous node.
+    fn pop(&mut self) {
+        self.0 = self.0.and_then(|inner| unsafe {
+            let prev = (*inner).prev;
+            if prev.is_none() {
+                free_tree(inner);
+            }
+            prev
+        });
+    }
+
+    fn clear(&mut self) {
+        while self.0.is_some() {
+            self.pop();
+        }
+    }
+}
+
+impl Drop for CallTree {
+    fn drop(&mut self) {
+        self.clear()
+    }
+}
+
+unsafe fn free_tree(root: *mut CallTreeInner) {
+    let mut node = Box::from_raw(root);
+
+    let mut children = Vec::new();
+    mem::swap(&mut node.children, &mut children);
+
+    for child in children {
+        free_tree(child);
+    }
+}
+
+struct CallTreeInner {
+    elem: StackElement,
+    children: Vec<*mut Self>,
+    prev: Option<*mut Self>,
+}
+
+impl CallTreeInner {
+    fn new(elem: StackElement) -> *mut Self {
+        Box::leak(Box::new(Self {
+            elem,
+            children: Vec::new(),
+            prev: None,
+        }))
+    }
+
+    fn with_prev(elem: StackElement, prev: *mut Self) -> *mut Self {
+        Box::leak(Box::new(Self {
+            elem,
+            children: Vec::new(),
+            prev: Some(prev),
+        }))
+    }
 }
