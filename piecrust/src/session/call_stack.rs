@@ -42,6 +42,12 @@ impl CallStack {
         self.stack.pop()
     }
 
+    /// Pops an element from the callstack and prunes the call tree.
+    pub fn pop_prune(&mut self) -> Option<StackElement> {
+        self.tree.pop_prune();
+        self.stack.pop()
+    }
+
     /// Returns a view of the stack to the `n`th element from the top.
     pub fn nth_from_top(&self, n: usize) -> Option<StackElement> {
         let len = self.stack.len();
@@ -105,6 +111,18 @@ impl CallTree {
             if prev.is_none() {
                 free_tree(inner);
             }
+            prev
+        });
+    }
+
+    /// Clears the tree under the current node, and moves to the previous node.
+    fn pop_prune(&mut self) {
+        self.0 = self.0.and_then(|inner| unsafe {
+            let prev = (*inner).prev;
+            if let Some(prev) = prev {
+                (*prev).children.pop();
+            }
+            free_tree(inner);
             prev
         });
     }

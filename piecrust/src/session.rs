@@ -530,6 +530,23 @@ impl Session {
         }
     }
 
+    pub(crate) fn pop_callstack_prune(&mut self) {
+        if let Some(element) = self.inner.call_stack.pop_prune() {
+            self.update_instance_count(element.contract_id, false);
+        }
+    }
+
+    pub(crate) fn revert_callstack(&mut self) -> Result<(), std::io::Error> {
+        for elem in self.inner.call_stack.iter_tree() {
+            let instance = self
+                .instance(&elem.contract_id)
+                .expect("instance should exist");
+            instance.revert()?;
+        }
+
+        Ok(())
+    }
+
     /// Commits the given session to disk, consuming the session and returning
     /// its state root.
     pub fn commit(self) -> Result<[u8; 32], Error> {
@@ -588,8 +605,24 @@ impl Session {
             .instance(&stack_element.contract_id)
             .expect("instance should exist");
 
+        instance
+            .snap()
+            .map_err(|err| Error::MemorySnapshotFailure {
+                reason: None,
+                io: Arc::new(err),
+            })?;
+
         let arg_len = instance.write_bytes_to_arg_buffer(&fdata);
-        let ret_len = instance.call(fname, arg_len, limit)?;
+        let ret_len = instance.call(fname, arg_len, limit).map_err(|err| {
+            if let Err(io_err) = self.revert_callstack() {
+                return Error::MemorySnapshotFailure {
+                    reason: Some(Arc::new(err)),
+                    io: Arc::new(io_err),
+                };
+            }
+            self.pop_callstack_prune();
+            err
+        })?;
         let ret = instance.read_bytes_from_arg_buffer(ret_len as u32);
 
         let spent = limit
@@ -597,6 +630,17 @@ impl Session {
                 .get_remaining_points()
                 .expect("there should be remaining points");
 
+        for elem in self.inner.call_stack.iter_tree() {
+            let instance = self
+                .instance(&elem.contract_id)
+                .expect("instance should exist");
+            instance
+                .apply()
+                .map_err(|err| Error::MemorySnapshotFailure {
+                    reason: None,
+                    io: Arc::new(err),
+                })?;
+        }
         self.pop_callstack();
 
         Ok((ret, spent))

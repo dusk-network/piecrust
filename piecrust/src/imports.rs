@@ -4,12 +4,13 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
+use std::sync::Arc;
+
+use piecrust_uplink::{ContractId, ARGBUF_LEN, CONTRACT_ID_BYTES};
 use wasmer::{imports, Function, FunctionEnv, FunctionEnvMut};
 
-use crate::Error;
-use piecrust_uplink::{ContractId, ARGBUF_LEN, CONTRACT_ID_BYTES};
-
 use crate::instance::{Env, WrappedInstance};
+use crate::Error;
 
 const POINT_PASS_PCT: u64 = 93;
 
@@ -154,6 +155,11 @@ fn c(
                 .instance(&callee_stack_element.contract_id)
                 .expect("callee instance should exist");
 
+            callee.snap().map_err(|err| Error::MemorySnapshotFailure {
+                reason: None,
+                io: Arc::new(err),
+            })?;
+
             let arg = &arg_buf[..arg_len as usize];
 
             callee.write_argument(arg);
@@ -168,11 +174,20 @@ fn c(
                 .expect("there should be points remaining");
             let callee_spent = callee_limit - callee_remaining;
 
-            env.pop_callstack();
-
             Ok((ret_len, callee_spent))
+        })
+        .map_err(|err| {
+            if let Err(io_err) = env.revert_callstack() {
+                return Error::MemorySnapshotFailure {
+                    reason: Some(Arc::new(err)),
+                    io: Arc::new(io_err),
+                };
+            }
+            env.pop_callstack_prune();
+            err
         })?;
 
+    env.pop_callstack();
     instance.set_remaining_points(caller_remaining - callee_spent);
 
     Ok(ret_len)
