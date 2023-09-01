@@ -214,10 +214,7 @@ impl Session {
 
         let wrapped_contract =
             WrappedContract::new(bytecode, None::<Objectcode>)?;
-        let contract_metadata = ContractMetadata {
-            contract_id,
-            owner: owner.clone(),
-        };
+        let contract_metadata = ContractMetadata { contract_id, owner };
         let metadata_bytes = Self::serialize_data(&contract_metadata)?;
 
         self.inner
@@ -231,29 +228,37 @@ impl Session {
             )
             .map_err(|err| PersistenceError(Arc::new(err)))?;
 
-        self.create_instance(contract_id)?;
-        let instance =
-            self.instance(&contract_id).expect("instance should exist");
+        let instantiate = || {
+            self.create_instance(contract_id)?;
+            let instance =
+                self.instance(&contract_id).expect("instance should exist");
 
-        let has_init = instance.is_function_exported(INIT_METHOD);
-        if has_init && arg.is_none() {
-            return Err(InitalizationError(
-                "Contract has constructor but no argument was provided".into(),
-            ));
-        }
-
-        if let Some(arg) = arg {
-            if !has_init {
+            let has_init = instance.is_function_exported(INIT_METHOD);
+            if has_init && arg.is_none() {
                 return Err(InitalizationError(
-                    "Argument was provided but contract has no constructor"
+                    "Contract has constructor but no argument was provided"
                         .into(),
                 ));
             }
 
-            self.call_inner(contract_id, INIT_METHOD, arg, points_limit)?;
-        }
+            if let Some(arg) = arg {
+                if !has_init {
+                    return Err(InitalizationError(
+                        "Argument was provided but contract has no constructor"
+                            .into(),
+                    ));
+                }
 
-        Ok(())
+                self.call_inner(contract_id, INIT_METHOD, arg, points_limit)?;
+            }
+
+            Ok(())
+        };
+
+        instantiate().map_err(|err| {
+            self.inner.contract_session.remove_contract(&contract_id);
+            err
+        })
     }
 
     /// Execute a call on the current state of this session.

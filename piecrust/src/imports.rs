@@ -7,9 +7,7 @@
 use wasmer::{imports, Function, FunctionEnv, FunctionEnvMut};
 
 use crate::Error;
-use piecrust_uplink::{
-    ContractError, ContractId, ARGBUF_LEN, CONTRACT_ID_BYTES,
-};
+use piecrust_uplink::{ContractId, ARGBUF_LEN, CONTRACT_ID_BYTES};
 
 use crate::instance::{Env, WrappedInstance};
 
