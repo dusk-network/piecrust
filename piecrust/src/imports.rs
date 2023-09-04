@@ -6,7 +6,9 @@
 
 use std::sync::Arc;
 
-use piecrust_uplink::{ContractId, ARGBUF_LEN, CONTRACT_ID_BYTES};
+use piecrust_uplink::{
+    ContractError, ContractId, ARGBUF_LEN, CONTRACT_ID_BYTES,
+};
 use wasmer::{imports, Function, FunctionEnv, FunctionEnvMut};
 
 use crate::instance::{Env, WrappedInstance};
@@ -134,63 +136,68 @@ fn c(
         caller_remaining * POINT_PASS_PCT / 100
     };
 
-    let (ret_len, callee_spent) = instance
-        .with_memory_mut::<_, Result<_, Error>>(|memory| {
-            let name = core::str::from_utf8(
-                &memory[name_ofs as usize..][..name_len as usize],
-            )?;
+    let with_memory = |memory: &mut [u8]| -> Result<_, Error> {
+        let arg_buf = &memory[argbuf_ofs..][..ARGBUF_LEN];
 
-            let arg_buf = &memory[argbuf_ofs..][..ARGBUF_LEN];
+        let mut mod_id = ContractId::uninitialized();
+        mod_id.as_bytes_mut().copy_from_slice(
+            &memory[mod_id_ofs as usize..][..std::mem::size_of::<ContractId>()],
+        );
 
-            let mut mod_id = ContractId::uninitialized();
-            mod_id.as_bytes_mut().copy_from_slice(
-                &memory[mod_id_ofs as usize..]
-                    [..std::mem::size_of::<ContractId>()],
-            );
+        let callee_stack_element = env
+            .push_callstack(mod_id, callee_limit)
+            .expect("pushing to the callstack should succeed");
+        let callee = env
+            .instance(&callee_stack_element.contract_id)
+            .expect("callee instance should exist");
 
-            let callee_stack_element = env
-                .push_callstack(mod_id, callee_limit)
-                .expect("pushing to the callstack should succeed");
-            let callee = env
-                .instance(&callee_stack_element.contract_id)
-                .expect("callee instance should exist");
+        callee.snap().map_err(|err| Error::MemorySnapshotFailure {
+            reason: None,
+            io: Arc::new(err),
+        })?;
 
-            callee.snap().map_err(|err| Error::MemorySnapshotFailure {
-                reason: None,
-                io: Arc::new(err),
-            })?;
+        let name = core::str::from_utf8(
+            &memory[name_ofs as usize..][..name_len as usize],
+        )?;
 
-            let arg = &arg_buf[..arg_len as usize];
+        let arg = &arg_buf[..arg_len as usize];
 
-            callee.write_argument(arg);
-            let ret_len = callee.call(name, arg.len() as u32, callee_limit)?;
-            check_arg(callee, ret_len as u32)?;
+        callee.write_argument(arg);
+        let ret_len = callee.call(name, arg.len() as u32, callee_limit)?;
+        check_arg(callee, ret_len as u32)?;
 
-            // copy back result
-            callee.read_argument(&mut memory[argbuf_ofs..][..ret_len as usize]);
+        // copy back result
+        callee.read_argument(&mut memory[argbuf_ofs..][..ret_len as usize]);
 
-            let callee_remaining = callee
-                .get_remaining_points()
-                .expect("there should be points remaining");
-            let callee_spent = callee_limit - callee_remaining;
+        let callee_remaining = callee
+            .get_remaining_points()
+            .expect("there should be points remaining");
+        let callee_spent = callee_limit - callee_remaining;
 
-            Ok((ret_len, callee_spent))
-        })
-        .map_err(|err| {
+        Ok((ret_len, callee_spent))
+    };
+
+    let ret = match instance.with_memory_mut(with_memory) {
+        Ok((ret_len, callee_spent)) => {
+            env.pop_callstack();
+            instance.set_remaining_points(caller_remaining - callee_spent);
+            ret_len
+        }
+        Err(mut err) => {
             if let Err(io_err) = env.revert_callstack() {
-                return Error::MemorySnapshotFailure {
+                err = Error::MemorySnapshotFailure {
                     reason: Some(Arc::new(err)),
                     io: Arc::new(io_err),
                 };
             }
             env.pop_callstack_prune();
-            err
-        })?;
+            instance.set_remaining_points(caller_remaining - callee_limit);
 
-    env.pop_callstack();
-    instance.set_remaining_points(caller_remaining - callee_spent);
+            ContractError::from(err).into()
+        }
+    };
 
-    Ok(ret_len)
+    Ok(ret)
 }
 
 fn hq(
