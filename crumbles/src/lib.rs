@@ -486,7 +486,7 @@ impl MmapInner {
     }
 
     unsafe fn snap(&mut self) -> io::Result<()> {
-        if libc::mprotect(self.bytes.as_mut_ptr().cast(), PAGE_SIZE, PROT_READ)
+        if libc::mprotect(self.bytes.as_mut_ptr().cast(), MEM_SIZE, PROT_READ)
             != 0
         {
             return Err(io::Error::last_os_error());
@@ -498,7 +498,7 @@ impl MmapInner {
     }
 
     unsafe fn apply(&mut self) -> io::Result<()> {
-        if libc::mprotect(self.bytes.as_mut_ptr().cast(), PAGE_SIZE, PROT_READ)
+        if libc::mprotect(self.bytes.as_mut_ptr().cast(), MEM_SIZE, PROT_READ)
             != 0
         {
             return Err(io::Error::last_os_error());
@@ -535,7 +535,7 @@ impl MmapInner {
                 .copy_from_slice(&clean_page[..]);
         }
 
-        if libc::mprotect(self.bytes.as_mut_ptr().cast(), PAGE_SIZE, PROT_READ)
+        if libc::mprotect(self.bytes.as_mut_ptr().cast(), MEM_SIZE, PROT_READ)
             != 0
         {
             return Err(io::Error::last_os_error());
@@ -653,6 +653,8 @@ mod tests {
     use std::thread;
 
     const DIRT: [u8; 2 * PAGE_SIZE] = [42; 2 * PAGE_SIZE];
+    const DIRT2: [u8; 2 * PAGE_SIZE] = [43; 2 * PAGE_SIZE];
+
     const OFFSET: usize = PAGE_SIZE / 2 + PAGE_SIZE;
 
     #[test]
@@ -689,5 +691,98 @@ mod tests {
         threads
             .drain(..)
             .for_each(|t| t.join().expect("Thread should exit cleanly"));
+    }
+
+    #[test]
+    fn revert() {
+        let mut mem =
+            Mmap::new().expect("Instantiating new memory should succeed");
+
+        let slice = &mut mem[OFFSET..][..DIRT.len()];
+        slice.copy_from_slice(&DIRT);
+
+        mem.snap().expect("Snapshotting should succeed");
+
+        assert_eq!(mem.dirty_pages().count(), 0);
+        let slice = &mem[OFFSET..][..DIRT.len()];
+        assert_eq!(slice, DIRT, "Slice should be dirt just written");
+
+        // Writing to the same page should now be reversible
+        let slice = &mut mem[OFFSET..][..DIRT.len()];
+        slice.copy_from_slice(&[0; 2 * PAGE_SIZE]);
+
+        mem.revert().expect("Reverting should succeed");
+
+        assert_eq!(mem.dirty_pages().count(), 3);
+        let slice = &mut mem[OFFSET..][..DIRT.len()];
+        assert_eq!(
+            slice, DIRT,
+            "Slice should be the dirt that was written before"
+        );
+    }
+
+    #[test]
+    fn multi_revert() {
+        let mut mem =
+            Mmap::new().expect("Instantiating new memory should succeed");
+
+        let slice = &mut mem[OFFSET..][..DIRT.len()];
+        slice.copy_from_slice(&DIRT);
+
+        mem.snap().expect("Snapshotting should succeed");
+
+        assert_eq!(mem.dirty_pages().count(), 0);
+        let slice = &mem[OFFSET..][..DIRT.len()];
+        assert_eq!(slice, DIRT, "Slice should be dirt just written");
+
+        let slice = &mut mem[OFFSET..][..DIRT2.len()];
+        slice.copy_from_slice(&DIRT2);
+
+        mem.snap().expect("Snapshotting should succeed");
+
+        assert_eq!(mem.dirty_pages().count(), 0);
+        let slice = &mem[OFFSET..][..DIRT2.len()];
+        assert_eq!(slice, DIRT2, "Slice should be dirt just written");
+
+        mem.revert().expect("Reverting should succeed");
+
+        assert_eq!(mem.dirty_pages().count(), 3);
+        let slice = &mem[OFFSET..][..DIRT2.len()];
+        assert_eq!(slice, DIRT2, "Slice should be dirt written second");
+
+        mem.revert().expect("Reverting should succeed");
+
+        assert_eq!(mem.dirty_pages().count(), 3);
+        let slice = &mem[OFFSET..][..DIRT.len()];
+        assert_eq!(slice, DIRT, "Slice should be dirt written first");
+    }
+
+    #[test]
+    fn apply() {
+        let mut mem =
+            Mmap::new().expect("Instantiating new memory should succeed");
+
+        let slice = &mut mem[OFFSET..][..DIRT.len()];
+        slice.copy_from_slice(&DIRT);
+
+        mem.snap().expect("Snapshotting should succeed");
+
+        assert_eq!(mem.dirty_pages().count(), 0);
+        let slice = &mem[OFFSET..][..DIRT.len()];
+        assert_eq!(slice, DIRT, "Slice should be dirt just written");
+
+        // Writing to the same page should now be reversible
+        let slice = &mut mem[OFFSET..][..DIRT.len()];
+        slice.copy_from_slice(&[0; 2 * PAGE_SIZE]);
+
+        mem.apply().expect("Applying should succeed");
+
+        assert_eq!(mem.dirty_pages().count(), 3);
+        let slice = &mut mem[OFFSET..][..DIRT.len()];
+        assert_eq!(
+            slice,
+            &[0; 2 * PAGE_SIZE],
+            "Slice should be the zeros written afterwards"
+        );
     }
 }
