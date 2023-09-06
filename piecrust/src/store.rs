@@ -521,8 +521,10 @@ fn write_commit_inner<P: AsRef<Path>>(
                 let base_metadata_path =
                     base_bytecode_path.with_extension(METADATA_EXTENSION);
 
-                let memory_path = directories.memory_dir.join(&contract_hex);
+                let memory_dir = directories.memory_dir.join(&contract_hex);
                 let base_memory_dir = base.memory_dir.join(&contract_hex);
+
+                fs::create_dir_all(&memory_dir)?;
 
                 fs::hard_link(base_bytecode_path, bytecode_path)?;
                 fs::hard_link(base_objectcode_path, objectcode_path)?;
@@ -530,7 +532,7 @@ fn write_commit_inner<P: AsRef<Path>>(
 
                 for page_offset in &elem.offsets {
                     let page_path =
-                        memory_path.join(format!("{page_offset:08x}"));
+                        memory_dir.join(format!("{page_offset:08x}"));
                     let base_page_path =
                         base_memory_dir.join(format!("{page_offset:08x}"));
 
