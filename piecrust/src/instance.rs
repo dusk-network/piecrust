@@ -4,6 +4,7 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
+use std::io;
 use std::ops::{Deref, DerefMut};
 use std::ptr::NonNull;
 use std::sync::Arc;
@@ -33,6 +34,7 @@ pub struct WrappedInstance {
     instance: wasmer::Instance,
     arg_buf_ofs: usize,
     store: wasmer::Store,
+    memory: Memory,
 }
 
 pub(crate) struct Env {
@@ -134,7 +136,7 @@ impl WrappedInstance {
         contract: &WrappedContract,
         memory: Memory,
     ) -> Result<Self, Error> {
-        let tunables = InstanceTunables::new(memory);
+        let tunables = InstanceTunables::new(memory.clone());
         let mut store = Store::new_store_with_tunables(tunables);
 
         let env = Env {
@@ -184,9 +186,28 @@ impl WrappedInstance {
             store,
             instance,
             arg_buf_ofs,
+            memory,
         };
 
         Ok(wrapped)
+    }
+
+    pub(crate) fn snap(&self) -> io::Result<()> {
+        let mut memory = self.memory.write();
+        memory.snap()?;
+        Ok(())
+    }
+
+    pub(crate) fn revert(&self) -> io::Result<()> {
+        let mut memory = self.memory.write();
+        memory.revert()?;
+        Ok(())
+    }
+
+    pub(crate) fn apply(&self) -> io::Result<()> {
+        let mut memory = self.memory.write();
+        memory.apply()?;
+        Ok(())
     }
 
     // Write argument into instance
@@ -282,7 +303,7 @@ impl WrappedInstance {
     }
 
     #[allow(unused)]
-    pub fn snap(&self) {
+    pub fn print_state(&self) {
         let mem = self
             .instance
             .exports

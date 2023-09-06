@@ -94,19 +94,10 @@ struct SessionInner {
 
     contract_session: ContractSession,
     host_queries: HostQueries,
-
-    call_history: Vec<CallOrDeploy>,
     buffer: Vec<u8>,
 
     feeder: Option<mpsc::Sender<Vec<u8>>>,
     events: Vec<Event>,
-
-    call_count: usize,
-    icc_count: usize, // inter-contract call - 0 is the main call
-    icc_height: usize, // height of an inter-contract call
-    // Keeps errors/successes that were found during the execution of a
-    // particular inter-contract call in the context of a call.
-    icc_errors: BTreeMap<usize, BTreeMap<usize, Error>>,
 }
 
 impl Session {
@@ -122,14 +113,9 @@ impl Session {
             data,
             contract_session,
             host_queries,
-            call_history: vec![],
             buffer: vec![0; WASM_PAGE_SIZE],
             feeder: None,
             events: vec![],
-            call_count: 0,
-            icc_count: 0,
-            icc_height: 0,
-            icc_errors: BTreeMap::new(),
         })
     }
 
@@ -228,10 +214,7 @@ impl Session {
 
         let wrapped_contract =
             WrappedContract::new(bytecode, None::<Objectcode>)?;
-        let contract_metadata = ContractMetadata {
-            contract_id,
-            owner: owner.clone(),
-        };
+        let contract_metadata = ContractMetadata { contract_id, owner };
         let metadata_bytes = Self::serialize_data(&contract_metadata)?;
 
         self.inner
@@ -245,37 +228,37 @@ impl Session {
             )
             .map_err(|err| PersistenceError(Arc::new(err)))?;
 
-        self.create_instance(contract_id)?;
-        let instance =
-            self.instance(&contract_id).expect("instance should exist");
+        let instantiate = || {
+            self.create_instance(contract_id)?;
+            let instance =
+                self.instance(&contract_id).expect("instance should exist");
 
-        let has_init = instance.is_function_exported(INIT_METHOD);
-        if has_init && arg.is_none() {
-            return Err(InitalizationError(
-                "Contract has constructor but no argument was provided".into(),
-            ));
-        }
-
-        if let Some(arg) = &arg {
-            if !has_init {
+            let has_init = instance.is_function_exported(INIT_METHOD);
+            if has_init && arg.is_none() {
                 return Err(InitalizationError(
-                    "Argument was provided but contract has no constructor"
+                    "Contract has constructor but no argument was provided"
                         .into(),
                 ));
             }
 
-            self.initialize(contract_id, arg.clone(), points_limit)?;
-        }
+            if let Some(arg) = arg {
+                if !has_init {
+                    return Err(InitalizationError(
+                        "Argument was provided but contract has no constructor"
+                            .into(),
+                    ));
+                }
 
-        self.inner.call_history.push(From::from(Deploy {
-            contract_id,
-            bytecode: bytecode.to_vec(),
-            fdata: arg,
-            owner,
-            limit: points_limit,
-        }));
+                self.call_inner(contract_id, INIT_METHOD, arg, points_limit)?;
+            }
 
-        Ok(())
+            Ok(())
+        };
+
+        instantiate().map_err(|err| {
+            self.inner.contract_session.remove_contract(&contract_id);
+            err
+        })
     }
 
     /// Execute a call on the current state of this session.
@@ -344,12 +327,8 @@ impl Session {
             return Err(InitalizationError("init call not allowed".into()));
         }
 
-        let (data, points_spent) = self.execute_until_ok(Call {
-            contract,
-            fname: fn_name.to_string(),
-            fdata: fn_arg.into(),
-            limit: points_limit,
-        })?;
+        let (data, points_spent) =
+            self.call_inner(contract, fn_name, fn_arg.into(), points_limit)?;
         let events = mem::take(&mut self.inner.events);
 
         Ok(CallReceipt {
@@ -405,21 +384,6 @@ impl Session {
         let r = self.call_raw(contract, fn_name, fn_arg, u64::MAX);
         self.inner.feeder = None;
         r
-    }
-
-    pub fn initialize(
-        &mut self,
-        contract: ContractId,
-        arg: Vec<u8>,
-        points_limit: u64,
-    ) -> Result<(), Error> {
-        self.execute_until_ok(Call {
-            contract,
-            fname: INIT_METHOD.to_string(),
-            fdata: arg,
-            limit: points_limit,
-        })?;
-        Ok(())
     }
 
     pub(crate) fn instance<'a>(
@@ -566,6 +530,23 @@ impl Session {
         }
     }
 
+    pub(crate) fn pop_callstack_prune(&mut self) {
+        if let Some(element) = self.inner.call_stack.pop_prune() {
+            self.update_instance_count(element.contract_id, false);
+        }
+    }
+
+    pub(crate) fn revert_callstack(&mut self) -> Result<(), std::io::Error> {
+        for elem in self.inner.call_stack.iter_tree() {
+            let instance = self
+                .instance(&elem.contract_id)
+                .expect("instance should exist");
+            instance.revert()?;
+        }
+
+        Ok(())
+    }
+
     /// Commits the given session to disk, consuming the session and returning
     /// its state root.
     pub fn commit(self) -> Result<[u8; 32], Error> {
@@ -612,194 +593,54 @@ impl Session {
         Ok(buf[..pos].to_vec())
     }
 
-    /// Increment the call execution count.
-    ///
-    /// If the call errors on the first called contract, return said error.
-    pub(crate) fn increment_call_count(&mut self) -> Option<Error> {
-        self.inner.call_count += 1;
-        self.inner
-            .icc_errors
-            .get(&self.inner.call_count)
-            .and_then(|map| map.get(&0))
-            .cloned()
-    }
-
-    /// Increment the icc execution count, returning the current count. If there
-    /// was, previously, an error in the execution of the ic call with the
-    /// current number count - meaning after iteration - it will be returned.
-    pub(crate) fn increment_icc_count(&mut self) -> Option<Error> {
-        self.inner.icc_count += 1;
-        match self.inner.icc_errors.get(&self.inner.call_count) {
-            Some(icc_results) => {
-                icc_results.get(&self.inner.icc_count).cloned()
-            }
-            None => None,
-        }
-    }
-
-    /// When this is decremented, it means we have successfully "rolled back"
-    /// one icc. Therefore it should remove all errors after the call, after the
-    /// decrement.
-    ///
-    /// # Panics
-    /// When the errors map is not present.
-    pub(crate) fn decrement_icc_count(&mut self) {
-        self.inner.icc_count -= 1;
-        self.inner
-            .icc_errors
-            .get_mut(&self.inner.call_count)
-            .expect("Map should always be there")
-            .retain(|c, _| c <= &self.inner.icc_count);
-    }
-
-    /// Increments the height of an icc.
-    pub(crate) fn increment_icc_height(&mut self) {
-        self.inner.icc_height += 1;
-    }
-
-    /// Decrements the height of an icc.
-    pub(crate) fn decrement_icc_height(&mut self) {
-        self.inner.icc_height -= 1;
-    }
-
-    /// Insert error at the current icc count.
-    ///
-    /// If there are errors at a larger ICC count than current, they will be
-    /// forgotten.
-    pub(crate) fn insert_icc_error(&mut self, err: Error) {
-        match self.inner.icc_errors.entry(self.inner.call_count) {
-            Entry::Vacant(entry) => {
-                let mut map = BTreeMap::new();
-                map.insert(self.inner.icc_count, err);
-                entry.insert(map);
-            }
-            Entry::Occupied(mut entry) => {
-                let map = entry.get_mut();
-                map.insert(self.inner.icc_count, err);
-            }
-        }
-    }
-
-    /// Execute the call and re-execute until the call errors with only itself
-    /// in the call stack, or succeeds.
-    fn execute_until_ok(
+    fn call_inner(
         &mut self,
-        call: Call,
+        contract: ContractId,
+        fname: &str,
+        fdata: Vec<u8>,
+        limit: u64,
     ) -> Result<(Vec<u8>, u64), Error> {
-        // If the call succeeds at first run, then we can proceed with adding it
-        // to the call history and return.
-        match self.call_if_not_error(call) {
-            Ok(data) => return Ok(data),
-            Err(err) => {
-                // If the call does not succeed, we should check if it failed at
-                // height zero. If so, we should register the error with ICC
-                // count 0 and re-execute, returning the result.
-                //
-                // This will ensure that the call is never really executed,
-                // keeping it atomic.
-                if self.inner.icc_height == 0 {
-                    self.inner.icc_count = 0;
-                    self.insert_icc_error(err);
-                    return self.re_execute();
-                }
-
-                // If it is not at height zero, just register the error and let
-                // it re-execute until ok.
-                self.insert_icc_error(err);
-            }
-        }
-
-        // Loop until executed atomically.
-        loop {
-            match self.re_execute() {
-                Ok(awesome) => return Ok(awesome),
-                Err(err) => {
-                    if self.inner.icc_height == 0 {
-                        self.inner.icc_count = 0;
-                        self.insert_icc_error(err);
-                        return self.re_execute();
-                    }
-                    self.insert_icc_error(err);
-                }
-            }
-        }
-    }
-
-    /// Purge all produced data and re-execute all transactions and deployments
-    /// in order, returning the result of the last executed call.
-    fn re_execute(&mut self) -> Result<(Vec<u8>, u64), Error> {
-        // Take all transaction history since we're going to re-add it back
-        // anyway.
-        let mut call_history =
-            Vec::with_capacity(self.inner.call_history.len());
-        mem::swap(&mut call_history, &mut self.inner.call_history);
-
-        // Purge all other data that is set by performing transactions.
-        self.clear_stack_and_instances();
-        self.inner.debug.clear();
-        self.inner.events.clear();
-        self.inner.contract_session.clear_contracts();
-        self.inner.call_count = 0;
-
-        // This will always be set by the loop, so this one will never be
-        // returned.
-        let mut res = Ok((vec![], 0));
-
-        for call in call_history {
-            match call {
-                CallOrDeploy::Call(call) => {
-                    res = self.call_if_not_error(call);
-                }
-                CallOrDeploy::Deploy(deploy) => {
-                    self.do_deploy(deploy.contract_id, &deploy.bytecode, deploy.fdata, deploy.owner, deploy.limit)
-                        .expect("Only deploys that succeed should be added to the history");
-                }
-            }
-        }
-
-        res
-    }
-
-    /// Make the call only if an error is not known. If an error is known return
-    /// it instead.
-    ///
-    /// This will add the call to the call history as well.
-    fn call_if_not_error(
-        &mut self,
-        call: Call,
-    ) -> Result<(Vec<u8>, u64), Error> {
-        // Set both the count and height of the ICCs to zero
-        self.inner.icc_count = 0;
-        self.inner.icc_height = 0;
-
-        // If we already know of an error on this call, don't execute and just
-        // return the error.
-        if let Some(err) = self.increment_call_count() {
-            // We also need it in the call history here.
-            self.inner.call_history.push(call.into());
-            return Err(err);
-        }
-
-        let res = self.call_inner(&call);
-        self.inner.call_history.push(call.into());
-        res
-    }
-
-    fn call_inner(&mut self, call: &Call) -> Result<(Vec<u8>, u64), Error> {
-        let stack_element = self.push_callstack(call.contract, call.limit)?;
+        let stack_element = self.push_callstack(contract, limit)?;
         let instance = self
             .instance(&stack_element.contract_id)
             .expect("instance should exist");
 
-        let arg_len = instance.write_bytes_to_arg_buffer(&call.fdata);
-        let ret_len = instance.call(&call.fname, arg_len, call.limit)?;
+        instance
+            .snap()
+            .map_err(|err| Error::MemorySnapshotFailure {
+                reason: None,
+                io: Arc::new(err),
+            })?;
+
+        let arg_len = instance.write_bytes_to_arg_buffer(&fdata);
+        let ret_len = instance.call(fname, arg_len, limit).map_err(|err| {
+            if let Err(io_err) = self.revert_callstack() {
+                return Error::MemorySnapshotFailure {
+                    reason: Some(Arc::new(err)),
+                    io: Arc::new(io_err),
+                };
+            }
+            self.pop_callstack_prune();
+            err
+        })?;
         let ret = instance.read_bytes_from_arg_buffer(ret_len as u32);
 
-        let spent = call.limit
+        let spent = limit
             - instance
                 .get_remaining_points()
                 .expect("there should be remaining points");
 
+        for elem in self.inner.call_stack.iter_tree() {
+            let instance = self
+                .instance(&elem.contract_id)
+                .expect("instance should exist");
+            instance
+                .apply()
+                .map_err(|err| Error::MemorySnapshotFailure {
+                    reason: None,
+                    io: Arc::new(err),
+                })?;
+        }
         self.pop_callstack();
 
         Ok((ret, spent))
@@ -850,41 +691,6 @@ impl CallReceipt<Vec<u8>> {
             data,
         })
     }
-}
-
-#[derive(Debug)]
-enum CallOrDeploy {
-    Call(Call),
-    Deploy(Deploy),
-}
-
-impl From<Call> for CallOrDeploy {
-    fn from(call: Call) -> Self {
-        Self::Call(call)
-    }
-}
-
-impl From<Deploy> for CallOrDeploy {
-    fn from(deploy: Deploy) -> Self {
-        Self::Deploy(deploy)
-    }
-}
-
-#[derive(Debug)]
-struct Deploy {
-    contract_id: ContractId,
-    bytecode: Vec<u8>,
-    fdata: Option<Vec<u8>>,
-    owner: Vec<u8>,
-    limit: u64,
-}
-
-#[derive(Debug)]
-struct Call {
-    contract: ContractId,
-    fname: String,
-    fdata: Vec<u8>,
-    limit: u64,
 }
 
 #[derive(Debug, Default)]

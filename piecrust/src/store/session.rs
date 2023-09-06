@@ -188,9 +188,9 @@ impl ContractSession {
         }
     }
 
-    /// Clear all deployed deployed or otherwise instantiated contracts.
-    pub fn clear_contracts(&mut self) {
-        self.contracts.clear();
+    /// Remove the given contract from the session.
+    pub fn remove_contract(&mut self, contract: &ContractId) {
+        self.contracts.remove(contract);
     }
 
     /// Checks if contract is deployed

@@ -49,14 +49,19 @@ pub enum Error {
     InvalidArgumentBuffer,
     #[error("Invalid memory")]
     InvalidFunctionSignature(String),
-    #[error(transparent)]
-    MemorySetupError(Arc<std::io::Error>),
     #[error("Memory access out of bounds: offset {offset}, length {len}, memory length {mem_len}")]
     MemoryAccessOutOfBounds {
         offset: usize,
         len: usize,
         mem_len: usize,
     },
+    #[error("Snapshot failure: {reason:?} {io}")]
+    MemorySnapshotFailure {
+        reason: Option<Arc<Self>>,
+        io: Arc<std::io::Error>,
+    },
+    #[error(transparent)]
+    MemorySetupError(Arc<std::io::Error>),
     #[error("Missing feed")]
     MissingFeed,
     #[error("Missing host data: {0}")]

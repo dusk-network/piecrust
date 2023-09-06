@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Fix memory protection on snapshotting functions
+
 ## [0.1.0] - 2023-08-30
 
 ### Added
