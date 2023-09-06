@@ -18,18 +18,23 @@ and, the directory will contain the following files:
             contract_1
             contract_2
         memory/   # Contract memories
-            contract_1
-            contract_2
+            contract_1/
+                00000000 # Memory pages
+                00010000
+                00020000
+            contract_2/
+                00000000
+                00010000
         index    # Contract memory hashes
 ```
 
 ### Another Commit
 
-When can then start a new session using `Root1` as a base commit, and make some
+When can then start a new session using `root_1` as a base commit, and make some
 modifications to the state by performing transactions. Let's say that we made
-some modifications to `contract_1`'s memory, and deploy a new contract with
-identifier `contract_3`. We can then commit to those changes forming a new commit
-with `root_2`.
+some modifications to `contract_1`'s first memory page, and deploy a new
+contract with identifier `contract_3`. We can then commit to those changes
+forming a new commit with `root_2`.
 
 The directory will then look like this:
 
@@ -40,8 +45,13 @@ The directory will then look like this:
             contract_1
             contract_2
         memory/
-            contract_1
-            contract_2
+            contract_1/
+                00000000
+                00010000
+                00020000
+            contract_2/
+                00000000
+                00010000
         index
     root_2/
         bytecode/
@@ -49,53 +59,21 @@ The directory will then look like this:
             contract_2 # Hard link
             contract_3 # New contract
         memory/
-            contract_1 # Hard link
-            contract_1.diff # Delta
-            contract_2 # Hard link
-            contract_3
+            contract_1/
+                00000000 # New file (modified)
+                00010000 # Hard link (unmodified)
+                00020000 # Hard link
+            contract_2/
+                00000000 # Hard link
+                00010000 # Hard link
+            contract_3/
+                00000000 # New file (new contract)
         index
 ```
 
-To save space on disk, the `contract_1.diff` file is a compressed delta between
-the contents of the memory on disk and what they would be in `root_2`. Coupled
-together with the hard linking of memories and bytecodes, this allows us to
-effectively maintain a commit history and allow for independent commit
-deletions, while maintaining a small file system footprint.
-
-### Yet Another Commit...
-
-We start yet another session, this time basing ourselves from `root_2`, and we make
-some changes to `contract_2`. The
-
-When we commit yet another session, make some change additional commit files are created:
-
-```
-/tmp/piecrust/
-    root_1/*
-    root_2/
-        bytecode/
-            contract_1
-            contract_2
-            contract_3
-        memory/
-            contract_1
-            contract_1.diff
-            contract_2
-            contract_3
-        index
-    root_3/
-        bytecode/
-            contract_1
-            contract_2
-            contract_3
-        memory/
-            contract_1
-            contract_1.diff # Hard link
-            contract_2
-            contract_2.diff
-            contract_3
-        index
-```
+Only modified memory pages are saved to disk, and the rest are hard linked from
+the previous commit. Together, these two measures allow us to both save space on
+disk and maintain a history of independent commits.
 
 ### Index File
 
@@ -103,7 +81,7 @@ The `index` file in all commit directories contains a map of all existing
 contracts to their respective memory hashes. This is handy for avoiding IO
 operations when computing the root of the state.
 
-### Copy-on-write and Session concurrency 
+### Copy-on-write and Session concurrency
 
 Copy-on-write memory mapped files - see [mmap](https://man7.org/linux/man-pages/man2/mmap.2.html) -
 can be leveraged to make commits read-only, while keeping changes in memory.
