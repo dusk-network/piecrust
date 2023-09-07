@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.3] - 2023-09-07
+
 ### Fixed
 
 - Fix out of bound in argument buffer handling
@@ -229,6 +231,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- VERSIONS -->
 [Unreleased]: https://github.com/dusk-network/piecrust/compare/piecrust-0.9.2...HEAD
+[0.9.3]: https://github.com/dusk-network/piecrust/compare/piecrust-0.9.2...piecrust-0.9.3
 [0.9.2]: https://github.com/dusk-network/piecrust/compare/piecrust-0.9.1...piecrust-0.9.2
 [0.9.1]: https://github.com/dusk-network/piecrust/compare/piecrust-0.9.0...piecrust-0.9.1
 [0.9.0]: https://github.com/dusk-network/piecrust/compare/piecrust-0.8.0...piecrust-0.9.0
