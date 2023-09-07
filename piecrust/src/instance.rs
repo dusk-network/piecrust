@@ -4,10 +4,10 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use std::io;
 use std::ops::{Deref, DerefMut};
 use std::ptr::NonNull;
 use std::sync::Arc;
+use std::{cmp, io};
 
 use colored::*;
 use wasmer::wasmparser::Operator;
@@ -256,11 +256,13 @@ impl WrappedInstance {
         F: FnOnce(&mut [u8]) -> R,
     {
         self.with_memory_mut(|memory_bytes| {
-            let a = self.arg_buf_ofs;
-            let b = ARGBUF_LEN;
-            let begin = &mut memory_bytes[a..];
-            let trimmed = &mut begin[..b];
-            f(trimmed)
+            let offset = self.arg_buf_ofs;
+            let slice = &mut memory_bytes[offset..];
+
+            let len = cmp::min(slice.len(), ARGBUF_LEN);
+            let buffer = &mut slice[..len];
+
+            f(buffer)
         })
     }
 

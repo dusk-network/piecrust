@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Fix out of bound in argument buffer handling
+
 ## [0.9.2] - 2023-09-07
 
 ### Changed
