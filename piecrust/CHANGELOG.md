@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Remove re-execution in favor of micro-snapshots [#254]
 
+### Fixed
+
+- Fix non-existing memory directory when not modifying a contract
+
 ## [0.9.0] - 2023-08-30
 
 ### Changed
