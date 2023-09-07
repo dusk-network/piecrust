@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.1] - 2023-09-07
+
 ### Changed
 
 - Remove re-execution in favor of micro-snapshots [#254]
@@ -216,7 +218,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [#93]: https://github.com/dusk-network/piecrust/issues/93
 
 <!-- VERSIONS -->
-[Unreleased]: https://github.com/dusk-network/piecrust/compare/piecrust-0.9.0...HEAD
+[Unreleased]: https://github.com/dusk-network/piecrust/compare/piecrust-0.9.1...HEAD
+[0.9.1]: https://github.com/dusk-network/piecrust/compare/piecrust-0.9.0...piecrust-0.9.1
 [0.9.0]: https://github.com/dusk-network/piecrust/compare/piecrust-0.8.0...piecrust-0.9.0
 [0.8.0]: https://github.com/dusk-network/piecrust/compare/v0.7.0...piecrust-0.8.0
 [0.7.0]: https://github.com/dusk-network/piecrust/compare/piecrust-0.6.2...v0.7.0
