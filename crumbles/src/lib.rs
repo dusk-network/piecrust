@@ -42,6 +42,7 @@
 #![deny(clippy::pedantic)]
 
 use std::{
+    cmp,
     collections::BTreeMap,
     fs::File,
     mem::{self, MaybeUninit},
@@ -304,6 +305,11 @@ impl Mmap {
                 )
             })
     }
+
+    /// Sets the length of the memory mapping to the given number of bytes.
+    pub fn set_len(&mut self, len: u32) {
+        self.0.set_len(len);
+    }
 }
 
 impl AsRef<[u8]> for Mmap {
@@ -465,8 +471,15 @@ impl MmapInner {
 
     unsafe fn set_dirty(&mut self, page_num: usize) -> io::Result<()> {
         let start_addr = self.bytes.as_ptr() as usize;
-
         let page_offset = page_num * PAGE_SIZE;
+
+        if page_offset >= self.bytes.len() {
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                "Out of bounds write",
+            ));
+        }
+
         let page_addr = start_addr + page_offset;
 
         if libc::mprotect(page_addr as _, PAGE_SIZE, PROT_READ | PROT_WRITE)
@@ -542,6 +555,15 @@ impl MmapInner {
         }
 
         Ok(())
+    }
+
+    fn set_len(&mut self, len: u32) {
+        let ptr = self.bytes.as_mut_ptr();
+
+        let len = len as usize + PAGE_SIZE;
+        let len = cmp::min(MEM_SIZE, len);
+
+        unsafe { self.bytes = slice::from_raw_parts_mut(ptr, len) };
     }
 
     fn last_snapshot(&self) -> &Snapshot {

@@ -5,11 +5,11 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 use std::fs::OpenOptions;
-use std::io;
 use std::ops::{Deref, DerefMut};
 use std::path::Path;
 use std::ptr::NonNull;
 use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
+use std::{cmp, io};
 
 use crumbles::{Mmap, PAGE_SIZE};
 use wasmer::WASM_MAX_PAGES;
@@ -27,7 +27,6 @@ pub const MAX_MEM_SIZE: usize = MAX_PAGES * PAGE_SIZE;
 #[derive(Debug)]
 pub(crate) struct MemoryInner {
     pub(crate) mmap: Mmap,
-    pub(crate) current_len: usize,
     def: VMMemoryDefinition,
     init: bool,
 }
@@ -42,15 +41,16 @@ impl Memory {
     pub(crate) fn new() -> io::Result<Self> {
         let mut mmap = Mmap::new()?;
 
+        mmap.set_len(MIN_MEM_SIZE as u32);
+
         let def = VMMemoryDefinition {
             base: mmap.as_mut_ptr(),
-            current_length: MAX_MEM_SIZE,
+            current_length: MIN_MEM_SIZE + PAGE_SIZE,
         };
 
         Ok(Self {
             inner: Arc::new(RwLock::new(MemoryInner {
                 mmap,
-                current_len: MIN_MEM_SIZE,
                 def,
                 init: false,
             })),
@@ -72,15 +72,16 @@ impl Memory {
             }))?
         };
 
+        mmap.set_len(len as u32);
+
         let def = VMMemoryDefinition {
             base: mmap.as_mut_ptr(),
-            current_length: MAX_MEM_SIZE,
+            current_length: cmp::min(len + PAGE_SIZE, MAX_MEM_SIZE),
         };
 
         Ok(Self {
             inner: Arc::new(RwLock::new(MemoryInner {
                 mmap,
-                current_len: len,
                 def,
                 init: true,
             })),
@@ -156,21 +157,21 @@ impl LinearMemory for Memory {
     }
 
     fn size(&self) -> Pages {
-        let pages = self.read().inner.current_len / PAGE_SIZE;
+        let pages = self.read().len() / PAGE_SIZE;
         Pages(pages as u32)
     }
 
     fn style(&self) -> MemoryStyle {
         MemoryStyle::Static {
             bound: Pages(MAX_PAGES as u32),
-            offset_guard_size: PAGE_SIZE as u64,
+            offset_guard_size: 0,
         }
     }
 
     fn grow(&mut self, delta: Pages) -> Result<Pages, MemoryError> {
         let mut memory = self.write();
 
-        let current_len = memory.inner.current_len;
+        let current_len = memory.len();
         let new_len = current_len + delta.0 as usize * PAGE_SIZE;
 
         if new_len > MAX_PAGES * PAGE_SIZE {
@@ -180,7 +181,13 @@ impl LinearMemory for Memory {
             });
         }
 
-        memory.inner.current_len = new_len;
+        memory.set_len(new_len as u32);
+
+        memory.inner.def = VMMemoryDefinition {
+            base: memory.as_mut_ptr(),
+            current_length: cmp::min(new_len + PAGE_SIZE, MAX_MEM_SIZE),
+        };
+
         Ok(Pages((new_len / PAGE_SIZE) as u32))
     }
 

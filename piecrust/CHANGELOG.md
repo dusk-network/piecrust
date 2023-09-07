@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## Changed
+
+- Change to use `crumbles::Mmap::set_len` on growing memory
+
 ## [0.9.1] - 2023-09-07
 
 ### Changed
