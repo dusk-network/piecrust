@@ -47,7 +47,7 @@ use std::{
     fs::File,
     mem::{self, MaybeUninit},
     ops::{Deref, DerefMut},
-    os::fd::IntoRawFd,
+    os::fd::AsRawFd,
     sync::{Once, OnceLock, RwLock},
     {io, process, ptr, slice},
 };
@@ -456,7 +456,7 @@ impl MmapInner {
                     file_len,
                     PROT_READ,
                     MAP_PRIVATE | MAP_FIXED | MAP_NORESERVE,
-                    file.into_raw_fd(),
+                    file.as_raw_fd(),
                     0,
                 );
 
