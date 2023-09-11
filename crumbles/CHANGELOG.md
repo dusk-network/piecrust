@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Change `AsRef<[u8]>` and `AsMut<[u8]>` implementations for `Mmap` to always
+  return the entire mapping
+- Change segfault handler to no longer handle "Out of Bounds", since rust
+  already handles this correctly - with a panic
+
+### Removed
+
+- Remove `Mmap::set_len`
+- Remove `len` field from `MmapInner`
+
 ## [0.1.3] - 2023-09-11
 
 ### Fixed

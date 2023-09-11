@@ -7,7 +7,7 @@
 use std::ops::{Deref, DerefMut};
 use std::ptr::NonNull;
 use std::sync::Arc;
-use std::{cmp, io};
+use std::{io, slice};
 
 use colored::*;
 use wasmer::wasmparser::Operator;
@@ -22,6 +22,7 @@ use wasmer_types::{
 };
 use wasmer_vm::{LinearMemory, VMMemory, VMTable, VMTableDefinition};
 
+use crumbles::MEM_SIZE;
 use piecrust_uplink::{ContractId, Event, ARGBUF_LEN};
 
 use crate::contract::WrappedContract;
@@ -235,7 +236,11 @@ impl WrappedInstance {
             "memory export should be checked at contract creation time",
         );
         let view = mem.view(&self.store);
-        let memory_bytes = unsafe { view.data_unchecked() };
+        let memory_bytes = unsafe {
+            let slice = view.data_unchecked();
+            let ptr = slice.as_ptr();
+            slice::from_raw_parts(ptr, MEM_SIZE)
+        };
         f(memory_bytes)
     }
 
@@ -247,7 +252,11 @@ impl WrappedInstance {
             "memory export should be checked at contract creation time",
         );
         let view = mem.view(&self.store);
-        let memory_bytes = unsafe { view.data_unchecked_mut() };
+        let memory_bytes = unsafe {
+            let slice = view.data_unchecked_mut();
+            let ptr = slice.as_mut_ptr();
+            slice::from_raw_parts_mut(ptr, MEM_SIZE)
+        };
         f(memory_bytes)
     }
 
@@ -257,12 +266,7 @@ impl WrappedInstance {
     {
         self.with_memory_mut(|memory_bytes| {
             let offset = self.arg_buf_ofs;
-            let slice = &mut memory_bytes[offset..];
-
-            let len = cmp::min(slice.len(), ARGBUF_LEN);
-            let buffer = &mut slice[..len];
-
-            f(buffer)
+            f(&mut memory_bytes[offset..][..ARGBUF_LEN])
         })
     }
 
