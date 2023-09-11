@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Change minimum number of pages to be 4
+- Change reporting of memory to the host to be the total range of the memory
+  mapping available
+
+### Removed
+
+- Fake guard pages are now removed
+
 ## [0.9.3] - 2023-09-07
 
 ### Fixed

@@ -66,7 +66,7 @@ impl ContractIndex {
         let memory = memory.read();
         let memory_inner = memory.inner;
 
-        element.len = memory_inner.mmap.len();
+        element.len = memory_inner.def.current_length;
 
         for (dirty_page, _, page_offset) in memory_inner.mmap.dirty_pages() {
             element.offsets.insert(page_offset);

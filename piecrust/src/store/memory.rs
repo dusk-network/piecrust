@@ -5,11 +5,11 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 use std::fs::OpenOptions;
+use std::io;
 use std::ops::{Deref, DerefMut};
 use std::path::Path;
 use std::ptr::NonNull;
 use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
-use std::{cmp, io};
 
 use crumbles::{Mmap, PAGE_SIZE};
 use wasmer::WASM_MAX_PAGES;
@@ -19,7 +19,7 @@ use wasmer_vm::{
     VMMemory, VMMemoryDefinition,
 };
 
-const MIN_PAGES: usize = 2;
+const MIN_PAGES: usize = 4;
 const MIN_MEM_SIZE: usize = MIN_PAGES * PAGE_SIZE;
 const MAX_PAGES: usize = WASM_MAX_PAGES as usize;
 pub const MAX_MEM_SIZE: usize = MAX_PAGES * PAGE_SIZE;
@@ -27,7 +27,7 @@ pub const MAX_MEM_SIZE: usize = MAX_PAGES * PAGE_SIZE;
 #[derive(Debug)]
 pub(crate) struct MemoryInner {
     pub(crate) mmap: Mmap,
-    def: VMMemoryDefinition,
+    pub(crate) def: VMMemoryDefinition,
     init: bool,
 }
 
@@ -41,11 +41,9 @@ impl Memory {
     pub(crate) fn new() -> io::Result<Self> {
         let mut mmap = Mmap::new()?;
 
-        mmap.set_len(MIN_MEM_SIZE as u32);
-
         let def = VMMemoryDefinition {
             base: mmap.as_mut_ptr(),
-            current_length: MIN_MEM_SIZE + PAGE_SIZE,
+            current_length: MIN_MEM_SIZE,
         };
 
         Ok(Self {
@@ -72,11 +70,9 @@ impl Memory {
             }))?
         };
 
-        mmap.set_len(len as u32);
-
         let def = VMMemoryDefinition {
             base: mmap.as_mut_ptr(),
-            current_length: cmp::min(len + PAGE_SIZE, MAX_MEM_SIZE),
+            current_length: len,
         };
 
         Ok(Self {
@@ -171,7 +167,7 @@ impl LinearMemory for Memory {
     fn grow(&mut self, delta: Pages) -> Result<Pages, MemoryError> {
         let mut memory = self.write();
 
-        let current_len = memory.len();
+        let current_len = memory.inner.def.current_length;
         let new_len = current_len + delta.0 as usize * PAGE_SIZE;
 
         if new_len > MAX_PAGES * PAGE_SIZE {
@@ -181,11 +177,9 @@ impl LinearMemory for Memory {
             });
         }
 
-        memory.set_len(new_len as u32);
-
         memory.inner.def = VMMemoryDefinition {
             base: memory.as_mut_ptr(),
-            current_length: cmp::min(new_len + PAGE_SIZE, MAX_MEM_SIZE),
+            current_length: new_len,
         };
 
         Ok(Pages((new_len / PAGE_SIZE) as u32))
