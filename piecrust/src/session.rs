@@ -386,6 +386,15 @@ impl Session {
         r
     }
 
+    /// Returns the current length of the memory of the given contract.
+    ///
+    /// If the contract does not exist, or is otherwise not instantiated in this
+    /// session, it will return `None`.
+    pub fn memory_len(&self, contract_id: &ContractId) -> Option<usize> {
+        self.instance(contract_id)
+            .map(|instance| instance.mem_len())
+    }
+
     pub(crate) fn instance<'a>(
         &self,
         contract_id: &ContractId,

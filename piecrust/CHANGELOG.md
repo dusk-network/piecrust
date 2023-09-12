@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Add `Session::memory_len` to get the length of a memory in session [#268]
+
 ### Changed
 
 - Change minimum number of pages to be 4
