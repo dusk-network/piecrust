@@ -114,7 +114,7 @@ impl<'a> Deref for MemoryReadGuard<'a> {
 }
 
 pub struct MemoryWriteGuard<'a> {
-    inner: RwLockWriteGuard<'a, MemoryInner>,
+    pub(crate) inner: RwLockWriteGuard<'a, MemoryInner>,
 }
 
 impl<'a> AsRef<[u8]> for MemoryWriteGuard<'a> {

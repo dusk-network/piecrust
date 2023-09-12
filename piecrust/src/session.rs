@@ -483,20 +483,24 @@ impl Session {
         self.inner.call_stack.nth_from_top(n)
     }
 
+    /// Creates a new instance of the given contract, returning its memory
+    /// length.
     fn create_instance(
         &mut self,
-        contract_id: ContractId,
-    ) -> Result<(), Error> {
-        let instance = self.new_instance(contract_id)?;
-        if self.inner.instance_map.get(&contract_id).is_some() {
-            panic!("Contract already in the stack: {contract_id:?}");
+        contract: ContractId,
+    ) -> Result<usize, Error> {
+        let instance = self.new_instance(contract)?;
+        if self.inner.instance_map.get(&contract).is_some() {
+            panic!("Contract already in the stack: {contract:?}");
         }
+
+        let mem_len = instance.mem_len();
 
         let instance = Box::new(instance);
         let instance = Box::leak(instance) as *mut WrappedInstance;
 
-        self.inner.instance_map.insert(contract_id, (instance, 1));
-        Ok(())
+        self.inner.instance_map.insert(contract, (instance, 1));
+        Ok(mem_len)
     }
 
     pub(crate) fn push_callstack(
@@ -507,13 +511,21 @@ impl Session {
         let instance = self.instance(&contract_id);
 
         match instance {
-            Some(_) => {
+            Some(instance) => {
                 self.update_instance_count(contract_id, true);
-                self.inner.call_stack.push(contract_id, limit);
+                self.inner.call_stack.push(StackElement {
+                    contract_id,
+                    limit,
+                    mem_len: instance.mem_len(),
+                });
             }
             None => {
-                self.create_instance(contract_id)?;
-                self.inner.call_stack.push(contract_id, limit);
+                let mem_len = self.create_instance(contract_id)?;
+                self.inner.call_stack.push(StackElement {
+                    contract_id,
+                    limit,
+                    mem_len,
+                });
             }
         }
 
@@ -542,6 +554,7 @@ impl Session {
                 .instance(&elem.contract_id)
                 .expect("instance should exist");
             instance.revert()?;
+            instance.set_len(elem.mem_len);
         }
 
         Ok(())

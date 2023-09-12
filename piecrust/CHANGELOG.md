@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Revert memory size on errors [#268]
 - Fix reporting of memory size to `wasmer` [#268]
 
 ## [0.9.3] - 2023-09-07

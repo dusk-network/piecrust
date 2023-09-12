@@ -260,6 +260,16 @@ impl WrappedInstance {
         f(memory_bytes)
     }
 
+    /// Returns the current length of the memory.
+    pub(crate) fn mem_len(&self) -> usize {
+        self.memory.read().inner.def.current_length
+    }
+
+    /// Sets the length of the memory.
+    pub(crate) fn set_len(&mut self, len: usize) {
+        self.memory.write().inner.def.current_length = len;
+    }
+
     pub(crate) fn with_arg_buffer<F, R>(&self, f: F) -> R
     where
         F: FnOnce(&mut [u8]) -> R,
