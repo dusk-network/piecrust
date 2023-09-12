@@ -17,6 +17,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Fake guard pages are now removed
 
+### Fixed
+
+- Fix reporting of memory size to `wasmer` [#268]
+
 ## [0.9.3] - 2023-09-07
 
 ### Fixed
@@ -218,6 +222,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [#234]: https://github.com/dusk-network/piecrust/pull/234
 
 <!-- ISSUES -->
+[#268]: https://github.com/dusk-network/piecrust/issues/268
 [#254]: https://github.com/dusk-network/piecrust/issues/254
 [#253]: https://github.com/dusk-network/piecrust/issues/253
 [#249]: https://github.com/dusk-network/piecrust/issues/249

@@ -153,7 +153,7 @@ impl LinearMemory for Memory {
     }
 
     fn size(&self) -> Pages {
-        let pages = self.read().len() / PAGE_SIZE;
+        let pages = self.read().inner.def.current_length / PAGE_SIZE;
         Pages(pages as u32)
     }
 
