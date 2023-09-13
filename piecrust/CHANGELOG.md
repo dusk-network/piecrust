@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.0] - 2023-09-13
+
 ### Added
 
 - Add `Session::memory_len` to get the length of a memory in session [#268]
@@ -250,7 +252,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [#93]: https://github.com/dusk-network/piecrust/issues/93
 
 <!-- VERSIONS -->
-[Unreleased]: https://github.com/dusk-network/piecrust/compare/piecrust-0.9.2...HEAD
+[Unreleased]: https://github.com/dusk-network/piecrust/compare/piecrust-0.10.0...HEAD
+[0.10.0]: https://github.com/dusk-network/piecrust/compare/piecrust-0.9.3...piecrust-0.10.0
 [0.9.3]: https://github.com/dusk-network/piecrust/compare/piecrust-0.9.2...piecrust-0.9.3
 [0.9.2]: https://github.com/dusk-network/piecrust/compare/piecrust-0.9.1...piecrust-0.9.2
 [0.9.1]: https://github.com/dusk-network/piecrust/compare/piecrust-0.9.0...piecrust-0.9.1
