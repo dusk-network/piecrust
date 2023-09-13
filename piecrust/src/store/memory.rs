@@ -114,7 +114,7 @@ impl<'a> Deref for MemoryReadGuard<'a> {
 }
 
 pub struct MemoryWriteGuard<'a> {
-    inner: RwLockWriteGuard<'a, MemoryInner>,
+    pub(crate) inner: RwLockWriteGuard<'a, MemoryInner>,
 }
 
 impl<'a> AsRef<[u8]> for MemoryWriteGuard<'a> {
@@ -153,7 +153,7 @@ impl LinearMemory for Memory {
     }
 
     fn size(&self) -> Pages {
-        let pages = self.read().len() / PAGE_SIZE;
+        let pages = self.read().inner.def.current_length / PAGE_SIZE;
         Pages(pages as u32)
     }
 

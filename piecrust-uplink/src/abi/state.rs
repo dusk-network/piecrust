@@ -16,7 +16,7 @@ use crate::{
     SCRATCH_BUF_BYTES,
 };
 
-mod arg_buf {
+pub mod arg_buf {
     use crate::ARGBUF_LEN;
 
     #[no_mangle]

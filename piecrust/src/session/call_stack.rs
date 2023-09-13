@@ -12,6 +12,7 @@ use piecrust_uplink::ContractId;
 pub struct StackElement {
     pub contract_id: ContractId,
     pub limit: u64,
+    pub mem_len: usize,
 }
 
 /// A stack of contract calls.
@@ -30,10 +31,9 @@ impl CallStack {
     }
 
     /// Push an element to the call stack.
-    pub fn push(&mut self, contract_id: ContractId, limit: u64) {
-        let se = StackElement { contract_id, limit };
-        self.tree.push(se);
-        self.stack.push(se);
+    pub fn push(&mut self, elem: StackElement) {
+        self.tree.push(elem);
+        self.stack.push(elem);
     }
 
     /// Pops an element from the callstack.
