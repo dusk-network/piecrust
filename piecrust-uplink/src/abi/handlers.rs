@@ -8,10 +8,6 @@ use core::panic::PanicInfo;
 
 #[panic_handler]
 fn panic(_info: &PanicInfo) -> ! {
-    #[cfg(feature = "debug")]
-    if let Some(msg) = _info.message() {
-        crate::debug!("{msg}");
-    }
     unreachable!()
 }
 

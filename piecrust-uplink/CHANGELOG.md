@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed
+
+- Remove call to `hdebug` on panic [#271]
+
 ## [0.7.1] - 2023-09-13
 
 ### Added
@@ -105,6 +109,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - First `piecrust-uplink` release
 
 <!-- ISSUES -->
+[#271]: https://github.com/dusk-network/piecrust/issues/271
 [#268]: https://github.com/dusk-network/piecrust/issues/268
 [#243]: https://github.com/dusk-network/piecrust/issues/243
 [#222]: https://github.com/dusk-network/piecrust/issues/222
