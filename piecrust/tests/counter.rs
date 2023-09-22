@@ -87,3 +87,25 @@ fn call_through_c() -> Result<(), Error> {
 
     Ok(())
 }
+
+#[test]
+fn increment_panic() -> Result<(), Error> {
+    let vm = VM::ephemeral()?;
+
+    let mut session = vm.session(SessionData::builder())?;
+
+    let counter_id = session.deploy(
+        contract_bytecode!("fallible_counter"),
+        ContractData::builder(OWNER),
+        LIMIT,
+    )?;
+
+    match session.call::<_, ()>(counter_id, "increment", &true, LIMIT) {
+        Err(Error::ContractPanic(panic_msg)) => {
+            assert_eq!(panic_msg, String::from("Incremental panic"));
+        }
+        _ => panic!("Expected a panic error"),
+    }
+
+    Ok(())
+}

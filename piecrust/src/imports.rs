@@ -33,6 +33,7 @@ impl DefaultImports {
                 "feed" => Function::new_typed_with_env(store, &fenv, feed),
                 "limit" => Function::new_typed_with_env(store, &fenv, limit),
                 "spent" => Function::new_typed_with_env(store, &fenv, spent),
+                "panic" => Function::new_typed_with_env(store, &fenv, panic),
                 "owner" => Function::new_typed_with_env(store, &fenv, owner),
                 "self_id" => Function::new_typed_with_env(store, &fenv, self_id),
             }
@@ -163,7 +164,9 @@ fn c(
         let arg = &arg_buf[..arg_len as usize];
 
         callee.write_argument(arg);
-        let ret_len = callee.call(name, arg.len() as u32, callee_limit)?;
+        let ret_len = callee
+            .call(name, arg.len() as u32, callee_limit)
+            .map_err(Error::normalize)?;
         check_arg(callee, ret_len as u32)?;
 
         // copy back result
@@ -337,6 +340,24 @@ fn spent(fenv: FunctionEnvMut<Env>) -> u64 {
         .expect("there should be remaining points");
 
     limit - remaining
+}
+
+fn panic(fenv: FunctionEnvMut<Env>, arg_len: u32) -> Result<(), Error> {
+    let env = fenv.data();
+    let instance = env.self_instance();
+
+    check_arg(instance, arg_len)?;
+
+    instance.with_arg_buffer(|buf| {
+        let slice = &buf[..arg_len as usize];
+
+        let msg = match std::str::from_utf8(slice) {
+            Ok(msg) => msg,
+            Err(err) => return Err(Error::Utf8(err)),
+        };
+
+        Err(Error::ContractPanic(msg.to_owned()))
+    })
 }
 
 fn owner(fenv: FunctionEnvMut<Env>) -> u32 {

@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Add `panic` import implementation [#271]
+- Add `Error::ContractPanic` variant [#271]
+
+### Changed
+
+- Allow for multiple initializations on a new memory [#271]
+- Downcast `Error::RuntimeError` on each call boundary [#271]
+
 ## [0.10.0] - 2023-09-13
 
 ### Added
@@ -229,6 +239,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [#234]: https://github.com/dusk-network/piecrust/pull/234
 
 <!-- ISSUES -->
+[#271]: https://github.com/dusk-network/piecrust/issues/271
 [#268]: https://github.com/dusk-network/piecrust/issues/268
 [#254]: https://github.com/dusk-network/piecrust/issues/254
 [#253]: https://github.com/dusk-network/piecrust/issues/253
