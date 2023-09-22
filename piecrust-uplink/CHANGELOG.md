@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Add call to `panic` in panic handler [#271]
+- Add `panic` extern [#271]
+
 ### Removed
 
 - Remove call to `hdebug` on panic [#271]
