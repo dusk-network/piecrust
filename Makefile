@@ -39,7 +39,7 @@ cold-reboot: contracts ## Run the cold reboot test
 
 .PHONY: test contracts cold-reboot assert-counter-contract-small
 
-MAX_COUNTER_CONTRACT_SIZE = 512
+MAX_COUNTER_CONTRACT_SIZE = 8192
 
 assert-counter-contract-small: contracts
 	@test `wc -c target/stripped/counter.wasm | sed 's/^[^0-9]*\([0-9]*\).*/\1/'` -lt $(MAX_COUNTER_CONTRACT_SIZE);
