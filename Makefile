@@ -7,8 +7,7 @@ contracts: ## Build example contracts
 	  --release \
 	  --manifest-path=contracts/Cargo.toml \
 	  --color=always \
-	  -Z build-std=core,alloc,panic_abort \
-	  -Z build-std-features=panic_immediate_abort \
+	  -Z build-std=core,alloc \
 	  --target wasm32-unknown-unknown
 	@contracts/c-example/build.sh
 	@mkdir -p target/stripped
