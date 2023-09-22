@@ -29,7 +29,7 @@ impl FallibleCounter {
         let value = self.value + 1;
         self.value = value;
         if panic {
-            panic!()
+            panic!("Incremental panic");
         }
     }
 }

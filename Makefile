@@ -7,8 +7,7 @@ contracts: ## Build example contracts
 	  --release \
 	  --manifest-path=contracts/Cargo.toml \
 	  --color=always \
-	  -Z build-std=core,alloc,panic_abort \
-	  -Z build-std-features=panic_immediate_abort \
+	  -Z build-std=core,alloc \
 	  --target wasm32-unknown-unknown
 	@contracts/c-example/build.sh
 	@mkdir -p target/stripped
@@ -39,7 +38,7 @@ cold-reboot: contracts ## Run the cold reboot test
 
 .PHONY: test contracts cold-reboot assert-counter-contract-small
 
-MAX_COUNTER_CONTRACT_SIZE = 512
+MAX_COUNTER_CONTRACT_SIZE = 8192
 
 assert-counter-contract-small: contracts
 	@test `wc -c target/stripped/counter.wasm | sed 's/^[^0-9]*\([0-9]*\).*/\1/'` -lt $(MAX_COUNTER_CONTRACT_SIZE);

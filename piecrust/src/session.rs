@@ -635,16 +635,19 @@ impl Session {
             })?;
 
         let arg_len = instance.write_bytes_to_arg_buffer(&fdata);
-        let ret_len = instance.call(fname, arg_len, limit).map_err(|err| {
-            if let Err(io_err) = self.revert_callstack() {
-                return Error::MemorySnapshotFailure {
-                    reason: Some(Arc::new(err)),
-                    io: Arc::new(io_err),
-                };
-            }
-            self.pop_callstack_prune();
-            err
-        })?;
+        let ret_len = instance
+            .call(fname, arg_len, limit)
+            .map_err(|err| {
+                if let Err(io_err) = self.revert_callstack() {
+                    return Error::MemorySnapshotFailure {
+                        reason: Some(Arc::new(err)),
+                        io: Arc::new(io_err),
+                    };
+                }
+                self.pop_callstack_prune();
+                err
+            })
+            .map_err(Error::normalize)?;
         let ret = instance.read_bytes_from_arg_buffer(ret_len as u32);
 
         let spent = limit

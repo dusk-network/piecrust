@@ -28,7 +28,7 @@ pub const MAX_MEM_SIZE: usize = MAX_PAGES * PAGE_SIZE;
 pub(crate) struct MemoryInner {
     pub(crate) mmap: Mmap,
     pub(crate) def: VMMemoryDefinition,
-    init: bool,
+    is_new: bool,
 }
 
 /// WASM memory belonging to a given contract during a given session.
@@ -50,7 +50,7 @@ impl Memory {
             inner: Arc::new(RwLock::new(MemoryInner {
                 mmap,
                 def,
-                init: false,
+                is_new: true,
             })),
         })
     }
@@ -79,7 +79,7 @@ impl Memory {
             inner: Arc::new(RwLock::new(MemoryInner {
                 mmap,
                 def,
-                init: true,
+                is_new: false,
             })),
         })
     }
@@ -201,16 +201,13 @@ impl LinearMemory for Memory {
         data: &[u8],
     ) -> Result<(), Trap> {
         let this = self.write();
-        let mut inner = this.inner;
+        let inner = this.inner;
 
-        match inner.init {
-            true => Ok(()),
-            false => {
-                initialize_memory_with_data(&inner.def, start, data).map(|_| {
-                    inner.init = true;
-                })
-            }
+        if inner.is_new {
+            initialize_memory_with_data(&inner.def, start, data)?;
         }
+
+        Ok(())
     }
 }
 

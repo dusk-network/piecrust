@@ -70,6 +70,8 @@ pub enum Error {
     MissingHostQuery(String),
     #[error("OutOfPoints")]
     OutOfPoints,
+    #[error("Contract panic: {0}")]
+    ContractPanic(String),
     #[error(transparent)]
     ParsingError(wasmer::wasmparser::BinaryReaderError),
     #[error(transparent)]
@@ -90,6 +92,18 @@ pub enum Error {
     Utf8(std::str::Utf8Error),
     #[error("ValidationError")]
     ValidationError,
+}
+
+impl Error {
+    pub fn normalize(self) -> Self {
+        match self {
+            Self::RuntimeError(rerr) => match rerr.downcast() {
+                Ok(err) => err,
+                Err(rerr) => Self::RuntimeError(rerr),
+            },
+            err => err,
+        }
+    }
 }
 
 impl From<std::convert::Infallible> for Error {
@@ -162,9 +176,9 @@ const OTHER_STATUS_CODE: i32 = i32::MIN;
 
 impl From<Error> for ContractError {
     fn from(err: Error) -> Self {
-        // TODO implement this fully
         match err {
             Error::OutOfPoints => Self::OUTOFGAS,
+            Error::ContractPanic(_) => Self::PANIC,
             _ => Self::OTHER(OTHER_STATUS_CODE),
         }
     }
