@@ -4,6 +4,7 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
+use std::marker::PhantomData;
 use std::mem;
 
 use piecrust_uplink::ContractId;
@@ -67,20 +68,12 @@ impl CallStack {
 
     /// Returns an iterator over the call tree, starting from the rightmost
     /// leaf, and proceeding to the top of the current position of the tree.
-    pub fn iter_tree(&self) -> impl Iterator<Item = StackElement> {
-        let mut v = Vec::new();
-        if let Some(inner) = self.tree.0 {
-            right_fill(&mut v, unsafe { &*inner });
+    pub fn iter_tree(&self) -> CallTreeIter {
+        CallTreeIter {
+            node: self.tree.0,
+            _marker: PhantomData,
         }
-        v.into_iter()
     }
-}
-
-fn right_fill(v: &mut Vec<StackElement>, tree: &CallTreeInner) {
-    for child in tree.children.iter().rev() {
-        right_fill(v, unsafe { &**child });
-    }
-    v.push(tree.elem);
 }
 
 #[derive(Debug, Default)]
@@ -172,5 +165,53 @@ impl CallTreeInner {
             children: Vec::new(),
             prev: Some(prev),
         }))
+    }
+}
+
+/// An iterator over a [`CallTree`].
+///
+/// It starts at the righmost node and proceeds leftward towards its siblings,
+/// up toward the root.
+pub struct CallTreeIter<'a> {
+    node: Option<*mut CallTreeInner>,
+    _marker: PhantomData<&'a ()>,
+}
+
+impl<'a> Iterator for CallTreeIter<'a> {
+    type Item = &'a StackElement;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        unsafe {
+            let node = match self.node {
+                Some(node) => node,
+                None => return None,
+            };
+
+            let elem = &(*node).elem;
+
+            self.node = (*node).prev.map(|prev_node| {
+                let node_index = (*prev_node)
+                    .children
+                    .iter()
+                    .position(|&n| n == node)
+                    .expect("The child must be the prev's child");
+
+                if node_index == 0 {
+                    prev_node
+                } else {
+                    let sibling_index = node_index - 1;
+                    let mut next_node = (*prev_node).children[sibling_index];
+
+                    while !(*next_node).children.is_empty() {
+                        let last_index = (*next_node).children.len() - 1;
+                        next_node = (*next_node).children[last_index];
+                    }
+
+                    next_node
+                }
+            });
+
+            Some(elem)
+        }
     }
 }

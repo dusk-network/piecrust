@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Add `CallTreeIter` to improve iteration over call tree [#206]
 - Add `panic` import implementation [#271]
 - Add `Error::ContractPanic` variant [#271]
 
@@ -250,6 +251,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [#216]: https://github.com/dusk-network/piecrust/issues/216
 [#213]: https://github.com/dusk-network/piecrust/issues/213
 [#207]: https://github.com/dusk-network/piecrust/issues/207
+[#206]: https://github.com/dusk-network/piecrust/issues/206
 [#202]: https://github.com/dusk-network/piecrust/issues/202
 [#201]: https://github.com/dusk-network/piecrust/issues/201
 [#181]: https://github.com/dusk-network/piecrust/issues/181
