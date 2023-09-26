@@ -4,8 +4,6 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-pub mod call_stack;
-
 use std::borrow::Cow;
 use std::collections::btree_map::Entry;
 use std::collections::BTreeMap;
@@ -24,15 +22,13 @@ use rkyv::{
 };
 use wasmer_types::WASM_PAGE_SIZE;
 
+use crate::call_tree::{CallTree, CallTreeElem};
 use crate::contract::{ContractData, ContractMetadata, WrappedContract};
+use crate::error::Error::{self, InitalizationError, PersistenceError};
 use crate::instance::WrappedInstance;
 use crate::store::{ContractSession, Objectcode};
 use crate::types::StandardBufSerializer;
 use crate::vm::HostQueries;
-use crate::Error;
-use crate::Error::{InitalizationError, PersistenceError};
-
-use call_stack::{CallTree, CallTreeElem};
 
 const MAX_META_SIZE: usize = ARGBUF_LEN;
 pub const INIT_METHOD: &str = "init";

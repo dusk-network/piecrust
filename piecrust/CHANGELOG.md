@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Expose `CallTree` and `CallTreeElem` in the public API [#206]
 - Add `CallTreeIter` to improve iteration over call tree [#206]
 - Add `panic` import implementation [#271]
 - Add `Error::ContractPanic` variant [#271]

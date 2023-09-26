@@ -9,6 +9,7 @@ use std::mem;
 
 use piecrust_uplink::ContractId;
 
+/// An element of the call tree.
 #[derive(Debug, Clone, Copy)]
 pub struct CallTreeElem {
     pub contract_id: ContractId,
@@ -22,14 +23,14 @@ pub struct CallTree(Option<*mut CallTreeInner>);
 
 impl CallTree {
     /// Creates a new empty call tree, starting with at the given contract.
-    pub const fn new() -> Self {
+    pub(crate) const fn new() -> Self {
         Self(None)
     }
 
     /// Push an element to the call tree.
     ///
     /// This pushes a new child to the current node, and advances to it.
-    pub fn push(&mut self, elem: CallTreeElem) {
+    pub(crate) fn push(&mut self, elem: CallTreeElem) {
         match self.0 {
             None => self.0 = Some(CallTreeInner::new(elem)),
             Some(inner) => unsafe {
@@ -41,7 +42,7 @@ impl CallTree {
     }
 
     /// Moves to the previous node, returning the current element.
-    pub fn move_up(&mut self) -> Option<CallTreeElem> {
+    pub(crate) fn move_up(&mut self) -> Option<CallTreeElem> {
         self.0.map(|inner| unsafe {
             let elem = (*inner).elem;
 
@@ -57,7 +58,7 @@ impl CallTree {
 
     /// Moves to the previous node, returning the current element, while
     /// clearing the tree under it.
-    pub fn move_up_prune(&mut self) -> Option<CallTreeElem> {
+    pub(crate) fn move_up_prune(&mut self) -> Option<CallTreeElem> {
         self.0.map(|inner| unsafe {
             let elem = (*inner).elem;
 
@@ -76,7 +77,7 @@ impl CallTree {
     /// node.
     ///
     /// The zeroth previous element is the current node.
-    pub fn nth_up(&self, n: usize) -> Option<CallTreeElem> {
+    pub(crate) fn nth_up(&self, n: usize) -> Option<CallTreeElem> {
         let mut current = self.0;
 
         let mut i = 0;
@@ -89,7 +90,7 @@ impl CallTree {
     }
 
     /// Clears the call tree of all elements.
-    pub fn clear(&mut self) {
+    pub(crate) fn clear(&mut self) {
         while self.0.is_some() {
             self.move_up();
         }
@@ -97,7 +98,7 @@ impl CallTree {
 
     /// Returns an iterator over the call tree, starting from the rightmost
     /// leaf, and proceeding to the top of the current position of the tree.
-    pub fn iter(&self) -> CallTreeIter {
+    pub fn iter(&self) -> impl Iterator<Item = &CallTreeElem> {
         CallTreeIter {
             node: self.0,
             _marker: PhantomData,
@@ -150,7 +151,7 @@ impl CallTreeInner {
 ///
 /// It starts at the righmost node and proceeds leftward towards its siblings,
 /// up toward the root.
-pub struct CallTreeIter<'a> {
+struct CallTreeIter<'a> {
     node: Option<*mut CallTreeInner>,
     _marker: PhantomData<&'a ()>,
 }
