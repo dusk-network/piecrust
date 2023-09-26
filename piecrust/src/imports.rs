@@ -182,7 +182,7 @@ fn c(
 
     let ret = match instance.with_memory_mut(with_memory) {
         Ok((ret_len, callee_spent)) => {
-            env.pop_callstack();
+            env.move_up_call_tree();
             instance.set_remaining_points(caller_remaining - callee_spent);
             ret_len
         }
@@ -193,7 +193,7 @@ fn c(
                     io: Arc::new(io_err),
                 };
             }
-            env.pop_callstack_prune();
+            env.move_up_prune_call_tree();
             instance.set_remaining_points(caller_remaining - callee_limit);
 
             ContractError::from(err).into()
