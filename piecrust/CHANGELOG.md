@@ -19,6 +19,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Allow for multiple initializations on a new memory [#271]
 - Downcast `Error::RuntimeError` on each call boundary [#271]
 
+### Removed
+
+- Remove `CallStack` in favor of `CallTree` [#206]
+
 ## [0.10.0] - 2023-09-13
 
 ### Added

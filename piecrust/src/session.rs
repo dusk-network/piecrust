@@ -32,7 +32,7 @@ use crate::vm::HostQueries;
 use crate::Error;
 use crate::Error::{InitalizationError, PersistenceError};
 
-use call_stack::{CallStack, CallTreeElem};
+use call_stack::{CallTree, CallTreeElem};
 
 const MAX_META_SIZE: usize = ARGBUF_LEN;
 pub const INIT_METHOD: &str = "init";
@@ -87,7 +87,7 @@ impl Drop for Session {
 
 #[derive(Debug)]
 struct SessionInner {
-    call_stack: CallStack,
+    call_stack: CallTree,
     instance_map: BTreeMap<ContractId, (*mut WrappedInstance, u64)>,
     debug: Vec<String>,
     data: SessionData,
@@ -107,7 +107,7 @@ impl Session {
         data: SessionData,
     ) -> Self {
         Self::from(SessionInner {
-            call_stack: CallStack::new(),
+            call_stack: CallTree::new(),
             instance_map: BTreeMap::new(),
             debug: vec![],
             data,
@@ -489,7 +489,7 @@ impl Session {
     }
 
     pub(crate) fn nth_from_top(&self, n: usize) -> Option<CallTreeElem> {
-        self.inner.call_stack.nth_from_top(n)
+        self.inner.call_stack.nth_up(n)
     }
 
     /// Creates a new instance of the given contract, returning its memory
@@ -541,24 +541,24 @@ impl Session {
         Ok(self
             .inner
             .call_stack
-            .nth_from_top(0)
+            .nth_up(0)
             .expect("We just pushed an element to the stack"))
     }
 
     pub(crate) fn pop_callstack(&mut self) {
-        if let Some(element) = self.inner.call_stack.pop() {
+        if let Some(element) = self.inner.call_stack.move_up() {
             self.update_instance_count(element.contract_id, false);
         }
     }
 
     pub(crate) fn pop_callstack_prune(&mut self) {
-        if let Some(element) = self.inner.call_stack.pop_prune() {
+        if let Some(element) = self.inner.call_stack.move_up_prune() {
             self.update_instance_count(element.contract_id, false);
         }
     }
 
     pub(crate) fn revert_callstack(&mut self) -> Result<(), std::io::Error> {
-        for elem in self.inner.call_stack.iter_tree() {
+        for elem in self.inner.call_stack.iter() {
             let instance = self
                 .instance(&elem.contract_id)
                 .expect("instance should exist");
@@ -655,7 +655,7 @@ impl Session {
                 .get_remaining_points()
                 .expect("there should be remaining points");
 
-        for elem in self.inner.call_stack.iter_tree() {
+        for elem in self.inner.call_stack.iter() {
             let instance = self
                 .instance(&elem.contract_id)
                 .expect("instance should exist");

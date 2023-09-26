@@ -16,77 +16,20 @@ pub struct CallTreeElem {
     pub mem_len: usize,
 }
 
-/// A stack of contract calls.
+/// The tree of contract calls.
 #[derive(Debug, Default)]
-pub struct CallStack {
-    stack: Vec<CallTreeElem>,
-    tree: CallTree,
-}
-
-impl CallStack {
-    pub const fn new() -> Self {
-        Self {
-            stack: Vec::new(),
-            tree: CallTree::new(),
-        }
-    }
-
-    /// Push an element to the call stack.
-    pub fn push(&mut self, elem: CallTreeElem) {
-        self.tree.push(elem);
-        self.stack.push(elem);
-    }
-
-    /// Pops an element from the callstack.
-    pub fn pop(&mut self) -> Option<CallTreeElem> {
-        self.tree.pop();
-        self.stack.pop()
-    }
-
-    /// Pops an element from the callstack and prunes the call tree.
-    pub fn pop_prune(&mut self) -> Option<CallTreeElem> {
-        self.tree.pop_prune();
-        self.stack.pop()
-    }
-
-    /// Returns a view of the stack to the `n`th element from the top.
-    pub fn nth_from_top(&self, n: usize) -> Option<CallTreeElem> {
-        let len = self.stack.len();
-
-        if len > n {
-            Some(self.stack[len - (n + 1)])
-        } else {
-            None
-        }
-    }
-
-    /// Clear the call stack of all elements.
-    pub fn clear(&mut self) {
-        self.tree.clear();
-        self.stack.clear();
-    }
-
-    /// Returns an iterator over the call tree, starting from the rightmost
-    /// leaf, and proceeding to the top of the current position of the tree.
-    pub fn iter_tree(&self) -> CallTreeIter {
-        CallTreeIter {
-            node: self.tree.0,
-            _marker: PhantomData,
-        }
-    }
-}
-
-#[derive(Debug, Default)]
-struct CallTree(Option<*mut CallTreeInner>);
+pub struct CallTree(Option<*mut CallTreeInner>);
 
 impl CallTree {
     /// Creates a new empty call tree, starting with at the given contract.
-    const fn new() -> Self {
+    pub const fn new() -> Self {
         Self(None)
     }
 
-    /// Pushes a new child to the current node, and advances to it.
-    fn push(&mut self, elem: CallTreeElem) {
+    /// Push an element to the call tree.
+    ///
+    /// This pushes a new child to the current node, and advances to it.
+    pub fn push(&mut self, elem: CallTreeElem) {
         match self.0 {
             None => self.0 = Some(CallTreeInner::new(elem)),
             Some(inner) => unsafe {
@@ -97,32 +40,67 @@ impl CallTree {
         }
     }
 
-    /// Moves to the previous node.
-    fn pop(&mut self) {
-        self.0 = self.0.and_then(|inner| unsafe {
+    /// Moves to the previous node, returning the current element.
+    pub fn move_up(&mut self) -> Option<CallTreeElem> {
+        self.0.map(|inner| unsafe {
+            let elem = (*inner).elem;
+
             let prev = (*inner).prev;
             if prev.is_none() {
                 free_tree(inner);
             }
-            prev
-        });
+            self.0 = prev;
+
+            elem
+        })
     }
 
-    /// Clears the tree under the current node, and moves to the previous node.
-    fn pop_prune(&mut self) {
-        self.0 = self.0.and_then(|inner| unsafe {
+    /// Moves to the previous node, returning the current element, while
+    /// clearing the tree under it.
+    pub fn move_up_prune(&mut self) -> Option<CallTreeElem> {
+        self.0.map(|inner| unsafe {
+            let elem = (*inner).elem;
+
             let prev = (*inner).prev;
             if let Some(prev) = prev {
                 (*prev).children.pop();
             }
             free_tree(inner);
-            prev
-        });
+            self.0 = prev;
+
+            elem
+        })
     }
 
-    fn clear(&mut self) {
+    /// Returns the `n`th previous element from the counting from the current
+    /// node.
+    ///
+    /// The zeroth previous element is the current node.
+    pub fn nth_up(&self, n: usize) -> Option<CallTreeElem> {
+        let mut current = self.0;
+
+        let mut i = 0;
+        while i < n {
+            current = current.and_then(|inner| unsafe { (*inner).prev });
+            i += 1;
+        }
+
+        current.map(|inner| unsafe { (*inner).elem })
+    }
+
+    /// Clears the call tree of all elements.
+    pub fn clear(&mut self) {
         while self.0.is_some() {
-            self.pop();
+            self.move_up();
+        }
+    }
+
+    /// Returns an iterator over the call tree, starting from the rightmost
+    /// leaf, and proceeding to the top of the current position of the tree.
+    pub fn iter(&self) -> CallTreeIter {
+        CallTreeIter {
+            node: self.0,
+            _marker: PhantomData,
         }
     }
 }
