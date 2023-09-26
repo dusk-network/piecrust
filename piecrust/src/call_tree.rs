@@ -14,12 +14,13 @@ use piecrust_uplink::ContractId;
 pub struct CallTreeElem {
     pub contract_id: ContractId,
     pub limit: u64,
+    pub spent: u64,
     pub mem_len: usize,
 }
 
 /// The tree of contract calls.
 #[derive(Debug, Default)]
-pub struct CallTree(Option<*mut CallTreeInner>);
+pub struct CallTree(Option<*mut CallTreeNode>);
 
 impl CallTree {
     /// Creates a new empty call tree, starting with at the given contract.
@@ -32,18 +33,20 @@ impl CallTree {
     /// This pushes a new child to the current node, and advances to it.
     pub(crate) fn push(&mut self, elem: CallTreeElem) {
         match self.0 {
-            None => self.0 = Some(CallTreeInner::new(elem)),
+            None => self.0 = Some(CallTreeNode::new(elem)),
             Some(inner) => unsafe {
-                let node = CallTreeInner::with_prev(elem, inner);
+                let node = CallTreeNode::with_prev(elem, inner);
                 (*inner).children.push(node);
                 self.0 = Some(node)
             },
         }
     }
 
-    /// Moves to the previous node, returning the current element.
-    pub(crate) fn move_up(&mut self) -> Option<CallTreeElem> {
+    /// Moves to the previous node and set the gas spent of the current element,
+    /// returning it.
+    pub(crate) fn move_up(&mut self, spent: u64) -> Option<CallTreeElem> {
         self.0.map(|inner| unsafe {
+            (*inner).elem.spent = spent;
             let elem = (*inner).elem;
 
             let prev = (*inner).prev;
@@ -56,8 +59,8 @@ impl CallTree {
         })
     }
 
-    /// Moves to the previous node, returning the current element, while
-    /// clearing the tree under it.
+    /// Moves to the previous node, clearing the tree under it, and returns the
+    /// current element.
     pub(crate) fn move_up_prune(&mut self) -> Option<CallTreeElem> {
         self.0.map(|inner| unsafe {
             let elem = (*inner).elem;
@@ -71,6 +74,17 @@ impl CallTree {
 
             elem
         })
+    }
+
+    /// Give the current node the amount spent and recusively update amount
+    /// spent to accurately reflect what each node spent during each call.
+    pub(crate) fn update_spent(&mut self, spent: u64) {
+        if let Some(inner) = self.0 {
+            unsafe {
+                (*inner).elem.spent = spent;
+                update_spent(inner);
+            }
+        }
     }
 
     /// Returns the `n`th previous element from the counting from the current
@@ -91,8 +105,17 @@ impl CallTree {
 
     /// Clears the call tree of all elements.
     pub(crate) fn clear(&mut self) {
-        while self.0.is_some() {
-            self.move_up();
+        unsafe {
+            if let Some(inner) = self.0 {
+                let mut root = inner;
+
+                while let Some(prev) = (*root).prev {
+                    root = prev;
+                }
+
+                self.0 = None;
+                free_tree(root);
+            }
         }
     }
 
@@ -100,10 +123,24 @@ impl CallTree {
     /// leaf, and proceeding to the top of the current position of the tree.
     pub fn iter(&self) -> impl Iterator<Item = &CallTreeElem> {
         CallTreeIter {
-            node: self.0,
+            tree: self.0.map(|root| unsafe {
+                let mut node = root;
+
+                while !(*node).children.is_empty() {
+                    let last_index = (*node).children.len() - 1;
+                    node = (*node).children[last_index];
+                }
+
+                Subtree { root, node }
+            }),
             _marker: PhantomData,
         }
     }
+}
+
+struct Subtree {
+    root: *mut CallTreeNode,
+    node: *mut CallTreeNode,
 }
 
 impl Drop for CallTree {
@@ -112,7 +149,15 @@ impl Drop for CallTree {
     }
 }
 
-unsafe fn free_tree(root: *mut CallTreeInner) {
+unsafe fn update_spent(node: *mut CallTreeNode) {
+    let node = &mut *node;
+    node.children.iter_mut().for_each(|&mut child| unsafe {
+        node.elem.spent -= (*child).elem.spent;
+        update_spent(child);
+    });
+}
+
+unsafe fn free_tree(root: *mut CallTreeNode) {
     let mut node = Box::from_raw(root);
 
     let mut children = Vec::new();
@@ -123,13 +168,13 @@ unsafe fn free_tree(root: *mut CallTreeInner) {
     }
 }
 
-struct CallTreeInner {
+struct CallTreeNode {
     elem: CallTreeElem,
     children: Vec<*mut Self>,
     prev: Option<*mut Self>,
 }
 
-impl CallTreeInner {
+impl CallTreeNode {
     fn new(elem: CallTreeElem) -> *mut Self {
         Box::leak(Box::new(Self {
             elem,
@@ -152,7 +197,7 @@ impl CallTreeInner {
 /// It starts at the righmost node and proceeds leftward towards its siblings,
 /// up toward the root.
 struct CallTreeIter<'a> {
-    node: Option<*mut CallTreeInner>,
+    tree: Option<Subtree>,
     _marker: PhantomData<&'a ()>,
 }
 
@@ -161,14 +206,21 @@ impl<'a> Iterator for CallTreeIter<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         unsafe {
-            let node = match self.node {
-                Some(node) => node,
-                None => return None,
-            };
+            let tree = self.tree.as_mut()?;
 
+            let node = tree.node;
             let elem = &(*node).elem;
 
-            self.node = (*node).prev.map(|prev_node| {
+            if node == tree.root {
+                self.tree = None;
+                return Some(elem);
+            }
+
+            let prev_node = (*node).prev.expect(
+                "There should always be a prev in a subtree before the root",
+            );
+
+            tree.node = {
                 let node_index = (*prev_node)
                     .children
                     .iter()
@@ -188,7 +240,7 @@ impl<'a> Iterator for CallTreeIter<'a> {
 
                     next_node
                 }
-            });
+            };
 
             Some(elem)
         }

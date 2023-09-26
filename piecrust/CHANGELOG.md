@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Add `spent` field to `CallTreeElem` [#206]
 - Add `call_tree` to `CallReceipt` [#206]
 - Expose `CallTree` and `CallTreeElem` in the public API [#206]
 - Add `CallTreeIter` to improve iteration over call tree [#206]

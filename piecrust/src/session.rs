@@ -522,6 +522,7 @@ impl Session {
                 self.inner.call_tree.push(CallTreeElem {
                     contract_id,
                     limit,
+                    spent: 0,
                     mem_len: instance.mem_len(),
                 });
             }
@@ -530,6 +531,7 @@ impl Session {
                 self.inner.call_tree.push(CallTreeElem {
                     contract_id,
                     limit,
+                    spent: 0,
                     mem_len,
                 });
             }
@@ -542,8 +544,8 @@ impl Session {
             .expect("We just pushed an element to the stack"))
     }
 
-    pub(crate) fn move_up_call_tree(&mut self) {
-        if let Some(element) = self.inner.call_tree.move_up() {
+    pub(crate) fn move_up_call_tree(&mut self, spent: u64) {
+        if let Some(element) = self.inner.call_tree.move_up(spent) {
             self.update_instance_count(element.contract_id, false);
         }
     }
@@ -666,6 +668,7 @@ impl Session {
 
         let mut call_tree = CallTree::new();
         mem::swap(&mut self.inner.call_tree, &mut call_tree);
+        call_tree.update_spent(spent);
 
         Ok((ret, spent, call_tree))
     }
