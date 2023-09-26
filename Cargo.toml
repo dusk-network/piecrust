@@ -4,3 +4,4 @@ members = [
     "piecrust-uplink",
     "piecrust",
 ]
+resolver = "2"
