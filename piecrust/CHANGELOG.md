@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Rename `StackElement` to `CallTreeElem` [#206]
 - Allow for multiple initializations on a new memory [#271]
 - Downcast `Error::RuntimeError` on each call boundary [#271]
 

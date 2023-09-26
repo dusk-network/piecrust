@@ -32,7 +32,7 @@ use crate::vm::HostQueries;
 use crate::Error;
 use crate::Error::{InitalizationError, PersistenceError};
 
-use call_stack::{CallStack, StackElement};
+use call_stack::{CallStack, CallTreeElem};
 
 const MAX_META_SIZE: usize = ARGBUF_LEN;
 pub const INIT_METHOD: &str = "init";
@@ -488,7 +488,7 @@ impl Session {
         self.inner.host_queries.call(name, buf, arg_len)
     }
 
-    pub(crate) fn nth_from_top(&self, n: usize) -> Option<StackElement> {
+    pub(crate) fn nth_from_top(&self, n: usize) -> Option<CallTreeElem> {
         self.inner.call_stack.nth_from_top(n)
     }
 
@@ -516,13 +516,13 @@ impl Session {
         &mut self,
         contract_id: ContractId,
         limit: u64,
-    ) -> Result<StackElement, Error> {
+    ) -> Result<CallTreeElem, Error> {
         let instance = self.instance(&contract_id);
 
         match instance {
             Some(instance) => {
                 self.update_instance_count(contract_id, true);
-                self.inner.call_stack.push(StackElement {
+                self.inner.call_stack.push(CallTreeElem {
                     contract_id,
                     limit,
                     mem_len: instance.mem_len(),
@@ -530,7 +530,7 @@ impl Session {
             }
             None => {
                 let mem_len = self.create_instance(contract_id)?;
-                self.inner.call_stack.push(StackElement {
+                self.inner.call_stack.push(CallTreeElem {
                     contract_id,
                     limit,
                     mem_len,

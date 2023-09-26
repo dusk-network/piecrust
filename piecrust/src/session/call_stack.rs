@@ -10,7 +10,7 @@ use std::mem;
 use piecrust_uplink::ContractId;
 
 #[derive(Debug, Clone, Copy)]
-pub struct StackElement {
+pub struct CallTreeElem {
     pub contract_id: ContractId,
     pub limit: u64,
     pub mem_len: usize,
@@ -19,7 +19,7 @@ pub struct StackElement {
 /// A stack of contract calls.
 #[derive(Debug, Default)]
 pub struct CallStack {
-    stack: Vec<StackElement>,
+    stack: Vec<CallTreeElem>,
     tree: CallTree,
 }
 
@@ -32,25 +32,25 @@ impl CallStack {
     }
 
     /// Push an element to the call stack.
-    pub fn push(&mut self, elem: StackElement) {
+    pub fn push(&mut self, elem: CallTreeElem) {
         self.tree.push(elem);
         self.stack.push(elem);
     }
 
     /// Pops an element from the callstack.
-    pub fn pop(&mut self) -> Option<StackElement> {
+    pub fn pop(&mut self) -> Option<CallTreeElem> {
         self.tree.pop();
         self.stack.pop()
     }
 
     /// Pops an element from the callstack and prunes the call tree.
-    pub fn pop_prune(&mut self) -> Option<StackElement> {
+    pub fn pop_prune(&mut self) -> Option<CallTreeElem> {
         self.tree.pop_prune();
         self.stack.pop()
     }
 
     /// Returns a view of the stack to the `n`th element from the top.
-    pub fn nth_from_top(&self, n: usize) -> Option<StackElement> {
+    pub fn nth_from_top(&self, n: usize) -> Option<CallTreeElem> {
         let len = self.stack.len();
 
         if len > n {
@@ -86,7 +86,7 @@ impl CallTree {
     }
 
     /// Pushes a new child to the current node, and advances to it.
-    fn push(&mut self, elem: StackElement) {
+    fn push(&mut self, elem: CallTreeElem) {
         match self.0 {
             None => self.0 = Some(CallTreeInner::new(elem)),
             Some(inner) => unsafe {
@@ -145,13 +145,13 @@ unsafe fn free_tree(root: *mut CallTreeInner) {
 }
 
 struct CallTreeInner {
-    elem: StackElement,
+    elem: CallTreeElem,
     children: Vec<*mut Self>,
     prev: Option<*mut Self>,
 }
 
 impl CallTreeInner {
-    fn new(elem: StackElement) -> *mut Self {
+    fn new(elem: CallTreeElem) -> *mut Self {
         Box::leak(Box::new(Self {
             elem,
             children: Vec::new(),
@@ -159,7 +159,7 @@ impl CallTreeInner {
         }))
     }
 
-    fn with_prev(elem: StackElement, prev: *mut Self) -> *mut Self {
+    fn with_prev(elem: CallTreeElem, prev: *mut Self) -> *mut Self {
         Box::leak(Box::new(Self {
             elem,
             children: Vec::new(),
@@ -178,7 +178,7 @@ pub struct CallTreeIter<'a> {
 }
 
 impl<'a> Iterator for CallTreeIter<'a> {
-    type Item = &'a StackElement;
+    type Item = &'a CallTreeElem;
 
     fn next(&mut self) -> Option<Self::Item> {
         unsafe {
