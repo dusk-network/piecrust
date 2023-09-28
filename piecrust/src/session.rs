@@ -4,8 +4,6 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-pub mod call_stack;
-
 use std::borrow::Cow;
 use std::collections::btree_map::Entry;
 use std::collections::BTreeMap;
@@ -24,15 +22,13 @@ use rkyv::{
 };
 use wasmer_types::WASM_PAGE_SIZE;
 
+use crate::call_tree::{CallTree, CallTreeElem};
 use crate::contract::{ContractData, ContractMetadata, WrappedContract};
+use crate::error::Error::{self, InitalizationError, PersistenceError};
 use crate::instance::WrappedInstance;
 use crate::store::{ContractSession, Objectcode};
 use crate::types::StandardBufSerializer;
 use crate::vm::HostQueries;
-use crate::Error;
-use crate::Error::{InitalizationError, PersistenceError};
-
-use call_stack::{CallStack, StackElement};
 
 const MAX_META_SIZE: usize = ARGBUF_LEN;
 pub const INIT_METHOD: &str = "init";
@@ -87,7 +83,7 @@ impl Drop for Session {
 
 #[derive(Debug)]
 struct SessionInner {
-    call_stack: CallStack,
+    call_tree: CallTree,
     instance_map: BTreeMap<ContractId, (*mut WrappedInstance, u64)>,
     debug: Vec<String>,
     data: SessionData,
@@ -107,7 +103,7 @@ impl Session {
         data: SessionData,
     ) -> Self {
         Self::from(SessionInner {
-            call_stack: CallStack::new(),
+            call_tree: CallTree::new(),
             instance_map: BTreeMap::new(),
             debug: vec![],
             data,
@@ -327,7 +323,7 @@ impl Session {
             return Err(InitalizationError("init call not allowed".into()));
         }
 
-        let (data, points_spent) =
+        let (data, points_spent, call_tree) =
             self.call_inner(contract, fn_name, fn_arg.into(), points_limit)?;
         let events = mem::take(&mut self.inner.events);
 
@@ -335,6 +331,7 @@ impl Session {
             points_limit,
             points_spent,
             events,
+            call_tree,
             data,
         })
     }
@@ -424,7 +421,7 @@ impl Session {
     }
 
     fn clear_stack_and_instances(&mut self) {
-        self.inner.call_stack.clear();
+        self.inner.call_tree.clear();
 
         while !self.inner.instance_map.is_empty() {
             let (_, (instance, _)) =
@@ -488,8 +485,8 @@ impl Session {
         self.inner.host_queries.call(name, buf, arg_len)
     }
 
-    pub(crate) fn nth_from_top(&self, n: usize) -> Option<StackElement> {
-        self.inner.call_stack.nth_from_top(n)
+    pub(crate) fn nth_from_top(&self, n: usize) -> Option<CallTreeElem> {
+        self.inner.call_tree.nth_parent(n)
     }
 
     /// Creates a new instance of the given contract, returning its memory
@@ -516,23 +513,25 @@ impl Session {
         &mut self,
         contract_id: ContractId,
         limit: u64,
-    ) -> Result<StackElement, Error> {
+    ) -> Result<CallTreeElem, Error> {
         let instance = self.instance(&contract_id);
 
         match instance {
             Some(instance) => {
                 self.update_instance_count(contract_id, true);
-                self.inner.call_stack.push(StackElement {
+                self.inner.call_tree.push(CallTreeElem {
                     contract_id,
                     limit,
+                    spent: 0,
                     mem_len: instance.mem_len(),
                 });
             }
             None => {
                 let mem_len = self.create_instance(contract_id)?;
-                self.inner.call_stack.push(StackElement {
+                self.inner.call_tree.push(CallTreeElem {
                     contract_id,
                     limit,
+                    spent: 0,
                     mem_len,
                 });
             }
@@ -540,25 +539,25 @@ impl Session {
 
         Ok(self
             .inner
-            .call_stack
-            .nth_from_top(0)
+            .call_tree
+            .nth_parent(0)
             .expect("We just pushed an element to the stack"))
     }
 
-    pub(crate) fn pop_callstack(&mut self) {
-        if let Some(element) = self.inner.call_stack.pop() {
+    pub(crate) fn move_up_call_tree(&mut self, spent: u64) {
+        if let Some(element) = self.inner.call_tree.move_up(spent) {
             self.update_instance_count(element.contract_id, false);
         }
     }
 
-    pub(crate) fn pop_callstack_prune(&mut self) {
-        if let Some(element) = self.inner.call_stack.pop_prune() {
+    pub(crate) fn move_up_prune_call_tree(&mut self) {
+        if let Some(element) = self.inner.call_tree.move_up_prune() {
             self.update_instance_count(element.contract_id, false);
         }
     }
 
     pub(crate) fn revert_callstack(&mut self) -> Result<(), std::io::Error> {
-        for elem in self.inner.call_stack.iter_tree() {
+        for elem in self.inner.call_tree.iter() {
             let instance = self
                 .instance(&elem.contract_id)
                 .expect("instance should exist");
@@ -621,7 +620,7 @@ impl Session {
         fname: &str,
         fdata: Vec<u8>,
         limit: u64,
-    ) -> Result<(Vec<u8>, u64), Error> {
+    ) -> Result<(Vec<u8>, u64, CallTree), Error> {
         let stack_element = self.push_callstack(contract, limit)?;
         let instance = self
             .instance(&stack_element.contract_id)
@@ -644,7 +643,7 @@ impl Session {
                         io: Arc::new(io_err),
                     };
                 }
-                self.pop_callstack_prune();
+                self.move_up_prune_call_tree();
                 err
             })
             .map_err(Error::normalize)?;
@@ -655,7 +654,7 @@ impl Session {
                 .get_remaining_points()
                 .expect("there should be remaining points");
 
-        for elem in self.inner.call_stack.iter_tree() {
+        for elem in self.inner.call_tree.iter() {
             let instance = self
                 .instance(&elem.contract_id)
                 .expect("instance should exist");
@@ -666,9 +665,12 @@ impl Session {
                     io: Arc::new(err),
                 })?;
         }
-        self.pop_callstack();
 
-        Ok((ret, spent))
+        let mut call_tree = CallTree::new();
+        mem::swap(&mut self.inner.call_tree, &mut call_tree);
+        call_tree.update_spent(spent);
+
+        Ok((ret, spent, call_tree))
     }
 
     pub fn contract_metadata(
@@ -684,7 +686,7 @@ impl Session {
 ///
 /// [`call`]: [`Session::call`]
 /// [`call_raw`]: [`Session::call_raw`]
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Debug)]
 pub struct CallReceipt<T> {
     /// The amount of points spent in the execution of the call.
     pub points_spent: u64,
@@ -693,6 +695,9 @@ pub struct CallReceipt<T> {
 
     /// The events emitted during the execution of the call.
     pub events: Vec<Event>,
+    /// The call tree produced during the execution.
+    pub call_tree: CallTree,
+
     /// The data returned by the called contract.
     pub data: T,
 }
@@ -713,6 +718,7 @@ impl CallReceipt<Vec<u8>> {
             points_spent: self.points_spent,
             points_limit: self.points_limit,
             events: self.events,
+            call_tree: self.call_tree,
             data,
         })
     }

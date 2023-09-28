@@ -105,6 +105,7 @@
 
 #[macro_use]
 mod bytecode_macro;
+mod call_tree;
 mod contract;
 mod error;
 mod imports;
@@ -114,6 +115,7 @@ mod store;
 mod types;
 mod vm;
 
+pub use call_tree::{CallTree, CallTreeElem};
 pub use contract::{ContractData, ContractDataBuilder};
 pub use error::Error;
 pub use session::{CallReceipt, Session, SessionData};
