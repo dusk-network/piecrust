@@ -486,7 +486,7 @@ impl Session {
     }
 
     pub(crate) fn nth_from_top(&self, n: usize) -> Option<CallTreeElem> {
-        self.inner.call_tree.nth_up(n)
+        self.inner.call_tree.nth_parent(n)
     }
 
     /// Creates a new instance of the given contract, returning its memory
@@ -540,7 +540,7 @@ impl Session {
         Ok(self
             .inner
             .call_tree
-            .nth_up(0)
+            .nth_parent(0)
             .expect("We just pushed an element to the stack"))
     }
 
