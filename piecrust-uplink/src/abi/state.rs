@@ -13,7 +13,7 @@ use rkyv::{
 
 use crate::{
     ContractError, ContractId, RawCall, RawResult, StandardBufSerializer,
-    SCRATCH_BUF_BYTES,
+    CONTRACT_ID_BYTES, SCRATCH_BUF_BYTES,
 };
 
 pub mod arg_buf {
@@ -247,11 +247,12 @@ pub fn owner<const N: usize>() -> [u8; N] {
 /// Return the current contract's id.
 pub fn self_id() -> ContractId {
     unsafe { ext::self_id() };
-    let id: [u8; 32] = with_arg_buf(|buf| {
-        let ret = unsafe { archived_root::<[u8; 32]>(&buf[..32]) };
+    let id: ContractId = with_arg_buf(|buf| {
+        let ret =
+            unsafe { archived_root::<ContractId>(&buf[..CONTRACT_ID_BYTES]) };
         ret.deserialize(&mut Infallible).expect("Infallible")
     });
-    ContractId::from(id)
+    id
 }
 
 /// Return the ID of the calling contract. The returned id will be
