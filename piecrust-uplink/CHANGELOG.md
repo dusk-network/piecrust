@@ -12,6 +12,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add call to `panic` in panic handler [#271]
 - Add `panic` extern [#271]
 
+### Changed
+
+- Change return of `owner` and `self_id` to `()`
+
 ### Removed
 
 - Remove call to `hdebug` on panic [#271]
