@@ -360,7 +360,7 @@ fn panic(fenv: FunctionEnvMut<Env>, arg_len: u32) -> Result<(), Error> {
     })
 }
 
-fn owner(fenv: FunctionEnvMut<Env>) -> u32 {
+fn owner(fenv: FunctionEnvMut<Env>) {
     let env = fenv.data();
     let self_id = env.self_contract_id();
     let contract_metadata = env
@@ -370,10 +370,9 @@ fn owner(fenv: FunctionEnvMut<Env>) -> u32 {
     let len = slice.len();
     env.self_instance()
         .with_arg_buffer(|arg| arg[..len].copy_from_slice(slice));
-    len as u32
 }
 
-fn self_id(fenv: FunctionEnvMut<Env>) -> u32 {
+fn self_id(fenv: FunctionEnvMut<Env>) {
     let env = fenv.data();
     let self_id = env.self_contract_id();
     let contract_metadata = env
@@ -383,5 +382,4 @@ fn self_id(fenv: FunctionEnvMut<Env>) -> u32 {
     let len = slice.len();
     env.self_instance()
         .with_arg_buffer(|arg| arg[..len].copy_from_slice(slice));
-    len as u32
 }

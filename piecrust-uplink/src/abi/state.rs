@@ -13,7 +13,7 @@ use rkyv::{
 
 use crate::{
     ContractError, ContractId, RawCall, RawResult, StandardBufSerializer,
-    SCRATCH_BUF_BYTES,
+    CONTRACT_ID_BYTES, SCRATCH_BUF_BYTES,
 };
 
 pub mod arg_buf {
@@ -58,8 +58,8 @@ mod ext {
         pub fn caller();
         pub fn limit() -> u64;
         pub fn spent() -> u64;
-        pub fn owner() -> u32;
-        pub fn self_id() -> u32;
+        pub fn owner();
+        pub fn self_id();
     }
 }
 
@@ -80,7 +80,7 @@ where
         composite.pos() as u32
     });
 
-    let name_ptr = name.as_bytes().as_ptr() as *const u8;
+    let name_ptr = name.as_bytes().as_ptr();
     let name_len = name.as_bytes().len() as u32;
 
     let ret_len = unsafe { ext::hq(name_ptr, name_len, arg_len) };
@@ -237,21 +237,22 @@ where
 
 /// Return the current contract's owner.
 pub fn owner<const N: usize>() -> [u8; N] {
-    let len = unsafe { ext::owner() } as usize;
+    unsafe { ext::owner() };
     with_arg_buf(|buf| {
-        let ret = unsafe { archived_root::<[u8; N]>(&buf[..len]) };
+        let ret = unsafe { archived_root::<[u8; N]>(&buf[..N]) };
         ret.deserialize(&mut Infallible).expect("Infallible")
     })
 }
 
 /// Return the current contract's id.
 pub fn self_id() -> ContractId {
-    let len = unsafe { ext::self_id() } as usize;
-    let id: [u8; 32] = with_arg_buf(|buf| {
-        let ret = unsafe { archived_root::<[u8; 32]>(&buf[..len]) };
+    unsafe { ext::self_id() };
+    let id: ContractId = with_arg_buf(|buf| {
+        let ret =
+            unsafe { archived_root::<ContractId>(&buf[..CONTRACT_ID_BYTES]) };
         ret.deserialize(&mut Infallible).expect("Infallible")
     });
-    ContractId::from(id)
+    id
 }
 
 /// Return the ID of the calling contract. The returned id will be
