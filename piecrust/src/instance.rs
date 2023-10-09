@@ -22,7 +22,6 @@ use wasmer_types::{
 };
 use wasmer_vm::{LinearMemory, VMMemory, VMTable, VMTableDefinition};
 
-use crumbles::MEM_SIZE;
 use piecrust_uplink::{ContractId, Event, ARGBUF_LEN};
 
 use crate::contract::WrappedContract;
@@ -239,7 +238,7 @@ impl WrappedInstance {
         let memory_bytes = unsafe {
             let slice = view.data_unchecked();
             let ptr = slice.as_ptr();
-            slice::from_raw_parts(ptr, MEM_SIZE)
+            slice::from_raw_parts(ptr, MAX_MEM_SIZE)
         };
         f(memory_bytes)
     }
@@ -255,7 +254,7 @@ impl WrappedInstance {
         let memory_bytes = unsafe {
             let slice = view.data_unchecked_mut();
             let ptr = slice.as_mut_ptr();
-            slice::from_raw_parts_mut(ptr, MEM_SIZE)
+            slice::from_raw_parts_mut(ptr, MAX_MEM_SIZE)
         };
         f(memory_bytes)
     }

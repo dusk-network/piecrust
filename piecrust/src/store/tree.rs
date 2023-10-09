@@ -7,11 +7,10 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use bytecheck::CheckBytes;
-use crumbles::PAGE_SIZE;
 use piecrust_uplink::ContractId;
 use rkyv::{Archive, Deserialize, Serialize};
 
-use crate::store::Memory;
+use crate::store::memory::{Memory, PAGE_SIZE};
 
 // There are `2^16` pages in a memory
 const P_HEIGHT: usize = 16;
