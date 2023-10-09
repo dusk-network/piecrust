@@ -11,7 +11,7 @@ use std::path::Path;
 use std::ptr::NonNull;
 use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
-use crumbles::{Mmap, PAGE_SIZE};
+use crumbles::Mmap;
 use wasmer::WASM_MAX_PAGES;
 use wasmer_types::{MemoryType, Pages};
 use wasmer_vm::{
@@ -22,6 +22,8 @@ use wasmer_vm::{
 const MIN_PAGES: usize = 4;
 const MIN_MEM_SIZE: usize = MIN_PAGES * PAGE_SIZE;
 const MAX_PAGES: usize = WASM_MAX_PAGES as usize;
+
+pub const PAGE_SIZE: usize = wasmer::WASM_PAGE_SIZE;
 pub const MAX_MEM_SIZE: usize = MAX_PAGES * PAGE_SIZE;
 
 #[derive(Debug)]
@@ -39,7 +41,7 @@ pub struct Memory {
 
 impl Memory {
     pub(crate) fn new() -> io::Result<Self> {
-        let mut mmap = Mmap::new()?;
+        let mut mmap = Mmap::new(MAX_PAGES, PAGE_SIZE)?;
 
         let def = VMMemoryDefinition {
             base: mmap.as_mut_ptr(),
@@ -61,13 +63,17 @@ impl Memory {
         I: IntoIterator<Item = (usize, P)>,
     {
         let mut mmap = unsafe {
-            Mmap::with_files(paths.into_iter().map(|(offset, path)| {
-                OpenOptions::new()
-                    .read(true)
-                    .write(true)
-                    .open(path)
-                    .map(|file| (offset, file))
-            }))?
+            Mmap::with_files(
+                MAX_PAGES,
+                PAGE_SIZE,
+                paths.into_iter().map(|(offset, path)| {
+                    OpenOptions::new()
+                        .read(true)
+                        .write(true)
+                        .open(path)
+                        .map(|file| (offset, file))
+                }),
+            )?
         };
 
         let def = VMMemoryDefinition {
