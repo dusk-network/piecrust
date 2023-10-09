@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Allow for choosing the size of the mapping
+
+### Changed
+
+- Change `Mmap::new` and `Mmap::with_files` to take `n_pages` and `page_size`
+
+### Removed
+
+- Remove `MEM_SIZE` and `PAGE_SIZE` constants
+
 ## [0.2.0] - 2023-09-13
 
 ### Changed

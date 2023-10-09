@@ -4,16 +4,11 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-//! Library for creating and managing [`MEM_SIZE`] bytes copy-on-write
-//! memory-mapped regions.
+//! Library for creating and managing copy-on-write memory-mapped regions.
 //!
 //! The core functionality is offered by the [`Mmap`] struct, which is a
 //! read-write memory region that keeps track of which pages have been written
 //! to.
-//!
-//! Each `Mmap` is `MEM_SIZE` in size, and can be backed by physical memory, a
-//! set of files, or a combination of both. Each page is [`PAGE_SIZE`] in size,
-//! meaning that each mmap contains 65536 pages.
 //!
 //! # Example
 //! ```rust
@@ -21,7 +16,7 @@
 //! # fn main() -> io::Result<()> {
 //! use crumbles::Mmap;
 //!
-//! let mut mmap = Mmap::new()?;
+//! let mut mmap = Mmap::new(65536, 65536)?;
 //!
 //! // When first created, the mmap is not dirty.
 //! assert_eq!(mmap.dirty_pages().count(), 0);
@@ -57,14 +52,8 @@ use libc::{
     PROT_READ, PROT_WRITE, SA_SIGINFO,
 };
 
-/// Size of each memory region in bytes. 4GiB.
-pub const MEM_SIZE: usize = 0x100_000_000;
-/// Size of each memory page in bytes. 64KiB.
-pub const PAGE_SIZE: usize = 0x10_000;
-
-/// A handle to a [`MEM_SIZE`] copy-on-write memory-mapped region that keeps
-/// track of which pages have been written to. Each page is [`PAGE_SIZE`] in
-/// size.
+/// A handle to a copy-on-write memory-mapped region that keeps track of which
+/// pages have been written to.
 ///
 /// A `Mmap` may be backed by a set of files, physical memory, or a combination
 /// of both. Use [`new`] to create a new mmap backed entirely by physical
@@ -94,6 +83,10 @@ impl Mmap {
     /// Create a new mmap, backed entirely by physical memory. The memory is
     /// initialized to all zeros.
     ///
+    /// The size of the memory region is specified by the caller using the
+    /// number of pages - `page_number` - and the page size - `page_size`. The
+    /// size total size of the region will then be `page_number * page_size`.
+    ///
     /// # Errors
     /// If the underlying call to map memory fails, the function will return an
     /// error.
@@ -104,23 +97,26 @@ impl Mmap {
     /// # fn main() -> io::Result<()> {
     /// use crumbles::Mmap;
     ///
-    /// let mmap = Mmap::new()?;
+    /// let mmap = Mmap::new(65536, 65536)?;
     /// assert_eq!(mmap[..0x10_000], [0; 0x10_000]);
     /// # Ok(())
     /// # }
     /// ```
-    pub fn new() -> io::Result<Self> {
-        unsafe { Self::with_files(None) }
+    pub fn new(page_number: usize, page_size: usize) -> io::Result<Self> {
+        unsafe { Self::with_files(page_number, page_size, None) }
     }
 
     /// Create a new memory, backed by the given files at the given offsets.
-    /// Regions of the memory not covered
+    ///
+    /// The size of the memory region is specified by the caller using the
+    /// number of pages - `page_number` - and the page size - `page_size`. The
+    /// size total size of the region will then be `page_number * page_size`.
     ///
     /// # Errors
-    /// If the given files are too large for the [`MEM_SIZE`] memory region, or
-    /// at an offset where they wouldn't fit within said region, the function
-    /// will return an error. Also, if any of the files' size or offsets is not
-    /// a multiple of the page size, the function will return an error.
+    /// If the given files are too large for the memory region, or at an offset
+    /// where they wouldn't fit within said region, the function will return an
+    /// error. Also, if any of the files' size or offsets is not a multiple of
+    /// the page size, the function will return an error.
     ///
     /// # Safety
     /// The caller must ensure that the given files are not modified while
@@ -142,22 +138,27 @@ impl Mmap {
     /// let mut contents = Vec::new();
     /// file.read_to_end(&mut contents)?;
     ///
-    /// let mmap = unsafe { Mmap::with_files(iter::once(Ok((0, file))))? };
+    /// let mmap = unsafe { Mmap::with_files(65536, 65536, iter::once(Ok((0, file))))? };
     /// assert_eq!(mmap[..contents.len()], contents[..]);
     /// # Ok(())
     /// # }
     /// ```
-    pub unsafe fn with_files<I>(files_and_offsets: I) -> io::Result<Self>
+    pub unsafe fn with_files<I>(
+        page_number: usize,
+        page_size: usize,
+        files_and_offsets: I,
+    ) -> io::Result<Self>
     where
         I: IntoIterator<Item = io::Result<(usize, File)>>,
     {
-        let inner = MmapInner::with_files(files_and_offsets)?;
+        let inner =
+            MmapInner::with_files(page_number, page_size, files_and_offsets)?;
 
         with_global_map_mut(|global_map| {
             let inner = Box::leak(Box::new(inner));
 
             let start_addr = inner.bytes.as_mut_ptr() as usize;
-            let end_addr = start_addr + MEM_SIZE;
+            let end_addr = start_addr + inner.bytes.len();
 
             let inner_ptr = inner as *mut _;
 
@@ -175,10 +176,9 @@ impl Mmap {
     /// the original or [`apply`] to keep the changes.
     ///
     /// # Errors
-    /// If the given files are too large for the [`MEM_SIZE`] memory region, or
-    /// at an offset where they wouldn't fit within said region, the function
-    /// will return an error. Also, if any of the files' size or offsets is not
-    /// a multiple of the page size, the function will return an error.
+    /// If the underlying call to protect the memory region fails, this function
+    /// will error. When this happens, the memory region will be left in an
+    /// inconsistent state, and the caller is encouraged to drop the structure.
     ///
     /// # Example
     /// ```rust
@@ -186,7 +186,7 @@ impl Mmap {
     /// # fn main() -> io::Result<()> {
     /// use crumbles::Mmap;
     ///
-    /// let mut mmap = Mmap::new()?;
+    /// let mut mmap = Mmap::new(65536, 65536)?;
     ///
     /// mmap[0] = 1;
     /// mmap.snap()?;
@@ -212,10 +212,9 @@ impl Mmap {
     /// memory to its initial state on instantiation.
     ///
     /// # Errors
-    /// If the given files are too large for the [`MEM_SIZE`] memory region, or
-    /// at an offset where they wouldn't fit within said region, the function
-    /// will return an error. Also, if any of the files' size or offsets is not
-    /// a multiple of the page size, the function will return an error.
+    /// If the underlying call to protect the memory region fails, this function
+    /// will error. When this happens, the memory region will be left in an
+    /// inconsistent state, and the caller is encouraged to drop the structure.
     ///
     /// # Example
     /// ```rust
@@ -223,7 +222,7 @@ impl Mmap {
     /// # fn main() -> io::Result<()> {
     /// use crumbles::Mmap;
     ///
-    /// let mut mmap = Mmap::new()?;
+    /// let mut mmap = Mmap::new(65536, 65536)?;
     ///
     /// mmap[0] = 1;
     /// mmap.revert()?;
@@ -256,7 +255,7 @@ impl Mmap {
     /// # fn main() -> io::Result<()> {
     /// use crumbles::Mmap;
     ///
-    /// let mut mmap = Mmap::new()?;
+    /// let mut mmap = Mmap::new(65536, 65536)?;
     ///
     /// mmap[0] = 1;
     /// mmap.apply()?;
@@ -281,7 +280,7 @@ impl Mmap {
     /// # fn main() -> io::Result<()> {
     /// use crumbles::Mmap;
     ///
-    /// let mut mmap = Mmap::new()?;
+    /// let mut mmap = Mmap::new(65536, 65536)?;
     /// mmap[0x10_000] = 1; // second page
     ///
     /// let dirty_pages: Vec<_> = mmap.dirty_pages().collect();
@@ -295,10 +294,11 @@ impl Mmap {
         self.0
             .last_snapshot()
             .iter()
-            .map(move |(page_num, clean_page)| {
-                let offset = page_num * PAGE_SIZE;
+            .map(move |(page_index, clean_page)| {
+                let page_size = self.0.page_size;
+                let offset = page_index * page_size;
                 (
-                    &self.0.bytes[offset..][..PAGE_SIZE],
+                    &self.0.bytes[offset..][..page_size],
                     &clean_page[..],
                     offset,
                 )
@@ -342,7 +342,8 @@ impl Drop for Mmap {
                 let inner = Box::from_raw(inner_ptr);
 
                 let start_addr = inner.bytes.as_mut_ptr() as usize;
-                let end_addr = start_addr + MEM_SIZE;
+                let len = inner.bytes.len();
+                let end_addr = start_addr + len;
 
                 global_map.remove(start_addr..end_addr);
             };
@@ -380,6 +381,14 @@ where
     closure(&mut global_map)
 }
 
+#[allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
+fn system_page_size() -> usize {
+    static mut PAGE_SIZE: OnceLock<usize> = OnceLock::new();
+    unsafe {
+        *PAGE_SIZE.get_or_init(|| libc::sysconf(libc::_SC_PAGESIZE) as usize)
+    }
+}
+
 /// A map from dirty page numbers to their "clean" contents.
 type Snapshot = BTreeMap<usize, Vec<u8>>;
 
@@ -387,17 +396,28 @@ type Snapshot = BTreeMap<usize, Vec<u8>>;
 #[derive(Debug)]
 struct MmapInner {
     bytes: &'static mut [u8],
+    page_size: usize,
     snapshots: Vec<Snapshot>,
 }
 
 impl MmapInner {
-    unsafe fn new() -> io::Result<Self> {
+    unsafe fn new(page_number: usize, page_size: usize) -> io::Result<Self> {
         setup_action();
 
+        let system_page_size = system_page_size();
+        if page_size % system_page_size != 0 {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!("Page size {page_size} must be a multiple of the system page size {system_page_size}"),
+            ));
+        }
+
         let bytes = {
+            let len = page_number * page_size;
+
             let ptr = libc::mmap(
                 ptr::null_mut(),
-                MEM_SIZE,
+                len,
                 PROT_READ,
                 MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE,
                 -1,
@@ -408,21 +428,27 @@ impl MmapInner {
                 return Err(io::Error::last_os_error());
             }
 
-            slice::from_raw_parts_mut(ptr.cast(), MEM_SIZE)
+            slice::from_raw_parts_mut(ptr.cast(), len)
         };
 
         Ok(Self {
             bytes,
+            page_size,
             // There should always be at least one snapshot
             snapshots: vec![Snapshot::new()],
         })
     }
 
-    unsafe fn with_files<I>(files_and_offsets: I) -> io::Result<Self>
+    unsafe fn with_files<I>(
+        page_number: usize,
+        page_size: usize,
+        files_and_offsets: I,
+    ) -> io::Result<Self>
     where
         I: IntoIterator<Item = io::Result<(usize, File)>>,
     {
-        let inner = MmapInner::new()?;
+        let inner = MmapInner::new(page_number, page_size)?;
+        let len = inner.bytes.len();
 
         for r in files_and_offsets {
             let (offset, file) = r?;
@@ -436,7 +462,7 @@ impl MmapInner {
             {
                 let file_len = file.metadata()?.len() as usize;
 
-                if offset + file_len > MEM_SIZE {
+                if offset + file_len > len {
                     return Err(io::Error::new(
                         io::ErrorKind::InvalidInput,
                         "File too large for memory region",
@@ -463,32 +489,37 @@ impl MmapInner {
         Ok(inner)
     }
 
-    unsafe fn set_dirty(&mut self, page_num: usize) -> io::Result<()> {
+    unsafe fn set_dirty(&mut self, si_addr: usize) -> io::Result<()> {
+        let start_addr = self.bytes.as_mut_ptr() as usize;
+        let page_size = self.page_size;
+        let page_index = (si_addr - start_addr) / page_size;
+
         let start_addr = self.bytes.as_ptr() as usize;
-        let page_offset = page_num * PAGE_SIZE;
+        let page_offset = page_index * self.page_size;
 
         let page_addr = start_addr + page_offset;
+        let page_size = self.page_size;
 
-        if libc::mprotect(page_addr as _, PAGE_SIZE, PROT_READ | PROT_WRITE)
+        if libc::mprotect(page_addr as _, page_size, PROT_READ | PROT_WRITE)
             != 0
         {
             return Err(io::Error::last_os_error());
         }
 
-        if !self.last_snapshot().contains_key(&page_num) {
-            let mut clean_page = vec![0; PAGE_SIZE];
-            clean_page.copy_from_slice(&self.bytes[page_offset..][..PAGE_SIZE]);
+        if !self.last_snapshot().contains_key(&page_index) {
+            let mut clean_page = vec![0; page_size];
+            clean_page.copy_from_slice(&self.bytes[page_offset..][..page_size]);
 
-            self.last_snapshot_mut().insert(page_num, clean_page);
+            self.last_snapshot_mut().insert(page_index, clean_page);
         }
 
         Ok(())
     }
 
     unsafe fn snap(&mut self) -> io::Result<()> {
-        if libc::mprotect(self.bytes.as_mut_ptr().cast(), MEM_SIZE, PROT_READ)
-            != 0
-        {
+        let len = self.bytes.len();
+
+        if libc::mprotect(self.bytes.as_mut_ptr().cast(), len, PROT_READ) != 0 {
             return Err(io::Error::last_os_error());
         }
 
@@ -498,9 +529,9 @@ impl MmapInner {
     }
 
     unsafe fn apply(&mut self) -> io::Result<()> {
-        if libc::mprotect(self.bytes.as_mut_ptr().cast(), MEM_SIZE, PROT_READ)
-            != 0
-        {
+        let len = self.bytes.len();
+
+        if libc::mprotect(self.bytes.as_mut_ptr().cast(), len, PROT_READ) != 0 {
             return Err(io::Error::last_os_error());
         }
 
@@ -513,8 +544,8 @@ impl MmapInner {
         }
         let snapshot = self.last_snapshot_mut();
 
-        for (page_num, clean_page) in popped_snapshot {
-            snapshot.entry(page_num).or_insert(clean_page);
+        for (page_index, clean_page) in popped_snapshot {
+            snapshot.entry(page_index).or_insert(clean_page);
         }
 
         Ok(())
@@ -529,15 +560,17 @@ impl MmapInner {
             self.snapshots.push(Snapshot::new());
         }
 
-        for (page_num, clean_page) in popped_snapshot {
-            let page_offset = page_num * PAGE_SIZE;
-            self.bytes[page_offset..][..PAGE_SIZE]
+        let page_size = self.page_size;
+
+        for (page_index, clean_page) in popped_snapshot {
+            let page_offset = page_index * page_size;
+            self.bytes[page_offset..][..page_size]
                 .copy_from_slice(&clean_page[..]);
         }
 
-        if libc::mprotect(self.bytes.as_mut_ptr().cast(), MEM_SIZE, PROT_READ)
-            != 0
-        {
+        let len = self.bytes.len();
+
+        if libc::mprotect(self.bytes.as_mut_ptr().cast(), len, PROT_READ) != 0 {
             return Err(io::Error::last_os_error());
         }
 
@@ -560,7 +593,10 @@ impl MmapInner {
 impl Drop for MmapInner {
     fn drop(&mut self) {
         unsafe {
-            libc::munmap(self.bytes.as_mut_ptr().cast(), MEM_SIZE);
+            let ptr = self.bytes.as_mut_ptr();
+            let len = self.bytes.len();
+
+            libc::munmap(ptr.cast(), len);
         }
     }
 }
@@ -633,12 +669,10 @@ unsafe fn segfault_handler(
         if let Some(inner_ptr) = global_map.get(&si_addr) {
             let inner = &mut *(*inner_ptr as *mut MmapInner);
 
-            let start_addr = inner.bytes.as_mut_ptr() as usize;
-            let page_num = (si_addr - start_addr) / PAGE_SIZE;
-
-            if inner.set_dirty(page_num).is_err() {
+            if inner.set_dirty(si_addr).is_err() {
                 call_old_action(sig, info, ctx);
             }
+
             return;
         }
 
@@ -652,6 +686,9 @@ mod tests {
 
     use std::thread;
 
+    const N_PAGES: usize = 65536;
+    const PAGE_SIZE: usize = 65536;
+
     const DIRT: [u8; 2 * PAGE_SIZE] = [42; 2 * PAGE_SIZE];
     const DIRT2: [u8; 2 * PAGE_SIZE] = [43; 2 * PAGE_SIZE];
 
@@ -659,8 +696,8 @@ mod tests {
 
     #[test]
     fn write() {
-        let mut mem =
-            Mmap::new().expect("Instantiating new memory should succeed");
+        let mut mem = Mmap::new(N_PAGES, PAGE_SIZE)
+            .expect("Instantiating new memory should succeed");
 
         let slice = &mut mem[OFFSET..][..DIRT.len()];
         slice.copy_from_slice(&DIRT);
@@ -677,7 +714,7 @@ mod tests {
 
         for _ in 0..NUM_THREADS {
             threads.push(thread::spawn(|| {
-                let mut mem = Mmap::new()
+                let mut mem = Mmap::new(N_PAGES, PAGE_SIZE)
                     .expect("Instantiating new memory should succeed");
 
                 let slice = &mut mem[OFFSET..][..DIRT.len()];
@@ -695,8 +732,8 @@ mod tests {
 
     #[test]
     fn revert() {
-        let mut mem =
-            Mmap::new().expect("Instantiating new memory should succeed");
+        let mut mem = Mmap::new(N_PAGES, PAGE_SIZE)
+            .expect("Instantiating new memory should succeed");
 
         let slice = &mut mem[OFFSET..][..DIRT.len()];
         slice.copy_from_slice(&DIRT);
@@ -723,8 +760,8 @@ mod tests {
 
     #[test]
     fn multi_revert() {
-        let mut mem =
-            Mmap::new().expect("Instantiating new memory should succeed");
+        let mut mem = Mmap::new(N_PAGES, PAGE_SIZE)
+            .expect("Instantiating new memory should succeed");
 
         let slice = &mut mem[OFFSET..][..DIRT.len()];
         slice.copy_from_slice(&DIRT);
@@ -759,8 +796,8 @@ mod tests {
 
     #[test]
     fn apply() {
-        let mut mem =
-            Mmap::new().expect("Instantiating new memory should succeed");
+        let mut mem = Mmap::new(N_PAGES, PAGE_SIZE)
+            .expect("Instantiating new memory should succeed");
 
         let slice = &mut mem[OFFSET..][..DIRT.len()];
         slice.copy_from_slice(&DIRT);
