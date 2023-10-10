@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Adapt to use `LocateFile` - `crumbles`'s lazy page loading mechanism
 - Adapt to `crumbles` needing `n_pages` and `page_size`
 - Change return of `owner` and `self_id` to `()`
 - Rename `StackElement` to `CallTreeElem` [#206]

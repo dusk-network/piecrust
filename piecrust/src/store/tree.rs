@@ -10,7 +10,7 @@ use bytecheck::CheckBytes;
 use piecrust_uplink::ContractId;
 use rkyv::{Archive, Deserialize, Serialize};
 
-use crate::store::memory::{Memory, PAGE_SIZE};
+use crate::store::memory::Memory;
 
 // There are `2^16` pages in a memory
 const P_HEIGHT: usize = 16;
@@ -45,7 +45,7 @@ impl Default for ContractIndex {
 pub struct ContractIndexElement {
     pub tree: PageTree,
     pub len: usize,
-    pub offsets: BTreeSet<usize>,
+    pub page_indices: BTreeSet<usize>,
 }
 
 impl ContractIndex {
@@ -56,7 +56,7 @@ impl ContractIndex {
                 ContractIndexElement {
                     tree: PageTree::new(),
                     len: 0,
-                    offsets: BTreeSet::new(),
+                    page_indices: BTreeSet::new(),
                 },
             );
         }
@@ -67,13 +67,10 @@ impl ContractIndex {
 
         element.len = memory_inner.def.current_length;
 
-        for (dirty_page, _, page_offset) in memory_inner.mmap.dirty_pages() {
-            element.offsets.insert(page_offset);
-
+        for (dirty_page, _, page_index) in memory_inner.mmap.dirty_pages() {
+            element.page_indices.insert(*page_index);
             let hash = Hash::new(dirty_page);
-            let page_pos = page_offset / PAGE_SIZE;
-
-            element.tree.insert(page_pos as u64, hash);
+            element.tree.insert(*page_index as u64, hash);
         }
 
         self.tree

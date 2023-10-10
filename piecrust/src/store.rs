@@ -170,6 +170,10 @@ fn read_commit<P: AsRef<Path>>(commit_dir: P) -> io::Result<Commit> {
     Ok(commit)
 }
 
+fn page_path<P: AsRef<Path>>(memory_dir: P, page_index: usize) -> PathBuf {
+    memory_dir.as_ref().join(format!("{page_index}"))
+}
+
 fn commit_from_dir<P: AsRef<Path>>(dir: P) -> io::Result<Commit> {
     let dir = dir.as_ref();
 
@@ -194,9 +198,9 @@ fn commit_from_dir<P: AsRef<Path>>(dir: P) -> io::Result<Commit> {
 
         let memory_dir = memory_dir.join(&contract_hex);
 
-        for page_offset in &contract_index.offsets {
-            let memory_path = memory_dir.join(format!("{page_offset:08x}"));
-            if !memory_path.is_file() {
+        for page_index in &contract_index.page_indices {
+            let page_path = page_path(&memory_dir, *page_index);
+            if !page_path.is_file() {
                 return Err(io::Error::new(
                     io::ErrorKind::InvalidData,
                     format!("Non-existing memory for contract: {contract_hex}"),
@@ -452,10 +456,10 @@ fn write_commit_inner<P: AsRef<Path>>(
 
         let mut pages = BTreeSet::new();
 
-        for (dirty_page, _, page_offset) in memory.dirty_pages() {
-            let page_path = memory_dir.join(format!("{page_offset:08x}"));
+        for (dirty_page, _, page_index) in memory.dirty_pages() {
+            let page_path = page_path(&memory_dir, *page_index);
             fs::write(page_path, dirty_page)?;
-            pages.insert(page_offset);
+            pages.insert(*page_index);
         }
 
         let bytecode_path = directories.bytecode_dir.join(&contract_hex);
@@ -483,16 +487,15 @@ fn write_commit_inner<P: AsRef<Path>>(
                 fs::hard_link(base_objectcode_path, objectcode_path)?;
                 fs::hard_link(base_metadata_path, metadata_path)?;
 
-                for page_offset in &elem.offsets {
+                for page_index in &elem.page_indices {
                     // Only write the clean pages, since the dirty ones have
                     // already been written.
-                    if !pages.contains(page_offset) {
-                        let page_path =
-                            memory_dir.join(format!("{page_offset:08x}"));
+                    if !pages.contains(page_index) {
+                        let new_page_path = page_path(&memory_dir, *page_index);
                         let base_page_path =
-                            base_memory_dir.join(format!("{page_offset:08x}"));
+                            page_path(&base_memory_dir, *page_index);
 
-                        fs::hard_link(base_page_path, page_path)?;
+                        fs::hard_link(base_page_path, new_page_path)?;
                     }
                 }
             }
@@ -530,13 +533,12 @@ fn write_commit_inner<P: AsRef<Path>>(
                 fs::hard_link(base_objectcode_path, objectcode_path)?;
                 fs::hard_link(base_metadata_path, metadata_path)?;
 
-                for page_offset in &elem.offsets {
-                    let page_path =
-                        memory_dir.join(format!("{page_offset:08x}"));
+                for page_index in &elem.page_indices {
+                    let new_page_path = page_path(&memory_dir, *page_index);
                     let base_page_path =
-                        base_memory_dir.join(format!("{page_offset:08x}"));
+                        page_path(&base_memory_dir, *page_index);
 
-                    fs::hard_link(base_page_path, page_path)?;
+                    fs::hard_link(base_page_path, new_page_path)?;
                 }
             }
         }
