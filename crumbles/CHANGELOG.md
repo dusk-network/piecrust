@@ -9,10 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Add `LocateFile` trait for getting file paths for mapping
 - Allow for choosing the size of the mapping
 
 ### Changed
 
+- Mapping behavior is now lazy, mapping pages to their regions on demand
+- Change `Mmap::with_files` to take `LocateFile` instead of `IntoIterator<Item = io::Result<(usize, File)>>`
 - Change `Mmap::new` and `Mmap::with_files` to take `n_pages` and `page_size`
 
 ### Removed
