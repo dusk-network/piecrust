@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] - 2023-10-11
+
 ### Added
 
 - Add call to `panic` in panic handler [#271]
@@ -136,7 +138,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [#136]: https://github.com/dusk-network/piecrust/issues/136
 
 <!-- VERSIONS -->
-[Unreleased]: https://github.com/dusk-network/piecrust/compare/uplink-0.7.1...HEAD
+[Unreleased]: https://github.com/dusk-network/piecrust/compare/uplink-0.8.0...HEAD
+[0.8.0]: https://github.com/dusk-network/piecrust/compare/uplink-0.7.1...uplink-0.8.0
 [0.7.1]: https://github.com/dusk-network/piecrust/compare/v0.7.0...uplink-0.7.1
 [0.7.0]: https://github.com/dusk-network/piecrust/compare/uplink-0.6.1...v0.7.0
 [0.6.1]: https://github.com/dusk-network/piecrust/compare/v0.6.0...uplink-0.6.1
