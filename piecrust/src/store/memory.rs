@@ -4,14 +4,15 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use std::fs::OpenOptions;
-use std::io;
-use std::ops::{Deref, DerefMut};
-use std::path::Path;
-use std::ptr::NonNull;
-use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
+use std::{
+    fmt::{Debug, Formatter},
+    io,
+    ops::{Deref, DerefMut},
+    ptr::NonNull,
+    sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard},
+};
 
-use crumbles::Mmap;
+use crumbles::{LocateFile, Mmap};
 use wasmer::WASM_MAX_PAGES;
 use wasmer_types::{MemoryType, Pages};
 use wasmer_vm::{
@@ -26,11 +27,21 @@ const MAX_PAGES: usize = WASM_MAX_PAGES as usize;
 pub const PAGE_SIZE: usize = wasmer::WASM_PAGE_SIZE;
 pub const MAX_MEM_SIZE: usize = MAX_PAGES * PAGE_SIZE;
 
-#[derive(Debug)]
 pub(crate) struct MemoryInner {
     pub(crate) mmap: Mmap,
     pub(crate) def: VMMemoryDefinition,
     is_new: bool,
+}
+
+impl Debug for MemoryInner {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("MemoryInner")
+            .field("mmap", &self.mmap.as_ptr())
+            .field("mmap_len", &self.mmap.len())
+            .field("current_len", &self.def.current_length)
+            .field("is_new", &self.is_new)
+            .finish()
+    }
 }
 
 /// WASM memory belonging to a given contract during a given session.
@@ -57,24 +68,15 @@ impl Memory {
         })
     }
 
-    pub(crate) fn from_files<P, I>(paths: I, len: usize) -> io::Result<Self>
+    pub(crate) fn from_files<FL>(
+        file_locator: FL,
+        len: usize,
+    ) -> io::Result<Self>
     where
-        P: AsRef<Path>,
-        I: IntoIterator<Item = (usize, P)>,
+        FL: 'static + LocateFile,
     {
-        let mut mmap = unsafe {
-            Mmap::with_files(
-                MAX_PAGES,
-                PAGE_SIZE,
-                paths.into_iter().map(|(offset, path)| {
-                    OpenOptions::new()
-                        .read(true)
-                        .write(true)
-                        .open(path)
-                        .map(|file| (offset, file))
-                }),
-            )?
-        };
+        let mut mmap =
+            unsafe { Mmap::with_files(MAX_PAGES, PAGE_SIZE, file_locator)? };
 
         let def = VMMemoryDefinition {
             base: mmap.as_mut_ptr(),

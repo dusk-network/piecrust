@@ -158,14 +158,29 @@ impl ContractSession {
 
                             let memory = match base_commit.index.get(&contract)
                             {
-                                Some(elem) => Memory::from_files(
-                                    elem.offsets.iter().map(|page_offset| {
-                                        let page_path = memory_path
-                                            .join(format!("{page_offset:08x}"));
-                                        (*page_offset, page_path)
-                                    }),
-                                    elem.len,
-                                )?,
+                                Some(elem) => {
+                                    let page_indices =
+                                        elem.page_indices.clone();
+                                    let memory_path = memory_path.clone();
+
+                                    Memory::from_files(
+                                        move |page_index: usize| {
+                                            match page_indices
+                                                .contains(&page_index)
+                                            {
+                                                true => {
+                                                    let page_path = memory_path
+                                                        .join(format!(
+                                                            "{page_index}"
+                                                        ));
+                                                    Some(page_path)
+                                                }
+                                                false => None,
+                                            }
+                                        },
+                                        elem.len,
+                                    )?
+                                }
                                 None => Memory::new()?,
                             };
 
