@@ -1,9 +1,14 @@
 help: ## Display this help screen
 	@grep -h -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-15s\033[0m %s\n", $$1, $$2}'
 
-contracts: ## Build example contracts
+COMPILER_VERSION=v0.0.0
+
+setup-compiler: ## Setup the Dusk Contract Compiler
+	@./scripts/setup-compiler.sh $(COMPILER_VERSION)
+
+contracts: setup-compiler ## Build example contracts
 	@RUSTFLAGS="-C link-args=-zstack-size=65536" \
-	cargo build \
+	cargo +dusk build \
 	  --release \
 	  --manifest-path=contracts/Cargo.toml \
 	  --color=always \
