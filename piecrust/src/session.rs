@@ -7,10 +7,13 @@
 use std::borrow::Cow;
 use std::collections::btree_map::Entry;
 use std::collections::BTreeMap;
+use std::fmt::{Debug, Formatter};
 use std::mem;
 use std::sync::{mpsc, Arc};
 
 use bytecheck::CheckBytes;
+use dusk_wasmtime::{Config, Engine, LinearMemory, MemoryCreator, MemoryType};
+use once_cell::sync::OnceCell;
 use piecrust_uplink::{ContractId, Event, ARGBUF_LEN, SCRATCH_BUF_BYTES};
 use rkyv::ser::serializers::{
     BufferScratch, BufferSerializer, CompositeSerializer,
@@ -20,13 +23,12 @@ use rkyv::{
     check_archived_root, validation::validators::DefaultValidator, Archive,
     Deserialize, Infallible, Serialize,
 };
-use wasmer_types::WASM_PAGE_SIZE;
 
 use crate::call_tree::{CallTree, CallTreeElem};
 use crate::contract::{ContractData, ContractMetadata, WrappedContract};
 use crate::error::Error::{self, InitalizationError, PersistenceError};
 use crate::instance::WrappedInstance;
-use crate::store::{ContractSession, Objectcode};
+use crate::store::{ContractSession, Objectcode, PAGE_SIZE};
 use crate::types::StandardBufSerializer;
 use crate::vm::HostQueries;
 
@@ -47,19 +49,18 @@ unsafe impl Sync for Session {}
 /// [`VM`]: crate::VM
 /// [`call`]: Session::call
 /// [`commit`]: Session::commit
-#[derive(Debug)]
 pub struct Session {
+    engine: Engine,
     inner: &'static mut SessionInner,
     original: bool,
 }
 
-/// This implementation purposefully boxes and leaks the `SessionInner`.
-impl From<SessionInner> for Session {
-    fn from(inner: SessionInner) -> Self {
-        Self {
-            inner: Box::leak(Box::new(inner)),
-            original: true,
-        }
+impl Debug for Session {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Session")
+            .field("inner", &self.inner)
+            .field("original", &self.original)
+            .finish()
     }
 }
 
@@ -81,8 +82,15 @@ impl Drop for Session {
     }
 }
 
+fn dummy_engine() -> Engine {
+    static DUMMY_ENGINE: OnceCell<Engine> = OnceCell::new();
+    DUMMY_ENGINE.get_or_init(Engine::default).clone()
+}
+
 #[derive(Debug)]
 struct SessionInner {
+    current: ContractId,
+
     call_tree: CallTree,
     instance_map: BTreeMap<ContractId, (*mut WrappedInstance, u64)>,
     debug: Vec<String>,
@@ -96,23 +104,73 @@ struct SessionInner {
     events: Vec<Event>,
 }
 
+unsafe impl MemoryCreator for Session {
+    /// This new memory is created for the contract currently at the top of the
+    /// call tree.
+    fn new_memory(
+        &self,
+        _ty: MemoryType,
+        minimum: usize,
+        _maximum: Option<usize>,
+        _reserved_size_in_bytes: Option<usize>,
+        _guard_size_in_bytes: usize,
+    ) -> Result<Box<dyn LinearMemory>, String> {
+        let contract = self.inner.current;
+
+        let session = self.clone();
+
+        let contract_data =
+            session.inner.contract_session.contract(contract).map_err(
+                |err| format!("Failed to get contract from session: {err:?}"),
+            )?;
+
+        let mut memory = contract_data
+            .expect("Contract data should exist at this point")
+            .memory;
+
+        if memory.is_new {
+            memory.current_len = minimum;
+        }
+
+        Ok(Box::new(memory))
+    }
+}
+
 impl Session {
     pub(crate) fn new(
+        mut config: Config,
         contract_session: ContractSession,
         host_queries: HostQueries,
         data: SessionData,
     ) -> Self {
-        Self::from(SessionInner {
+        let inner = SessionInner {
+            current: ContractId::uninitialized(),
             call_tree: CallTree::new(),
             instance_map: BTreeMap::new(),
             debug: vec![],
             data,
             contract_session,
             host_queries,
-            buffer: vec![0; WASM_PAGE_SIZE],
+            buffer: vec![0; PAGE_SIZE],
             feeder: None,
             events: vec![],
-        })
+        };
+
+        // This implementation purposefully boxes and leaks the `SessionInner`.
+        let inner = Box::leak(Box::new(inner));
+
+        let mut session = Self {
+            engine: dummy_engine(),
+            inner,
+            original: true,
+        };
+
+        config.with_host_memory(Arc::new(session.clone()));
+
+        session.engine = Engine::new(&config)
+            .expect("Engine configuration is set at compile time");
+
+        session
     }
 
     /// Clone the given session. We explicitly **do not** implement the
@@ -127,9 +185,15 @@ impl Session {
         // SAFETY: we explicitly allow aliasing of the session for internal
         // use.
         Self {
+            engine: self.engine.clone(),
             inner: unsafe { &mut *inner },
             original: false,
         }
+    }
+
+    /// Return a reference to the engine used in this session.
+    pub(crate) fn engine(&self) -> &Engine {
+        &self.engine
     }
 
     /// Deploy a contract, returning its [`ContractId`]. The ID is computed
@@ -209,7 +273,7 @@ impl Session {
         }
 
         let wrapped_contract =
-            WrappedContract::new(bytecode, None::<Objectcode>)?;
+            WrappedContract::new(&self.engine, bytecode, None::<Objectcode>)?;
         let contract_metadata = ContractMetadata { contract_id, owner };
         let metadata_bytes = Self::serialize_data(&contract_metadata)?;
 
@@ -261,7 +325,7 @@ impl Session {
     ///
     /// Calls are atomic, meaning that on failure their execution doesn't modify
     /// the state. They are also metered, and will execute with the given
-    /// `points_limit`.
+    /// `points_limit`. This value should never be 0.
     ///
     /// # Errors
     /// The call may error during execution for a wide array of reasons, the
@@ -463,9 +527,13 @@ impl Session {
             .ok_or(Error::ContractDoesNotExist(contract_id))?;
 
         let contract = WrappedContract::new(
+            &self.engine,
             store_data.bytecode,
             Some(store_data.objectcode),
         )?;
+
+        self.inner.current = contract_id;
+
         let instance = WrappedInstance::new(
             self.clone(),
             contract_id,
@@ -649,10 +717,7 @@ impl Session {
             .map_err(Error::normalize)?;
         let ret = instance.read_bytes_from_arg_buffer(ret_len as u32);
 
-        let spent = limit
-            - instance
-                .get_remaining_points()
-                .expect("there should be remaining points");
+        let spent = limit - instance.get_remaining_points();
 
         for elem in self.inner.call_tree.iter() {
             let instance = self

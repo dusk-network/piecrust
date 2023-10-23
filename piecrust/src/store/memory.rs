@@ -4,33 +4,31 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
+use std::sync::atomic::Ordering;
 use std::{
     fmt::{Debug, Formatter},
     io,
-    ops::{Deref, DerefMut},
-    ptr::NonNull,
-    sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard},
+    ops::{Deref, DerefMut, Range},
+    sync::atomic::AtomicUsize,
 };
 
 use crumbles::{LocateFile, Mmap};
-use wasmer::WASM_MAX_PAGES;
-use wasmer_types::{MemoryType, Pages};
-use wasmer_vm::{
-    initialize_memory_with_data, LinearMemory, MemoryError, MemoryStyle, Trap,
-    VMMemory, VMMemoryDefinition,
-};
+use dusk_wasmtime::LinearMemory;
+
+pub const PAGE_SIZE: usize = 0x10000;
+const WASM_MAX_PAGES: u32 = 0x10000;
 
 const MIN_PAGES: usize = 4;
 const MIN_MEM_SIZE: usize = MIN_PAGES * PAGE_SIZE;
 const MAX_PAGES: usize = WASM_MAX_PAGES as usize;
 
-pub const PAGE_SIZE: usize = wasmer::WASM_PAGE_SIZE;
 pub const MAX_MEM_SIZE: usize = MAX_PAGES * PAGE_SIZE;
 
-pub(crate) struct MemoryInner {
-    pub(crate) mmap: Mmap,
-    pub(crate) def: VMMemoryDefinition,
-    is_new: bool,
+pub struct MemoryInner {
+    pub mmap: Mmap,
+    pub current_len: usize,
+    pub is_new: bool,
+    ref_count: AtomicUsize,
 }
 
 impl Debug for MemoryInner {
@@ -38,189 +36,134 @@ impl Debug for MemoryInner {
         f.debug_struct("MemoryInner")
             .field("mmap", &self.mmap.as_ptr())
             .field("mmap_len", &self.mmap.len())
-            .field("current_len", &self.def.current_length)
+            .field("current_len", &self.current_len)
             .field("is_new", &self.is_new)
             .finish()
     }
 }
 
+impl Deref for MemoryInner {
+    type Target = Mmap;
+
+    fn deref(&self) -> &Self::Target {
+        &self.mmap
+    }
+}
+
+impl DerefMut for MemoryInner {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.mmap
+    }
+}
+
 /// WASM memory belonging to a given contract during a given session.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Memory {
-    inner: Arc<RwLock<MemoryInner>>,
+    inner: &'static mut MemoryInner,
 }
 
 impl Memory {
-    pub(crate) fn new() -> io::Result<Self> {
-        let mut mmap = Mmap::new(MAX_PAGES, PAGE_SIZE)?;
-
-        let def = VMMemoryDefinition {
-            base: mmap.as_mut_ptr(),
-            current_length: MIN_MEM_SIZE,
-        };
-
+    pub fn new() -> io::Result<Self> {
         Ok(Self {
-            inner: Arc::new(RwLock::new(MemoryInner {
-                mmap,
-                def,
+            inner: Box::leak(Box::new(MemoryInner {
+                mmap: Mmap::new(MAX_PAGES, PAGE_SIZE)?,
+                current_len: MIN_MEM_SIZE,
                 is_new: true,
+                ref_count: AtomicUsize::new(1),
             })),
         })
     }
 
-    pub(crate) fn from_files<FL>(
-        file_locator: FL,
-        len: usize,
-    ) -> io::Result<Self>
+    pub fn from_files<FL>(file_locator: FL, len: usize) -> io::Result<Self>
     where
         FL: 'static + LocateFile,
     {
-        let mut mmap =
-            unsafe { Mmap::with_files(MAX_PAGES, PAGE_SIZE, file_locator)? };
-
-        let def = VMMemoryDefinition {
-            base: mmap.as_mut_ptr(),
-            current_length: len,
-        };
-
         Ok(Self {
-            inner: Arc::new(RwLock::new(MemoryInner {
-                mmap,
-                def,
+            inner: Box::leak(Box::new(MemoryInner {
+                mmap: unsafe {
+                    Mmap::with_files(MAX_PAGES, PAGE_SIZE, file_locator)?
+                },
+                current_len: len,
                 is_new: false,
+                ref_count: AtomicUsize::new(1),
             })),
         })
     }
+}
 
-    pub fn read(&self) -> MemoryReadGuard {
-        let inner = self.inner.read().unwrap();
-        MemoryReadGuard { inner }
-    }
+/// This implementation of clone is dangerous, and must be accompanied by the
+/// underneath implementation of `Drop`.
+///
+/// We do this to avoid locking the memory in any way when recursively offering
+/// it to a session.
+///
+/// It is safe since we guarantee that there is no access contention - read or
+/// write.
+impl Clone for Memory {
+    fn clone(&self) -> Self {
+        self.ref_count.fetch_add(1, Ordering::SeqCst);
 
-    pub fn write(&self) -> MemoryWriteGuard {
-        let inner = self.inner.write().unwrap();
-        MemoryWriteGuard { inner }
+        let inner = self.inner as *const MemoryInner;
+        let inner = inner as *mut MemoryInner;
+        // SAFETY: we explicitly allow aliasing of the memory for internal
+        // use.
+        Self {
+            inner: unsafe { &mut *inner },
+        }
     }
 }
 
-pub struct MemoryReadGuard<'a> {
-    pub(crate) inner: RwLockReadGuard<'a, MemoryInner>,
-}
-
-impl<'a> AsRef<[u8]> for MemoryReadGuard<'a> {
-    fn as_ref(&self) -> &[u8] {
-        &self.inner.mmap
+impl Drop for Memory {
+    fn drop(&mut self) {
+        if self.ref_count.fetch_sub(1, Ordering::SeqCst) == 1 {
+            unsafe {
+                let _ = Box::from_raw(self.inner);
+            }
+        }
     }
 }
 
-impl<'a> Deref for MemoryReadGuard<'a> {
-    type Target = Mmap;
+impl Deref for Memory {
+    type Target = MemoryInner;
 
     fn deref(&self) -> &Self::Target {
-        &self.inner.mmap
+        self.inner
     }
 }
 
-pub struct MemoryWriteGuard<'a> {
-    pub(crate) inner: RwLockWriteGuard<'a, MemoryInner>,
-}
-
-impl<'a> AsRef<[u8]> for MemoryWriteGuard<'a> {
-    fn as_ref(&self) -> &[u8] {
-        &self.inner.mmap
-    }
-}
-
-impl<'a> AsMut<[u8]> for MemoryWriteGuard<'a> {
-    fn as_mut(&mut self) -> &mut [u8] {
-        &mut self.inner.mmap
-    }
-}
-
-impl<'a> Deref for MemoryWriteGuard<'a> {
-    type Target = Mmap;
-
-    fn deref(&self) -> &Self::Target {
-        &self.inner.mmap
-    }
-}
-
-impl<'a> DerefMut for MemoryWriteGuard<'a> {
+impl DerefMut for Memory {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.inner.mmap
+        self.inner
     }
 }
 
-impl LinearMemory for Memory {
-    fn ty(&self) -> MemoryType {
-        MemoryType {
-            minimum: Pages(MIN_PAGES as u32),
-            maximum: Some(Pages(MAX_PAGES as u32)),
-            shared: false,
-        }
+unsafe impl LinearMemory for Memory {
+    fn byte_size(&self) -> usize {
+        self.inner.current_len
     }
 
-    fn size(&self) -> Pages {
-        let pages = self.read().inner.def.current_length / PAGE_SIZE;
-        Pages(pages as u32)
+    fn maximum_byte_size(&self) -> Option<usize> {
+        Some(MAX_MEM_SIZE)
     }
 
-    fn style(&self) -> MemoryStyle {
-        MemoryStyle::Static {
-            bound: Pages(MAX_PAGES as u32),
-            offset_guard_size: 0,
-        }
-    }
-
-    fn grow(&mut self, delta: Pages) -> Result<Pages, MemoryError> {
-        let mut memory = self.write();
-
-        let current_len = memory.inner.def.current_length;
-        let new_len = current_len + delta.0 as usize * PAGE_SIZE;
-
-        if new_len > MAX_PAGES * PAGE_SIZE {
-            return Err(MemoryError::CouldNotGrow {
-                current: Pages((current_len / PAGE_SIZE) as u32),
-                attempted_delta: delta,
-            });
-        }
-
-        memory.inner.def = VMMemoryDefinition {
-            base: memory.as_mut_ptr(),
-            current_length: new_len,
-        };
-
-        Ok(Pages((new_len / PAGE_SIZE) as u32))
-    }
-
-    fn vmmemory(&self) -> NonNull<VMMemoryDefinition> {
-        let inner = self.inner.read().unwrap();
-        let ptr = &inner.def as *const VMMemoryDefinition;
-        NonNull::new(ptr as *mut VMMemoryDefinition).unwrap()
-    }
-
-    fn try_clone(&self) -> Option<Box<dyn LinearMemory + 'static>> {
-        Some(Box::new(self.clone()))
-    }
-
-    unsafe fn initialize_with_data(
-        &self,
-        start: usize,
-        data: &[u8],
-    ) -> Result<(), Trap> {
-        let this = self.write();
-        let inner = this.inner;
-
-        if inner.is_new {
-            initialize_memory_with_data(&inner.def, start, data)?;
-        }
-
+    fn grow_to(&mut self, new_size: usize) -> Result<(), dusk_wasmtime::Error> {
+        self.inner.current_len = new_size;
         Ok(())
     }
-}
 
-impl From<Memory> for VMMemory {
-    fn from(memory: Memory) -> Self {
-        VMMemory(Box::new(memory))
+    fn needs_init(&self) -> bool {
+        self.is_new
+    }
+
+    fn as_ptr(&self) -> *mut u8 {
+        self.inner.as_ptr() as _
+    }
+
+    fn wasm_accessible(&self) -> Range<usize> {
+        let begin = self.inner.mmap.as_ptr() as _;
+        let len = self.inner.current_len;
+        let end = begin + len;
+
+        begin..end
     }
 }

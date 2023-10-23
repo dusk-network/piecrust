@@ -16,13 +16,10 @@ license = "MPL-2.0"
 crumbles = { version = "0.3", path = "../crumbles" }
 piecrust-uplink = { version = "0.8", path = "../piecrust-uplink" }
 
-wasmer = "=3.1"
-wasmer-vm = "=3.1"
-wasmer-types = "=3.1"
-wasmer-middlewares = "=3.1"
-wasmer-compiler-singlepass = "=3.1"
+dusk-wasmtime = { version = "14", default-features = false, features = ["cranelift", "parallel-compilation"] }
 bytecheck = "0.6"
 rkyv = { version = "0.7", features = ["size_32", "validation"] }
+once_cell = "1.18"
 parking_lot = "0.12"
 blake3 = "1"
 colored = "2"
@@ -37,7 +34,6 @@ const-decoder = "0.3"
 [dev-dependencies]
 criterion = "0.4"
 dusk-plonk = { version = "0.14", features = ["rkyv-impl"] }
-once_cell = "1.18"
 
 [features]
 debug = []

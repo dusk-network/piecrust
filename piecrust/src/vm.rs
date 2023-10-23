@@ -11,12 +11,51 @@ use std::path::Path;
 use std::sync::Arc;
 use std::thread;
 
+use dusk_wasmtime::{
+    Config, ModuleVersionStrategy, OptLevel, Strategy, WasmBacktraceDetails,
+};
 use tempfile::tempdir;
-use wasmer_vm::init_traps;
 
 use crate::session::{Session, SessionData};
 use crate::store::ContractStore;
 use crate::Error::{self, PersistenceError};
+
+fn config() -> Config {
+    let mut config = Config::new();
+
+    // Neither WASM backtrace, nor native unwind info.
+    config.wasm_backtrace(false);
+    config.wasm_backtrace_details(WasmBacktraceDetails::Disable);
+
+    config.native_unwind_info(false);
+
+    // 512KiB of max stack is the default, but we want to be explicit about it.
+    config.max_wasm_stack(0x80000);
+    config.consume_fuel(true);
+
+    config.strategy(Strategy::Cranelift);
+    config.cranelift_opt_level(OptLevel::SpeedAndSize);
+    // We need entirely deterministic computation
+    config.cranelift_nan_canonicalization(true);
+
+    // Host memory creator is set in the session.
+    // config.with_host_memory()
+
+    config.static_memory_forced(true);
+    config.static_memory_maximum_size(0x100000000);
+    config.static_memory_guard_size(0);
+    config.dynamic_memory_guard_size(0);
+    config.guard_before_linear_memory(false);
+    config.memory_init_cow(false);
+
+    config
+        .module_version(ModuleVersionStrategy::Custom(String::from("piecrust")))
+        .expect("Module version should be valid");
+    config.generate_address_map(false);
+    config.macos_use_mach_ports(false);
+
+    config
+}
 
 /// A handle to the piecrust virtual machine.
 ///
@@ -38,6 +77,7 @@ use crate::Error::{self, PersistenceError};
 /// [`sync_thread`]: VM::sync_thread
 #[derive(Debug)]
 pub struct VM {
+    config: Config,
     host_queries: HostQueries,
     store: ContractStore,
 }
@@ -52,11 +92,10 @@ impl VM {
     /// # Errors
     /// If the directory contains unparseable or inconsistent data.
     pub fn new<P: AsRef<Path>>(root_dir: P) -> Result<Self, Error> {
-        init_traps();
-
         let store = ContractStore::new(root_dir)
             .map_err(|err| PersistenceError(Arc::new(err)))?;
         Ok(Self {
+            config: config(),
             host_queries: HostQueries::default(),
             store,
         })
@@ -70,8 +109,6 @@ impl VM {
     /// # Errors
     /// If creating a temporary directory fails.
     pub fn ephemeral() -> Result<Self, Error> {
-        init_traps();
-
         let tmp = tempdir().map_err(|err| PersistenceError(Arc::new(err)))?;
         let tmp = tmp.path().to_path_buf();
 
@@ -79,6 +116,7 @@ impl VM {
             .map_err(|err| PersistenceError(Arc::new(err)))?;
 
         Ok(Self {
+            config: config(),
             host_queries: HostQueries::default(),
             store,
         })
@@ -117,6 +155,7 @@ impl VM {
             _ => self.store.genesis_session(),
         };
         Ok(Session::new(
+            self.config.clone(),
             contract_session,
             self.host_queries.clone(),
             data,
