@@ -13,13 +13,13 @@ contracts: setup-compiler ## Build example contracts
 	  --manifest-path=contracts/Cargo.toml \
 	  --color=always \
 	  -Z build-std=core,alloc \
-	  --target wasm32-unknown-unknown
-	@contracts/c-example/build.sh
+	  --target wasm64-unknown-unknown
 	@mkdir -p target/stripped
-	@find target/wasm32-unknown-unknown/release -maxdepth 1 -name "*.wasm" \
+	@contracts/c-example/build.sh
+	@find target/wasm64-unknown-unknown/release -maxdepth 1 -name "*.wasm" \
 	    | xargs -I % basename % \
 	    | xargs -I % wasm-tools strip -a \
-	 	          target/wasm32-unknown-unknown/release/% \
+	 	          target/wasm64-unknown-unknown/release/% \
 	 	          -o target/stripped/%
 
 test: contracts cold-reboot assert-counter-contract-small ## Run all tests

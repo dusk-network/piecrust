@@ -87,6 +87,6 @@ int32_t increment_and_read(int32_t _arg_len) {
 // Calls the "hd" extern with an (almost) certainly out of bounds pointer, in an
 // effort to trigger an error.
 int32_t out_of_bounds(int32_t _arg_len) {
-    hd((uint8_t*)4294967295, 2);
+    hd((uint8_t*)4398046511103, 2);
     return 0;
 }
