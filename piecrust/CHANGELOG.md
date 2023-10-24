@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## Added
+
+- Add some `Error` variants:
+  * `InvalidFunction`
+  * `InvalidMemory`
+- Add `once_cell` dependency
+
+## Changed
+
+- Change `Error::RuntimeError` variant to contain `dusk_wasmtime::Error`,
+  and changed `From` implementation
+- Switch runtime from `wasmer` to `wasmtime`
+
+## Removed
+
+- Remove 4 page - 256KiB - minimum memory requirement for contracts
+- Remove `Clone` derivation for `Error`
+- Remove some `Error` variants, along with `From` implementations:
+  * `CompileError`
+  * `DeserializeError`
+  * `ExportError`
+  * `InstantiationError`
+  * `InvalidFunctionSignature`
+  * `MemorySetupError`
+  * `ParsingError`
+  * `SerializeError`
+  * `Trap`
+
 ## [0.11.0] - 2023-10-11
 
 ### Added

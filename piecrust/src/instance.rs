@@ -4,36 +4,23 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
+use std::io;
 use std::ops::{Deref, DerefMut};
-use std::ptr::NonNull;
-use std::sync::Arc;
-use std::{io, slice};
 
 use colored::*;
-use wasmer::wasmparser::Operator;
-use wasmer::{CompilerConfig, RuntimeError, Tunables, TypedFunction};
-use wasmer_compiler_singlepass::Singlepass;
-use wasmer_middlewares::metering::{
-    get_remaining_points, set_remaining_points, MeteringPoints,
-};
-use wasmer_middlewares::Metering;
-use wasmer_types::{
-    MemoryError, MemoryStyle, MemoryType, TableStyle, TableType,
-};
-use wasmer_vm::{LinearMemory, VMMemory, VMTable, VMTableDefinition};
-
+use dusk_wasmtime::{Instance, Module, Mutability, Store, ValType};
 use piecrust_uplink::{ContractId, Event, ARGBUF_LEN};
 
 use crate::contract::WrappedContract;
-use crate::imports::DefaultImports;
+use crate::imports::Imports;
 use crate::session::Session;
 use crate::store::{Memory, MAX_MEM_SIZE};
 use crate::Error;
 
 pub struct WrappedInstance {
-    instance: wasmer::Instance,
+    instance: Instance,
     arg_buf_ofs: usize,
-    store: wasmer::Store,
+    store: Store<Env>,
     memory: Memory,
 }
 
@@ -95,40 +82,6 @@ impl Env {
     }
 }
 
-/// Convenience methods for dealing with our custom store
-pub struct Store;
-
-impl Store {
-    const INITIAL_POINT_LIMIT: u64 = 10_000_000;
-
-    pub fn new_store() -> wasmer::Store {
-        Self::with_creator(|compiler_config| {
-            wasmer::Store::new(compiler_config)
-        })
-    }
-
-    pub fn new_store_with_tunables(
-        tunables: impl Tunables + Send + Sync + 'static,
-    ) -> wasmer::Store {
-        Self::with_creator(|compiler_config| {
-            wasmer::Store::new_with_tunables(compiler_config, tunables)
-        })
-    }
-
-    fn with_creator<F>(f: F) -> wasmer::Store
-    where
-        F: FnOnce(Singlepass) -> wasmer::Store,
-    {
-        let metering =
-            Arc::new(Metering::new(Self::INITIAL_POINT_LIMIT, cost_function));
-
-        let mut compiler_config = Singlepass::default();
-        compiler_config.push_middleware(metering);
-
-        f(compiler_config)
-    }
-}
-
 impl WrappedInstance {
     pub fn new(
         session: Session,
@@ -136,51 +89,84 @@ impl WrappedInstance {
         contract: &WrappedContract,
         memory: Memory,
     ) -> Result<Self, Error> {
-        let tunables = InstanceTunables::new(memory.clone());
-        let mut store = Store::new_store_with_tunables(tunables);
+        let engine = session.engine().clone();
 
         let env = Env {
             self_id: contract_id,
             session,
         };
 
-        let imports = DefaultImports::default(&mut store, env);
+        let module =
+            unsafe { Module::deserialize(&engine, contract.as_bytes())? };
+        let mut store = Store::new(&engine, env);
 
-        let module = unsafe {
-            wasmer::Module::deserialize(&store, contract.as_bytes())?
-        };
-
-        let instance = wasmer::Instance::new(&mut store, &module, &imports)?;
+        let imports = Imports::for_module(&mut store, &module)?;
+        let instance = Instance::new(&mut store, &module, &imports)?;
 
         // Ensure there is a global exported named `A`, whose value is in the
         // memory.
-        let arg_buf_ofs =
-            match instance.exports.get_global("A")?.get(&mut store) {
-                wasmer::Value::I32(i) => i as usize,
-                _ => return Err(Error::InvalidArgumentBuffer),
-            };
+        let arg_buf_ofs = match instance.get_global(&mut store, "A") {
+            Some(global) => {
+                let ty = global.ty(&mut store);
+
+                if ty.mutability() != Mutability::Const {
+                    return Err(Error::InvalidArgumentBuffer);
+                }
+
+                let val = global.get(&mut store);
+
+                val.i32().ok_or(Error::InvalidArgumentBuffer)? as usize
+            }
+            _ => return Err(Error::InvalidArgumentBuffer),
+        };
+
         if arg_buf_ofs + ARGBUF_LEN >= MAX_MEM_SIZE {
             return Err(Error::InvalidArgumentBuffer);
         }
 
         // Ensure there is at most one memory exported, and that it is called
         // "memory".
-        let n_memories = instance.exports.iter().memories().count();
+        let n_memories = module
+            .exports()
+            .filter(|exp| exp.ty().memory().is_some())
+            .count();
+
         if n_memories > 1 {
             return Err(Error::TooManyMemories(n_memories));
         }
-        let _ = instance.exports.get_memory("memory")?;
 
         // Ensure that every exported function has a signature that matches the
         // calling convention `F: I32 -> I32`.
-        for (fname, func) in instance.exports.iter().functions() {
-            let func_ty = func.ty(&store);
-            if func_ty.params() != [wasmer::Type::I32]
-                || func_ty.results() != [wasmer::Type::I32]
-            {
-                return Err(Error::InvalidFunctionSignature(fname.clone()));
+        for exp in module.exports() {
+            let exp_ty = exp.ty();
+            if let Some(func_ty) = exp_ty.func() {
+                let func_name = exp.name();
+
+                // There must be only one parameter with type `I32`.
+                let mut params = func_ty.params();
+                if params.len() != 1 {
+                    return Err(Error::InvalidFunction(func_name.to_string()));
+                }
+                let param = params.next().unwrap();
+                if param != ValType::I32 {
+                    return Err(Error::InvalidFunction(func_name.to_string()));
+                }
+
+                // There must be only one result with type `I32`.
+                let mut results = func_ty.results();
+                if results.len() != 1 {
+                    return Err(Error::InvalidFunction(func_name.to_string()));
+                }
+                let result = results.next().unwrap();
+                if result != ValType::I32 {
+                    return Err(Error::InvalidFunction(func_name.to_string()));
+                }
             }
         }
+
+        let _ = instance
+            .get_memory(&mut store, "memory")
+            .ok_or(Error::InvalidMemory)?;
 
         let wrapped = WrappedInstance {
             store,
@@ -192,36 +178,33 @@ impl WrappedInstance {
         Ok(wrapped)
     }
 
-    pub(crate) fn snap(&self) -> io::Result<()> {
-        let mut memory = self.memory.write();
-        memory.snap()?;
+    pub(crate) fn snap(&mut self) -> io::Result<()> {
+        self.memory.snap()?;
         Ok(())
     }
 
-    pub(crate) fn revert(&self) -> io::Result<()> {
-        let mut memory = self.memory.write();
-        memory.revert()?;
+    pub(crate) fn revert(&mut self) -> io::Result<()> {
+        self.memory.revert()?;
         Ok(())
     }
 
-    pub(crate) fn apply(&self) -> io::Result<()> {
-        let mut memory = self.memory.write();
-        memory.apply()?;
+    pub(crate) fn apply(&mut self) -> io::Result<()> {
+        self.memory.apply()?;
         Ok(())
     }
 
     // Write argument into instance
     pub(crate) fn write_argument(&mut self, arg: &[u8]) {
-        self.with_arg_buffer(|buf| buf[..arg.len()].copy_from_slice(arg))
+        self.with_arg_buf_mut(|buf| buf[..arg.len()].copy_from_slice(arg))
     }
 
     // Read argument from instance
     pub(crate) fn read_argument(&mut self, arg: &mut [u8]) {
-        self.with_arg_buffer(|buf| arg.copy_from_slice(&buf[..arg.len()]))
+        self.with_arg_buf(|buf| arg.copy_from_slice(&buf[..arg.len()]))
     }
 
     pub(crate) fn read_bytes_from_arg_buffer(&self, arg_len: u32) -> Vec<u8> {
-        self.with_arg_buffer(|abuf| {
+        self.with_arg_buf(|abuf| {
             let slice = &abuf[..arg_len as usize];
             slice.to_vec()
         })
@@ -231,56 +214,48 @@ impl WrappedInstance {
     where
         F: FnOnce(&[u8]) -> R,
     {
-        let mem = self.instance.exports.get_memory("memory").expect(
-            "memory export should be checked at contract creation time",
-        );
-        let view = mem.view(&self.store);
-        let memory_bytes = unsafe {
-            let slice = view.data_unchecked();
-            let ptr = slice.as_ptr();
-            slice::from_raw_parts(ptr, MAX_MEM_SIZE)
-        };
-        f(memory_bytes)
+        f(&self.memory)
     }
 
-    pub(crate) fn with_memory_mut<F, R>(&self, f: F) -> R
+    pub(crate) fn with_memory_mut<F, R>(&mut self, f: F) -> R
     where
         F: FnOnce(&mut [u8]) -> R,
     {
-        let mem = self.instance.exports.get_memory("memory").expect(
-            "memory export should be checked at contract creation time",
-        );
-        let view = mem.view(&self.store);
-        let memory_bytes = unsafe {
-            let slice = view.data_unchecked_mut();
-            let ptr = slice.as_mut_ptr();
-            slice::from_raw_parts_mut(ptr, MAX_MEM_SIZE)
-        };
-        f(memory_bytes)
+        f(&mut self.memory)
     }
 
     /// Returns the current length of the memory.
     pub(crate) fn mem_len(&self) -> usize {
-        self.memory.read().inner.def.current_length
+        self.memory.current_len
     }
 
     /// Sets the length of the memory.
     pub(crate) fn set_len(&mut self, len: usize) {
-        self.memory.write().inner.def.current_length = len;
+        self.memory.current_len = len;
     }
 
-    pub(crate) fn with_arg_buffer<F, R>(&self, f: F) -> R
+    pub(crate) fn with_arg_buf<F, R>(&self, f: F) -> R
+    where
+        F: FnOnce(&[u8]) -> R,
+    {
+        let offset = self.arg_buf_ofs;
+        self.with_memory(
+            |memory_bytes| f(&memory_bytes[offset..][..ARGBUF_LEN]),
+        )
+    }
+
+    pub(crate) fn with_arg_buf_mut<F, R>(&mut self, f: F) -> R
     where
         F: FnOnce(&mut [u8]) -> R,
     {
+        let offset = self.arg_buf_ofs;
         self.with_memory_mut(|memory_bytes| {
-            let offset = self.arg_buf_ofs;
             f(&mut memory_bytes[offset..][..ARGBUF_LEN])
         })
     }
 
-    pub(crate) fn write_bytes_to_arg_buffer(&self, buf: &[u8]) -> u32 {
-        self.with_arg_buffer(|arg_buffer| {
+    pub(crate) fn write_bytes_to_arg_buffer(&mut self, buf: &[u8]) -> u32 {
+        self.with_arg_buf_mut(|arg_buffer| {
             arg_buffer[..buf.len()].copy_from_slice(buf);
             buf.len() as u32
         })
@@ -292,72 +267,70 @@ impl WrappedInstance {
         arg_len: u32,
         limit: u64,
     ) -> Result<i32, Error> {
-        let fun: TypedFunction<u32, i32> = self
+        let fun = self
             .instance
-            .exports
-            .get_typed_function(&self.store, method_name)?;
+            .get_typed_func::<u32, i32>(&mut self.store, method_name)?;
 
         self.set_remaining_points(limit);
+
         fun.call(&mut self.store, arg_len)
             .map_err(|e| map_call_err(self, e))
     }
 
     pub fn set_remaining_points(&mut self, limit: u64) {
-        set_remaining_points(&mut self.store, &self.instance, limit);
+        let remaining = self.store.fuel_remaining().expect("Fuel is enabled");
+        self.store
+            .consume_fuel(remaining)
+            .expect("Consuming all fuel should succeed");
+        self.store
+            .add_fuel(limit)
+            .expect("Adding fuel should succeed");
     }
 
-    pub fn get_remaining_points(&mut self) -> Option<u64> {
-        match get_remaining_points(&mut self.store, &self.instance) {
-            MeteringPoints::Remaining(points) => Some(points),
-            MeteringPoints::Exhausted => None,
-        }
+    pub fn get_remaining_points(&mut self) -> u64 {
+        self.store.fuel_remaining().expect("Fuel should be enabled")
     }
 
-    pub fn is_function_exported<N: AsRef<str>>(&self, name: N) -> bool {
-        self.instance.exports.get_function(name.as_ref()).is_ok()
+    pub fn is_function_exported<N: AsRef<str>>(&mut self, name: N) -> bool {
+        self.instance
+            .get_func(&mut self.store, name.as_ref())
+            .is_some()
     }
 
     #[allow(unused)]
     pub fn print_state(&self) {
-        let mem = self
-            .instance
-            .exports
-            .get_memory("memory")
-            .expect("memory export is checked at contract creation time");
+        self.with_memory(|mem| {
+            const CSZ: usize = 128;
+            const RSZ: usize = 16;
 
-        let view = mem.view(&self.store);
-        let maybe_interesting = unsafe { view.data_unchecked_mut() };
+            for (chunk_nr, chunk) in mem.chunks(CSZ).enumerate() {
+                if chunk[..] != [0; CSZ][..] {
+                    for (row_nr, row) in chunk.chunks(RSZ).enumerate() {
+                        let ofs = chunk_nr * CSZ + row_nr * RSZ;
 
-        const CSZ: usize = 128;
-        const RSZ: usize = 16;
+                        print!("{ofs:08x}:");
 
-        for (chunk_nr, chunk) in maybe_interesting.chunks(CSZ).enumerate() {
-            if chunk[..] != [0; CSZ][..] {
-                for (row_nr, row) in chunk.chunks(RSZ).enumerate() {
-                    let ofs = chunk_nr * CSZ + row_nr * RSZ;
+                        for (i, byte) in row.iter().enumerate() {
+                            if i % 4 == 0 {
+                                print!(" ");
+                            }
 
-                    print!("{ofs:08x}:");
+                            let buf_start = self.arg_buf_ofs;
+                            let buf_end = buf_start + ARGBUF_LEN;
 
-                    for (i, byte) in row.iter().enumerate() {
-                        if i % 4 == 0 {
-                            print!(" ");
+                            if ofs + i >= buf_start && ofs + i < buf_end {
+                                print!("{}", format!("{byte:02x}").green());
+                                print!(" ");
+                            } else {
+                                print!("{byte:02x} ")
+                            }
                         }
 
-                        let buf_start = self.arg_buf_ofs;
-                        let buf_end = buf_start + ARGBUF_LEN;
-
-                        if ofs + i >= buf_start && ofs + i < buf_end {
-                            print!("{}", format!("{byte:02x}").green());
-                            print!(" ");
-                        } else {
-                            print!("{byte:02x} ")
-                        }
+                        println!();
                     }
-
-                    println!();
                 }
             }
-        }
+        });
     }
 
     pub fn arg_buffer_offset(&self) -> usize {
@@ -365,79 +338,13 @@ impl WrappedInstance {
     }
 }
 
-fn map_call_err(instance: &mut WrappedInstance, err: RuntimeError) -> Error {
-    if instance.get_remaining_points().is_none() {
+fn map_call_err(
+    instance: &mut WrappedInstance,
+    err: dusk_wasmtime::Error,
+) -> Error {
+    if instance.get_remaining_points() == 0 {
         return Error::OutOfPoints;
     }
 
     err.into()
-}
-
-pub struct InstanceTunables {
-    memory: Memory,
-}
-
-impl InstanceTunables {
-    pub fn new(memory: Memory) -> Self {
-        InstanceTunables { memory }
-    }
-}
-
-impl Tunables for InstanceTunables {
-    fn memory_style(&self, _memory: &MemoryType) -> MemoryStyle {
-        self.memory.style()
-    }
-
-    fn table_style(&self, _table: &TableType) -> TableStyle {
-        TableStyle::CallerChecksSignature
-    }
-
-    fn create_host_memory(
-        &self,
-        _ty: &MemoryType,
-        _style: &MemoryStyle,
-    ) -> Result<VMMemory, MemoryError> {
-        Ok(VMMemory::from_custom(self.memory.clone()))
-    }
-
-    unsafe fn create_vm_memory(
-        &self,
-        _ty: &MemoryType,
-        _style: &MemoryStyle,
-        vm_definition_location: NonNull<wasmer_vm::VMMemoryDefinition>,
-    ) -> Result<VMMemory, MemoryError> {
-        // now, it's important to update vm_definition_location with the memory
-        // information!
-        let mut ptr = vm_definition_location;
-        let md = ptr.as_mut();
-
-        let memory = self.memory.clone();
-
-        *md = *memory.vmmemory().as_ptr();
-
-        Ok(memory.into())
-    }
-
-    /// Create a table owned by the host given a [`TableType`] and a
-    /// [`TableStyle`].
-    fn create_host_table(
-        &self,
-        ty: &TableType,
-        style: &TableStyle,
-    ) -> Result<VMTable, String> {
-        VMTable::new(ty, style)
-    }
-
-    unsafe fn create_vm_table(
-        &self,
-        ty: &TableType,
-        style: &TableStyle,
-        vm_definition_location: NonNull<VMTableDefinition>,
-    ) -> Result<VMTable, String> {
-        VMTable::from_definition(ty, style, vm_definition_location)
-    }
-}
-
-fn cost_function(_op: &Operator) -> u64 {
-    1
 }

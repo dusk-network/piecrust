@@ -20,7 +20,7 @@ use std::sync::mpsc;
 use std::{fs, io, thread};
 
 pub use bytecode::Bytecode;
-pub use memory::{Memory, MAX_MEM_SIZE};
+pub use memory::{Memory, MAX_MEM_SIZE, PAGE_SIZE};
 pub use metadata::Metadata;
 pub use objectcode::Objectcode;
 use piecrust_uplink::ContractId;
@@ -449,14 +449,13 @@ fn write_commit_inner<P: AsRef<Path>>(
     for (contract, contract_data) in &commit_contracts {
         let contract_hex = hex::encode(contract);
 
-        let memory = contract_data.memory.read();
         let memory_dir = directories.memory_dir.join(&contract_hex);
 
         fs::create_dir_all(&memory_dir)?;
 
         let mut pages = BTreeSet::new();
 
-        for (dirty_page, _, page_index) in memory.dirty_pages() {
+        for (dirty_page, _, page_index) in contract_data.memory.dirty_pages() {
             let page_path = page_path(&memory_dir, *page_index);
             fs::write(page_path, dirty_page)?;
             pages.insert(*page_index);

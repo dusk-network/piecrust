@@ -7,12 +7,11 @@
 use std::sync::Arc;
 
 use bytecheck::CheckBytes;
+use dusk_wasmtime::{Engine, Module};
+use piecrust_uplink::ContractId;
 use rkyv::{Archive, Deserialize, Serialize};
-use wasmer::Module;
 
 use crate::error::Error;
-use crate::instance::Store;
-use piecrust_uplink::ContractId;
 
 pub struct ContractData<'a, A, const N: usize> {
     pub(crate) contract_id: Option<ContractId>,
@@ -89,14 +88,14 @@ pub struct WrappedContract {
 
 impl WrappedContract {
     pub fn new<B: AsRef<[u8]>, C: AsRef<[u8]>>(
+        engine: &Engine,
         bytecode: B,
         objectcode: Option<C>,
     ) -> Result<Self, Error> {
-        let store = Store::new_store();
         let serialized = match objectcode {
             Some(obj) => obj.as_ref().to_vec(),
             _ => {
-                let contract = Module::new(&store, bytecode.as_ref())?;
+                let contract = Module::new(engine, bytecode.as_ref())?;
                 contract.serialize()?.to_vec()
             }
         };

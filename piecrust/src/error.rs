@@ -21,12 +21,10 @@ pub type Compo = CompositeSerializerError<
 >;
 
 /// The error type returned by the piecrust VM.
-#[derive(Error, Debug, Clone)]
+#[derive(Error, Debug)]
 pub enum Error {
     #[error("Commit error: {0}")]
     CommitError(Cow<'static, str>),
-    #[error(transparent)]
-    CompileError(Arc<wasmer::CompileError>),
     #[error(transparent)]
     CompositeSerializerError(Arc<Compo>),
     #[error(transparent)]
@@ -34,21 +32,17 @@ pub enum Error {
     #[error("Contract does not exist: {0}")]
     ContractDoesNotExist(ContractId),
     #[error(transparent)]
-    DeserializeError(Arc<wasmer::DeserializeError>),
-    #[error(transparent)]
-    ExportError(Arc<wasmer::ExportError>),
-    #[error(transparent)]
     FeedPulled(mpsc::SendError<Vec<u8>>),
     #[error(transparent)]
     Infallible(std::convert::Infallible),
     #[error("InitalizationError: {0}")]
     InitalizationError(Cow<'static, str>),
-    #[error(transparent)]
-    InstantiationError(Arc<wasmer::InstantiationError>),
     #[error("Invalid global")]
     InvalidArgumentBuffer,
+    #[error("Invalid function: {0}")]
+    InvalidFunction(String),
     #[error("Invalid memory")]
-    InvalidFunctionSignature(String),
+    InvalidMemory,
     #[error("Memory access out of bounds: offset {offset}, length {len}, memory length {mem_len}")]
     MemoryAccessOutOfBounds {
         offset: usize,
@@ -60,8 +54,6 @@ pub enum Error {
         reason: Option<Arc<Self>>,
         io: Arc<std::io::Error>,
     },
-    #[error(transparent)]
-    MemorySetupError(Arc<std::io::Error>),
     #[error("Missing feed")]
     MissingFeed,
     #[error("Missing host data: {0}")]
@@ -73,21 +65,15 @@ pub enum Error {
     #[error("Contract panic: {0}")]
     ContractPanic(String),
     #[error(transparent)]
-    ParsingError(wasmer::wasmparser::BinaryReaderError),
-    #[error(transparent)]
     PersistenceError(Arc<std::io::Error>),
     #[error(transparent)]
     RestoreError(Arc<std::io::Error>),
     #[error(transparent)]
-    RuntimeError(wasmer::RuntimeError),
-    #[error(transparent)]
-    SerializeError(Arc<wasmer::SerializeError>),
+    RuntimeError(dusk_wasmtime::Error),
     #[error("Session error: {0}")]
     SessionError(Cow<'static, str>),
     #[error("Too many memories: {0}")]
     TooManyMemories(usize),
-    #[error("WASMER TRAP")]
-    Trap(Arc<wasmer_vm::Trap>),
     #[error(transparent)]
     Utf8(std::str::Utf8Error),
     #[error("ValidationError")]
@@ -118,51 +104,15 @@ impl From<std::str::Utf8Error> for Error {
     }
 }
 
-impl From<wasmer::InstantiationError> for Error {
-    fn from(e: wasmer::InstantiationError) -> Self {
-        Error::InstantiationError(Arc::from(e))
-    }
-}
-
-impl From<wasmer::CompileError> for Error {
-    fn from(e: wasmer::CompileError) -> Self {
-        Error::CompileError(Arc::from(e))
-    }
-}
-
-impl From<wasmer::ExportError> for Error {
-    fn from(e: wasmer::ExportError) -> Self {
-        Error::ExportError(Arc::from(e))
-    }
-}
-
-impl From<wasmer::RuntimeError> for Error {
-    fn from(e: wasmer::RuntimeError) -> Self {
+impl From<dusk_wasmtime::Error> for Error {
+    fn from(e: dusk_wasmtime::Error) -> Self {
         Error::RuntimeError(e)
-    }
-}
-
-impl From<wasmer::SerializeError> for Error {
-    fn from(e: wasmer::SerializeError) -> Self {
-        Error::SerializeError(Arc::from(e))
-    }
-}
-
-impl From<wasmer::DeserializeError> for Error {
-    fn from(e: wasmer::DeserializeError) -> Self {
-        Error::DeserializeError(Arc::from(e))
     }
 }
 
 impl From<Compo> for Error {
     fn from(e: Compo) -> Self {
         Error::CompositeSerializerError(Arc::from(e))
-    }
-}
-
-impl From<wasmer_vm::Trap> for Error {
-    fn from(e: wasmer_vm::Trap) -> Self {
-        Error::Trap(Arc::from(e))
     }
 }
 

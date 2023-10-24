@@ -57,7 +57,7 @@ pub fn fails_with_out_of_points() -> Result<(), Error> {
     )?;
 
     let err = session
-        .call::<_, i64>(counter_id, "read_value", &(), 0)
+        .call::<_, i64>(counter_id, "read_value", &(), 1)
         .expect_err("should error with no gas");
 
     assert!(matches!(err, Error::OutOfPoints));

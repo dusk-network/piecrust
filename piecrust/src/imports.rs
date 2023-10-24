@@ -6,47 +6,62 @@
 
 use std::sync::Arc;
 
+use dusk_wasmtime::{
+    Caller, Extern, Func, Module, Result as WasmtimeResult, Store,
+};
 use piecrust_uplink::{
     ContractError, ContractId, ARGBUF_LEN, CONTRACT_ID_BYTES,
 };
-use wasmer::{imports, Function, FunctionEnv, FunctionEnvMut};
 
 use crate::instance::{Env, WrappedInstance};
 use crate::Error;
 
 const POINT_PASS_PCT: u64 = 93;
 
-pub(crate) struct DefaultImports;
+pub(crate) struct Imports;
 
-impl DefaultImports {
-    pub fn default(store: &mut wasmer::Store, env: Env) -> wasmer::Imports {
-        let fenv = FunctionEnv::new(store, env);
+impl Imports {
+    /// Makes a vector of imports for the given module.
+    pub fn for_module(
+        store: &mut Store<Env>,
+        module: &Module,
+    ) -> Result<Vec<Extern>, Error> {
+        let max_imports = 12;
+        let mut imports = Vec::with_capacity(max_imports);
 
-        #[allow(unused_mut)]
-        let mut imports = imports! {
-            "env" => {
-                "caller" => Function::new_typed_with_env(store, &fenv, caller),
-                "c" => Function::new_typed_with_env(store, &fenv, c),
-                "hq" => Function::new_typed_with_env(store, &fenv, hq),
-                "hd" => Function::new_typed_with_env(store, &fenv, hd),
-                "emit" => Function::new_typed_with_env(store, &fenv, emit),
-                "feed" => Function::new_typed_with_env(store, &fenv, feed),
-                "limit" => Function::new_typed_with_env(store, &fenv, limit),
-                "spent" => Function::new_typed_with_env(store, &fenv, spent),
-                "panic" => Function::new_typed_with_env(store, &fenv, panic),
-                "owner" => Function::new_typed_with_env(store, &fenv, owner),
-                "self_id" => Function::new_typed_with_env(store, &fenv, self_id),
+        for import in module.imports() {
+            let import_name = import.name();
+
+            match Self::import(store, import_name) {
+                None => {
+                    return Err(Error::InvalidFunction(import_name.to_string()))
+                }
+                Some(func) => {
+                    imports.push(func.into());
+                }
             }
-        };
+        }
 
-        #[cfg(feature = "debug")]
-        imports.define(
-            "env",
-            "hdebug",
-            Function::new_typed_with_env(store, &fenv, hdebug),
-        );
+        Ok(imports)
+    }
 
-        imports
+    fn import(store: &mut Store<Env>, name: &str) -> Option<Func> {
+        Some(match name {
+            "caller" => Func::wrap(store, caller),
+            "c" => Func::wrap(store, c),
+            "hq" => Func::wrap(store, hq),
+            "hd" => Func::wrap(store, hd),
+            "emit" => Func::wrap(store, emit),
+            "feed" => Func::wrap(store, feed),
+            "limit" => Func::wrap(store, limit),
+            "spent" => Func::wrap(store, spent),
+            "panic" => Func::wrap(store, panic),
+            "owner" => Func::wrap(store, owner),
+            "self_id" => Func::wrap(store, self_id),
+            #[cfg(feature = "debug")]
+            "hdebug" => Func::wrap(store, hdebug),
+            _ => return None,
+        })
     }
 }
 
@@ -96,27 +111,27 @@ fn check_arg(instance: &WrappedInstance, arg_len: u32) -> Result<(), Error> {
     Ok(())
 }
 
-fn caller(env: FunctionEnvMut<Env>) {
+fn caller(env: Caller<Env>) {
     let env = env.data();
 
     let mod_id = env
         .nth_from_top(1)
         .map_or(ContractId::uninitialized(), |elem| elem.contract_id);
 
-    env.self_instance().with_arg_buffer(|arg| {
+    env.self_instance().with_arg_buf_mut(|arg| {
         arg[..std::mem::size_of::<ContractId>()]
             .copy_from_slice(mod_id.as_bytes())
     })
 }
 
 fn c(
-    mut fenv: FunctionEnvMut<Env>,
+    mut fenv: Caller<Env>,
     mod_id_ofs: u32,
     name_ofs: u32,
     name_len: u32,
     arg_len: u32,
     points_limit: u64,
-) -> Result<i32, Error> {
+) -> WasmtimeResult<i32> {
     let env = fenv.data_mut();
 
     let instance = env.self_instance();
@@ -127,9 +142,7 @@ fn c(
 
     let argbuf_ofs = instance.arg_buffer_offset();
 
-    let caller_remaining = instance
-        .get_remaining_points()
-        .expect("there should be points remaining");
+    let caller_remaining = instance.get_remaining_points();
 
     let callee_limit = if points_limit > 0 && points_limit < caller_remaining {
         points_limit
@@ -172,9 +185,7 @@ fn c(
         // copy back result
         callee.read_argument(&mut memory[argbuf_ofs..][..ret_len as usize]);
 
-        let callee_remaining = callee
-            .get_remaining_points()
-            .expect("there should be points remaining");
+        let callee_remaining = callee.get_remaining_points();
         let callee_spent = callee_limit - callee_remaining;
 
         Ok((ret_len, callee_spent))
@@ -204,11 +215,11 @@ fn c(
 }
 
 fn hq(
-    mut fenv: FunctionEnvMut<Env>,
+    mut fenv: Caller<Env>,
     name_ofs: u32,
     name_len: u32,
     arg_len: u32,
-) -> Result<u32, Error> {
+) -> WasmtimeResult<u32> {
     let env = fenv.data_mut();
 
     let instance = env.self_instance();
@@ -225,16 +236,16 @@ fn hq(
             .map(ToOwned::to_owned)
     })?;
 
-    instance
-        .with_arg_buffer(|buf| env.host_query(&name, buf, arg_len))
-        .ok_or(Error::MissingHostQuery(name))
+    Ok(instance
+        .with_arg_buf_mut(|buf| env.host_query(&name, buf, arg_len))
+        .ok_or(Error::MissingHostQuery(name))?)
 }
 
 fn hd(
-    mut fenv: FunctionEnvMut<Env>,
+    mut fenv: Caller<Env>,
     name_ofs: u32,
     name_len: u32,
-) -> Result<u32, Error> {
+) -> WasmtimeResult<u32> {
     let env = fenv.data_mut();
 
     let instance = env.self_instance();
@@ -252,7 +263,7 @@ fn hd(
 
     let data = env.meta(&name).unwrap_or_default();
 
-    instance.with_arg_buffer(|buf| {
+    instance.with_arg_buf_mut(|buf| {
         buf[..data.len()].copy_from_slice(&data);
     });
 
@@ -260,18 +271,18 @@ fn hd(
 }
 
 fn emit(
-    mut fenv: FunctionEnvMut<Env>,
+    mut fenv: Caller<Env>,
     topic_ofs: u32,
     topic_len: u32,
     arg_len: u32,
-) -> Result<(), Error> {
+) -> WasmtimeResult<()> {
     let env = fenv.data_mut();
     let instance = env.self_instance();
 
     check_ptr(instance, topic_ofs, topic_len)?;
     check_arg(instance, arg_len)?;
 
-    let data = instance.with_arg_buffer(|buf| {
+    let data = instance.with_arg_buf(|buf| {
         let arg_len = arg_len as usize;
         Vec::from(&buf[..arg_len])
     });
@@ -290,28 +301,28 @@ fn emit(
     Ok(())
 }
 
-fn feed(mut fenv: FunctionEnvMut<Env>, arg_len: u32) -> Result<(), Error> {
+fn feed(mut fenv: Caller<Env>, arg_len: u32) -> WasmtimeResult<()> {
     let env = fenv.data_mut();
     let instance = env.self_instance();
 
     check_arg(instance, arg_len)?;
 
-    let data = instance.with_arg_buffer(|buf| {
+    let data = instance.with_arg_buf(|buf| {
         let arg_len = arg_len as usize;
         Vec::from(&buf[..arg_len])
     });
 
-    env.push_feed(data)
+    Ok(env.push_feed(data)?)
 }
 
 #[cfg(feature = "debug")]
-fn hdebug(mut fenv: FunctionEnvMut<Env>, msg_len: u32) -> Result<(), Error> {
+fn hdebug(mut fenv: Caller<Env>, msg_len: u32) -> WasmtimeResult<()> {
     let env = fenv.data_mut();
     let instance = env.self_instance();
 
     check_arg(instance, msg_len)?;
 
-    instance.with_arg_buffer(|buf| {
+    Ok(instance.with_arg_buf(|buf| {
         let slice = &buf[..msg_len as usize];
 
         let msg = match std::str::from_utf8(slice) {
@@ -323,32 +334,30 @@ fn hdebug(mut fenv: FunctionEnvMut<Env>, msg_len: u32) -> Result<(), Error> {
         println!("CONTRACT DEBUG {msg}");
 
         Ok(())
-    })
+    })?)
 }
 
-fn limit(fenv: FunctionEnvMut<Env>) -> u64 {
+fn limit(fenv: Caller<Env>) -> u64 {
     fenv.data().limit()
 }
 
-fn spent(fenv: FunctionEnvMut<Env>) -> u64 {
+fn spent(fenv: Caller<Env>) -> u64 {
     let env = fenv.data();
     let instance = env.self_instance();
 
     let limit = env.limit();
-    let remaining = instance
-        .get_remaining_points()
-        .expect("there should be remaining points");
+    let remaining = instance.get_remaining_points();
 
     limit - remaining
 }
 
-fn panic(fenv: FunctionEnvMut<Env>, arg_len: u32) -> Result<(), Error> {
+fn panic(fenv: Caller<Env>, arg_len: u32) -> WasmtimeResult<()> {
     let env = fenv.data();
     let instance = env.self_instance();
 
     check_arg(instance, arg_len)?;
 
-    instance.with_arg_buffer(|buf| {
+    Ok(instance.with_arg_buf(|buf| {
         let slice = &buf[..arg_len as usize];
 
         let msg = match std::str::from_utf8(slice) {
@@ -357,10 +366,10 @@ fn panic(fenv: FunctionEnvMut<Env>, arg_len: u32) -> Result<(), Error> {
         };
 
         Err(Error::ContractPanic(msg.to_owned()))
-    })
+    })?)
 }
 
-fn owner(fenv: FunctionEnvMut<Env>) {
+fn owner(fenv: Caller<Env>) {
     let env = fenv.data();
     let self_id = env.self_contract_id();
     let contract_metadata = env
@@ -369,10 +378,10 @@ fn owner(fenv: FunctionEnvMut<Env>) {
     let slice = contract_metadata.owner.as_slice();
     let len = slice.len();
     env.self_instance()
-        .with_arg_buffer(|arg| arg[..len].copy_from_slice(slice));
+        .with_arg_buf_mut(|arg| arg[..len].copy_from_slice(slice));
 }
 
-fn self_id(fenv: FunctionEnvMut<Env>) {
+fn self_id(fenv: Caller<Env>) {
     let env = fenv.data();
     let self_id = env.self_contract_id();
     let contract_metadata = env
@@ -381,5 +390,5 @@ fn self_id(fenv: FunctionEnvMut<Env>) {
     let slice = contract_metadata.contract_id.as_bytes();
     let len = slice.len();
     env.self_instance()
-        .with_arg_buffer(|arg| arg[..len].copy_from_slice(slice));
+        .with_arg_buf_mut(|arg| arg[..len].copy_from_slice(slice));
 }

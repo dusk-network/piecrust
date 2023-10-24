@@ -62,12 +62,9 @@ impl ContractIndex {
         }
         let element = self.contracts.get_mut(&contract).unwrap();
 
-        let memory = memory.read();
-        let memory_inner = memory.inner;
+        element.len = memory.current_len;
 
-        element.len = memory_inner.def.current_length;
-
-        for (dirty_page, _, page_index) in memory_inner.mmap.dirty_pages() {
+        for (dirty_page, _, page_index) in memory.dirty_pages() {
             element.page_indices.insert(*page_index);
             let hash = Hash::new(dirty_page);
             element.tree.insert(*page_index as u64, hash);
