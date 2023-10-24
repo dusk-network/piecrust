@@ -42,7 +42,6 @@ fn config() -> Config {
     // config.with_host_memory()
 
     config.static_memory_forced(true);
-    config.static_memory_maximum_size(0x100000000);
     config.static_memory_guard_size(0);
     config.dynamic_memory_guard_size(0);
     config.guard_before_linear_memory(false);
@@ -53,6 +52,9 @@ fn config() -> Config {
         .expect("Module version should be valid");
     config.generate_address_map(false);
     config.macos_use_mach_ports(false);
+
+    // Support 64-bit memories
+    config.wasm_memory64(true);
 
     config
 }

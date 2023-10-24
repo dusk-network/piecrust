@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Added
 
+- Support `memory64` smart contracts [#281]
 - Add some `Error` variants:
   * `InvalidFunction`
   * `InvalidMemory`
@@ -281,6 +282,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [#234]: https://github.com/dusk-network/piecrust/pull/234
 
 <!-- ISSUES -->
+[#281]: https://github.com/dusk-network/piecrust/issues/281
 [#271]: https://github.com/dusk-network/piecrust/issues/271
 [#268]: https://github.com/dusk-network/piecrust/issues/268
 [#254]: https://github.com/dusk-network/piecrust/issues/254
