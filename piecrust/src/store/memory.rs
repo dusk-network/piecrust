@@ -16,7 +16,7 @@ use crumbles::{LocateFile, Mmap};
 use dusk_wasmtime::LinearMemory;
 
 pub const PAGE_SIZE: usize = 0x10000;
-const WASM_MAX_PAGES: u32 = 0x10000;
+const WASM_MAX_PAGES: u32 = 0x4000000;
 
 const MIN_PAGES: usize = 4;
 const MIN_MEM_SIZE: usize = MIN_PAGES * PAGE_SIZE;

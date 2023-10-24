@@ -12,9 +12,9 @@ use rkyv::{Archive, Deserialize, Serialize};
 
 use crate::store::memory::Memory;
 
-// There are `2^16` pages in a memory
-const P_HEIGHT: usize = 16;
-const P_ARITY: usize = 2;
+// There are max `2^26` pages in a memory
+const P_HEIGHT: usize = 13;
+const P_ARITY: usize = 4;
 
 pub type PageTree = dusk_merkle::Tree<Hash, P_HEIGHT, P_ARITY>;
 

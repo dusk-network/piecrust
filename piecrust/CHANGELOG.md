@@ -17,6 +17,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Changed
 
+- Change contract tree to be arity 4 and height 17 [#159]
+- Maximum contract size is now 4TiB [#159]
 - Change `Error::RuntimeError` variant to contain `dusk_wasmtime::Error`,
   and changed `From` implementation
 - Switch runtime from `wasmer` to `wasmtime`
@@ -303,6 +305,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [#167]: https://github.com/dusk-network/piecrust/issues/167
 [#166]: https://github.com/dusk-network/piecrust/issues/166
 [#162]: https://github.com/dusk-network/piecrust/issues/162
+[#159]: https://github.com/dusk-network/piecrust/issues/159
 [#158]: https://github.com/dusk-network/piecrust/issues/158
 [#136]: https://github.com/dusk-network/piecrust/issues/136
 [#93]: https://github.com/dusk-network/piecrust/issues/93
