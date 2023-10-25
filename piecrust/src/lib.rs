@@ -74,6 +74,12 @@
 //! the error-producing call, which returns an error without being actually
 //! executed.
 //!
+//! # 32 vs 64-bit
+//!
+//! Contracts can be compiled to either 32 or 64-bit WASM - i.e. the `memory64`
+//! proposal. 32-bit contracts have a maximum memory size of 4GiB, while 64-bit
+//! contracts have a maximum memory size of 4TiB.
+//!
 //! # Usage
 //! ```
 //! use piecrust::{contract_bytecode, ContractData, SessionData, VM};
