@@ -197,7 +197,9 @@ impl Session {
     }
 
     /// Deploy a contract, returning its [`ContractId`]. The ID is computed
-    /// using a `blake3` hash of the `bytecode`.
+    /// using a `blake3` hash of the `bytecode`. Contracts using the `memory64`
+    /// proposal are accepted in just the same way as 32-bit contracts, and
+    /// their handling is totally transparent.
     ///
     /// Since a deployment may execute some contract initialization code, that
     /// code will be metered and executed with the given `points_limit`.

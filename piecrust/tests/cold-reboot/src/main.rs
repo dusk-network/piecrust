@@ -23,9 +23,8 @@ fn initialize_counter<P: AsRef<Path>>(
 ) -> Result<(), piecrust::Error> {
     let mut session = vm.session(SessionData::builder())?;
 
-    let counter_bytecode = include_bytes!(
-        "../../../../target/wasm32-unknown-unknown/release/counter.wasm"
-    );
+    let counter_bytecode =
+        include_bytes!("../../../../target/stripped/counter.wasm");
 
     session.deploy(
         counter_bytecode,

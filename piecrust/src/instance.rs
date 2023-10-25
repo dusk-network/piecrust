@@ -100,30 +100,6 @@ impl WrappedInstance {
             unsafe { Module::deserialize(&engine, contract.as_bytes())? };
         let mut store = Store::new(&engine, env);
 
-        let imports = Imports::for_module(&mut store, &module)?;
-        let instance = Instance::new(&mut store, &module, &imports)?;
-
-        // Ensure there is a global exported named `A`, whose value is in the
-        // memory.
-        let arg_buf_ofs = match instance.get_global(&mut store, "A") {
-            Some(global) => {
-                let ty = global.ty(&mut store);
-
-                if ty.mutability() != Mutability::Const {
-                    return Err(Error::InvalidArgumentBuffer);
-                }
-
-                let val = global.get(&mut store);
-
-                val.i32().ok_or(Error::InvalidArgumentBuffer)? as usize
-            }
-            _ => return Err(Error::InvalidArgumentBuffer),
-        };
-
-        if arg_buf_ofs + ARGBUF_LEN >= MAX_MEM_SIZE {
-            return Err(Error::InvalidArgumentBuffer);
-        }
-
         // Ensure there is at most one memory exported, and that it is called
         // "memory".
         let n_memories = module
@@ -131,9 +107,15 @@ impl WrappedInstance {
             .filter(|exp| exp.ty().memory().is_some())
             .count();
 
-        if n_memories > 1 {
+        if n_memories != 1 {
             return Err(Error::TooManyMemories(n_memories));
         }
+
+        let is_64 = module
+            .exports()
+            .filter_map(|exp| exp.ty().memory().map(|mem_ty| mem_ty.is_64()))
+            .next()
+            .unwrap();
 
         // Ensure that every exported function has a signature that matches the
         // calling convention `F: I32 -> I32`.
@@ -164,9 +146,33 @@ impl WrappedInstance {
             }
         }
 
-        let _ = instance
-            .get_memory(&mut store, "memory")
-            .ok_or(Error::InvalidMemory)?;
+        let imports = Imports::for_module(&mut store, &module, is_64)?;
+        let instance = Instance::new(&mut store, &module, &imports)?;
+
+        // Ensure there is a global exported named `A`, whose value is in the
+        // memory.
+        let arg_buf_ofs = match instance.get_global(&mut store, "A") {
+            Some(global) => {
+                let ty = global.ty(&mut store);
+
+                if ty.mutability() != Mutability::Const {
+                    return Err(Error::InvalidArgumentBuffer);
+                }
+
+                let val = global.get(&mut store);
+
+                if is_64 {
+                    val.i64().ok_or(Error::InvalidArgumentBuffer)? as usize
+                } else {
+                    val.i32().ok_or(Error::InvalidArgumentBuffer)? as usize
+                }
+            }
+            _ => return Err(Error::InvalidArgumentBuffer),
+        };
+
+        if arg_buf_ofs + ARGBUF_LEN >= MAX_MEM_SIZE {
+            return Err(Error::InvalidArgumentBuffer);
+        }
 
         let wrapped = WrappedInstance {
             store,
