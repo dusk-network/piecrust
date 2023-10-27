@@ -157,7 +157,8 @@ fn read_all_commits<P: AsRef<Path>>(
         let entry = entry?;
         if entry.path().is_dir() {
             let commit = read_commit(entry.path())?;
-            commits.insert(*commit.index.root(), commit);
+            let root = *commit.index.root();
+            commits.insert(root, commit);
         }
     }
 
@@ -430,7 +431,7 @@ fn write_commit_inner<P: AsRef<Path>>(
             bytecode_dir,
             memory_dir,
             base: base.map(|inner| {
-                let base_root = inner.index.root();
+                let base_root = *inner.index.root();
 
                 let base_hex = hex::encode(base_root);
                 let base_dir = root_dir.join(base_hex);

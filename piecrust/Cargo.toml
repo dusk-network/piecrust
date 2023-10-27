@@ -28,7 +28,7 @@ tempfile = "3"
 thiserror = "1"
 rand = "0.8"
 hex = "0.4"
-dusk-merkle = { version = "0.1", features = ["rkyv-impl"] }
+dusk-merkle = { version = "0.5", features = ["rkyv-impl"] }
 const-decoder = "0.3"
 
 [dev-dependencies]
