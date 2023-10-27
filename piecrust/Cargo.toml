@@ -22,7 +22,6 @@ rkyv = { version = "0.7", features = ["size_32", "validation"] }
 once_cell = "1.18"
 parking_lot = "0.12"
 blake3 = "1"
-colored = "2"
 memmap2 = "0.7"
 tempfile = "3"
 thiserror = "1"

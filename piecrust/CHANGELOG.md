@@ -26,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Removed
 
+- Remove `colored` dependency
 - Remove 4 page - 256KiB - minimum memory requirement for contracts
 - Remove `Clone` derivation for `Error`
 - Remove some `Error` variants, along with `From` implementations:

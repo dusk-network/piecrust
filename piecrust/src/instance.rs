@@ -7,7 +7,6 @@
 use std::io;
 use std::ops::{Deref, DerefMut};
 
-use colored::*;
 use dusk_wasmtime::{Instance, Module, Mutability, Store, ValType};
 use piecrust_uplink::{ContractId, Event, ARGBUF_LEN};
 
@@ -325,7 +324,7 @@ impl WrappedInstance {
                             let buf_end = buf_start + ARGBUF_LEN;
 
                             if ofs + i >= buf_start && ofs + i < buf_end {
-                                print!("{}", format!("{byte:02x}").green());
+                                print!("{byte:02x}");
                                 print!(" ");
                             } else {
                                 print!("{byte:02x} ")
