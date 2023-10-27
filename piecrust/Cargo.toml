@@ -20,7 +20,6 @@ dusk-wasmtime = { version = "14", default-features = false, features = ["craneli
 bytecheck = "0.6"
 rkyv = { version = "0.7", features = ["size_32", "validation"] }
 once_cell = "1.18"
-parking_lot = "0.12"
 blake3 = "1"
 memmap2 = "0.7"
 tempfile = "3"
