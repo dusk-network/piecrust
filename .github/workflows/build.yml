@@ -8,76 +8,24 @@ name: build
 
 jobs:
   analyze:
-    name: Dusk analyzer
-    runs-on: core
-    steps:
-      - uses: actions/checkout@v2
-      - name: Install latest nightly toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: nightly
-          override: true
-      - name: Install cargo-dusk-analyzer
-        uses: actions-rs/cargo@v1
-        with:
-          command: install
-          args: --git https://github.com/dusk-network/cargo-dusk-analyzer
-      - name: Run `cargo dusk-analyzer`
-        uses: actions-rs/cargo@v1
-        with:
-          command: dusk-analyzer
+    name: Code Analysis
+    uses: dusk-network/.github/.github/workflows/code-analysis.yml@main
+    with:
+      clippy_default: false
+      clippy_args: -- -D warnings
+
+  dusk_analyzer:
+    name: Dusk Analyzer
+    uses: dusk-network/.github/.github/workflows/dusk-analysis.yml@main
 
   test:
     name: Make test
-    runs-on: core
+    runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
-      - name: Install latest nightly toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: nightly
-          override: true
-      - name: Install WASM target
-        run: rustup target add wasm32-unknown-unknown
-      - name: Add `rust-src` component
-        run: rustup component add rust-src
+      - uses: actions/checkout@v3
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo install wasm-tools
+      - run: rustup target add wasm32-unknown-unknown
+      - run: rustup component add rust-src
       - name: Run `make test`
         run: make test
-
-  fmt:
-    name: Rustfmt
-    runs-on: core
-    steps:
-      - uses: actions/checkout@v2
-      - name: Install latest nightly toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: nightly
-          override: true
-      - run: rustup component add rustfmt
-      - name: Run `cargo fmt`
-        uses: actions-rs/cargo@v1
-        with:
-          command: fmt
-          args: --all -- --check
-
-  clippy:
-    name: Clippy
-    runs-on: core
-    steps:
-      - uses: actions/checkout@v2
-      - name: Install latest nightly toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: nightly
-          override: true
-      - run: rustup component add clippy
-      - name: Run `cargo clippy`
-        uses: actions-rs/cargo@v1
-        with:
-          command: clippy
-          args: -- -D warnings
