@@ -41,6 +41,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   * `SerializeError`
   * `Trap`
 
+## Fixed
+
+-  Fix  loading of compiled contracts from  state transported from different
+  platforms [#287]
+
 ## [0.11.0] - 2023-10-11
 
 ### Added
@@ -287,6 +292,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [#234]: https://github.com/dusk-network/piecrust/pull/234
 
 <!-- ISSUES -->
+[#287]: https://github.com/dusk-network/piecrust/issues/287
 [#281]: https://github.com/dusk-network/piecrust/issues/281
 [#271]: https://github.com/dusk-network/piecrust/issues/271
 [#268]: https://github.com/dusk-network/piecrust/issues/268

@@ -12,7 +12,8 @@ use std::sync::Arc;
 use std::thread;
 
 use dusk_wasmtime::{
-    Config, ModuleVersionStrategy, OptLevel, Strategy, WasmBacktraceDetails,
+    Config, Engine, ModuleVersionStrategy, OptLevel, Strategy,
+    WasmBacktraceDetails,
 };
 use tempfile::tempdir;
 
@@ -94,10 +95,17 @@ impl VM {
     /// # Errors
     /// If the directory contains unparseable or inconsistent data.
     pub fn new<P: AsRef<Path>>(root_dir: P) -> Result<Self, Error> {
-        let store = ContractStore::new(root_dir)
+        let config = config();
+
+        let engine = Engine::new(&config).expect(
+            "Configuration should be valid since its set at compile time",
+        );
+
+        let store = ContractStore::new(&engine, root_dir)
             .map_err(|err| PersistenceError(Arc::new(err)))?;
+
         Ok(Self {
-            config: config(),
+            config,
             host_queries: HostQueries::default(),
             store,
         })
@@ -114,11 +122,17 @@ impl VM {
         let tmp = tempdir().map_err(|err| PersistenceError(Arc::new(err)))?;
         let tmp = tmp.path().to_path_buf();
 
-        let store = ContractStore::new(tmp)
+        let config = config();
+
+        let engine = Engine::new(&config).expect(
+            "Configuration should be valid since its set at compile time",
+        );
+
+        let store = ContractStore::new(&engine, tmp)
             .map_err(|err| PersistenceError(Arc::new(err)))?;
 
         Ok(Self {
-            config: config(),
+            config,
             host_queries: HostQueries::default(),
             store,
         })

@@ -20,6 +20,7 @@ use std::sync::mpsc;
 use std::{fs, io, thread};
 
 pub use bytecode::Bytecode;
+use dusk_wasmtime::{Engine, Module};
 pub use memory::{Memory, MAX_MEM_SIZE, PAGE_SIZE};
 pub use metadata::Metadata;
 pub use objectcode::Objectcode;
@@ -52,13 +53,13 @@ impl ContractStore {
     /// [`commit`]: ContractSession::commit
     /// [`delete`]: ContractStore::delete_commit
     /// [`session spawning`]: ContractStore::session
-    pub fn new<P: AsRef<Path>>(dir: P) -> io::Result<Self> {
+    pub fn new<P: AsRef<Path>>(engine: &Engine, dir: P) -> io::Result<Self> {
         let root_dir = dir.as_ref();
 
         fs::create_dir_all(root_dir)?;
 
         let (call, calls) = mpsc::channel();
-        let commits = read_all_commits(root_dir)?;
+        let commits = read_all_commits(engine, root_dir)?;
 
         let loop_root_dir = root_dir.to_path_buf();
 
@@ -148,6 +149,7 @@ impl ContractStore {
 }
 
 fn read_all_commits<P: AsRef<Path>>(
+    engine: &Engine,
     root_dir: P,
 ) -> io::Result<BTreeMap<Hash, Commit>> {
     let root_dir = root_dir.as_ref();
@@ -156,7 +158,7 @@ fn read_all_commits<P: AsRef<Path>>(
     for entry in fs::read_dir(root_dir)? {
         let entry = entry?;
         if entry.path().is_dir() {
-            let commit = read_commit(entry.path())?;
+            let commit = read_commit(engine, entry.path())?;
             let root = *commit.index.root();
             commits.insert(root, commit);
         }
@@ -165,9 +167,12 @@ fn read_all_commits<P: AsRef<Path>>(
     Ok(commits)
 }
 
-fn read_commit<P: AsRef<Path>>(commit_dir: P) -> io::Result<Commit> {
+fn read_commit<P: AsRef<Path>>(
+    engine: &Engine,
+    commit_dir: P,
+) -> io::Result<Commit> {
     let commit_dir = commit_dir.as_ref();
-    let commit = commit_from_dir(commit_dir)?;
+    let commit = commit_from_dir(engine, commit_dir)?;
     Ok(commit)
 }
 
@@ -175,7 +180,10 @@ fn page_path<P: AsRef<Path>>(memory_dir: P, page_index: usize) -> PathBuf {
     memory_dir.as_ref().join(format!("{page_index}"))
 }
 
-fn commit_from_dir<P: AsRef<Path>>(dir: P) -> io::Result<Commit> {
+fn commit_from_dir<P: AsRef<Path>>(
+    engine: &Engine,
+    dir: P,
+) -> io::Result<Commit> {
     let dir = dir.as_ref();
 
     let index_path = dir.join(INDEX_FILE);
@@ -195,6 +203,34 @@ fn commit_from_dir<P: AsRef<Path>>(dir: P) -> io::Result<Commit> {
                 io::ErrorKind::InvalidData,
                 format!("Non-existing bytecode for contract: {contract_hex}"),
             ));
+        }
+
+        let objectcode_path =
+            bytecode_path.with_extension(OBJECTCODE_EXTENSION);
+
+        if !objectcode_path.is_file() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("Non-existing objectcode for contract: {contract_hex}"),
+            ));
+        }
+
+        // SAFETY it is safe to deserialize the file here, since we don't use
+        // the module here. We just want to check if the file is valid.
+        if unsafe {
+            Module::deserialize_file(engine, &objectcode_path).is_err()
+        } {
+            let bytecode = Bytecode::from_file(bytecode_path)?;
+            let module =
+                Module::new(engine, bytecode.as_ref()).map_err(|err| {
+                    io::Error::new(io::ErrorKind::InvalidData, err)
+                })?;
+            fs::write(
+                objectcode_path,
+                module.serialize().map_err(|err| {
+                    io::Error::new(io::ErrorKind::InvalidData, err)
+                })?,
+            )?;
         }
 
         let memory_dir = memory_dir.join(&contract_hex);
