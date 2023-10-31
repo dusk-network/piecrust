@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Changed
 
+- Upgrade `dusk-merkle` to version `0.5`
 - Change contract tree to be arity 4 and height 17 [#159]
 - Maximum contract size is now 4TiB [#159]
 - Change `Error::RuntimeError` variant to contain `dusk_wasmtime::Error`,
@@ -25,6 +26,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Removed
 
+- Remove `parking_lot` dependency
+- Remove `colored` dependency
 - Remove 4 page - 256KiB - minimum memory requirement for contracts
 - Remove `Clone` derivation for `Error`
 - Remove some `Error` variants, along with `From` implementations:

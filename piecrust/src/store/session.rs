@@ -74,7 +74,9 @@ impl ContractSession {
         for (contract, entry) in &self.contracts {
             commit.index.insert(*contract, &entry.memory);
         }
-        *commit.index.root()
+        let root = commit.index.root();
+
+        *root
     }
 
     /// Commits the given session to disk, consuming the session and adding it
@@ -137,7 +139,7 @@ impl ContractSession {
 
                     match base_commit.index.contains_key(&contract) {
                         true => {
-                            let base_hex = hex::encode(base);
+                            let base_hex = hex::encode(*base);
                             let base_dir = self.root_dir.join(base_hex);
 
                             let contract_hex = hex::encode(contract);
