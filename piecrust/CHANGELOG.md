@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.0] - 2023-11-01
+
 ## Added
 
 - Support `memory64` smart contracts [#281]
@@ -320,7 +322,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [#93]: https://github.com/dusk-network/piecrust/issues/93
 
 <!-- VERSIONS -->
-[Unreleased]: https://github.com/dusk-network/piecrust/compare/piecrust-0.11.0...HEAD
+[Unreleased]: https://github.com/dusk-network/piecrust/compare/piecrust-0.12.0...HEAD
+[0.12.0]: https://github.com/dusk-network/piecrust/compare/piecrust-0.11.0...piecrust-0.12.0
 [0.11.0]: https://github.com/dusk-network/piecrust/compare/piecrust-0.10.0...piecrust-0.11.0
 [0.10.0]: https://github.com/dusk-network/piecrust/compare/piecrust-0.9.3...piecrust-0.10.0
 [0.9.3]: https://github.com/dusk-network/piecrust/compare/piecrust-0.9.2...piecrust-0.9.3
