@@ -9,21 +9,22 @@
 mod bytecode;
 mod memory;
 mod metadata;
-mod objectcode;
+mod module;
 mod session;
 mod tree;
 
 use std::collections::btree_map::Entry::*;
 use std::collections::{BTreeMap, BTreeSet};
+use std::fmt::{Debug, Formatter};
 use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 use std::{fs, io, thread};
 
 pub use bytecode::Bytecode;
-use dusk_wasmtime::{Engine, Module};
+use dusk_wasmtime::Engine;
 pub use memory::{Memory, MAX_MEM_SIZE, PAGE_SIZE};
 pub use metadata::Metadata;
-pub use objectcode::Objectcode;
+pub use module::Module;
 use piecrust_uplink::ContractId;
 use session::ContractDataEntry;
 pub use session::ContractSession;
@@ -36,11 +37,22 @@ const OBJECTCODE_EXTENSION: &str = "a";
 const METADATA_EXTENSION: &str = "m";
 
 /// A store for all contract commits.
-#[derive(Debug)]
 pub struct ContractStore {
     sync_loop: thread::JoinHandle<()>,
+    engine: Engine,
+
     call: mpsc::Sender<Call>,
     root_dir: PathBuf,
+}
+
+impl Debug for ContractStore {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ContractStore")
+            .field("sync_loop", &self.sync_loop)
+            .field("call", &self.call)
+            .field("root_dir", &self.root_dir)
+            .finish()
+    }
 }
 
 impl ContractStore {
@@ -53,13 +65,13 @@ impl ContractStore {
     /// [`commit`]: ContractSession::commit
     /// [`delete`]: ContractStore::delete_commit
     /// [`session spawning`]: ContractStore::session
-    pub fn new<P: AsRef<Path>>(engine: &Engine, dir: P) -> io::Result<Self> {
+    pub fn new<P: AsRef<Path>>(engine: Engine, dir: P) -> io::Result<Self> {
         let root_dir = dir.as_ref();
 
         fs::create_dir_all(root_dir)?;
 
         let (call, calls) = mpsc::channel();
-        let commits = read_all_commits(engine, root_dir)?;
+        let commits = read_all_commits(&engine, root_dir)?;
 
         let loop_root_dir = root_dir.to_path_buf();
 
@@ -71,6 +83,7 @@ impl ContractStore {
 
         Ok(Self {
             sync_loop,
+            engine,
             call,
             root_dir: root_dir.into(),
         })
@@ -144,7 +157,12 @@ impl ContractStore {
     }
 
     fn session_with_base(&self, base: Option<Commit>) -> ContractSession {
-        ContractSession::new(&self.root_dir, base, self.call.clone())
+        ContractSession::new(
+            &self.root_dir,
+            self.engine.clone(),
+            base,
+            self.call.clone(),
+        )
     }
 }
 
@@ -217,20 +235,13 @@ fn commit_from_dir<P: AsRef<Path>>(
 
         // SAFETY it is safe to deserialize the file here, since we don't use
         // the module here. We just want to check if the file is valid.
-        if unsafe {
-            Module::deserialize_file(engine, &objectcode_path).is_err()
-        } {
+        if Module::from_file(engine, &objectcode_path).is_err() {
             let bytecode = Bytecode::from_file(bytecode_path)?;
             let module =
                 Module::new(engine, bytecode.as_ref()).map_err(|err| {
                     io::Error::new(io::ErrorKind::InvalidData, err)
                 })?;
-            fs::write(
-                objectcode_path,
-                module.serialize().map_err(|err| {
-                    io::Error::new(io::ErrorKind::InvalidData, err)
-                })?,
-            )?;
+            fs::write(objectcode_path, module.serialize())?;
         }
 
         let memory_dir = memory_dir.join(&contract_hex);
@@ -537,7 +548,7 @@ fn write_commit_inner<P: AsRef<Path>>(
             }
         } else {
             fs::write(bytecode_path, &contract_data.bytecode)?;
-            fs::write(objectcode_path, &contract_data.objectcode)?;
+            fs::write(objectcode_path, &contract_data.module.serialize())?;
             fs::write(metadata_path, &contract_data.metadata)?;
         }
     }

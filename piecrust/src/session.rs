@@ -28,7 +28,7 @@ use crate::call_tree::{CallTree, CallTreeElem};
 use crate::contract::{ContractData, ContractMetadata, WrappedContract};
 use crate::error::Error::{self, InitalizationError, PersistenceError};
 use crate::instance::WrappedInstance;
-use crate::store::{ContractSession, Objectcode, PAGE_SIZE};
+use crate::store::{ContractSession, PAGE_SIZE};
 use crate::types::StandardBufSerializer;
 use crate::vm::HostQueries;
 
@@ -275,7 +275,7 @@ impl Session {
         }
 
         let wrapped_contract =
-            WrappedContract::new(&self.engine, bytecode, None::<Objectcode>)?;
+            WrappedContract::new(&self.engine, bytecode, None::<&[u8]>)?;
         let contract_metadata = ContractMetadata { contract_id, owner };
         let metadata_bytes = Self::serialize_data(&contract_metadata)?;
 
@@ -531,7 +531,7 @@ impl Session {
         let contract = WrappedContract::new(
             &self.engine,
             store_data.bytecode,
-            Some(store_data.objectcode),
+            Some(store_data.module.serialize()),
         )?;
 
         self.inner.current = contract_id;

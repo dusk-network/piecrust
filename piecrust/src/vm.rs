@@ -101,7 +101,7 @@ impl VM {
             "Configuration should be valid since its set at compile time",
         );
 
-        let store = ContractStore::new(&engine, root_dir)
+        let store = ContractStore::new(engine, root_dir)
             .map_err(|err| PersistenceError(Arc::new(err)))?;
 
         Ok(Self {
@@ -128,7 +128,7 @@ impl VM {
             "Configuration should be valid since its set at compile time",
         );
 
-        let store = ContractStore::new(&engine, tmp)
+        let store = ContractStore::new(engine, tmp)
             .map_err(|err| PersistenceError(Arc::new(err)))?;
 
         Ok(Self {

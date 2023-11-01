@@ -6,23 +6,25 @@
 
 use std::collections::btree_map::Entry::{Occupied, Vacant};
 use std::collections::BTreeMap;
+use std::fmt::Debug;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 use std::{io, mem};
 
-use crate::contract::ContractMetadata;
+use dusk_wasmtime::Engine;
 use piecrust_uplink::ContractId;
 
+use crate::contract::ContractMetadata;
 use crate::store::tree::Hash;
 use crate::store::{
-    Bytecode, Call, Commit, Memory, Metadata, Objectcode, BYTECODE_DIR,
-    MEMORY_DIR, METADATA_EXTENSION, OBJECTCODE_EXTENSION,
+    Bytecode, Call, Commit, Memory, Metadata, Module, BYTECODE_DIR, MEMORY_DIR,
+    METADATA_EXTENSION, OBJECTCODE_EXTENSION,
 };
 
 #[derive(Debug, Clone)]
 pub struct ContractDataEntry {
     pub bytecode: Bytecode,
-    pub objectcode: Objectcode,
+    pub module: Module,
     pub metadata: Metadata,
     pub memory: Memory,
 }
@@ -36,9 +38,9 @@ pub struct ContractDataEntry {
 /// call to [`commit`].
 ///
 /// [`commit`]: ContractSession::commit
-#[derive(Debug)]
 pub struct ContractSession {
     contracts: BTreeMap<ContractId, ContractDataEntry>,
+    engine: Engine,
 
     base: Option<Commit>,
     root_dir: PathBuf,
@@ -46,14 +48,26 @@ pub struct ContractSession {
     call: mpsc::Sender<Call>,
 }
 
+impl Debug for ContractSession {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ContractSession")
+            .field("contracts", &self.contracts)
+            .field("base", &self.base)
+            .field("root_dir", &self.root_dir)
+            .finish()
+    }
+}
+
 impl ContractSession {
     pub(crate) fn new<P: AsRef<Path>>(
         root_dir: P,
+        engine: Engine,
         base: Option<Commit>,
         call: mpsc::Sender<Call>,
     ) -> Self {
         Self {
             contracts: BTreeMap::new(),
+            engine,
             base,
             root_dir: root_dir.as_ref().into(),
             call,
@@ -154,8 +168,10 @@ impl ContractSession {
                                 base_dir.join(MEMORY_DIR).join(contract_hex);
 
                             let bytecode = Bytecode::from_file(bytecode_path)?;
-                            let objectcode =
-                                Objectcode::from_file(objectcode_path)?;
+                            let module = Module::from_file(
+                                &self.engine,
+                                objectcode_path,
+                            )?;
                             let metadata = Metadata::from_file(metadata_path)?;
 
                             let memory = match base_commit.index.get(&contract)
@@ -189,7 +205,7 @@ impl ContractSession {
                             let contract = entry
                                 .insert(ContractDataEntry {
                                     bytecode,
-                                    objectcode,
+                                    module,
                                     metadata,
                                     memory,
                                 })
@@ -236,7 +252,7 @@ impl ContractSession {
     ) -> io::Result<()> {
         let memory = Memory::new()?;
         let bytecode = Bytecode::new(bytecode)?;
-        let objectcode = Objectcode::new(objectcode)?;
+        let module = Module::new(&self.engine, objectcode)?;
         let metadata = Metadata::new(metadata_bytes, metadata)?;
 
         // If the position is already filled in the tree, the contract cannot be
@@ -254,7 +270,7 @@ impl ContractSession {
             contract_id,
             ContractDataEntry {
                 bytecode,
-                objectcode,
+                module,
                 metadata,
                 memory,
             },
