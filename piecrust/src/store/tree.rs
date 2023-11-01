@@ -15,15 +15,52 @@ use rkyv::{Archive, Deserialize, Serialize};
 
 use crate::store::memory::Memory;
 
-// There are max `2^26` pages in a memory
-const P_HEIGHT: usize = 13;
-const P_ARITY: usize = 4;
+// There are max `2^16` pages in a 32-bit memory
+const P32_HEIGHT: usize = 8;
+const P32_ARITY: usize = 4;
 
-pub type PageTree = dusk_merkle::Tree<Hash, P_HEIGHT, P_ARITY>;
+type PageTree32 = dusk_merkle::Tree<Hash, P32_HEIGHT, P32_ARITY>;
+
+// There are max `2^26` pages in a 64-bit memory
+const P64_HEIGHT: usize = 13;
+const P64_ARITY: usize = 4;
+
+type PageTree64 = dusk_merkle::Tree<Hash, P64_HEIGHT, P64_ARITY>;
 
 // This means we have max `2^32` contracts
 const C_HEIGHT: usize = 32;
 const C_ARITY: usize = 2;
+
+#[derive(Debug, Clone, Archive, Deserialize, Serialize)]
+#[archive_attr(derive(CheckBytes))]
+pub enum PageTree {
+    Wasm32(PageTree32),
+    Wasm64(PageTree64),
+}
+
+impl PageTree {
+    pub fn new(is_64: bool) -> Self {
+        if is_64 {
+            Self::Wasm64(PageTree64::new())
+        } else {
+            Self::Wasm32(PageTree32::new())
+        }
+    }
+
+    pub fn insert(&mut self, position: u64, item: impl Into<Hash>) {
+        match self {
+            Self::Wasm32(tree) => tree.insert(position, item),
+            Self::Wasm64(tree) => tree.insert(position, item),
+        }
+    }
+
+    pub fn root(&self) -> Ref<Hash> {
+        match self {
+            Self::Wasm32(tree) => tree.root(),
+            Self::Wasm64(tree) => tree.root(),
+        }
+    }
+}
 
 pub type Tree = dusk_merkle::Tree<Hash, C_HEIGHT, C_ARITY>;
 
@@ -57,7 +94,7 @@ impl ContractIndex {
             self.contracts.insert(
                 contract,
                 ContractIndexElement {
-                    tree: PageTree::new(),
+                    tree: PageTree::new(memory.is_64()),
                     len: 0,
                     page_indices: BTreeSet::new(),
                 },
@@ -155,10 +192,10 @@ impl dusk_merkle::Aggregate<C_ARITY> for Hash {
     }
 }
 
-impl dusk_merkle::Aggregate<P_ARITY> for Hash {
+impl dusk_merkle::Aggregate<P32_ARITY> for Hash {
     const EMPTY_SUBTREE: Self = Hash([0; blake3::OUT_LEN]);
 
-    fn aggregate(items: [&Self; P_ARITY]) -> Self {
+    fn aggregate(items: [&Self; P32_ARITY]) -> Self {
         let mut hasher = Hasher::new();
         for item in items {
             hasher.update(item.as_bytes());

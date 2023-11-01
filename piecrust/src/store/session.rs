@@ -182,6 +182,7 @@ impl ContractSession {
                                     let memory_path = memory_path.clone();
 
                                     Memory::from_files(
+                                        module.is_64(),
                                         move |page_index: usize| {
                                             match page_indices
                                                 .contains(&page_index)
@@ -199,7 +200,7 @@ impl ContractSession {
                                         elem.len,
                                     )?
                                 }
-                                None => Memory::new()?,
+                                None => Memory::new(module.is_64())?,
                             };
 
                             let contract = entry
@@ -250,10 +251,10 @@ impl ContractSession {
         metadata: ContractMetadata,
         metadata_bytes: B,
     ) -> io::Result<()> {
-        let memory = Memory::new()?;
         let bytecode = Bytecode::new(bytecode)?;
         let module = Module::new(&self.engine, objectcode)?;
         let metadata = Metadata::new(metadata_bytes, metadata)?;
+        let memory = Memory::new(module.is_64())?;
 
         // If the position is already filled in the tree, the contract cannot be
         // inserted.
