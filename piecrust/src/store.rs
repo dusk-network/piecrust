@@ -20,15 +20,17 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 use std::{fs, io, thread};
 
-pub use bytecode::Bytecode;
 use dusk_wasmtime::Engine;
+use piecrust_uplink::ContractId;
+use session::ContractDataEntry;
+use tree::{ContractIndex, Hash};
+
+pub use bytecode::Bytecode;
 pub use memory::{Memory, PAGE_SIZE};
 pub use metadata::Metadata;
 pub use module::Module;
-use piecrust_uplink::ContractId;
-use session::ContractDataEntry;
 pub use session::ContractSession;
-use tree::{ContractIndex, Hash};
+pub use tree::PageOpening;
 
 const BYTECODE_DIR: &str = "bytecode";
 const MEMORY_DIR: &str = "memory";

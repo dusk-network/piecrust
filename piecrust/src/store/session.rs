@@ -15,10 +15,10 @@ use dusk_wasmtime::Engine;
 use piecrust_uplink::ContractId;
 
 use crate::contract::ContractMetadata;
-use crate::store::tree::Hash;
+use crate::store::tree::{Hash, PageOpening};
 use crate::store::{
     Bytecode, Call, Commit, Memory, Metadata, Module, BYTECODE_DIR, MEMORY_DIR,
-    METADATA_EXTENSION, OBJECTCODE_EXTENSION,
+    METADATA_EXTENSION, OBJECTCODE_EXTENSION, PAGE_SIZE,
 };
 
 #[derive(Debug, Clone)]
@@ -91,6 +91,30 @@ impl ContractSession {
         let root = commit.index.root();
 
         *root
+    }
+
+    /// Returns an iterator through all the pages of a contract, together with a
+    /// proof of their inclusion in the state.
+    pub fn memory_pages(
+        &self,
+        contract: ContractId,
+    ) -> Option<impl Iterator<Item = (usize, &[u8], PageOpening)>> {
+        let mut commit = self.base.clone().unwrap_or_default();
+        for (contract, entry) in &self.contracts {
+            commit.index.insert(*contract, &entry.memory);
+        }
+
+        let contract_data = self.contracts.get(&contract)?;
+        let inclusion_proofs = commit.index.inclusion_proofs(&contract)?;
+
+        let inclusion_proofs =
+            inclusion_proofs.map(move |(page_index, opening)| {
+                let page_offset = page_index * PAGE_SIZE;
+                let page = &contract_data.memory[page_offset..][..PAGE_SIZE];
+                (page_index, page, opening)
+            });
+
+        Some(inclusion_proofs)
     }
 
     /// Commits the given session to disk, consuming the session and adding it

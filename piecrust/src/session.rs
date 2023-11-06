@@ -28,7 +28,7 @@ use crate::call_tree::{CallTree, CallTreeElem};
 use crate::contract::{ContractData, ContractMetadata, WrappedContract};
 use crate::error::Error::{self, InitalizationError, PersistenceError};
 use crate::instance::WrappedInstance;
-use crate::store::{ContractSession, PAGE_SIZE};
+use crate::store::{ContractSession, PageOpening, PAGE_SIZE};
 use crate::types::StandardBufSerializer;
 use crate::vm::HostQueries;
 
@@ -506,6 +506,22 @@ impl Session {
     /// It also doubles as the ID of a commit - the commit root.
     pub fn root(&self) -> [u8; 32] {
         self.inner.contract_session.root().into()
+    }
+
+    /// Returns an iterator over the pages (and their indices) of a contract's
+    /// memory, together with a proof of their inclusion in the state.
+    ///
+    /// The proof is a Merkle inclusion proof, and the caller is able to verify
+    /// it by using [`verify`], and matching the root with the one returned by
+    /// [`root`].
+    ///
+    /// [`verify`]: PageOpening::verify
+    /// [`root`]: Session::root
+    pub fn memory_pages(
+        &self,
+        contract: ContractId,
+    ) -> Option<impl Iterator<Item = (usize, &[u8], PageOpening)>> {
+        self.inner.contract_session.memory_pages(contract)
     }
 
     pub(crate) fn push_event(&mut self, event: Event) {
