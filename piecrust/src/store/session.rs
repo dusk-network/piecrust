@@ -184,7 +184,7 @@ impl ContractSession {
 
                             let bytecode_path =
                                 base_dir.join(BYTECODE_DIR).join(&contract_hex);
-                            let objectcode_path = bytecode_path
+                            let module_path = bytecode_path
                                 .with_extension(OBJECTCODE_EXTENSION);
                             let metadata_path = bytecode_path
                                 .with_extension(METADATA_EXTENSION);
@@ -192,10 +192,8 @@ impl ContractSession {
                                 base_dir.join(MEMORY_DIR).join(contract_hex);
 
                             let bytecode = Bytecode::from_file(bytecode_path)?;
-                            let module = Module::from_file(
-                                &self.engine,
-                                objectcode_path,
-                            )?;
+                            let module =
+                                Module::from_file(&self.engine, module_path)?;
                             let metadata = Metadata::from_file(metadata_path)?;
 
                             let memory = match base_commit.index.get(&contract)
@@ -271,12 +269,12 @@ impl ContractSession {
         &mut self,
         contract_id: ContractId,
         bytecode: B,
-        objectcode: B,
+        module: B,
         metadata: ContractMetadata,
         metadata_bytes: B,
     ) -> io::Result<()> {
         let bytecode = Bytecode::new(bytecode)?;
-        let module = Module::new(&self.engine, objectcode)?;
+        let module = Module::new(&self.engine, module)?;
         let metadata = Metadata::new(metadata_bytes, metadata)?;
         let memory = Memory::new(module.is_64())?;
 

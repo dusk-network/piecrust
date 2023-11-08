@@ -225,25 +225,24 @@ fn commit_from_dir<P: AsRef<Path>>(
             ));
         }
 
-        let objectcode_path =
-            bytecode_path.with_extension(OBJECTCODE_EXTENSION);
+        let module_path = bytecode_path.with_extension(OBJECTCODE_EXTENSION);
 
-        if !objectcode_path.is_file() {
+        if !module_path.is_file() {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
-                format!("Non-existing objectcode for contract: {contract_hex}"),
+                format!("Non-existing module for contract: {contract_hex}"),
             ));
         }
 
         // SAFETY it is safe to deserialize the file here, since we don't use
         // the module here. We just want to check if the file is valid.
-        if Module::from_file(engine, &objectcode_path).is_err() {
+        if Module::from_file(engine, &module_path).is_err() {
             let bytecode = Bytecode::from_file(bytecode_path)?;
             let module =
                 Module::new(engine, bytecode.as_ref()).map_err(|err| {
                     io::Error::new(io::ErrorKind::InvalidData, err)
                 })?;
-            fs::write(objectcode_path, module.serialize())?;
+            fs::write(module_path, module.serialize())?;
         }
 
         let memory_dir = memory_dir.join(&contract_hex);
@@ -512,12 +511,11 @@ fn write_commit_inner<P: AsRef<Path>>(
         }
 
         let bytecode_path = directories.bytecode_dir.join(&contract_hex);
-        let objectcode_path =
-            bytecode_path.with_extension(OBJECTCODE_EXTENSION);
+        let module_path = bytecode_path.with_extension(OBJECTCODE_EXTENSION);
         let metadata_path = bytecode_path.with_extension(METADATA_EXTENSION);
 
         // If the contract already existed in the base commit, we hard link the
-        // bytecode, objectcode, and metadata files to avoid duplicating them,
+        // bytecode, module, and metadata files to avoid duplicating them,
         // otherwise we write them to disk.
         //
         // Also, if there is a base commit, we hard link the pages of the
@@ -525,7 +523,7 @@ fn write_commit_inner<P: AsRef<Path>>(
         if let Some(base) = &directories.base {
             if let Some(elem) = base.inner.index.get(contract) {
                 let base_bytecode_path = base.bytecode_dir.join(&contract_hex);
-                let base_objectcode_path =
+                let base_module_path =
                     base_bytecode_path.with_extension(OBJECTCODE_EXTENSION);
                 let base_metadata_path =
                     base_bytecode_path.with_extension(METADATA_EXTENSION);
@@ -533,7 +531,7 @@ fn write_commit_inner<P: AsRef<Path>>(
                 let base_memory_dir = base.memory_dir.join(&contract_hex);
 
                 fs::hard_link(base_bytecode_path, bytecode_path)?;
-                fs::hard_link(base_objectcode_path, objectcode_path)?;
+                fs::hard_link(base_module_path, module_path)?;
                 fs::hard_link(base_metadata_path, metadata_path)?;
 
                 for page_index in &elem.page_indices {
@@ -550,7 +548,7 @@ fn write_commit_inner<P: AsRef<Path>>(
             }
         } else {
             fs::write(bytecode_path, &contract_data.bytecode)?;
-            fs::write(objectcode_path, &contract_data.module.serialize())?;
+            fs::write(module_path, &contract_data.module.serialize())?;
             fs::write(metadata_path, &contract_data.metadata)?;
         }
     }
@@ -562,13 +560,13 @@ fn write_commit_inner<P: AsRef<Path>>(
 
                 let bytecode_path =
                     directories.bytecode_dir.join(&contract_hex);
-                let objectcode_path =
+                let module_path =
                     bytecode_path.with_extension(OBJECTCODE_EXTENSION);
                 let metadata_path =
                     bytecode_path.with_extension(METADATA_EXTENSION);
 
                 let base_bytecode_path = base.bytecode_dir.join(&contract_hex);
-                let base_objectcode_path =
+                let base_module_path =
                     base_bytecode_path.with_extension(OBJECTCODE_EXTENSION);
                 let base_metadata_path =
                     base_bytecode_path.with_extension(METADATA_EXTENSION);
@@ -579,7 +577,7 @@ fn write_commit_inner<P: AsRef<Path>>(
                 fs::create_dir_all(&memory_dir)?;
 
                 fs::hard_link(base_bytecode_path, bytecode_path)?;
-                fs::hard_link(base_objectcode_path, objectcode_path)?;
+                fs::hard_link(base_module_path, module_path)?;
                 fs::hard_link(base_metadata_path, metadata_path)?;
 
                 for page_index in &elem.page_indices {
