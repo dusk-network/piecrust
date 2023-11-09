@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## Added
+
+- Add `Session::memory_pages` allowing for inclusion  proofs of pages [#273]
+
+## Changed
+
+- Change state tree to  distinguish between 32 and 64 bit smart contracts [#273]
+
 ## [0.12.0] - 2023-11-01
 
 ## Added
@@ -296,6 +304,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 <!-- ISSUES -->
 [#287]: https://github.com/dusk-network/piecrust/issues/287
 [#281]: https://github.com/dusk-network/piecrust/issues/281
+[#273]: https://github.com/dusk-network/piecrust/issues/273
 [#271]: https://github.com/dusk-network/piecrust/issues/271
 [#268]: https://github.com/dusk-network/piecrust/issues/268
 [#254]: https://github.com/dusk-network/piecrust/issues/254

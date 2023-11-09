@@ -90,9 +90,9 @@ impl WrappedContract {
     pub fn new<B: AsRef<[u8]>, C: AsRef<[u8]>>(
         engine: &Engine,
         bytecode: B,
-        objectcode: Option<C>,
+        module: Option<C>,
     ) -> Result<Self, Error> {
-        let serialized = match objectcode {
+        let serialized = match module {
             Some(obj) => obj.as_ref().to_vec(),
             _ => {
                 let contract = Module::new(engine, bytecode.as_ref())?;

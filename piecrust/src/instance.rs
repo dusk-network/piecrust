@@ -13,7 +13,7 @@ use piecrust_uplink::{ContractId, Event, ARGBUF_LEN};
 use crate::contract::WrappedContract;
 use crate::imports::Imports;
 use crate::session::Session;
-use crate::store::{Memory, MAX_MEM_SIZE};
+use crate::store::Memory;
 use crate::Error;
 
 pub struct WrappedInstance {
@@ -169,7 +169,7 @@ impl WrappedInstance {
             _ => return Err(Error::InvalidArgumentBuffer),
         };
 
-        if arg_buf_ofs + ARGBUF_LEN >= MAX_MEM_SIZE {
+        if arg_buf_ofs + ARGBUF_LEN >= memory.len() {
             return Err(Error::InvalidArgumentBuffer);
         }
 

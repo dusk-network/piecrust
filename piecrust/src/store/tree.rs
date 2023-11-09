@@ -15,15 +15,65 @@ use rkyv::{Archive, Deserialize, Serialize};
 
 use crate::store::memory::Memory;
 
-// There are max `2^26` pages in a memory
-const P_HEIGHT: usize = 13;
-const P_ARITY: usize = 4;
+// There are max `2^16` pages in a 32-bit memory
+const P32_HEIGHT: usize = 8;
+const P32_ARITY: usize = 4;
 
-pub type PageTree = dusk_merkle::Tree<Hash, P_HEIGHT, P_ARITY>;
+type PageTree32 = dusk_merkle::Tree<Hash, P32_HEIGHT, P32_ARITY>;
+
+// There are max `2^26` pages in a 64-bit memory
+const P64_HEIGHT: usize = 13;
+const P64_ARITY: usize = 4;
+
+type PageTree64 = dusk_merkle::Tree<Hash, P64_HEIGHT, P64_ARITY>;
 
 // This means we have max `2^32` contracts
 const C_HEIGHT: usize = 32;
 const C_ARITY: usize = 2;
+
+#[derive(Debug, Clone, Archive, Deserialize, Serialize)]
+#[archive_attr(derive(CheckBytes))]
+pub enum PageTree {
+    Wasm32(PageTree32),
+    Wasm64(PageTree64),
+}
+
+impl PageTree {
+    pub fn new(is_64: bool) -> Self {
+        if is_64 {
+            Self::Wasm64(PageTree64::new())
+        } else {
+            Self::Wasm32(PageTree32::new())
+        }
+    }
+
+    pub fn insert(&mut self, position: u64, item: impl Into<Hash>) {
+        match self {
+            Self::Wasm32(tree) => tree.insert(position, item),
+            Self::Wasm64(tree) => tree.insert(position, item),
+        }
+    }
+
+    pub fn root(&self) -> Ref<Hash> {
+        match self {
+            Self::Wasm32(tree) => tree.root(),
+            Self::Wasm64(tree) => tree.root(),
+        }
+    }
+
+    pub fn opening(&self, position: u64) -> Option<InnerPageOpening> {
+        match self {
+            Self::Wasm32(tree) => {
+                let opening = tree.opening(position)?;
+                Some(InnerPageOpening::Wasm32(opening))
+            }
+            Self::Wasm64(tree) => {
+                let opening = tree.opening(position)?;
+                Some(InnerPageOpening::Wasm64(opening))
+            }
+        }
+    }
+}
 
 pub type Tree = dusk_merkle::Tree<Hash, C_HEIGHT, C_ARITY>;
 
@@ -43,6 +93,37 @@ impl Default for ContractIndex {
     }
 }
 
+impl ContractIndex {
+    pub fn inclusion_proofs(
+        mut self,
+        contract_id: &ContractId,
+    ) -> Option<impl Iterator<Item = (usize, PageOpening)>> {
+        let contract = self.contracts.remove(contract_id)?;
+
+        let pos = position_from_contract(contract_id);
+
+        Some(contract.page_indices.into_iter().map(move |page_index| {
+            let tree_opening = self
+                .tree
+                .opening(pos)
+                .expect("There must be a leaf for the contract");
+
+            let page_opening = contract
+                .tree
+                .opening(page_index as u64)
+                .expect("There must be a leaf for the page");
+
+            (
+                page_index,
+                PageOpening {
+                    tree: tree_opening,
+                    inner: page_opening,
+                },
+            )
+        }))
+    }
+}
+
 #[derive(Debug, Clone, Archive, Deserialize, Serialize)]
 #[archive_attr(derive(CheckBytes))]
 pub struct ContractIndexElement {
@@ -57,7 +138,7 @@ impl ContractIndex {
             self.contracts.insert(
                 contract,
                 ContractIndexElement {
-                    tree: PageTree::new(),
+                    tree: PageTree::new(memory.is_64()),
                     len: 0,
                     page_indices: BTreeSet::new(),
                 },
@@ -93,6 +174,70 @@ impl ContractIndex {
         &self,
     ) -> impl Iterator<Item = (&ContractId, &ContractIndexElement)> {
         self.contracts.iter()
+    }
+}
+
+type Wasm32PageOpening = dusk_merkle::Opening<Hash, P32_HEIGHT, P32_ARITY>;
+type Wasm64PageOpening = dusk_merkle::Opening<Hash, P64_HEIGHT, P64_ARITY>;
+
+#[derive(Debug, Clone, Archive, Deserialize, Serialize)]
+#[archive_attr(derive(CheckBytes))]
+#[allow(clippy::large_enum_variant)]
+pub enum InnerPageOpening {
+    Wasm32(Wasm32PageOpening),
+    Wasm64(Wasm64PageOpening),
+}
+
+impl InnerPageOpening {
+    fn verify(&self, page: &[u8]) -> bool {
+        let page_hash = Hash::new(page);
+
+        match self {
+            Self::Wasm32(opening) => opening.verify(page_hash),
+            Self::Wasm64(opening) => opening.verify(page_hash),
+        }
+    }
+
+    fn root(&self) -> &Hash {
+        match self {
+            InnerPageOpening::Wasm32(inner) => inner.root(),
+            InnerPageOpening::Wasm64(inner) => inner.root(),
+        }
+    }
+}
+
+type TreeOpening = dusk_merkle::Opening<Hash, C_HEIGHT, C_ARITY>;
+
+/// A Merkle opening for page in the state.
+#[derive(Debug, Clone, Archive, Deserialize, Serialize)]
+#[archive_attr(derive(CheckBytes))]
+pub struct PageOpening {
+    tree: TreeOpening,
+    inner: InnerPageOpening,
+}
+
+impl PageOpening {
+    /// The root of the state tree when this opening was created.
+    ///
+    /// This is meant to be used together with [`Session::root`] and [`verify`]
+    /// to prove that a page is in the state.
+    ///
+    /// [`Session::root`]: crate::Session::root
+    /// [`verify`]: PageOpening::verify
+    pub fn root(&self) -> &Hash {
+        self.tree.root()
+    }
+
+    /// Verify that the given page corresponds to the opening.
+    ///
+    /// To truly verify that the page is in the state, it also needs to be
+    /// checked that the [`root`] of this opening is equal to the
+    /// [`Session::root`].
+    ///
+    /// [`root`]: PageOpening::root
+    /// [`Session::root`]: crate::Session::root
+    pub fn verify(&self, page: &[u8]) -> bool {
+        self.inner.verify(page) & self.tree.verify(*self.inner.root())
     }
 }
 
@@ -155,10 +300,10 @@ impl dusk_merkle::Aggregate<C_ARITY> for Hash {
     }
 }
 
-impl dusk_merkle::Aggregate<P_ARITY> for Hash {
+impl dusk_merkle::Aggregate<P32_ARITY> for Hash {
     const EMPTY_SUBTREE: Self = Hash([0; blake3::OUT_LEN]);
 
-    fn aggregate(items: [&Self; P_ARITY]) -> Self {
+    fn aggregate(items: [&Self; P32_ARITY]) -> Self {
         let mut hasher = Hasher::new();
         for item in items {
             hasher.update(item.as_bytes());

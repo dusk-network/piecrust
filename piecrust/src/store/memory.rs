@@ -16,18 +16,15 @@ use crumbles::{LocateFile, Mmap};
 use dusk_wasmtime::LinearMemory;
 
 pub const PAGE_SIZE: usize = 0x10000;
-const WASM_MAX_PAGES: u32 = 0x4000000;
 
-const MIN_PAGES: usize = 4;
-const MIN_MEM_SIZE: usize = MIN_PAGES * PAGE_SIZE;
-const MAX_PAGES: usize = WASM_MAX_PAGES as usize;
-
-pub const MAX_MEM_SIZE: usize = MAX_PAGES * PAGE_SIZE;
+const WASM32_MAX_PAGES: usize = 0x10000;
+const WASM64_MAX_PAGES: usize = 0x4000000;
 
 pub struct MemoryInner {
     pub mmap: Mmap,
     pub current_len: usize,
     pub is_new: bool,
+    is_64: bool,
     ref_count: AtomicUsize,
 }
 
@@ -63,31 +60,53 @@ pub struct Memory {
 }
 
 impl Memory {
-    pub fn new() -> io::Result<Self> {
+    pub fn new(is_64: bool) -> io::Result<Self> {
+        let max_pages = if is_64 {
+            WASM64_MAX_PAGES
+        } else {
+            WASM32_MAX_PAGES
+        };
+
         Ok(Self {
             inner: Box::leak(Box::new(MemoryInner {
-                mmap: Mmap::new(MAX_PAGES, PAGE_SIZE)?,
-                current_len: MIN_MEM_SIZE,
+                mmap: Mmap::new(max_pages, PAGE_SIZE)?,
+                current_len: 0,
                 is_new: true,
+                is_64,
                 ref_count: AtomicUsize::new(1),
             })),
         })
     }
 
-    pub fn from_files<FL>(file_locator: FL, len: usize) -> io::Result<Self>
+    pub fn from_files<FL>(
+        is_64: bool,
+        file_locator: FL,
+        len: usize,
+    ) -> io::Result<Self>
     where
         FL: 'static + LocateFile,
     {
+        let max_pages = if is_64 {
+            WASM64_MAX_PAGES
+        } else {
+            WASM32_MAX_PAGES
+        };
+
         Ok(Self {
             inner: Box::leak(Box::new(MemoryInner {
                 mmap: unsafe {
-                    Mmap::with_files(MAX_PAGES, PAGE_SIZE, file_locator)?
+                    Mmap::with_files(max_pages, PAGE_SIZE, file_locator)?
                 },
                 current_len: len,
                 is_new: false,
+                is_64,
                 ref_count: AtomicUsize::new(1),
             })),
         })
+    }
+
+    pub fn is_64(&self) -> bool {
+        self.inner.is_64
     }
 }
 
@@ -143,7 +162,7 @@ unsafe impl LinearMemory for Memory {
     }
 
     fn maximum_byte_size(&self) -> Option<usize> {
-        Some(MAX_MEM_SIZE)
+        Some(self.inner.len())
     }
 
     fn grow_to(&mut self, new_size: usize) -> Result<(), dusk_wasmtime::Error> {

@@ -4,7 +4,9 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use piecrust::{contract_bytecode, ContractData, Error, SessionData, VM};
+use piecrust::{
+    contract_bytecode, ContractData, Error, PageOpening, SessionData, VM,
+};
 
 const OWNER: [u8; 32] = [0u8; 32];
 const LIMIT: u64 = 1_000_000;
@@ -54,5 +56,66 @@ pub fn state_root_calculation() -> Result<(), Error> {
     let root_3 = session.root();
 
     assert_eq!(root_2, root_3, "The root of a session should be the same if no modifications were made");
+    Ok(())
+}
+
+#[test]
+pub fn inclusion_proofs() -> Result<(), Error> {
+    let vm = VM::ephemeral()?;
+    let mut session = vm.session(SessionData::builder())?;
+
+    let counter_id = session.deploy(
+        contract_bytecode!("counter"),
+        ContractData::builder(OWNER),
+        LIMIT,
+    )?;
+
+    fn mapper(
+        (_, page, opening): (usize, &[u8], PageOpening),
+    ) -> (Vec<u8>, PageOpening) {
+        (page.to_vec(), opening)
+    }
+
+    session.call::<_, ()>(counter_id, "increment", &(), LIMIT)?;
+
+    let pages = session
+        .memory_pages(counter_id)
+        .expect("There must be memory pages for the contract");
+
+    let (page_1, opening_1) = pages
+        .map(mapper)
+        .next()
+        .expect("There must be at least one page");
+
+    assert!(
+        opening_1.verify(&page_1),
+        "The page must be valid for the opening"
+    );
+
+    session.call::<_, ()>(counter_id, "increment", &(), LIMIT)?;
+
+    let pages = session
+        .memory_pages(counter_id)
+        .expect("There must be memory pages for the contract");
+
+    let (page_2, opening_2) = pages
+        .map(mapper)
+        .next()
+        .expect("There must be at least one page");
+
+    assert!(
+        opening_2.verify(&page_2),
+        "The page must be valid for the opening"
+    );
+
+    assert!(
+        !opening_1.verify(&page_2),
+        "The page must be invalid for the opening"
+    );
+    assert!(
+        !opening_2.verify(&page_1),
+        "The page must be invalid for the opening"
+    );
+
     Ok(())
 }
