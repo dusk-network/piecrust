@@ -20,11 +20,10 @@ jobs:
 
   test:
     name: Make test
-    runs-on: ubuntu-latest
+    runs-on: core
     steps:
       - uses: actions/checkout@v3
       - uses: Swatinem/rust-cache@v2
-      - run: cargo install wasm-tools
       - run: rustup target add wasm32-unknown-unknown
       - run: rustup component add rust-src
       - name: Run `make test`
