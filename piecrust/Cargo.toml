@@ -47,6 +47,11 @@ path = "tests/crossover.rs"
 required-features = ["debug"]
 
 [[test]]
+name = "commit"
+path = "tests/commit.rs"
+required-features = ["debug"]
+
+[[test]]
 name = "debugger"
 path = "tests/debugger.rs"
 required-features = ["debug"]
