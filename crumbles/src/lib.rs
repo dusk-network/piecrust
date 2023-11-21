@@ -831,6 +831,8 @@ unsafe fn segfault_handler(
 mod tests {
     use super::*;
 
+    use rand::rngs::StdRng;
+    use rand::{Rng, SeedableRng};
     use std::thread;
 
     const N_PAGES: usize = 65536;
@@ -967,6 +969,84 @@ mod tests {
             slice,
             &[0; 2 * PAGE_SIZE],
             "Slice should be the zeros written afterwards"
+        );
+    }
+
+    #[test]
+    fn apply_revert_apply() {
+        const N_WRITES: usize = 64;
+        let mut rng = StdRng::seed_from_u64(0xDEAD_BEEF);
+
+        let mut mem = Mmap::new(N_PAGES, PAGE_SIZE)
+            .expect("Instantiating new memory should succeed");
+        let mut mem_alt = Mmap::new(N_PAGES, PAGE_SIZE)
+            .expect("Instantiating new memory should succeed");
+
+        // Snapshot both, make the same changes on both, and apply the changes.
+        mem.snap().expect("Snapshotting should succeed");
+        mem_alt.snap().expect("Snapshotting should succeed");
+
+        for _ in 0..N_WRITES {
+            let i = rng.gen_range(0..N_PAGES);
+            let byte = rng.gen();
+
+            mem[i] = byte;
+            mem_alt[i] = byte;
+        }
+
+        mem.apply().expect("Applying should succeed");
+        mem_alt.apply().expect("Applying should succeed");
+
+        // Snapshot one, make some changes, and revert it.
+        mem.snap().expect("Snapshotting should succeed");
+        for _ in 0..N_WRITES {
+            let i = rng.gen_range(0..N_PAGES);
+            let byte = rng.gen();
+            mem[i] = byte;
+        }
+        mem.revert().expect("Reverting should succeed");
+
+        // Snapshot both, make the same changes on both, and apply the changes.
+        mem.snap().expect("Snapshotting should succeed");
+        mem_alt.snap().expect("Snapshotting should succeed");
+
+        for _ in 0..N_WRITES {
+            let i = rng.gen_range(0..N_PAGES);
+            let byte = rng.gen();
+
+            mem[i] = byte;
+            mem_alt[i] = byte;
+        }
+
+        mem.apply().expect("Applying should succeed");
+        mem_alt.apply().expect("Applying should succeed");
+
+        mem.dirty_pages().zip(mem_alt.dirty_pages()).for_each(
+            |((dirty, clean, index), (alt_dirty, alt_clean, alt_index))| {
+                let hash_dirty = blake3::hash(dirty);
+                let hash_alt_dirty = blake3::hash(alt_dirty);
+
+                let hash_dirty = hex::encode(hash_dirty.as_bytes());
+                let hash_alt_dirty = hex::encode(hash_alt_dirty.as_bytes());
+
+                assert_eq!(
+                    hash_dirty, hash_alt_dirty,
+                    "Dirty state should be the same"
+                );
+
+                let hash_clean = blake3::hash(clean);
+                let hash_alt_clean = blake3::hash(alt_clean);
+
+                let hash_clean = hex::encode(hash_clean.as_bytes());
+                let hash_alt_clean = hex::encode(hash_alt_clean.as_bytes());
+
+                assert_eq!(
+                    hash_clean, hash_alt_clean,
+                    "Clean state should be the same"
+                );
+
+                assert_eq!(index, alt_index, "Index should be the same");
+            },
         );
     }
 }
