@@ -71,8 +71,8 @@ fn error_reverts_growth() -> Result<(), Error> {
     )?;
 
     let initial_len = session
-        .memory_len(&id)
-        .expect("The contract should be instantiated in this session");
+        .memory_len(id)
+        .expect("The contract should exist in this session");
 
     // The first call to `append_error` will result in a call to memory.grow,
     // which must be reverted in both the state, and the size of the memory.
@@ -94,11 +94,11 @@ fn error_reverts_growth() -> Result<(), Error> {
     assert_eq!(len, 0, "There should be nothing appended to the state");
 
     let final_len = session
-        .memory_len(&id)
-        .expect("The contract should be instantiated in this session");
+        .memory_len(id)
+        .expect("The contract should exist in this session");
     let final_len_err = session_err
-        .memory_len(&id)
-        .expect("The contract should be instantiated in this session");
+        .memory_len(id)
+        .expect("The contract should exist in this session");
 
     assert!(initial_len < final_len);
     assert_eq!(

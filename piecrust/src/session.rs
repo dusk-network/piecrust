@@ -5,7 +5,6 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 use std::borrow::Cow;
-use std::collections::btree_map::Entry;
 use std::collections::BTreeMap;
 use std::fmt::{Debug, Formatter};
 use std::mem;
@@ -92,7 +91,7 @@ struct SessionInner {
     current: ContractId,
 
     call_tree: CallTree,
-    instance_map: BTreeMap<ContractId, (*mut WrappedInstance, u64)>,
+    instances: BTreeMap<ContractId, *mut WrappedInstance>,
     debug: Vec<String>,
     data: SessionData,
 
@@ -146,7 +145,7 @@ impl Session {
         let inner = SessionInner {
             current: ContractId::uninitialized(),
             call_tree: CallTree::new(),
-            instance_map: BTreeMap::new(),
+            instances: BTreeMap::new(),
             debug: vec![],
             data,
             contract_session,
@@ -451,47 +450,35 @@ impl Session {
 
     /// Returns the current length of the memory of the given contract.
     ///
-    /// If the contract does not exist, or is otherwise not instantiated in this
-    /// session, it will return `None`.
-    pub fn memory_len(&self, contract_id: &ContractId) -> Option<usize> {
-        self.instance(contract_id)
-            .map(|instance| instance.mem_len())
+    /// If the contract does not exist, it will return `None`.
+    pub fn memory_len(
+        &mut self,
+        contract_id: ContractId,
+    ) -> Result<Option<usize>, Error> {
+        Ok(self
+            .inner
+            .contract_session
+            .contract(contract_id)
+            .map_err(|err| Error::PersistenceError(Arc::new(err)))?
+            .map(|data| data.memory.current_len))
     }
 
     pub(crate) fn instance<'a>(
         &self,
         contract_id: &ContractId,
     ) -> Option<&'a mut WrappedInstance> {
-        self.inner
-            .instance_map
-            .get(contract_id)
-            .map(|(instance, _)| {
-                // SAFETY: We guarantee that the instance exists since we're in
-                // control over if it is dropped in `pop`
-                unsafe { &mut **instance }
-            })
-    }
-
-    fn update_instance_count(&mut self, contract_id: ContractId, inc: bool) {
-        match self.inner.instance_map.entry(contract_id) {
-            Entry::Occupied(mut entry) => {
-                let (_, count) = entry.get_mut();
-                if inc {
-                    *count += 1
-                } else {
-                    *count -= 1
-                };
-            }
-            _ => unreachable!("map must have an instance here"),
-        };
+        self.inner.instances.get(contract_id).map(|instance| {
+            // SAFETY: We guarantee that the instance exists since we're in
+            // control over if it is dropped with the session.
+            unsafe { &mut **instance }
+        })
     }
 
     fn clear_stack_and_instances(&mut self) {
         self.inner.call_tree.clear();
 
-        while !self.inner.instance_map.is_empty() {
-            let (_, (instance, _)) =
-                self.inner.instance_map.pop_first().unwrap();
+        while !self.inner.instances.is_empty() {
+            let (_, instance) = self.inner.instances.pop_first().unwrap();
             unsafe {
                 let _ = Box::from_raw(instance);
             };
@@ -582,7 +569,7 @@ impl Session {
         contract: ContractId,
     ) -> Result<usize, Error> {
         let instance = self.new_instance(contract)?;
-        if self.inner.instance_map.get(&contract).is_some() {
+        if self.inner.instances.get(&contract).is_some() {
             panic!("Contract already in the stack: {contract:?}");
         }
 
@@ -591,7 +578,7 @@ impl Session {
         let instance = Box::new(instance);
         let instance = Box::leak(instance) as *mut WrappedInstance;
 
-        self.inner.instance_map.insert(contract, (instance, 1));
+        self.inner.instances.insert(contract, instance);
         Ok(mem_len)
     }
 
@@ -604,7 +591,6 @@ impl Session {
 
         match instance {
             Some(instance) => {
-                self.update_instance_count(contract_id, true);
                 self.inner.call_tree.push(CallTreeElem {
                     contract_id,
                     limit,
@@ -631,15 +617,11 @@ impl Session {
     }
 
     pub(crate) fn move_up_call_tree(&mut self, spent: u64) {
-        if let Some(element) = self.inner.call_tree.move_up(spent) {
-            self.update_instance_count(element.contract_id, false);
-        }
+        self.inner.call_tree.move_up(spent);
     }
 
     pub(crate) fn move_up_prune_call_tree(&mut self) {
-        if let Some(element) = self.inner.call_tree.move_up_prune() {
-            self.update_instance_count(element.contract_id, false);
-        }
+        self.inner.call_tree.move_up_prune();
     }
 
     pub(crate) fn revert_callstack(&mut self) -> Result<(), std::io::Error> {
@@ -730,6 +712,7 @@ impl Session {
                     };
                 }
                 self.move_up_prune_call_tree();
+                self.clear_stack_and_instances();
                 err
             })
             .map_err(Error::normalize)?;
@@ -748,6 +731,7 @@ impl Session {
                     io: Arc::new(err),
                 })?;
         }
+        self.clear_stack_and_instances();
 
         let mut call_tree = CallTree::new();
         mem::swap(&mut self.inner.call_tree, &mut call_tree);

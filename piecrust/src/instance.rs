@@ -88,6 +88,7 @@ impl WrappedInstance {
         contract: &WrappedContract,
         memory: Memory,
     ) -> Result<Self, Error> {
+        let mut memory = memory;
         let engine = session.engine().clone();
 
         let env = Env {
@@ -172,6 +173,9 @@ impl WrappedInstance {
         if arg_buf_ofs + ARGBUF_LEN >= memory.len() {
             return Err(Error::InvalidArgumentBuffer);
         }
+
+        // A memory is no longer new after one instantiation
+        memory.is_new = false;
 
         let wrapped = WrappedInstance {
             store,
