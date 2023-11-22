@@ -22,9 +22,8 @@ jobs:
     name: Make test
     runs-on: core
     steps:
-      - uses: actions/checkout@v3
-      - run: rustup self uninstall -y || true 
-      - uses: actions-rust-lang/setup-rust-toolchain@v1
+      - uses: actions/checkout@v4
+      - uses: dsherret/rust-toolchain-file@v1
       - run: rustup target add wasm32-unknown-unknown
       - run: rustup component add rust-src
       - name: Run `make test`
