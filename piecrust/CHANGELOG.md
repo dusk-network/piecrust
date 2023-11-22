@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.13.0] - 2023-11-22
+
 ## Added
 
 - Add `Session::memory_pages` allowing for inclusion  proofs of pages [#273]
@@ -331,7 +333,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [#93]: https://github.com/dusk-network/piecrust/issues/93
 
 <!-- VERSIONS -->
-[Unreleased]: https://github.com/dusk-network/piecrust/compare/piecrust-0.12.0...HEAD
+[Unreleased]: https://github.com/dusk-network/piecrust/compare/piecrust-0.13.0...HEAD
+[0.13.0]: https://github.com/dusk-network/piecrust/compare/piecrust-0.12.0...piecrust-0.13.0
 [0.12.0]: https://github.com/dusk-network/piecrust/compare/piecrust-0.11.0...piecrust-0.12.0
 [0.11.0]: https://github.com/dusk-network/piecrust/compare/piecrust-0.10.0...piecrust-0.11.0
 [0.10.0]: https://github.com/dusk-network/piecrust/compare/piecrust-0.9.3...piecrust-0.10.0
