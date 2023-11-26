@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- De-instantiate modules after call [#296]
+- Change `Session::memory_len` to return `Result<Option<usize>>`, and not
+  require a contract to be instantiated [#296]
+
+### Fixed
+
+- Fix inconsistent state root after erroring call [#296]
+
 ## [0.13.0] - 2023-11-22
 
 ## Added
@@ -304,6 +314,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [#234]: https://github.com/dusk-network/piecrust/pull/234
 
 <!-- ISSUES -->
+[#296]: https://github.com/dusk-network/piecrust/issues/296
 [#287]: https://github.com/dusk-network/piecrust/issues/287
 [#281]: https://github.com/dusk-network/piecrust/issues/281
 [#273]: https://github.com/dusk-network/piecrust/issues/273

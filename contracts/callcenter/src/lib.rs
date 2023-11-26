@@ -92,6 +92,11 @@ impl Callcenter {
         call_with_limit(contract, "spend", &(), points_limit)?;
         Ok(())
     }
+
+    /// Just panic.
+    pub fn panik(&self) {
+        panic!("panik");
+    }
 }
 
 /// Expose `Callcenter::query_counter()` to the host
@@ -158,4 +163,10 @@ unsafe fn delegate_transaction(arg_len: u32) -> u32 {
     wrap_call(arg_len, |(mod_id, rt): (ContractId, RawCall)| {
         STATE.delegate_transaction(mod_id, rt)
     })
+}
+
+/// Expose `Callcenter::panik()` to the host
+#[no_mangle]
+unsafe fn panik(arg_len: u32) -> u32 {
+    wrap_call(arg_len, |()| STATE.panik())
 }

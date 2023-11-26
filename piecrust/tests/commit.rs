@@ -232,6 +232,67 @@ fn multiple_commits() -> Result<(), Error> {
     Ok(())
 }
 
+#[test]
+fn root_equal_on_err() -> Result<(), Error> {
+    let vm = VM::ephemeral()?;
+
+    let mut session = vm.session(SessionData::builder())?;
+
+    let callcenter_id = session.deploy(
+        contract_bytecode!("callcenter"),
+        ContractData::builder(OWNER),
+        LIMIT,
+    )?;
+    let counter_id = session.deploy(
+        contract_bytecode!("counter"),
+        ContractData::builder(OWNER),
+        LIMIT,
+    )?;
+
+    let root = session.commit()?;
+
+    let mut session_after = vm.session(SessionData::builder().base(root))?;
+    let mut session_after_alt =
+        vm.session(SessionData::builder().base(root))?;
+
+    assert_eq!(
+        session_after.root(),
+        session_after_alt.root(),
+        "Roots should be equal at the beginning"
+    );
+
+    session_after
+        .call::<_, ()>(callcenter_id, "panik", &counter_id, LIMIT)
+        .expect_err("Calling with too little gas should error");
+
+    assert_eq!(
+        session_after.root(),
+        session_after_alt.root(),
+        "Roots should be equal immediately after erroring call"
+    );
+
+    session_after.call::<_, ()>(
+        callcenter_id,
+        "increment_counter",
+        &counter_id,
+        LIMIT,
+    )?;
+    session_after_alt.call::<_, ()>(
+        callcenter_id,
+        "increment_counter",
+        &counter_id,
+        LIMIT,
+    )?;
+
+    assert_eq!(
+        session_after.root(),
+        session_after_alt.root(),
+        "Roots should be equal after call"
+    );
+
+    Ok(())
+}
+
 fn increment_counter_and_commit(
     mut session: Session,
     id: ContractId,
