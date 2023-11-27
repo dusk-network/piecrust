@@ -1,6 +1,7 @@
 
 
 ##Introduction
+
 This tutorial assumes that you have a working Rust environment set up on your machine.
 We also assume some minimal working knowledge of the Rust programming language.
 
@@ -345,4 +346,106 @@ unsafe fn feed_num(arg_len: u32) -> u32 {
 Method `feed_num` in the above example uses the host call named `feed` in order to pass subsequent values of a collection (in this case simple
 integers) to a communication channel. Caller of this method has a mechanism which allows it to pass a mpsc channel and consume values produced
 by the contract.
+
+##Host Functions
+Contracts are "almost" regular Rust programs convertible to Web Assembly, which means, they do not use standard library, and do not use 
+input/output functions. Contracts also run in a so called "hosted" environment, which means that they have some host services available
+to them. Among those services there is a set of host functions they are allowed to call. Host functions are always available to contratcs, 
+and so far we have encountered a few of them, like the following:
+- wrap_call()
+- emit()
+- feed()
+
+There are more host functions available and several of them will be described in this section. For the beginning, we'd like to mention the following 
+host functions:
+- owner()
+- self_id()
+- host_query()
+
+First two of those methods belong to a group of so-called "metadata" methods, as they provide some information about the contract itself.
+`owner()` provides contract id of contract's owner, while `self_id()` provides an id of a contract itself.
+Sample contract utilizing these two host calls might look as follows:
+
+```rust
+#![no_std]
+
+use piecrust_uplink as uplink;
+use uplink::ContractId;
+
+pub struct Metadata;
+static mut STATE: Metadata = Metadata;
+
+impl Metadata {
+    pub fn read_owner(&self) -> [u8; 33] {
+        uplink::owner()
+    }
+    pub fn read_id(&self) -> ContractId {
+        uplink::self_id()
+    }
+}
+
+#[no_mangle]
+unsafe fn read_owner(arg_len: u32) -> u32 {
+    uplink::wrap_call(arg_len, |_: ()| STATE.read_owner())
+}
+#[no_mangle]
+unsafe fn read_id(arg_len: u32) -> u32 {
+    uplink::wrap_call(arg_len, |_: ()| STATE.read_id())
+}
+```
+As we can see, the host environment provides also some types, like in this example, `ContractId`.
+The last of the host functions we'd like to mention in this section is `host_query()`.
+`host_query()` is a universal function which allows contracts to call any function that was registered with the host
+before the contract was called. Let's say that we would like to perform hashing on the host side. We could write
+a hash function and register it with the host, so that subsequently we would be able to call it from
+within a contract. Let's say our hashing function is as follows:
+
+```rust
+fn hash(buf: &mut [u8], len: u32) -> u32 {
+    let a = unsafe { rkyv::archived_root::<Vec<u8>>(&buf[..len as usize]) };
+    let v: Vec<u8> = a.deserialize(&mut rkyv::Infallible).unwrap();
+    let hash = blake3::hash(&v);
+    buf[..32].copy_from_slice(&hash.as_bytes()[..]);
+    32
+}
+```
+
+Our `hash` function deserializes passed vector of data, hashes it and places the returned hash in the same 
+area where input parameter were passed. Return value is the length of a passed return data.
+
+Function to be registered as host function needs to be of type `HostQuery`, which is defined as follows:
+```rust
+pub trait HostQuery: Send + Sync + Fn(&mut [u8], u32) -> u32 {}
+```
+
+Registration of a host function will look as follows:
+```rust
+vm.register_host_query("hash", hash);
+```
+
+After our hash function is registered, we are able to call it from withing a contract as follows:
+```rust
+#![no_std]
+
+use alloc::vec::Vec;
+
+use piecrust_uplink as uplink;
+
+pub struct Hoster;
+static mut STATE: Hoster = Hoster;
+
+impl Hoster {
+    pub fn host_hash(&self, bytes: Vec<u8>) -> [u8; 32] {
+        uplink::host_query("hash", bytes)
+    }
+}
+
+#[no_mangle]
+unsafe fn host_hash(arg_len: u32) -> u32 {
+    uplink::wrap_call(arg_len, |num| STATE.host_hash(num))
+}
+```
+
+## ZK Proof Verification
+
 
