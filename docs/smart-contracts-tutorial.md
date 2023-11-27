@@ -268,3 +268,47 @@ mod hosted {
     }
 }
 ```
+As you can see, the code is much harder to understand and contains much more boilerplate code, including code
+for parameters passing, their deserialization and return values serialization, special derivations of data
+structures and more. You may wonder how was persistence implemented in Version 1.0, as there are no
+special calls related to persistence in this version either. In Version 1.0, contract state is passed in its
+entirety into each state changing method as an extra first parameter, similarly to how object-oriented languages
+pass instance reference to method calls. Upon state alteration, a state changing method returns the new state as a
+return value. State persistence is thus taken care of by the host.
+
+##Eventing
+
+In addition to querying or changing the contract state, a contract can also send events. Events are objects which hold
+a topic string as well as an attched piece of data. Events are stored by the host and can be queried by the
+caller of a method which generated events. If a contract has a need to inform a user about some operations 
+or facts encountered during the execution, and this information may or may not be consumed by the user - events
+are an ideal tool for that. Events have the advantage that they are not passed as return values of contracts.
+Let's have a look at a small contract which generates events:
+
+```
+#![no_std]
+
+use piecrust_uplink as uplink;
+
+pub struct Eventer;
+
+static mut STATE: Eventer = Eventer;
+
+impl Eventer {
+    pub fn emit_num(&mut self, num: u32) {
+        for i in 0..num {
+            uplink::emit("number", i);
+        }
+    }
+}
+
+#[no_mangle]
+unsafe fn emit_events(arg_len: u32) -> u32 {
+    uplink::wrap_call(arg_len, |num| STATE.emit_num(num))
+}
+```
+Method `emit_num` generates as many events as its argument tells it to do. The events do not need to be passed
+as return value, but rather are stored by the host and can optionally be queries later by the caller.
+This is a very convenient mechanism for passing lightweight and optional information to the user.
+
+
