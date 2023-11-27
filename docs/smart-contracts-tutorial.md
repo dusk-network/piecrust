@@ -1,0 +1,270 @@
+
+
+##Introduction
+This tutorial assumes that you have a working Rust environment set up on your machine.
+We also assume some minimal working knowledge of the Rust programming language.
+
+Dusk blockchain runs smart contracts written in Web Assembly.
+You can write a smart contract in any language that can be translated into Web Assembly,
+as long as the resulting Web Assembly program conforms to a simple set of requirements.
+This tutorial will focus on showing you how to write smart contracts for the Disk blockchain in Rusk.
+
+We will start with a very simple counter example and then we will move on to the description of what are crucial
+elements of that example, next we will generalize and show more complex mechanisms available for contracts
+like inter-contract calls, host calls, persistence and more.
+ 
+In order to write smart contract for a Dusk blockchain
+
+##Simple Counter Example
+
+For the beginning, let's create a simple contract example for a counter. The counter will keep a count, and allow for
+incrementing it by one, as well as for reading its current value. In other words, the counter contract will count the 
+number of times its increment method has been called, and will make this count available via a read method.
+As our contract is "almost" a normal Rusk program, let's create a new Rust cargo project in order to
+be able to write it and compile it.
+
+You can create new Rust library for our contract by issuing the following command:
+
+`cargo new --lib hello-dusk-contract`
+
+This command will create a small Rust library project in a folder named `hello-dusk-contract`.
+You can open this project using your favorite IDE or with a simple system editor.
+In folder `src` there is a file `lib.rs` with some sample test. Your can remove this generated content
+by clearing up this file and then you can start entering the contract.
+
+As our Rust contract will be translated to Web Assembly, we need to compile it without standard libraries,
+as they won't be available at our Dusk blockchain runtime. Hence, first line of our contract will be:
+
+`#![no_std]`
+
+Next, in order to hook up methods of our contract as methods which are visible to our Dusk Virtual Machine
+named PieCrust, we need to import it into our module via the standard Rust `use` declaration:
+
+`use piecrust-uplink as uplink;`
+
+Having this behind us, we can now focus on our counter functionality. Let's define our counter as a Rust
+structure as follows:
+
+```
+pub struct Counter {
+    value: i64,
+}
+```
+
+Value of our counter will be kept as `value` field in a `Counter` struct.
+As counter's value is our state, which needs to be preserved between contract methods' invocations,
+we need to instantiate our state as a global static object:
+
+```
+static mut STATE: Counter = Counter { value: 0 };
+```
+
+Now we have our STATE of type Counter, but we also need methods to manipulate it. At this moment
+we are at the realm of 'normal' Rust, there is nothing Dusk or blockchain-specific in the following code:
+
+```
+impl Counter {
+    /// Increment the value of the counter by 1
+    pub fn increment(&mut self) {
+        self.value = self.value + 1;
+    }
+}
+```
+
+We also need a method to read the counter value, so eventually our Counter methods implementation block
+will look as follows:
+
+```
+impl Counter {
+    /// Read the value of the counter
+    pub fn read_value(&self) -> i64 {
+        self.value
+    }
+
+    /// Increment the value of the counter by 1
+    pub fn increment(&mut self) {
+        let value += 1;
+        self.value = value;
+    }
+}
+```
+
+We created a Rust structure containing our state and two methods, one manipulating that state and the other
+querying the state. Now we need to expose our methods to the Dusk Virtual Machine (PieCrust) so that 
+it is able to "see" them and execute them when our contract is deployed. For this we need the following code:
+
+```
+#[no_mangle]
+unsafe fn increment(arg_len: u32) -> u32 {
+    uplink::wrap_call(arg_len, |_: ()| STATE.increment())
+}
+```
+
+Similarly, to expose the `read_value` method we need to following code:
+```
+#[no_mangle]
+unsafe fn read_value(arg_len: u32) -> u32 {
+    uplink::wrap_call(arg_len, |_: ()| STATE.read_value())
+}
+```
+
+And this is it, our contract is now ready. The `#[no_magle]` annotations are needed in order to turn off 
+the default Rust linker name mangling - here we want our names to be as they are, since they will be called
+via mechanisms outside of control of the linker. `uplink::wrap_call` takes care of all the boilerplate
+code needed to serialize/deserialize and pass arguments to and from our methods.
+As a result, our counter contract looks as follows:
+
+```
+#![no_std]
+
+use piecrust_uplink as uplink;
+
+pub struct Counter {
+    value: i64,
+}
+
+static mut STATE: Counter = Counter { value: 0xfc };
+
+impl Counter {
+    pub fn read_value(&self) -> i64 {
+        self.value
+    }
+
+    pub fn increment(&mut self) {
+        self.value += 1;
+    }
+}
+
+#[no_mangle]
+unsafe fn read_value(arg_len: u32) -> u32 {
+    uplink::wrap_call(arg_len, |_: ()| STATE.read_value())
+}
+
+#[no_mangle]
+unsafe fn increment(arg_len: u32) -> u32 {
+    uplink::wrap_call(arg_len, |_: ()| STATE.increment())
+}
+```
+
+You can now issue the following command and see if it compiles:
+
+`cargo build --release --target wams32-unknown-unknown`
+
+When you do it, you encounter an error stating that a `piecrust-uplink` dependency is missing.
+You need to enter the following line in the `[dependencies]` section of your Cargo.toml file, in order to alleviate
+this error:
+
+```
+[dependencies]
+piecrust-uplink = { version = "0.8", features = ["abi", "dlmalloc"] }
+```
+
+Now you should be able to compile successfully and after issuing a command:
+
+`find . -name *.wasm`
+
+you should be able to see a file named: `hello_dusk_contact.wasm`
+That is the result of our compilation which can now be deployed on the Dusk Blockchain. 
+
+
+##Contract State Persistence
+After trying out and looking at the above example, you may wonder, how is it possible that counter state
+is being persisted, although we did not do anything with the count value. Usually, smart contracts
+provide persistence in a form of special key-value maps, accessible via an api provided by the contract host, i.e.,
+its Virtual Machine. Here, we did not do anything to make the count persistent, yet it is being persistent
+and when we try out the contract by subsequently calling increment and read_value, we can see that the count value
+is correct. The answer to this question is that the entire memory of the contract gets persisted, along
+with contract data. Hence, we don't need to do anything special to make data persistent. As the data is in memory,
+it will be persisted along with the entire memory. A consequence of this is the fact, that you can use any data
+structure or data collection in you program, and it will be persisted. You don't need to limit yourself to
+a predefined set of types given to you by the blockchain runtime environment.
+
+##Comparison with Rusk-VM Version 1.0
+Now that you had a taste of how a counter example smart contract looks in PieCrust (a.k.a. Rusk-VM Version 2.0), 
+it is worth to have a look at a functionally equivalent example written for Rusk-VM Version 1.0.
+An example looks as follows:
+
+```
+#![cfg_attr(target_arch = "wasm32", no_std)]
+use canonical_derive::Canon;
+
+pub const READ_VALUE: u8 = 0;
+pub const INCREMENT: u8 = 0;
+
+#[derive(Clone, Canon, Debug)]
+pub struct Counter {
+    value: i32,
+}
+
+impl Counter {
+    pub fn new(value: i32) -> Self {
+        Counter {
+            value,
+        }
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+mod hosted {
+    use super::*;
+
+    use canonical::{Canon, CanonError, Sink, Source};
+    use dusk_abi::{ContractState, ReturnValue};
+
+    const PAGE_SIZE: usize = 1024 * 4;
+
+    impl Counter {
+        pub fn read_value(&self) -> i32 {
+            self.value
+        }
+
+        pub fn increment(&mut self) {
+            self.value += 1;
+        }
+    }
+
+    fn query(bytes: &mut [u8; PAGE_SIZE]) -> Result<(), CanonError> {
+        let mut source = Source::new(&bytes[..]);
+
+        let slf = Counter::decode(&mut source)?;
+
+        let qid = u8::decode(&mut source)?;
+        match qid {
+            READ_VALUE => {
+                let ret = slf.read_value();
+                let mut sink = Sink::new(&mut bytes[..]);
+                ReturnValue::from_canon(&ret).encode(&mut sink);
+                Ok(())
+            }
+            _ => panic!(""),
+        }
+    }
+
+    #[no_mangle]
+    fn q(bytes: &mut [u8; PAGE_SIZE]) {
+        let _ = query(bytes);
+    }
+
+    fn transaction(bytes: &mut [u8; PAGE_SIZE]) -> Result<(), CanonError> {
+        let mut source = Source::new(bytes);
+
+        let mut slf = Counter::decode(&mut source)?;
+        let tid = u8::decode(&mut source)?;
+        match tid {
+            INCREMENT => {
+                slf.increment();
+                let mut sink = Sink::new(&mut bytes[..]);
+                ContractState::from_canon(&slf).encode(&mut sink);
+                ReturnValue::from_canon(&()).encode(&mut sink);
+                Ok(())
+            }
+            _ => panic!(""),
+        }
+    }
+
+    #[no_mangle]
+    fn t(bytes: &mut [u8; PAGE_SIZE]) {
+        transaction(bytes).unwrap()
+    }
+}
+```
