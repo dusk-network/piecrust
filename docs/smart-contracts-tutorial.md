@@ -446,6 +446,53 @@ unsafe fn host_hash(arg_len: u32) -> u32 {
 }
 ```
 
-## ZK Proof Verification
+##ZK Proof Verification
+One of the host functions available for contracts is a function to verify Zero Knowledge proofs. A method withing a contract
+performing a proof verification could look as follows:
+
+```rust
+    fn assert_proof(
+        verifier_data: &[u8],
+        proof: &[u8],
+        public_inputs: &[PublicInput],
+    ) -> Result<(), Error> {
+        rusk_abi::verify_proof(verifier_data, proof, public_inputs)
+            .then_some(())
+            .ok_or(Error::ProofVerification)
+    }
+```
+
+In this way, contract is able to verify ZK proof without performing the verification by itself, but rather by delegating
+the work to the host.
+
+##Calling Other Contracts
+Contracts are allowed to call other contracts, as in the following example:
+
+```rust
+#![no_std]
+
+use piecrust_uplink as uplink;
+use piecrust_uplink::call_with_limit;
+use uplink::{wrap_call, ContractError, ContractId, RawCall, RawResult};
+pub struct Callcenter;
+
+/// State of the Callcenter contract
+static mut STATE: Callcenter = Callcenter;
+
+impl Callcenter {
+    pub fn increment_counter(&mut self, counter_id: ContractId) {
+        uplink::call(counter_id, "increment", &()).unwrap()
+    }
+}
+
+#[no_mangle]
+unsafe fn increment_counter(arg_len: u32) -> u32 {
+    wrap_call(arg_len, |counter_id| STATE.increment_counter(counter_id))
+}
+```
+Host function `call` makes it possible for the contract to call a method of a given contract (identified by its id). 
+The function accepts contract id, name of the function to be called, as well as function argument, 
+which in the above example is a unit type (argument is empty).
+
 
 
