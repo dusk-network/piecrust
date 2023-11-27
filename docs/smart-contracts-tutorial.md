@@ -45,7 +45,7 @@ named PieCrust, we need to import it into our module via the standard Rust `use`
 Having this behind us, we can now focus on our counter functionality. Let's define our counter as a Rust
 structure as follows:
 
-```
+```rust
 pub struct Counter {
     value: i64,
 }
@@ -55,14 +55,14 @@ Value of our counter will be kept as `value` field in a `Counter` struct.
 As counter's value is our state, which needs to be preserved between contract methods' invocations,
 we need to instantiate our state as a global static object:
 
-```
+```rust
 static mut STATE: Counter = Counter { value: 0 };
 ```
 
 Now we have our STATE of type Counter, but we also need methods to manipulate it. At this moment
 we are at the realm of 'normal' Rust, there is nothing Dusk or blockchain-specific in the following code:
 
-```
+```rust
 impl Counter {
     /// Increment the value of the counter by 1
     pub fn increment(&mut self) {
@@ -74,7 +74,7 @@ impl Counter {
 We also need a method to read the counter value, so eventually our Counter methods implementation block
 will look as follows:
 
-```
+```rust
 impl Counter {
     /// Read the value of the counter
     pub fn read_value(&self) -> i64 {
@@ -93,7 +93,7 @@ We created a Rust structure containing our state and two methods, one manipulati
 querying the state. Now we need to expose our methods to the Dusk Virtual Machine (PieCrust) so that 
 it is able to "see" them and execute them when our contract is deployed. For this we need the following code:
 
-```
+```rust
 #[no_mangle]
 unsafe fn increment(arg_len: u32) -> u32 {
     uplink::wrap_call(arg_len, |_: ()| STATE.increment())
@@ -101,7 +101,7 @@ unsafe fn increment(arg_len: u32) -> u32 {
 ```
 
 Similarly, to expose the `read_value` method we need to following code:
-```
+```rust
 #[no_mangle]
 unsafe fn read_value(arg_len: u32) -> u32 {
     uplink::wrap_call(arg_len, |_: ()| STATE.read_value())
@@ -114,7 +114,7 @@ via mechanisms outside of control of the linker. `uplink::wrap_call` takes care 
 code needed to serialize/deserialize and pass arguments to and from our methods.
 As a result, our counter contract looks as follows:
 
-```
+```rust
 #![no_std]
 
 use piecrust_uplink as uplink;
@@ -154,7 +154,7 @@ When you do it, you encounter an error stating that a `piecrust-uplink` dependen
 You need to enter the following line in the `[dependencies]` section of your Cargo.toml file, in order to alleviate
 this error:
 
-```
+```toml
 [dependencies]
 piecrust-uplink = { version = "0.8", features = ["abi", "dlmalloc"] }
 ```
@@ -184,7 +184,7 @@ Now that you had a taste of how a counter example smart contract looks in PieCru
 it is worth to have a look at a functionally equivalent example written for Rusk-VM Version 1.0.
 An example looks as follows:
 
-```
+```rust
 #![cfg_attr(target_arch = "wasm32", no_std)]
 use canonical_derive::Canon;
 
@@ -285,7 +285,7 @@ or facts encountered during the execution, and this information may or may not b
 are an ideal tool for that. Events have the advantage that they are not passed as return values of contracts.
 Let's have a look at a small contract which generates events:
 
-```
+```rust
 #![no_std]
 
 use piecrust_uplink as uplink;
@@ -307,8 +307,42 @@ unsafe fn emit_events(arg_len: u32) -> u32 {
     uplink::wrap_call(arg_len, |num| STATE.emit_num(num))
 }
 ```
-Method `emit_num` generates as many events as its argument tells it to do. The events do not need to be passed
-as return value, but rather are stored by the host and can optionally be queries later by the caller.
+Method `emit_num` generates as many events as its argument tells it to. Events do not need to be passed
+as return value, but rather are stored by the host and can optionally be queried later by the caller.
 This is a very convenient mechanism for passing lightweight and optional information to the user.
 
+##Feeder
+
+Passing return value from contract query method via its return value is fine for relatively small values or data structures,
+yet it is impractical for larger collections. The caller may want to process one collection element at a time, and for such
+scenario a feeder mechanism can be used. Feeder passes data via a dedicated data channel called mpsc from Rust's standard library
+(mpsc stands for multiple producer single consumer).
+As contract writer, you do not need to worry about setting up a mpsc channel, as you can use a provided host method instead.
+The following example shows a simple contract which utilizes a feeder:
+
+```rust
+#![no_std]
+
+use piecrust_uplink as uplink;
+
+pub struct Feeder;
+static mut STATE: Feeder = Feeder;
+
+impl Feeder {
+    pub fn feed_num(&self, num: u32) {
+        for i in 0..num {
+            uplink::feed(i);
+        }
+    }
+}
+
+#[no_mangle]
+unsafe fn feed_num(arg_len: u32) -> u32 {
+    uplink::wrap_call(arg_len, |num| STATE.feed_num(num))
+}
+```
+
+Method `feed_num` in the above example uses the host call named `feed` in order to pass subsequent values of a collection (in this case simple
+integers) to a communication channel. Caller of this method has a mechanism which allows it to pass a mpsc channel and consume values produced
+by the contract.
 
