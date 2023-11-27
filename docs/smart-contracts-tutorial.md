@@ -8,14 +8,12 @@ We also assume some minimal working knowledge of the Rust programming language.
 Dusk blockchain runs smart contracts written in Web Assembly.
 You can write a smart contract in any language that can be translated into Web Assembly,
 as long as the resulting Web Assembly program conforms to a simple set of requirements.
-This tutorial will focus on showing you how to write smart contracts for the Disk blockchain in Rusk.
+This tutorial will focus on showing you how to write smart contracts for the Disk blockchain in Rust.
 
-We will start with a very simple counter example and then we will move on to the description of what are crucial
-elements of that example, next we will generalize and show more complex mechanisms available for contracts
+We will start with a very simple counter example, and then we will move on to describing the 
+elements of that example. After that, we will generalize and show more complex mechanisms available for contracts
 like inter-contract calls, host calls, persistence and more.
  
-In order to write smart contract for a Dusk blockchain
-
 ##Simple Counter Example
 
 For the beginning, let's create a simple contract example for a counter. The counter will keep a count, and allow for
