@@ -52,6 +52,27 @@ functionality on the host side is available, it should be used by the contract r
 This applies mostly to cryptographic and ZK-related functions, which are very computationally intense. You as a reader
 are encouraged to get familiar with methods provided by the host and to use them.
 
+Contracts encompass  transactions, which mutate state, and queries, which provide return values either directly or 
+via feeder. There is one more mechanism which can be used to obtain lightweight feedback information from contracts,
+this mechanism is event. Events can be emitted by both queries and transactions, and they can be processed by
+query or transaction caller after the call is finished. Events are very useful for triggering some actions on
+a caller side. In this tutorial we will cover only sending events, as processing events belongs to the calling side
+of the smart contracts' domain.
+
+While writing contracts, it is beneficial to be aware how parameters are passed back and forth to and from queries, 
+and to transactions. It is not critical to know the very details, as the details are covered by very useful host
+methods provided, yet it is good to have a general idea. Every smart contract, when deployed and run, has a 
+argument passing area in memory, called `A` (at the time of writing the size of A is one page (64kB)).
+When calling query or transaction, i.e., a function exported by the smart contract, arguments are serialized
+by the calling side and the result of serialization is placed in the buffer A. Once arguments are in the buffer, 
+the call to query or transaction is being made, and the only actual argument to the smart contract function called
+is the length of the data in the buffer A. In other words, only a 32 bit number is actually passed to the function,
+while the real function argument is in buffer A. The same happens upon return from a query, what is actually being
+passed is the length of the data in buffer A, while the real return value is stored in buffer A. This technique
+is hidden from the contract writer, as host methods `wrap_call` takes care of all the details. Should you ever
+wonder about a strange signature of functions declared under the `#[no_magle]` annotation, this is the explanation
+for it.
+
 We will start with a very simple counter example, and then we will move on to describing the 
 elements of that example. After that, we will generalize and show more complex mechanisms available for contracts
 like inter-contract calls, host calls, persistence and more.
