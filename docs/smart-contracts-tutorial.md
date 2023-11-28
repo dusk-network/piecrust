@@ -1,14 +1,56 @@
-
+##Preface
+This tutorial will focus on showing you how to write smart contracts for the Dusk blockchain in Rust.
+It focuses on the contracts themselves and does not explain how to call the contracts from other tools and does
+not explain how to deploy a contract.
+(It does explain how to make inter-contract calls though).
+This tutorial focuses on contract writing.
+To follow this tutorial it is recommended that you have a working Rust environment set up on your machine,
+so that you can compile the samples provided.
+We assume reader's moderate working knowledge of the Rust programming language.
 
 ##Introduction
-
-This tutorial assumes that you have a working Rust environment set up on your machine.
-We also assume some minimal working knowledge of the Rust programming language.
-
-Dusk blockchain runs smart contracts written in Web Assembly.
-You can write a smart contract in any language that can be translated into Web Assembly,
+Dusk blockchain runs smart contracts compiled into Web Assembly or written as Web Assembly.
+Therefore, you can write a smart contract in any language that can be translated into Web Assembly,
 as long as the resulting Web Assembly program conforms to a simple set of requirements.
-This tutorial will focus on showing you how to write smart contracts for the Disk blockchain in Rust.
+
+Smart contracts are executed by the Dusk Virtual Machine (PieCrust) which keeps contract's bytecode, its state,
+and on demand is able to create a runtime environment and execute contract's methods.
+There are two kinds of methods:
+- queries
+- transactions
+
+Queries do not change contract's state, yet are able to return data (either state data or some other data).
+Transactions do change contract's state, yet are not able to return data.
+
+At this point it is important to understand the concept of state. By a state we mean any data that is kept
+by contract in a persistent manner. As we are in a context of blockchain, our state is global. Given contract
+has only one state globally at a given time, and this state is maintained by all nodes operating the Dusk blockchain.
+Smart contract has access to its state and can provide values of it or a state in its entirety, if that is
+practical, via queries. On the other hand, contract's transactions allow the state to be mutated. State
+lives in a distributed ledger and its history is immutable, yet transactions make this history move forward. Hence, 
+after executing a transaction we obtain a new state, in a sense, that state history has been advanced one step
+ahead. All previous states are preserved.
+Getting back to not-changing-the-state queries: there are two ways queries can return value to the caller:
+- by the return value
+- via the feeder
+
+Return value is a bit similar to a regular programming language function return value. We have an argument passing
+buffer which will contain data returned, and we also pass its length.
+For collections and larger size data such way of passing return value is less practical, in such cases
+we may utilize a feeder. Feeder is based on Rust mcsp (mutiple producer single consumer) channel, and allows query
+caller to successively consume data passed to the feeder by the contract method. More about feeder in a section below.
+
+Calling smart contracts' queries and transaction methods is not free. Caller of contract's methods needs to
+pay gas in order for the methods to be executed. As we are not focusing in this tutorial on the caller's side, 
+we do not deal gas here, except a bit when we discuss inter-contract methods. Nevertheless, you as a smart contract writer
+need to be aware that execution of every instruction costs real money and that you need to conserve computational 
+power spent as much as possible. That is why it is important to understand well the concept of hosting and host methods
+which are provided for the contract to be called. Smart contracts run in an environment called host. Host provides
+a set of methods to be called by the contracts, some of which can be used to conserve computational power spent by
+contracts. Performing the same function on host is always cheaper than performing it by the contract. Hence, if some
+functionality on the host side is available, it should be used by the contract rather than duplicated by it.
+This applies mostly to cryptographic and ZK-related functions, which are very computationally intense. You as a reader
+are encouraged to get familiar with methods provided by the host and to use them.
 
 We will start with a very simple counter example, and then we will move on to describing the 
 elements of that example. After that, we will generalize and show more complex mechanisms available for contracts
