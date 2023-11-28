@@ -470,11 +470,9 @@ Contracts are allowed to call other contracts, as in the following example:
 #![no_std]
 
 use piecrust_uplink as uplink;
-use piecrust_uplink::call_with_limit;
-use uplink::{wrap_call, ContractError, ContractId, RawCall, RawResult};
-pub struct Callcenter;
+use uplink::ContractId;
 
-/// State of the Callcenter contract
+pub struct Callcenter;
 static mut STATE: Callcenter = Callcenter;
 
 impl Callcenter {
@@ -491,6 +489,31 @@ unsafe fn increment_counter(arg_len: u32) -> u32 {
 Host function `call` makes it possible for the contract to call a method of a given contract (identified by its id). 
 The function accepts contract id, name of the function to be called, as well as function argument, 
 which in the above example is a unit type (argument is empty).
+There is also another variant of the host `call()` function named `call_with_limit()`, which in addition
+to contract id, method name and method argument, also accepts a limit value of gas to be spent by the given call.
 
+##Inserting Debugging Statements
+Contracts, being Web Assembly modules, running in a Virtual Machine sandbox, are not allowed to perform
+any input/output operations. Sometimes it is needed, especially for debugging purposes, for the contract
+to print a message on the console. For this purpose, a host macro named `debug!` has been provided.
+In the following example, contract's method issues a debugging statement:
 
+```rust
+pub fn debug(&self, string: alloc::string::String) {
+    uplink::debug!("Message from a smart contract: {}", string);
+}
+```
+
+##Panicking
+Sometimes it is necessary for a contract to panic, especially if some critical check of arguments or state
+failed and there is no point to continue. Host macro named `panic!` is provided for this very purpose.
+In the following example, contract's method panics:
+
+```rust
+pub fn check_funds(&self) {
+    if self.funds <= 0 {
+        uplink::panic!("Out of funds");
+    }
+}
+```
 
