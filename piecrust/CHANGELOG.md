@@ -14,8 +14,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Change `Session::memory_len` to return `Result<Option<usize>>`, and not
   require a contract to be instantiated [#296]
 
+### Removed
+
+- Remove `once_cell` dependency
+
 ### Fixed
 
+- Fix improper use of mach_ports
 - Fix inconsistent state root after erroring call [#296]
 
 ## [0.13.0] - 2023-11-22
