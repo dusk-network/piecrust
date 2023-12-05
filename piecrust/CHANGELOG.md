@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Upgrade `dusk-wasmtime` to version `15`
 - De-instantiate modules after call [#296]
 - Change `Session::memory_len` to return `Result<Option<usize>>`, and not
   require a contract to be instantiated [#296]

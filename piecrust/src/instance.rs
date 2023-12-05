@@ -287,17 +287,11 @@ impl WrappedInstance {
     }
 
     pub fn set_remaining_points(&mut self, limit: u64) {
-        let remaining = self.store.fuel_remaining().expect("Fuel is enabled");
-        self.store
-            .consume_fuel(remaining)
-            .expect("Consuming all fuel should succeed");
-        self.store
-            .add_fuel(limit)
-            .expect("Adding fuel should succeed");
+        self.store.set_fuel(limit).expect("Fuel is enabled");
     }
 
     pub fn get_remaining_points(&mut self) -> u64 {
-        self.store.fuel_remaining().expect("Fuel should be enabled")
+        self.store.get_fuel().expect("Fuel is enabled")
     }
 
     pub fn is_function_exported<N: AsRef<str>>(&mut self, name: N) -> bool {
