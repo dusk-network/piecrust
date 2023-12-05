@@ -78,11 +78,20 @@ fn config() -> Config {
 /// [`session`]: VM::session
 /// [`Deletions`]: VM::delete_commit
 /// [`sync_thread`]: VM::sync_thread
-#[derive(Debug)]
 pub struct VM {
-    config: Config,
+    engine: Engine,
     host_queries: HostQueries,
     store: ContractStore,
+}
+
+impl Debug for VM {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.debug_struct("VM")
+            .field("config", self.engine.config())
+            .field("host_queries", &self.host_queries)
+            .field("store", &self.store)
+            .finish()
+    }
 }
 
 impl VM {
@@ -101,11 +110,11 @@ impl VM {
             "Configuration should be valid since its set at compile time",
         );
 
-        let store = ContractStore::new(engine, root_dir)
+        let store = ContractStore::new(engine.clone(), root_dir)
             .map_err(|err| PersistenceError(Arc::new(err)))?;
 
         Ok(Self {
-            config,
+            engine,
             host_queries: HostQueries::default(),
             store,
         })
@@ -128,11 +137,11 @@ impl VM {
             "Configuration should be valid since its set at compile time",
         );
 
-        let store = ContractStore::new(engine, tmp)
+        let store = ContractStore::new(engine.clone(), tmp)
             .map_err(|err| PersistenceError(Arc::new(err)))?;
 
         Ok(Self {
-            config,
+            engine,
             host_queries: HostQueries::default(),
             store,
         })
@@ -171,7 +180,7 @@ impl VM {
             _ => self.store.genesis_session(),
         };
         Ok(Session::new(
-            self.config.clone(),
+            self.engine.clone(),
             contract_session,
             self.host_queries.clone(),
             data,

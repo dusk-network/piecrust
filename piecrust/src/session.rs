@@ -11,8 +11,7 @@ use std::mem;
 use std::sync::{mpsc, Arc};
 
 use bytecheck::CheckBytes;
-use dusk_wasmtime::{Config, Engine, LinearMemory, MemoryCreator, MemoryType};
-use once_cell::sync::OnceCell;
+use dusk_wasmtime::{Engine, LinearMemory, MemoryCreator, MemoryType};
 use piecrust_uplink::{ContractId, Event, ARGBUF_LEN, SCRATCH_BUF_BYTES};
 use rkyv::ser::serializers::{
     BufferScratch, BufferSerializer, CompositeSerializer,
@@ -81,11 +80,6 @@ impl Drop for Session {
     }
 }
 
-fn dummy_engine() -> Engine {
-    static DUMMY_ENGINE: OnceCell<Engine> = OnceCell::new();
-    DUMMY_ENGINE.get_or_init(Engine::default).clone()
-}
-
 #[derive(Debug)]
 struct SessionInner {
     current: ContractId,
@@ -137,7 +131,7 @@ unsafe impl MemoryCreator for Session {
 
 impl Session {
     pub(crate) fn new(
-        mut config: Config,
+        engine: Engine,
         contract_session: ContractSession,
         host_queries: HostQueries,
         data: SessionData,
@@ -159,11 +153,12 @@ impl Session {
         let inner = Box::leak(Box::new(inner));
 
         let mut session = Self {
-            engine: dummy_engine(),
+            engine: engine.clone(),
             inner,
             original: true,
         };
 
+        let mut config = engine.config().clone();
         config.with_host_memory(Arc::new(session.clone()));
 
         session.engine = Engine::new(&config)
