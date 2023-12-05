@@ -18,9 +18,9 @@ contracts: setup-compiler ## Build example contracts
 	@contracts/c-example/build.sh
 	@find target/wasm64-unknown-unknown/release -maxdepth 1 -name "*.wasm" \
 	    | xargs -I % basename % \
-	    | xargs -I % wasm-tools strip -a \
+	    | xargs -I % ./scripts/strip.sh \
 	 	          target/wasm64-unknown-unknown/release/% \
-	 	          -o target/stripped/%
+	 	          target/stripped/%
 
 test: contracts cold-reboot assert-counter-contract-small ## Run all tests
 	@cargo test \
