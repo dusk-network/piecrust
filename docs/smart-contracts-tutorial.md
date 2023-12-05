@@ -454,10 +454,7 @@ pub fn check_funds(&self) {
 ```
 
 ## Constructor and Init
-It is possible to export a special contract methods named `init()`. Such methods will be called automatically when contract is deployed.
-The main purpose of such a method is to allow contract state initialization that would happen before the contract is operational and ready to receive calls.
-Method `init()` accepts a single argument of any serializable type. That argument will be passed to the init method by code which deploys the contract.
-In the following example, we can see a contract with an `init()` method:
+It is possible to export a special contract method named `init()` which can perform contact's initialization of any kind. Such method will be called automatically when the contract is deployed. The main intention behind method `init()` is to allow contracts to initialize their state at a time before the contract is operational and ready to receive calls. Method `init()` accepts a single argument of any serializable type. That argument will be passed to the init method by code which performs the deployment of the contract. In the following example, we can see a contract with an `init()` method:
 
 ```rust
 #![no_std]
@@ -492,9 +489,7 @@ unsafe fn init(arg_len: u32) -> u32 {
 }
 ```
 
-Method `init()` looks like any contract method, and it could do anything, not only initialize contract's state. 
-What is special about this method is the fact that the host will detect if method `init()` is exported, and if so, it will call it when when the contract is deployed.
-Let's have a look at how deployment of the above contract could be implemented:
+Method `init()` looks like any contract method, and it could do anything other methods can do, it is not limited to only initializing contract's state. What is special about this method is the fact that the host will detect if it is exported, and it will call it when when the contract is deployed. Let's have a look at how the deployment of the such contract could be implemented:
 
 ```rust
 fn deploy_contract_with_constrtor() -> Result<(), Error> {
@@ -510,7 +505,4 @@ fn deploy_contract_with_constrtor() -> Result<(), Error> {
     )?;
 }
 ```
-As we can see, method `deploy()` accepts an argument of type `Into<ContractData>`, so any object convertible to ContractData will be accepted.
-ContractData, on the other hand, contains a field named `constuctor_arg`, which is optional, but when set, will be used as an argument to the
-`init()` method of our contract. Hence, we can pass data from deployment code, like a contract deployment tool or a wallet, to contract state.
-Note that in the above example obligatory argument `owner` also had to be provided.
+As we can see, method `deploy()` accepts an argument of type `Into<ContractData>`, so any object convertible to ContractData will be accepted. ContractData, on the other hand, contains a field named `constuctor_arg`, which is optional, but when set, will be used as an argument to the `init()` method of our contract. In effect, we are able to pass data from deployment code, like a contract deployment tool or a wallet, to contract state. Note that in the above example obligatory argument `owner` also had to be provided.
