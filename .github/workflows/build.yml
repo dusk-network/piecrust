@@ -38,14 +38,5 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dsherret/rust-toolchain-file@v1
-      - run: rustup target add wasm32-unknown-unknown
-      - run: rustup component add rust-src
-
-      - run: sudo apt update && sudo apt install -y clang lld
-        if: ${{ contains(matrix.target, 'linux') }}
-
-      - run: brew install llvm
-        if: ${{ contains(matrix.target, 'apple') }}
-
       - name: Run `make test`
         run: make test

@@ -16,7 +16,7 @@ fn out_of_bounds() -> Result<(), Error> {
     let mut session = vm.session(SessionData::builder())?;
 
     let c_example_id = session.deploy(
-        contract_bytecode!("c-example"),
+        contract_bytecode!("c_example"),
         ContractData::builder(OWNER),
         LIMIT,
     )?;

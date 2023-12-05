@@ -15,7 +15,6 @@ contracts: setup-compiler ## Build example contracts
 	  -Z build-std=core,alloc \
 	  --target wasm64-unknown-unknown
 	@mkdir -p target/stripped
-	@contracts/c-example/build.sh
 	@find target/wasm64-unknown-unknown/release -maxdepth 1 -name "*.wasm" \
 	    | xargs -I % basename % \
 	    | xargs -I % ./scripts/strip.sh \
