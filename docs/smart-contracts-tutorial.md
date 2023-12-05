@@ -452,3 +452,65 @@ pub fn check_funds(&self) {
     }
 }
 ```
+
+## Constructor and Init
+It is possible to export a special contract methods named `init()`. Such methods will be called automatically when contract is deployed.
+The main purpose of such a method is to allow contract state initialization that would happen before the contract is operational and ready to receive calls.
+Method `init()` accepts a single argument of any serializable type. That argument will be passed to the init method by code which deploys the contract.
+In the following example, we can see a contract with an `init()` method:
+
+```rust
+#![no_std]
+use piecrust_uplink as uplink;
+
+pub struct State {
+    value: u64,
+}
+
+impl State {
+    pub fn init(&mut self, value: u64) {
+        self.value = value;
+    }
+}
+
+static mut STATE: State = State{ value: 0u64 };
+
+impl State {
+    pub fn read_value(&self) -> u64 {
+        self.value
+    }
+}
+
+#[no_mangle]
+unsafe fn read_value(arg_len: u32) -> u32 {
+    uplink::wrap_call(arg_len, |_: ()| STATE.read_value())
+}
+
+#[no_mangle]
+unsafe fn init(arg_len: u32) -> u32 {
+    uplink::wrap_call(arg_len, |arg: u8| STATE.init(arg))
+}
+```
+
+Method `init()` looks like any contract method, and it could do anything, not only initialize contract's state. 
+What is special about this method is the fact that the host will detect if method `init()` is exported, and if so, it will call it when when the contract is deployed.
+Let's have a look at how deployment of the above contract could be implemented:
+
+```rust
+fn deploy_contract_with_constrtor() -> Result<(), Error> {
+    let vm = VM::ephemeral()?;
+    const OWNER: [u8; 32] = [7u8; 32];
+
+    let mut session = vm.session(SessionData::builder())?;
+
+    let id = session.deploy(
+        contract_bytecode!("constructor_example_contract"),
+        ContractData::builder(OWNER).constructor_arg(&0xcafeu64),
+        LIMIT,
+    )?;
+}
+```
+As we can see, method `deploy()` accepts an argument of type `Into<ContractData>`, so any object convertible to ContractData will be accepted.
+ContractData, on the other hand, contains a field named `constuctor_arg`, which is optional, but when set, will be used as an argument to the
+`init()` method of our contract. Hence, we can pass data from deployment code, like a contract deployment tool or a wallet, to contract state.
+Note that in the above example obligatory argument `owner` also had to be provided.
