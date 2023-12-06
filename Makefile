@@ -1,7 +1,7 @@
 help: ## Display this help screen
 	@grep -h -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-15s\033[0m %s\n", $$1, $$2}'
 
-COMPILER_VERSION=v0.0.0
+COMPILER_VERSION=v0.1.0
 
 setup-compiler: ## Setup the Dusk Contract Compiler
 	@./scripts/setup-compiler.sh $(COMPILER_VERSION)
@@ -15,12 +15,11 @@ contracts: setup-compiler ## Build example contracts
 	  -Z build-std=core,alloc \
 	  --target wasm64-unknown-unknown
 	@mkdir -p target/stripped
-	@contracts/c-example/build.sh
 	@find target/wasm64-unknown-unknown/release -maxdepth 1 -name "*.wasm" \
 	    | xargs -I % basename % \
-	    | xargs -I % wasm-tools strip -a \
+	    | xargs -I % ./scripts/strip.sh \
 	 	          target/wasm64-unknown-unknown/release/% \
-	 	          -o target/stripped/%
+	 	          target/stripped/%
 
 test: contracts cold-reboot assert-counter-contract-small ## Run all tests
 	@cargo test \

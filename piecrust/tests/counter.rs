@@ -68,7 +68,7 @@ fn call_through_c() -> Result<(), Error> {
         LIMIT,
     )?;
     let c_example_id = session.deploy(
-        contract_bytecode!("c-example"),
+        contract_bytecode!("c_example"),
         ContractData::builder(OWNER),
         LIMIT,
     )?;

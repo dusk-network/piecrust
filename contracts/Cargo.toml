@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "box",
+    "c-example",
     "callcenter",
     "constructor",
     "counter",
