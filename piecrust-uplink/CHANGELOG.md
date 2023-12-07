@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Add `fn_name` and `fn_arg` as an argument to `call_raw` and `call_raw_with_limit` [#301]
+
+### Removed
+
+- Remove `raw_call` as an argument of `call_raw` and `call_raw_with_limit` [#301]
+- Remove `RawCall` and `RawResult` [#301]
+
 ## [0.8.0] - 2023-10-11
 
 ### Added
@@ -120,6 +129,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - First `piecrust-uplink` release
 
 <!-- ISSUES -->
+[#301]: https://github.com/dusk-network/piecrust/issues/301
 [#271]: https://github.com/dusk-network/piecrust/issues/271
 [#268]: https://github.com/dusk-network/piecrust/issues/268
 [#243]: https://github.com/dusk-network/piecrust/issues/243
