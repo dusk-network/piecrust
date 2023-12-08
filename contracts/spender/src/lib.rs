@@ -52,7 +52,7 @@ impl Spender {
     }
 
     /// Spend all points that are given to the contract.
-    pub fn spend() {
+    pub fn spend(&self) {
         panic!("I like spending");
     }
 }
@@ -61,4 +61,10 @@ impl Spender {
 #[no_mangle]
 unsafe fn get_limit_and_spent(a: u32) -> u32 {
     uplink::wrap_call(a, |_: ()| STATE.get_limit_and_spent())
+}
+
+/// Expose `Spender::spend()` to the host
+#[no_mangle]
+unsafe fn spend(a: u32) -> u32 {
+    uplink::wrap_call(a, |_: ()| STATE.spend())
 }

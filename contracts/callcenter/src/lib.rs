@@ -100,8 +100,9 @@ impl Callcenter {
         contract: ContractId,
         points_limit: u64,
     ) -> Result<(), ContractError> {
-        call_with_limit(contract, "spend", &(), points_limit)?;
-        Ok(())
+        let res = call_with_limit(contract, "spend", &(), points_limit);
+        uplink::debug!("spend call: {res:?}");
+        res
     }
 
     /// Just panic.
