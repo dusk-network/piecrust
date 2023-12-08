@@ -154,14 +154,14 @@ where
         )
     };
 
-    if ret_len < 0 {
-        return Err(ContractError::from_code(ret_len));
-    }
-
     with_arg_buf(|buf| {
-        let slice = &buf[..ret_len as usize];
-        let ret = unsafe { archived_root::<Ret>(slice) };
-        Ok(ret.deserialize(&mut Infallible).expect("Infallible"))
+        if ret_len < 0 {
+            Err(ContractError::from_parts(ret_len, buf))
+        } else {
+            let slice = &buf[..ret_len as usize];
+            let ret = unsafe { archived_root::<Ret>(slice) };
+            Ok(ret.deserialize(&mut Infallible).expect("Infallible"))
+        }
     })
 }
 
@@ -209,11 +209,13 @@ pub fn call_raw_with_limit(
         )
     };
 
-    if ret_len < 0 {
-        return Err(ContractError::from_code(ret_len));
-    }
-
-    with_arg_buf(|buf| Ok(buf[..ret_len as usize].to_vec()))
+    with_arg_buf(|buf| {
+        if ret_len < 0 {
+            Err(ContractError::from_parts(ret_len, buf))
+        } else {
+            Ok(buf[..ret_len as usize].to_vec())
+        }
+    })
 }
 
 /// Returns data made available by the host under the given name. The type `D`

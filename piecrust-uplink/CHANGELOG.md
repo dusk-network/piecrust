@@ -9,10 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Add `ContractError::to_parts` and `ContractError::from_parts` functions [#301]
 - Add `fn_name` and `fn_arg` as an argument to `call_raw` and `call_raw_with_limit` [#301]
+
+### Changed
+
+- Rename `ContractError::Other` to `ContractError::Unknown` [#301]
+- Rename `ContractError::OutOfGas` to `ContractError::OutOfPoints` [#301]
+- Change `Display` for `ContractError` to display messages [#301]
+- Change `ContractError` variants to be CamelCase [#301]
 
 ### Removed
 
+- Remove `ContractError::from_code` function [#301]
 - Remove `raw_call` as an argument of `call_raw` and `call_raw_with_limit` [#301]
 - Remove `RawCall` and `RawResult` [#301]
 
