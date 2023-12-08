@@ -45,6 +45,37 @@ pub fn points_get_used() -> Result<(), Error> {
 }
 
 #[test]
+pub fn panic_msg_gets_through() -> Result<(), Error> {
+    let vm = VM::ephemeral()?;
+
+    let mut session = vm.session(SessionData::builder())?;
+
+    let spender_id = session.deploy(
+        contract_bytecode!("spender"),
+        ContractData::builder(OWNER),
+        LIMIT,
+    )?;
+    let callcenter_id = session.deploy(
+        contract_bytecode!("callcenter"),
+        ContractData::builder(OWNER),
+        LIMIT,
+    )?;
+
+    let receipt = session.call::<_, Result<(), ContractError>>(
+        callcenter_id,
+        "call_spend_with_limit",
+        &(spender_id, 1000u64),
+        LIMIT,
+    )?;
+
+    assert!(
+        matches!(receipt.data, Err(ContractError::Panic(x)) if x == "I like spending")
+    );
+
+    Ok(())
+}
+
+#[test]
 pub fn fails_with_out_of_points() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 
