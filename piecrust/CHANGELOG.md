@@ -7,8 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Use `ContractError::to_parts` to write error messages to the argument buffer [#301]
+
 ### Changed
 
+- Rename `Error::ContractPanic` to `Error::Panic` to be more clear that the entire
+  execution panicked [#301]
 - Upgrade `dusk-wasmtime` to version `15`
 - De-instantiate modules after call [#296]
 - Change `Session::memory_len` to return `Result<Option<usize>>`, and not
@@ -320,6 +326,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [#234]: https://github.com/dusk-network/piecrust/pull/234
 
 <!-- ISSUES -->
+[#301]: https://github.com/dusk-network/piecrust/issues/301
 [#296]: https://github.com/dusk-network/piecrust/issues/296
 [#287]: https://github.com/dusk-network/piecrust/issues/287
 [#281]: https://github.com/dusk-network/piecrust/issues/281

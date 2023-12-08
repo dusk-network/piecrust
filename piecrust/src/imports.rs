@@ -264,7 +264,11 @@ pub(crate) fn c(
             env.move_up_prune_call_tree();
             instance.set_remaining_points(caller_remaining - callee_limit);
 
-            ContractError::from(err).into()
+            let c_err = ContractError::from(err);
+            instance.with_arg_buf_mut(|buf| {
+                c_err.to_parts(buf);
+            });
+            c_err.into()
         }
     };
 
@@ -378,7 +382,7 @@ fn panic(fenv: Caller<Env>, arg_len: u32) -> WasmtimeResult<()> {
             Err(err) => return Err(Error::Utf8(err)),
         };
 
-        Err(Error::ContractPanic(msg.to_owned()))
+        Err(Error::Panic(msg.to_owned()))
     })?)
 }
 

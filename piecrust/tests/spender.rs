@@ -69,14 +69,26 @@ pub fn fails_with_out_of_points() -> Result<(), Error> {
 pub fn contract_sets_call_limit() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 
-    let mut session = vm.session(SessionData::builder())?;
+    let mut session_1st = vm.session(SessionData::builder())?;
+    let mut session_2nd = vm.session(SessionData::builder())?;
 
-    let spender_id = session.deploy(
+    session_1st.deploy(
         contract_bytecode!("spender"),
         ContractData::builder(OWNER),
         LIMIT,
     )?;
-    let callcenter_id = session.deploy(
+    session_1st.deploy(
+        contract_bytecode!("callcenter"),
+        ContractData::builder(OWNER),
+        LIMIT,
+    )?;
+
+    let spender_id = session_2nd.deploy(
+        contract_bytecode!("spender"),
+        ContractData::builder(OWNER),
+        LIMIT,
+    )?;
+    let callcenter_id = session_2nd.deploy(
         contract_bytecode!("callcenter"),
         ContractData::builder(OWNER),
         LIMIT,
@@ -85,7 +97,7 @@ pub fn contract_sets_call_limit() -> Result<(), Error> {
     const FIRST_LIMIT: u64 = 1000;
     const SECOND_LIMIT: u64 = 2000;
 
-    let receipt = session.call::<_, Result<(), ContractError>>(
+    let receipt = session_1st.call::<_, Result<(), ContractError>>(
         callcenter_id,
         "call_spend_with_limit",
         &(spender_id, FIRST_LIMIT),
@@ -93,7 +105,7 @@ pub fn contract_sets_call_limit() -> Result<(), Error> {
     )?;
     let spent_first = receipt.points_spent;
 
-    let receipt = session.call::<_, Result<(), ContractError>>(
+    let receipt = session_2nd.call::<_, Result<(), ContractError>>(
         callcenter_id,
         "call_spend_with_limit",
         &(spender_id, SECOND_LIMIT),
