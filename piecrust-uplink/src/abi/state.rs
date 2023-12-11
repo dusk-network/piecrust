@@ -51,7 +51,7 @@ mod ext {
             fn_name: *const u8,
             fn_name_len: u32,
             fn_arg_len: u32,
-            points_limit: u64,
+            gas_limit: u64,
         ) -> i32;
 
         pub fn emit(topic: *const u8, topic_len: u32, arg_len: u32);
@@ -95,9 +95,9 @@ where
 }
 
 /// Calls a `contract`'s `fn_name` function with the given argument `fn_arg`.
-/// The contract will have `93%` of the remaining points available to spend.
+/// The contract will have `93%` of the remaining gas available to spend.
 ///
-/// To specify the points allowed to be spent by the called contract, use
+/// To specify the gas allowed to be spent by the called contract, use
 /// [`call_with_limit`].
 pub fn call<A, Ret>(
     contract: ContractId,
@@ -113,19 +113,18 @@ where
 }
 
 /// Calls a `contract`'s `fn_name` function with the given argument `fn_arg`,
-/// allowing it to spend the given `points_limit`.
+/// allowing it to spend the given `gas_limit`.
 ///
-/// A points limit of `0` is equivalent to using [`call`], and will use the
-/// default behavior - i.e. the called contract gets `93%` of the remaining
-/// points.
+/// A gas limit of `0` is equivalent to using [`call`], and will use the default
+/// behavior - i.e. the called contract gets `93%` of the remaining gas.
 ///
-/// If the points limit given is above or equal the remaining amount, the
-/// default behavior will be used instead.
+/// If the gas limit given is above or equal the remaining amount, the default
+/// behavior will be used instead.
 pub fn call_with_limit<A, Ret>(
     contract: ContractId,
     fn_name: &str,
     fn_arg: &A,
-    points_limit: u64,
+    gas_limit: u64,
 ) -> Result<Ret, ContractError>
 where
     A: for<'a> Serialize<StandardBufSerializer<'a>>,
@@ -150,7 +149,7 @@ where
             fn_name.as_ptr(),
             fn_name.len() as u32,
             arg_len,
-            points_limit,
+            gas_limit,
         )
     };
 
@@ -168,7 +167,7 @@ where
 /// Calls the function with name `fn_name` of the given `contract` using
 /// `fn_arg` as argument.
 ///
-/// To specify the points allowed to be spent by the called contract, use
+/// To specify the gas allowed to be spent by the called contract, use
 /// [`call_raw_with_limit`].
 pub fn call_raw(
     contract: ContractId,
@@ -179,19 +178,18 @@ pub fn call_raw(
 }
 
 /// Calls the function with name `fn_name` of the given `contract` using
-/// `fn_arg` as argument, allowing it to spend the given `points_limit`.
+/// `fn_arg` as argument, allowing it to spend the given `gas_limit`.
 ///
-/// A point limit of `0` is equivalent to using [`call_raw`], and will use the
-/// default behavior - i.e. the called contract gets `93%` of the remaining
-/// points.
+/// A gas limit of `0` is equivalent to using [`call_raw`], and will use the
+/// default behavior - i.e. the called contract gets `93%` of the remaining gas.
 ///
-/// If the points limit given is above or equal the remaining amount, the
-/// default behavior will be used instead.
+/// If the gas limit given is above or equal the remaining amount, the default
+/// behavior will be used instead.
 pub fn call_raw_with_limit(
     contract: ContractId,
     fn_name: &str,
     fn_arg: &[u8],
-    points_limit: u64,
+    gas_limit: u64,
 ) -> Result<Vec<u8>, ContractError> {
     with_arg_buf(|buf| {
         buf[..fn_arg.len()].copy_from_slice(fn_arg);
@@ -205,7 +203,7 @@ pub fn call_raw_with_limit(
             fn_name.as_ptr(),
             fn_name.len() as u32,
             fn_arg.len() as u32,
-            points_limit,
+            gas_limit,
         )
     };
 
@@ -276,12 +274,12 @@ pub fn caller() -> ContractId {
     })
 }
 
-/// Returns the points limit with which the contact was called.
+/// Returns the gas limit with which the contact was called.
 pub fn limit() -> u64 {
     unsafe { ext::limit() }
 }
 
-/// Returns the amount of points the contact has spent.
+/// Returns the amount of gas the contact has spent.
 pub fn spent() -> u64 {
     unsafe { ext::spent() }
 }
