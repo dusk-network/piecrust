@@ -19,7 +19,7 @@ use piecrust_uplink::{
 use crate::instance::{Env, WrappedInstance};
 use crate::Error;
 
-pub const POINT_PASS_PCT: u64 = 93;
+pub const GAS_PASS_PCT: u64 = 93;
 
 pub(crate) struct Imports;
 
@@ -187,7 +187,7 @@ pub(crate) fn c(
     name_ofs: usize,
     name_len: u32,
     arg_len: u32,
-    points_limit: u64,
+    gas_limit: u64,
 ) -> WasmtimeResult<i32> {
     let env = fenv.data_mut();
 
@@ -201,12 +201,12 @@ pub(crate) fn c(
 
     let argbuf_ofs = instance.arg_buffer_offset();
 
-    let caller_remaining = instance.get_remaining_points();
+    let caller_remaining = instance.get_remaining_gas();
 
-    let callee_limit = if points_limit > 0 && points_limit < caller_remaining {
-        points_limit
+    let callee_limit = if gas_limit > 0 && gas_limit < caller_remaining {
+        gas_limit
     } else {
-        caller_remaining * POINT_PASS_PCT / 100
+        caller_remaining * GAS_PASS_PCT / 100
     };
 
     let with_memory = |memory: &mut [u8]| -> Result<_, Error> {
@@ -242,7 +242,7 @@ pub(crate) fn c(
         // copy back result
         callee.read_argument(&mut memory[argbuf_ofs..][..ret_len as usize]);
 
-        let callee_remaining = callee.get_remaining_points();
+        let callee_remaining = callee.get_remaining_gas();
         let callee_spent = callee_limit - callee_remaining;
 
         Ok((ret_len, callee_spent))
@@ -251,7 +251,7 @@ pub(crate) fn c(
     let ret = match instance.with_memory_mut(with_memory) {
         Ok((ret_len, callee_spent)) => {
             env.move_up_call_tree(callee_spent);
-            instance.set_remaining_points(caller_remaining - callee_spent);
+            instance.set_remaining_gas(caller_remaining - callee_spent);
             ret_len
         }
         Err(mut err) => {
@@ -262,7 +262,7 @@ pub(crate) fn c(
                 };
             }
             env.move_up_prune_call_tree();
-            instance.set_remaining_points(caller_remaining - callee_limit);
+            instance.set_remaining_gas(caller_remaining - callee_limit);
 
             let c_err = ContractError::from(err);
             instance.with_arg_buf_mut(|buf| {
@@ -363,7 +363,7 @@ fn spent(fenv: Caller<Env>) -> u64 {
     let instance = env.self_instance();
 
     let limit = env.limit();
-    let remaining = instance.get_remaining_points();
+    let remaining = instance.get_remaining_gas();
 
     limit - remaining
 }

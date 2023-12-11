@@ -16,11 +16,11 @@
 //! to the VM's directory - using [`commit`]. After a commit, the resulting
 //! state may be used by starting a new session with it as a base.
 //!
-//! Contract execution is metered in terms of `points`. The limit for the number
-//! of points used in a `call` or `deploy` is passed in their respective
-//! function signatures. If the limit is exceeded during the call an error will
-//! be returned. To learn more about the compiler middleware used to achieve
-//! this, please refer to the relevant [wasmer docs].
+//! Contract execution is metered in terms of `gas`. The limit for gas used in a
+//! `call` or `deploy` is passed in their respective function signatures. If the
+//! limit is exceeded during the call an error will be returned. To learn more
+//! about the compiler middleware used to achieve this, please refer to the
+//! relevant [runtime docs].
 //!
 //! # State Representation and Session/Commit Mechanism
 //!
@@ -106,7 +106,7 @@
 //! [`call`]: Session::call
 //! [`deploy`]: Session::deploy
 //! [`commit`]: Session::commit
-//! [wasmer docs]: wasmer_middlewares::metering
+//! [runtime docs]: dusk_wasmtime::Config::consume_fuel
 //! [`deletions`]: VM::delete_commit
 
 #[macro_use]

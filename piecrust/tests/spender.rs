@@ -11,7 +11,7 @@ const OWNER: [u8; 32] = [0u8; 32];
 const LIMIT: u64 = 1_000_000;
 
 #[test]
-pub fn points_get_used() -> Result<(), Error> {
+pub fn gas_get_used() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 
     let mut session = vm.session(SessionData::builder())?;
@@ -29,7 +29,7 @@ pub fn points_get_used() -> Result<(), Error> {
 
     let receipt =
         session.call::<_, i64>(counter_id, "read_value", &(), LIMIT)?;
-    let counter_spent = receipt.points_spent;
+    let counter_spent = receipt.gas_spent;
 
     let receipt = session.call::<_, i64>(
         center_id,
@@ -37,7 +37,7 @@ pub fn points_get_used() -> Result<(), Error> {
         &counter_id,
         LIMIT,
     )?;
-    let center_spent = receipt.points_spent;
+    let center_spent = receipt.gas_spent;
 
     assert!(counter_spent < center_spent);
 
@@ -76,7 +76,7 @@ pub fn panic_msg_gets_through() -> Result<(), Error> {
 }
 
 #[test]
-pub fn fails_with_out_of_points() -> Result<(), Error> {
+pub fn fails_with_out_of_gas() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 
     let mut session = vm.session(SessionData::builder())?;
@@ -91,7 +91,7 @@ pub fn fails_with_out_of_points() -> Result<(), Error> {
         .call::<_, i64>(counter_id, "read_value", &(), 1)
         .expect_err("should error with no gas");
 
-    assert!(matches!(err, Error::OutOfPoints));
+    assert!(matches!(err, Error::OutOfGas));
 
     Ok(())
 }
@@ -134,7 +134,7 @@ pub fn contract_sets_call_limit() -> Result<(), Error> {
         &(spender_id, FIRST_LIMIT),
         LIMIT,
     )?;
-    let spent_first = receipt.points_spent;
+    let spent_first = receipt.gas_spent;
 
     let receipt = session_2nd.call::<_, Result<(), ContractError>>(
         callcenter_id,
@@ -142,7 +142,7 @@ pub fn contract_sets_call_limit() -> Result<(), Error> {
         &(spender_id, SECOND_LIMIT),
         LIMIT,
     )?;
-    let spent_second = receipt.points_spent;
+    let spent_second = receipt.gas_spent;
 
     assert_eq!(spent_second - spent_first, SECOND_LIMIT - FIRST_LIMIT);
 
@@ -172,7 +172,7 @@ pub fn limit_and_spent() -> Result<(), Error> {
 
     let (limit, spent_before, spent_after, called_limit, called_spent) =
         receipt.data;
-    let spender_spent = receipt.points_spent;
+    let spender_spent = receipt.gas_spent;
 
     assert_eq!(limit, LIMIT, "should be the initial limit");
 

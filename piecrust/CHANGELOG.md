@@ -13,6 +13,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Change documentation to change terminology from `points` to `gas`
+- Rename `CallReceipt::points_limit` and `CallReceipt::points_spent` to
+  `CallReceipt::gas_limit` and `CallReceipt::gas_spent` respectively
+- Rename `Error::OutOfPoints` to `Error::OutOfGas`
 - Rename `Error::ContractPanic` to `Error::Panic` to be more clear that the entire
   execution panicked [#301]
 - Upgrade `dusk-wasmtime` to version `15`

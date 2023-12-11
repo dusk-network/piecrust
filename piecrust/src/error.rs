@@ -59,8 +59,8 @@ pub enum Error {
     MissingHostData(String),
     #[error("Missing host query: {0}")]
     MissingHostQuery(String),
-    #[error("OutOfPoints")]
-    OutOfPoints,
+    #[error("OutOfGas")]
+    OutOfGas,
     #[error("Panic: {0}")]
     Panic(String),
     #[error(transparent)]
@@ -124,7 +124,7 @@ impl<A, B> From<rkyv::validation::CheckArchiveError<A, B>> for Error {
 impl From<Error> for ContractError {
     fn from(err: Error) -> Self {
         match err {
-            Error::OutOfPoints => Self::OutOfPoints,
+            Error::OutOfGas => Self::OutOfGas,
             Error::Panic(msg) => Self::Panic(msg),
             _ => Self::Unknown,
         }

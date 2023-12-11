@@ -196,7 +196,7 @@ impl Session {
     /// their handling is totally transparent.
     ///
     /// Since a deployment may execute some contract initialization code, that
-    /// code will be metered and executed with the given `points_limit`.
+    /// code will be metered and executed with the given `gas_limit`.
     ///
     /// # Errors
     /// It is possible that a collision between contract IDs occurs, even for
@@ -212,7 +212,7 @@ impl Session {
         &mut self,
         bytecode: &[u8],
         deploy_data: D,
-        points_limit: u64,
+        gas_limit: u64,
     ) -> Result<ContractId, Error>
     where
         A: 'a + for<'b> Serialize<StandardBufSerializer<'b>>,
@@ -248,7 +248,7 @@ impl Session {
             bytecode,
             constructor_arg,
             deploy_data.owner.to_vec(),
-            points_limit,
+            gas_limit,
         )?;
 
         Ok(contract_id)
@@ -260,7 +260,7 @@ impl Session {
         bytecode: &[u8],
         arg: Option<Vec<u8>>,
         owner: Vec<u8>,
-        points_limit: u64,
+        gas_limit: u64,
     ) -> Result<(), Error> {
         if self.inner.contract_session.contract_deployed(contract_id) {
             return Err(InitalizationError(
@@ -305,7 +305,7 @@ impl Session {
                     ));
                 }
 
-                self.call_inner(contract_id, INIT_METHOD, arg, points_limit)?;
+                self.call_inner(contract_id, INIT_METHOD, arg, gas_limit)?;
             }
 
             Ok(())
@@ -321,19 +321,19 @@ impl Session {
     ///
     /// Calls are atomic, meaning that on failure their execution doesn't modify
     /// the state. They are also metered, and will execute with the given
-    /// `points_limit`. This value should never be 0.
+    /// `gas_limit`. This value should never be 0.
     ///
     /// # Errors
     /// The call may error during execution for a wide array of reasons, the
-    /// most common ones being running against the point limit and a contract
-    /// panic. Calling the 'init' method is not allowed except for when
-    /// called from the deploy method.
+    /// most common ones being running against the gas limit and a contract
+    /// panic. Calling the 'init' method is not allowed except for when called
+    /// from the deploy method.
     pub fn call<A, R>(
         &mut self,
         contract: ContractId,
         fn_name: &str,
         fn_arg: &A,
-        points_limit: u64,
+        gas_limit: u64,
     ) -> Result<CallReceipt<R>, Error>
     where
         A: for<'b> Serialize<StandardBufSerializer<'b>>,
@@ -357,7 +357,7 @@ impl Session {
             contract,
             fn_name,
             self.inner.buffer[..pos].to_vec(),
-            points_limit,
+            gas_limit,
         )?;
 
         receipt.deserialize()
@@ -377,19 +377,19 @@ impl Session {
         contract: ContractId,
         fn_name: &str,
         fn_arg: V,
-        points_limit: u64,
+        gas_limit: u64,
     ) -> Result<CallReceipt<Vec<u8>>, Error> {
         if fn_name == INIT_METHOD {
             return Err(InitalizationError("init call not allowed".into()));
         }
 
-        let (data, points_spent, call_tree) =
-            self.call_inner(contract, fn_name, fn_arg.into(), points_limit)?;
+        let (data, gas_spent, call_tree) =
+            self.call_inner(contract, fn_name, fn_arg.into(), gas_limit)?;
         let events = mem::take(&mut self.inner.events);
 
         Ok(CallReceipt {
-            points_limit,
-            points_spent,
+            gas_limit,
+            gas_spent,
             events,
             call_tree,
             data,
@@ -401,9 +401,9 @@ impl Session {
     /// Feeder calls are used to have the contract be able to report larger
     /// amounts of data to the host via the channel included in this call.
     ///
-    /// These calls are always performed with the maximum amount of points,
-    /// since the contracts may spend quite a large amount in an effort to
-    /// report data.
+    /// These calls are always performed with the maximum amount of gas, since
+    /// the contracts may spend quite a large amount in an effort to report
+    /// data.
     pub fn feeder_call<A, R>(
         &mut self,
         contract: ContractId,
@@ -713,7 +713,7 @@ impl Session {
             .map_err(Error::normalize)?;
         let ret = instance.read_bytes_from_arg_buffer(ret_len as u32);
 
-        let spent = limit - instance.get_remaining_points();
+        let spent = limit - instance.get_remaining_gas();
 
         for elem in self.inner.call_tree.iter() {
             let instance = self
@@ -750,10 +750,10 @@ impl Session {
 /// [`call_raw`]: [`Session::call_raw`]
 #[derive(Debug)]
 pub struct CallReceipt<T> {
-    /// The amount of points spent in the execution of the call.
-    pub points_spent: u64,
+    /// The amount of gas spent in the execution of the call.
+    pub gas_spent: u64,
     /// The limit used in during this execution.
-    pub points_limit: u64,
+    pub gas_limit: u64,
 
     /// The events emitted during the execution of the call.
     pub events: Vec<Event>,
@@ -777,8 +777,8 @@ impl CallReceipt<Vec<u8>> {
         let data = ta.deserialize(&mut Infallible)?;
 
         Ok(CallReceipt {
-            points_spent: self.points_spent,
-            points_limit: self.points_limit,
+            gas_spent: self.gas_spent,
+            gas_limit: self.gas_limit,
             events: self.events,
             call_tree: self.call_tree,
             data,
