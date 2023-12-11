@@ -26,7 +26,7 @@ use core::str;
 #[archive_attr(derive(CheckBytes))]
 pub enum ContractError {
     Panic(String),
-    OutOfPoints,
+    OutOfGas,
     Unknown,
 }
 
@@ -56,7 +56,7 @@ impl ContractError {
 
         match code {
             -1 => Self::Panic(get_msg(slice)),
-            -2 => Self::OutOfPoints,
+            -2 => Self::OutOfGas,
             i32::MIN => Self::Unknown,
             _ => unreachable!("The host must guarantee that the code is valid"),
         }
@@ -80,7 +80,7 @@ impl ContractError {
                 put_msg(msg, slice);
                 -1
             }
-            Self::OutOfPoints => -2,
+            Self::OutOfGas => -2,
             Self::Unknown => i32::MIN,
         }
     }
@@ -90,7 +90,7 @@ impl From<ContractError> for i32 {
     fn from(err: ContractError) -> Self {
         match err {
             ContractError::Panic(_) => -1,
-            ContractError::OutOfPoints => -2,
+            ContractError::OutOfGas => -2,
             ContractError::Unknown => i32::MIN,
         }
     }
@@ -100,7 +100,7 @@ impl Display for ContractError {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         match self {
             ContractError::Panic(msg) => write!(f, "Panic: {msg}"),
-            ContractError::OutOfPoints => write!(f, "OutOfPoints"),
+            ContractError::OutOfGas => write!(f, "OutOfGas"),
             ContractError::Unknown => write!(f, "Unknown"),
         }
     }

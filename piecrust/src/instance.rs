@@ -280,17 +280,17 @@ impl WrappedInstance {
             .instance
             .get_typed_func::<u32, i32>(&mut self.store, method_name)?;
 
-        self.set_remaining_points(limit);
+        self.set_remaining_gas(limit);
 
         fun.call(&mut self.store, arg_len)
             .map_err(|e| map_call_err(self, e))
     }
 
-    pub fn set_remaining_points(&mut self, limit: u64) {
+    pub fn set_remaining_gas(&mut self, limit: u64) {
         self.store.set_fuel(limit).expect("Fuel is enabled");
     }
 
-    pub fn get_remaining_points(&mut self) -> u64 {
+    pub fn get_remaining_gas(&mut self) -> u64 {
         self.store.get_fuel().expect("Fuel is enabled")
     }
 
@@ -345,8 +345,8 @@ fn map_call_err(
     instance: &mut WrappedInstance,
     err: dusk_wasmtime::Error,
 ) -> Error {
-    if instance.get_remaining_points() == 0 {
-        return Error::OutOfPoints;
+    if instance.get_remaining_gas() == 0 {
+        return Error::OutOfGas;
     }
 
     err.into()

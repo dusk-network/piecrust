@@ -32,7 +32,7 @@ pub(crate) fn c(
     name_ofs: u32,
     name_len: u32,
     arg_len: u32,
-    points_limit: u64,
+    gas_limit: u64,
 ) -> WasmtimeResult<i32> {
     imports::c(
         fenv,
@@ -40,7 +40,7 @@ pub(crate) fn c(
         name_ofs as usize,
         name_len,
         arg_len,
-        points_limit,
+        gas_limit,
     )
 }
 

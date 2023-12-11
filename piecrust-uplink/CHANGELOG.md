@@ -14,8 +14,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Change variable names and documentation to match the `gas` terminology as
+  opposed to `points`
 - Rename `ContractError::Other` to `ContractError::Unknown` [#301]
-- Rename `ContractError::OutOfGas` to `ContractError::OutOfPoints` [#301]
 - Change `Display` for `ContractError` to display messages [#301]
 - Change `ContractError` variants to be CamelCase [#301]
 

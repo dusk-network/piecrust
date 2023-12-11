@@ -20,13 +20,13 @@ pub fn merkle_root() -> Result<(), Error> {
         LIMIT,
     )?;
 
-    // (measured) minimum points to pass - insertion in a merkle tree is
+    // (measured) minimum gas to pass - insertion in a merkle tree is
     // "expensive".
-    const POINTS_LIMIT: u64 = 147456;
+    const GAS_LIMIT: u64 = 147456;
 
     let empty_root = [0u8; 32];
     let root: [u8; 32] = session
-        .call(id, "root", &(), POINTS_LIMIT)
+        .call(id, "root", &(), GAS_LIMIT)
         .expect("root query should succeed")
         .data;
 
@@ -45,7 +45,7 @@ pub fn merkle_root() -> Result<(), Error> {
                 .expect("tree insertion should succeed");
 
             *root = session
-                .call(id, "root", &(), POINTS_LIMIT)
+                .call(id, "root", &(), GAS_LIMIT)
                 .expect("root query should succeed")
                 .data;
         });
