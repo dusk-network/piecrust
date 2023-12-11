@@ -8,9 +8,14 @@
 
 #![no_std]
 
+extern crate alloc;
+
+use alloc::string::String;
+use alloc::vec::Vec;
+
 use piecrust_uplink as uplink;
 use piecrust_uplink::call_with_limit;
-use uplink::{wrap_call, ContractError, ContractId, RawCall, RawResult};
+use uplink::{wrap_call, ContractError, ContractId};
 
 /// Struct that describes the state of the Callcenter contract
 pub struct Callcenter;
@@ -33,25 +38,31 @@ impl Callcenter {
     pub fn delegate_query(
         &self,
         contract_id: ContractId,
-        raw: RawCall,
-    ) -> Result<RawResult, ContractError> {
-        uplink::debug!("raw query {:?} at {:?}", raw, contract_id);
-        uplink::call_raw(contract_id, &raw)
+        fn_name: String,
+        fn_arg: Vec<u8>,
+    ) -> Result<Vec<u8>, ContractError> {
+        uplink::debug!("raw query {fn_name} at {contract_id:?}");
+        uplink::call_raw(contract_id, &fn_name, &fn_arg)
     }
 
     /// Pass the current query
-    pub fn query_passthrough(&mut self, raw: RawCall) -> RawCall {
-        uplink::debug!("q passthrough {:?}", raw);
-        raw
+    pub fn query_passthrough(
+        &mut self,
+        fn_name: String,
+        fn_arg: Vec<u8>,
+    ) -> (String, Vec<u8>) {
+        uplink::debug!("q passthrough {fn_name}");
+        (fn_name, fn_arg)
     }
 
     /// Execute a contract specified by its ID
     pub fn delegate_transaction(
         &mut self,
         contract_id: ContractId,
-        raw: RawCall,
-    ) -> RawResult {
-        uplink::call_raw(contract_id, &raw).unwrap()
+        fn_name: String,
+        fn_arg: Vec<u8>,
+    ) -> Vec<u8> {
+        uplink::call_raw(contract_id, &fn_name, &fn_arg).unwrap()
     }
 
     /// Check whether the current caller is the contract itself
@@ -89,8 +100,9 @@ impl Callcenter {
         contract: ContractId,
         points_limit: u64,
     ) -> Result<(), ContractError> {
-        call_with_limit(contract, "spend", &(), points_limit)?;
-        Ok(())
+        let res = call_with_limit(contract, "spend", &(), points_limit);
+        uplink::debug!("spend call: {res:?}");
+        res
     }
 
     /// Just panic.
@@ -146,22 +158,24 @@ unsafe fn return_caller(arg_len: u32) -> u32 {
 /// Expose `Callcenter::delegate_query()` to the host
 #[no_mangle]
 unsafe fn delegate_query(arg_len: u32) -> u32 {
-    wrap_call(arg_len, |(mod_id, rq): (ContractId, RawCall)| {
-        STATE.delegate_query(mod_id, rq)
+    wrap_call(arg_len, |(mod_id, fn_name, fn_arg)| {
+        STATE.delegate_query(mod_id, fn_name, fn_arg)
     })
 }
 
 /// Expose `Callcenter::query_passthrough()` to the host
 #[no_mangle]
 unsafe fn query_passthrough(arg_len: u32) -> u32 {
-    wrap_call(arg_len, |rq: RawCall| STATE.query_passthrough(rq))
+    wrap_call(arg_len, |(fn_name, fn_arg)| {
+        STATE.query_passthrough(fn_name, fn_arg)
+    })
 }
 
 /// Expose `Callcenter::delegate_transaction()` to the host
 #[no_mangle]
 unsafe fn delegate_transaction(arg_len: u32) -> u32 {
-    wrap_call(arg_len, |(mod_id, rt): (ContractId, RawCall)| {
-        STATE.delegate_transaction(mod_id, rt)
+    wrap_call(arg_len, |(mod_id, fn_name, fn_arg)| {
+        STATE.delegate_transaction(mod_id, fn_name, fn_arg)
     })
 }
 

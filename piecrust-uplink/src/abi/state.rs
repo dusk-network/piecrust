@@ -4,6 +4,8 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
+use alloc::vec::Vec;
+
 use rkyv::{
     archived_root,
     ser::serializers::{BufferScratch, BufferSerializer, CompositeSerializer},
@@ -12,8 +14,8 @@ use rkyv::{
 };
 
 use crate::{
-    ContractError, ContractId, RawCall, RawResult, StandardBufSerializer,
-    CONTRACT_ID_BYTES, SCRATCH_BUF_BYTES,
+    ContractError, ContractId, StandardBufSerializer, CONTRACT_ID_BYTES,
+    SCRATCH_BUF_BYTES,
 };
 
 pub mod arg_buf {
@@ -140,41 +142,44 @@ where
         composite.pos() as u32
     });
 
+    let fn_name = fn_name.as_bytes();
+
     let ret_len = unsafe {
         ext::c(
             &contract.as_bytes()[0],
-            &fn_name.as_bytes()[0],
+            fn_name.as_ptr(),
             fn_name.len() as u32,
             arg_len,
             points_limit,
         )
     };
 
-    if ret_len < 0 {
-        return Err(ContractError::from_code(ret_len));
-    }
-
     with_arg_buf(|buf| {
-        let slice = &buf[..ret_len as usize];
-        let ret = unsafe { archived_root::<Ret>(slice) };
-        Ok(ret.deserialize(&mut Infallible).expect("Infallible"))
+        if ret_len < 0 {
+            Err(ContractError::from_parts(ret_len, buf))
+        } else {
+            let slice = &buf[..ret_len as usize];
+            let ret = unsafe { archived_root::<Ret>(slice) };
+            Ok(ret.deserialize(&mut Infallible).expect("Infallible"))
+        }
     })
 }
 
-/// Calls a `contract` with the given [`RawCall`]. The contract will have `93%`
-/// of the remaining points available to spend.
+/// Calls the function with name `fn_name` of the given `contract` using
+/// `fn_arg` as argument.
 ///
 /// To specify the points allowed to be spent by the called contract, use
 /// [`call_raw_with_limit`].
 pub fn call_raw(
     contract: ContractId,
-    raw_call: &RawCall,
-) -> Result<RawResult, ContractError> {
-    call_raw_with_limit(contract, raw_call, 0)
+    fn_name: &str,
+    fn_arg: &[u8],
+) -> Result<Vec<u8>, ContractError> {
+    call_raw_with_limit(contract, fn_name, fn_arg, 0)
 }
 
-/// Calls a `contract` with the given [`RawCall`] allowing it to spend the given
-/// `points_limit`.
+/// Calls the function with name `fn_name` of the given `contract` using
+/// `fn_arg` as argument, allowing it to spend the given `points_limit`.
 ///
 /// A point limit of `0` is equivalent to using [`call_raw`], and will use the
 /// default behavior - i.e. the called contract gets `93%` of the remaining
@@ -184,32 +189,33 @@ pub fn call_raw(
 /// default behavior will be used instead.
 pub fn call_raw_with_limit(
     contract: ContractId,
-    raw_call: &RawCall,
+    fn_name: &str,
+    fn_arg: &[u8],
     points_limit: u64,
-) -> Result<RawResult, ContractError> {
+) -> Result<Vec<u8>, ContractError> {
     with_arg_buf(|buf| {
-        let bytes = raw_call.arg_bytes();
-        buf[..bytes.len()].copy_from_slice(bytes);
+        buf[..fn_arg.len()].copy_from_slice(fn_arg);
     });
 
-    let fn_name = raw_call.name_bytes();
-    let fn_arg_len = raw_call.arg_bytes().len() as u32;
+    let fn_name = fn_name.as_bytes();
 
     let ret_len = unsafe {
         ext::c(
             &contract.as_bytes()[0],
-            &fn_name[0],
+            fn_name.as_ptr(),
             fn_name.len() as u32,
-            fn_arg_len,
+            fn_arg.len() as u32,
             points_limit,
         )
     };
 
-    if ret_len < 0 {
-        return Err(ContractError::from_code(ret_len));
-    }
-
-    with_arg_buf(|buf| Ok(RawResult::new(&buf[..ret_len as usize])))
+    with_arg_buf(|buf| {
+        if ret_len < 0 {
+            Err(ContractError::from_parts(ret_len, buf))
+        } else {
+            Ok(buf[..ret_len as usize].to_vec())
+        }
+    })
 }
 
 /// Returns data made available by the host under the given name. The type `D`

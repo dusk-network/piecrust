@@ -101,7 +101,7 @@ fn increment_panic() -> Result<(), Error> {
     )?;
 
     match session.call::<_, ()>(counter_id, "increment", &true, LIMIT) {
-        Err(Error::ContractPanic(panic_msg)) => {
+        Err(Error::Panic(panic_msg)) => {
             assert_eq!(panic_msg, String::from("Incremental panic"));
         }
         _ => panic!("Expected a panic error"),

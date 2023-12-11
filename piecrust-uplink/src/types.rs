@@ -9,11 +9,8 @@ use alloc::vec::Vec;
 
 use bytecheck::CheckBytes;
 use rkyv::{
-    ser::serializers::{
-        AllocSerializer, BufferScratch, BufferSerializer, CompositeSerializer,
-    },
-    ser::Serializer,
-    Archive, Deserialize, Infallible, Serialize,
+    ser::serializers::{BufferScratch, BufferSerializer, CompositeSerializer},
+    Archive, Deserialize, Serialize,
 };
 
 use crate::SCRATCH_BUF_BYTES;
@@ -135,110 +132,5 @@ impl core::fmt::Display for ContractId {
             write!(f, "{:02x}", &byte)?
         }
         Ok(())
-    }
-}
-
-/// A `RawCall` is a contract call that doesn't care about types and only
-/// operates on raw data.
-#[derive(Archive, Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
-#[archive_attr(derive(CheckBytes))]
-pub struct RawCall {
-    arg_len: u32,
-    data: alloc::vec::Vec<u8>,
-}
-
-impl RawCall {
-    /// Creates a new [`RawCall`] by serializing an argument.
-    ///
-    /// The name of the [`RawCall`] is stored in its `data` field after the
-    /// arguments.
-    pub fn new<A>(name: &str, arg: A) -> Self
-    where
-        A: Serialize<AllocSerializer<64>>,
-    {
-        let mut ser = AllocSerializer::default();
-
-        ser.serialize_value(&arg)
-            .expect("We assume infallible serialization and allocation");
-
-        let data = ser.into_serializer().into_inner().to_vec();
-        Self::from_parts(name, data)
-    }
-
-    /// Create a new [`RawCall`] from its parts without serializing data.
-    ///
-    /// This assumes the `data` given has already been correctly serialized for
-    /// the contract to call.
-    pub fn from_parts(name: &str, data: alloc::vec::Vec<u8>) -> Self {
-        let mut data = data;
-
-        let arg_len = data.len() as u32;
-        data.extend_from_slice(name.as_bytes());
-
-        Self { arg_len, data }
-    }
-
-    /// Return a reference to the name of [`RawCall`]
-    pub fn name(&self) -> &str {
-        core::str::from_utf8(self.name_bytes())
-            .expect("always created from a valid &str")
-    }
-
-    /// Return a reference to the raw name of [`RawCall`]
-    pub fn name_bytes(&self) -> &[u8] {
-        &self.data[self.arg_len as usize..]
-    }
-
-    /// Return a reference to the raw argument of [`RawCall`]
-    pub fn arg_bytes(&self) -> &[u8] {
-        &self.data[..self.arg_len as usize]
-    }
-}
-
-#[derive(Archive, Serialize, Deserialize)]
-#[archive_attr(derive(CheckBytes))]
-pub struct RawResult {
-    data: alloc::vec::Vec<u8>,
-}
-
-/// A RawResult is a result that doesn't care about its type and only
-/// operates on raw data.
-impl RawResult {
-    /// Creates a new [`RawResult`] from raw data as bytes.
-    pub fn new(bytes: &[u8]) -> Self {
-        RawResult {
-            data: alloc::vec::Vec::from(bytes),
-        }
-    }
-
-    /// Casts the `data` from [`RawResult`] to the desired type by serializing
-    /// and returning it
-    pub fn cast<D>(&self) -> D
-    where
-        D: Archive,
-        D::Archived: Deserialize<D, Infallible>,
-    {
-        // add bytecheck here.
-        let archived = unsafe { rkyv::archived_root::<D>(&self.data[..]) };
-        archived.deserialize(&mut Infallible).expect("Infallible")
-    }
-}
-
-#[cfg(test)]
-mod test {
-    use super::*;
-
-    #[test]
-    fn raw_call() {
-        let q = RawCall::new("hello", 42u128);
-
-        assert_eq!(q.name(), "hello");
-        assert_eq!(
-            q.arg_bytes(),
-            [
-                0x2a, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-                0x00, 0x00, 0x00, 0x00, 0x00, 0x00
-            ]
-        );
     }
 }

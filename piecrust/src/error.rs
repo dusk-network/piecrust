@@ -5,7 +5,6 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 use std::borrow::Cow;
-use std::convert::Infallible;
 use std::sync::{mpsc, Arc};
 use thiserror::Error;
 
@@ -62,8 +61,8 @@ pub enum Error {
     MissingHostQuery(String),
     #[error("OutOfPoints")]
     OutOfPoints,
-    #[error("Contract panic: {0}")]
-    ContractPanic(String),
+    #[error("Panic: {0}")]
+    Panic(String),
     #[error(transparent)]
     PersistenceError(Arc<std::io::Error>),
     #[error(transparent)]
@@ -93,7 +92,7 @@ impl Error {
 }
 
 impl From<std::convert::Infallible> for Error {
-    fn from(err: Infallible) -> Self {
+    fn from(err: std::convert::Infallible) -> Self {
         Self::Infallible(err)
     }
 }
@@ -122,14 +121,12 @@ impl<A, B> From<rkyv::validation::CheckArchiveError<A, B>> for Error {
     }
 }
 
-const OTHER_STATUS_CODE: i32 = i32::MIN;
-
 impl From<Error> for ContractError {
     fn from(err: Error) -> Self {
         match err {
-            Error::OutOfPoints => Self::OUTOFGAS,
-            Error::ContractPanic(_) => Self::PANIC,
-            _ => Self::OTHER(OTHER_STATUS_CODE),
+            Error::OutOfPoints => Self::OutOfPoints,
+            Error::Panic(msg) => Self::Panic(msg),
+            _ => Self::Unknown,
         }
     }
 }

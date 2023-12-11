@@ -5,7 +5,7 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 use piecrust::{contract_bytecode, ContractData, Error, SessionData, VM};
-use piecrust_uplink::{ContractError, ContractId, RawCall, RawResult};
+use piecrust_uplink::{ContractError, ContractId};
 
 const OWNER: [u8; 32] = [0u8; 32];
 const LIMIT: u64 = 1_000_000;
@@ -103,13 +103,13 @@ pub fn cc_passthrough() -> Result<(), Error> {
         LIMIT,
     )?;
 
-    let rq = RawCall::new("read_value", ());
+    let raw = (String::from("read_value"), Vec::<u8>::new());
 
-    let res: RawCall = session
-        .call(center_id, "query_passthrough", &rq, LIMIT)?
+    let res: (String, Vec<u8>) = session
+        .call(center_id, "query_passthrough", &raw, LIMIT)?
         .data;
 
-    assert_eq!(rq, res);
+    assert_eq!(raw, res);
 
     Ok(())
 }
@@ -131,19 +131,19 @@ pub fn cc_delegated_read() -> Result<(), Error> {
         LIMIT,
     )?;
 
-    let rq = RawCall::new("read_value", ());
-
     // read value through callcenter
     let res = session
-        .call::<_, RawResult>(
+        .call::<_, Result<Vec<u8>, ContractError>>(
             center_id,
             "delegate_query",
-            &(counter_id, rq),
+            &(counter_id, String::from("read_value"), Vec::<u8>::new()),
             LIMIT,
         )?
-        .data;
+        .data
+        .expect("ICC should succeed");
 
-    let value: i64 = res.cast();
+    let value: i64 =
+        rkyv::from_bytes(&res).expect("Deserialization to succeed");
 
     assert_eq!(value, 0xfc);
 
@@ -155,8 +155,6 @@ pub fn cc_delegated_write() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 
     // increment through delegated transaction
-
-    let rt = RawCall::new("increment", ());
 
     let mut session = vm.session(SessionData::builder())?;
     let counter_id = session.deploy(
@@ -173,7 +171,7 @@ pub fn cc_delegated_write() -> Result<(), Error> {
     session.call::<_, ()>(
         center_id,
         "delegate_transaction",
-        &(counter_id, rt),
+        &(counter_id, String::from("increment"), Vec::<u8>::new()),
         LIMIT,
     )?;
 
