@@ -4,8 +4,7 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-//! Contract for testing the gas spending behavior, where the gas is measured in
-//! WASM points.
+//! Contract for testing the gas spending behavior.
 
 #![no_std]
 
@@ -18,7 +17,7 @@ pub struct Spender;
 static mut STATE: Spender = Spender;
 
 impl Spender {
-    /// Get the limit and spent points before and after an inter-contract call,
+    /// Get the limit and spent gas before and after an inter-contract call,
     /// including the limit and spent by the called contract
     pub fn get_limit_and_spent(&self) -> (u64, u64, u64, u64, u64) {
         let self_id = uplink::self_id();
@@ -51,7 +50,7 @@ impl Spender {
         }
     }
 
-    /// Spend all points that are given to the contract.
+    /// Spend all gas that is given to the contract.
     pub fn spend(&self) {
         panic!("I like spending");
     }

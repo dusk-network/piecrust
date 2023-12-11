@@ -21,7 +21,7 @@ mod ext {
             fn_name: *const u8,
             fn_name_len: u32,
             fn_arg_len: u32,
-            points_limit: u64,
+            gas_limit: u64,
         ) -> i32;
         pub fn hd(name: *const u8, name_len: u32) -> u32;
     }

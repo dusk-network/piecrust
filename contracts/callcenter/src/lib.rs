@@ -93,14 +93,14 @@ impl Callcenter {
     }
 
     /// Calls the `spend` function of the `contract` with no arguments, and the
-    /// given `points_limit`, assuming the called function returns `()`. It will
+    /// given `gas_limit`, assuming the called function returns `()`. It will
     /// then return the call's result itself.
     pub fn call_spend_with_limit(
         &self,
         contract: ContractId,
-        points_limit: u64,
+        gas_limit: u64,
     ) -> Result<(), ContractError> {
-        let res = call_with_limit(contract, "spend", &(), points_limit);
+        let res = call_with_limit(contract, "spend", &(), gas_limit);
         uplink::debug!("spend call: {res:?}");
         res
     }
@@ -138,8 +138,8 @@ unsafe fn call_self(arg_len: u32) -> u32 {
 /// Expose `Callcenter::call_spend_with_limit` to the host
 #[no_mangle]
 unsafe fn call_spend_with_limit(arg_len: u32) -> u32 {
-    wrap_call(arg_len, |(contract, points_limit)| {
-        STATE.call_spend_with_limit(contract, points_limit)
+    wrap_call(arg_len, |(contract, gas_limit)| {
+        STATE.call_spend_with_limit(contract, gas_limit)
     })
 }
 
