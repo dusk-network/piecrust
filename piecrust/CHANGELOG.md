@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.14.0] - 2023-12-13
+
 ### Added
 
 - Use `ContractError::to_parts` to write error messages to the argument buffer [#301]
@@ -361,7 +363,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [#93]: https://github.com/dusk-network/piecrust/issues/93
 
 <!-- VERSIONS -->
-[Unreleased]: https://github.com/dusk-network/piecrust/compare/piecrust-0.13.0...HEAD
+[Unreleased]: https://github.com/dusk-network/piecrust/compare/piecrust-0.14.0...HEAD
+[0.14.0]: https://github.com/dusk-network/piecrust/compare/piecrust-0.13.0...piecrust-0.14.0
 [0.13.0]: https://github.com/dusk-network/piecrust/compare/piecrust-0.12.0...piecrust-0.13.0
 [0.12.0]: https://github.com/dusk-network/piecrust/compare/piecrust-0.11.0...piecrust-0.12.0
 [0.11.0]: https://github.com/dusk-network/piecrust/compare/piecrust-0.10.0...piecrust-0.11.0
