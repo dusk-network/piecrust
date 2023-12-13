@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0] - 2023-12-13
+
 ### Added
 
 - Add `ContractError::to_parts` and `ContractError::from_parts` functions [#301]
@@ -158,7 +160,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [#136]: https://github.com/dusk-network/piecrust/issues/136
 
 <!-- VERSIONS -->
-[Unreleased]: https://github.com/dusk-network/piecrust/compare/uplink-0.8.0...HEAD
+[Unreleased]: https://github.com/dusk-network/piecrust/compare/uplink-0.9.0...HEAD
+[0.9.0]: https://github.com/dusk-network/piecrust/compare/uplink-0.8.0...uplink-0.9.0
 [0.8.0]: https://github.com/dusk-network/piecrust/compare/uplink-0.7.1...uplink-0.8.0
 [0.7.1]: https://github.com/dusk-network/piecrust/compare/v0.7.0...uplink-0.7.1
 [0.7.0]: https://github.com/dusk-network/piecrust/compare/uplink-0.6.1...v0.7.0
