@@ -8,6 +8,7 @@
 
 #![no_std]
 
+use piecrust_macros::contract;
 use piecrust_uplink as uplink;
 
 /// Struct that describes the state of the everest contract
@@ -16,15 +17,10 @@ pub struct Height;
 /// State of the everest contract
 static mut STATE: Height = Height;
 
+#[contract]
 impl Height {
     /// Query the host for the current block height
     pub fn get_height(&self) -> Option<u64> {
         uplink::meta_data::<u64>("height")
     }
-}
-
-/// Expose `Height::get_height()` to the host
-#[no_mangle]
-unsafe fn get_height(a: u32) -> u32 {
-    uplink::wrap_call(a, |_: ()| STATE.get_height())
 }

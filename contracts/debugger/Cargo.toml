@@ -9,6 +9,7 @@ edition = "2021"
 license = "MPL-2.0"
 
 [dependencies]
+piecrust-macros = { path = "../../piecrust-macros" }
 piecrust-uplink = { path = "../../piecrust-uplink", features = ["abi", "debug", "dlmalloc"] }
 
 [lib]

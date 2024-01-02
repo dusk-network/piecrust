@@ -10,6 +10,7 @@
 
 extern crate alloc;
 
+use piecrust_macros::contract;
 use piecrust_uplink as uplink;
 
 /// Struct that describes the state of the feeder contract
@@ -18,6 +19,7 @@ pub struct Feeder;
 /// State of the vector contract
 static mut STATE: Feeder = Feeder;
 
+#[contract]
 impl Feeder {
     /// Feed the host with 32-bit integers sequentially in the `0..num` range.
     pub fn feed_num(&self, num: u32) {
@@ -25,10 +27,4 @@ impl Feeder {
             uplink::feed(i);
         }
     }
-}
-
-/// Expose `Feeder::feed_num()` to the host
-#[no_mangle]
-unsafe fn feed_num(arg_len: u32) -> u32 {
-    uplink::wrap_call(arg_len, |num| STATE.feed_num(num))
 }

@@ -8,6 +8,7 @@
 
 #![no_std]
 
+use piecrust_macros::contract;
 use piecrust_uplink as uplink;
 use uplink::ContractId;
 
@@ -17,6 +18,7 @@ pub struct Metadata;
 /// State of the Metadata contract
 static mut STATE: Metadata = Metadata;
 
+#[contract]
 impl Metadata {
     /// Read the value of the contract's owner
     pub fn read_owner(&self) -> [u8; 33] {
@@ -27,16 +29,4 @@ impl Metadata {
     pub fn read_id(&self) -> ContractId {
         uplink::self_id()
     }
-}
-
-/// Expose `Metadata::read_owner()` to the host
-#[no_mangle]
-unsafe fn read_owner(arg_len: u32) -> u32 {
-    uplink::wrap_call(arg_len, |_: ()| STATE.read_owner())
-}
-
-/// Expose `Metadata::read_id()` to the host
-#[no_mangle]
-unsafe fn read_id(arg_len: u32) -> u32 {
-    uplink::wrap_call(arg_len, |_: ()| STATE.read_id())
 }

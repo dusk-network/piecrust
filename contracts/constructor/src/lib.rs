@@ -8,13 +8,14 @@
 
 #![no_std]
 
-use piecrust_uplink as uplink;
+use piecrust_macros::contract;
 
 /// Struct that describes the state of the Constructor contract
 pub struct Constructor {
     value: u8,
 }
 
+#[contract]
 impl Constructor {
     pub fn init(&mut self, value: u8) {
         self.value = value;
@@ -24,6 +25,7 @@ impl Constructor {
 /// State of the Constructor contract
 static mut STATE: Constructor = Constructor { value: 0x50 };
 
+#[contract]
 impl Constructor {
     /// Read the value of the constructor contract state
     pub fn read_value(&self) -> u8 {
@@ -34,22 +36,4 @@ impl Constructor {
         let value = self.value + 1;
         self.value = value;
     }
-}
-
-/// Expose `Constructor::read_value()` to the host
-#[no_mangle]
-unsafe fn read_value(arg_len: u32) -> u32 {
-    uplink::wrap_call(arg_len, |_: ()| STATE.read_value())
-}
-
-/// Expose `Constructor::increment()` to the host
-#[no_mangle]
-unsafe fn increment(arg_len: u32) -> u32 {
-    uplink::wrap_call(arg_len, |_: ()| STATE.increment())
-}
-
-/// Expose `Constructor::init()` to the host
-#[no_mangle]
-unsafe fn init(arg_len: u32) -> u32 {
-    uplink::wrap_call(arg_len, |arg: u8| STATE.init(arg))
 }

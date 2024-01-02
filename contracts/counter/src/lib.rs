@@ -9,7 +9,7 @@
 
 #![no_std]
 
-use piecrust_uplink as uplink;
+use piecrust_macros::contract;
 
 /// Struct that describes the state of the Counter contract
 pub struct Counter {
@@ -19,6 +19,7 @@ pub struct Counter {
 /// State of the Counter contract
 static mut STATE: Counter = Counter { value: 0xfc };
 
+#[contract]
 impl Counter {
     /// Read the value of the counter
     pub fn read_value(&self) -> i64 {
@@ -30,16 +31,4 @@ impl Counter {
         let value = self.value + 1;
         self.value = value;
     }
-}
-
-/// Expose `Counter::read_value()` to the host
-#[no_mangle]
-unsafe fn read_value(arg_len: u32) -> u32 {
-    uplink::wrap_call(arg_len, |_: ()| STATE.read_value())
-}
-
-/// Expose `Counter::increment()` to the host
-#[no_mangle]
-unsafe fn increment(arg_len: u32) -> u32 {
-    uplink::wrap_call(arg_len, |_: ()| STATE.increment())
 }

@@ -13,6 +13,7 @@ extern crate alloc;
 use alloc::string::String;
 use alloc::vec::Vec;
 
+use piecrust_macros::contract;
 use piecrust_uplink as uplink;
 
 use dusk_plonk::prelude::*;
@@ -23,6 +24,7 @@ pub struct Hoster;
 /// State of the host contract
 static mut STATE: Hoster = Hoster;
 
+#[contract]
 impl Hoster {
     /// Call 'hash' function via the host
     pub fn host_hash(&self, bytes: Vec<u8>) -> [u8; 32] {
@@ -45,18 +47,4 @@ impl Hoster {
             false => String::from("PROOF IS INVALID"),
         }
     }
-}
-
-/// Expose `Hoster::host_hash()` to the host
-#[no_mangle]
-unsafe fn host_hash(arg_len: u32) -> u32 {
-    uplink::wrap_call(arg_len, |num| STATE.host_hash(num))
-}
-
-/// Expose `Hoster::host_verify()` to the host
-#[no_mangle]
-unsafe fn host_verify(arg_len: u32) -> u32 {
-    uplink::wrap_call(arg_len, |(proof, public_inputs)| {
-        STATE.host_verify(proof, public_inputs)
-    })
 }

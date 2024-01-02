@@ -10,6 +10,7 @@
 
 extern crate alloc;
 
+use piecrust_macros::contract;
 use piecrust_uplink as uplink;
 
 /// Struct that describes the state of the debug contract
@@ -18,6 +19,7 @@ pub struct Debug;
 /// State of the debug contract
 static mut STATE: Debug = Debug;
 
+#[contract]
 impl Debug {
     /// Print debug information
     pub fn debug(&self, string: alloc::string::String) {
@@ -25,13 +27,7 @@ impl Debug {
     }
 
     /// Panic execution
-    pub fn panic(&self) {
+    fn panic(&self) {
         panic!("It's never too late to panic");
     }
-}
-
-/// Expose `Debug::debug()` to the host
-#[no_mangle]
-unsafe fn debug(arg_len: u32) -> u32 {
-    uplink::wrap_call(arg_len, |s: alloc::string::String| STATE.debug(s))
 }

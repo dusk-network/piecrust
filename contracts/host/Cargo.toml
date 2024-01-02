@@ -9,6 +9,7 @@ edition = "2021"
 license = "MPL-2.0"
 
 [dependencies]
+piecrust-macros = { path = "../../piecrust-macros" }
 piecrust-uplink = { path = "../../piecrust-uplink", features = ["abi", "dlmalloc"] }
 dusk-plonk = { version = "0.14", default-features = false, features = ["alloc", "rkyv-impl"] }
 

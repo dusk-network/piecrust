@@ -9,6 +9,7 @@
 
 #![no_std]
 
+use piecrust_macros::contract;
 use piecrust_uplink as uplink;
 
 use blake3::Hasher;
@@ -57,27 +58,16 @@ impl Merkle {
 /// State of the merkle contract
 static mut STATE: Merkle = Merkle::new();
 
+#[contract]
 impl Merkle {
-    fn insert_u64(&mut self, pos: u64, int: u64) {
+    pub fn insert(&mut self, pos: u64, int: u64) {
         let hash = blake3::hash(&int.to_le_bytes());
         self.tree.insert(pos, hash);
     }
 
-    fn root(&self) -> [u8; 32] {
+    pub fn root(&self) -> [u8; 32] {
         let root = self.tree.root().0;
         uplink::debug!("{:?}", root);
         root
     }
-}
-
-/// Expose `Merkle::insert()` to the host
-#[no_mangle]
-unsafe fn insert(a: u32) -> u32 {
-    uplink::wrap_call(a, |(pos, int)| STATE.insert_u64(pos, int))
-}
-
-/// Expose `Merkle::root()` to the host
-#[no_mangle]
-unsafe fn root(a: u32) -> u32 {
-    uplink::wrap_call(a, |_: ()| STATE.root())
 }

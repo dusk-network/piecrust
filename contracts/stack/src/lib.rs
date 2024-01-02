@@ -12,7 +12,7 @@ use nstack::annotation::Cardinality;
 use nstack::NStack;
 use ranno::Annotation;
 
-use piecrust_uplink as uplink;
+use piecrust_macros::contract;
 
 /// Struct that describes the state of the stack contract
 pub struct Stack {
@@ -24,6 +24,7 @@ static mut STATE: Stack = Stack {
     inner: NStack::new(),
 };
 
+#[contract]
 impl Stack {
     /// Push a new item onto the stack
     pub fn push(&mut self, elem: i32) {
@@ -39,22 +40,4 @@ impl Stack {
     pub fn len(&self) -> u32 {
         *Cardinality::from_child(&self.inner) as u32
     }
-}
-
-/// Expose `Stack::push()` to the host
-#[no_mangle]
-unsafe fn push(arg_len: u32) -> u32 {
-    uplink::wrap_call(arg_len, |elem: i32| STATE.push(elem))
-}
-
-/// Expose `Stack::pop()` to the host
-#[no_mangle]
-unsafe fn pop(arg_len: u32) -> u32 {
-    uplink::wrap_call(arg_len, |_arg: ()| STATE.pop())
-}
-
-/// Expose `Stack::len()` to the host
-#[no_mangle]
-unsafe fn len(arg_len: u32) -> u32 {
-    uplink::wrap_call(arg_len, |_arg: ()| STATE.len())
 }

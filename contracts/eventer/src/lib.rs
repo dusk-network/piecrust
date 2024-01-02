@@ -8,6 +8,7 @@
 
 #![no_std]
 
+use piecrust_macros::contract;
 use piecrust_uplink as uplink;
 
 /// Struct that describes the state of the eventer contract
@@ -16,17 +17,12 @@ pub struct Eventer;
 /// State of the eventer contract
 static mut STATE: Eventer = Eventer;
 
+#[contract]
 impl Eventer {
-    /// Emits an event with the given number
-    pub fn emit_num(&mut self, num: u32) {
+    /// Emits the given number of events
+    pub fn emit_events(&mut self, num: u32) {
         for i in 0..num {
             uplink::emit("number", i);
         }
     }
-}
-
-/// Expose `Eventer::emit_num()` to the host
-#[no_mangle]
-unsafe fn emit_events(arg_len: u32) -> u32 {
-    uplink::wrap_call(arg_len, |num| STATE.emit_num(num))
 }

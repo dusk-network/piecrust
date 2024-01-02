@@ -11,4 +11,5 @@ edition = "2018"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
+piecrust-macros = { path = "../../piecrust-macros" }
 piecrust-uplink = { path = "../../piecrust-uplink", features = ["abi", "dlmalloc"] }

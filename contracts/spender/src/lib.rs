@@ -8,6 +8,7 @@
 
 #![no_std]
 
+use piecrust_macros::contract;
 use piecrust_uplink as uplink;
 
 /// Struct that describes the state of the spender contract
@@ -16,6 +17,7 @@ pub struct Spender;
 /// State of the spender contract
 static mut STATE: Spender = Spender;
 
+#[contract]
 impl Spender {
     /// Get the limit and spent gas before and after an inter-contract call,
     /// including the limit and spent by the called contract
@@ -54,16 +56,4 @@ impl Spender {
     pub fn spend(&self) {
         panic!("I like spending");
     }
-}
-
-/// Expose `Spender::get_limit_and_spent()` to the host
-#[no_mangle]
-unsafe fn get_limit_and_spent(a: u32) -> u32 {
-    uplink::wrap_call(a, |_: ()| STATE.get_limit_and_spent())
-}
-
-/// Expose `Spender::spend()` to the host
-#[no_mangle]
-unsafe fn spend(a: u32) -> u32 {
-    uplink::wrap_call(a, |_: ()| STATE.spend())
 }

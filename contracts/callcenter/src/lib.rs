@@ -13,9 +13,10 @@ extern crate alloc;
 use alloc::string::String;
 use alloc::vec::Vec;
 
+use piecrust_macros::contract;
 use piecrust_uplink as uplink;
 use piecrust_uplink::call_with_limit;
-use uplink::{wrap_call, ContractError, ContractId};
+use uplink::{ContractError, ContractId};
 
 /// Struct that describes the state of the Callcenter contract
 pub struct Callcenter;
@@ -23,6 +24,7 @@ pub struct Callcenter;
 /// State of the Callcenter contract
 static mut STATE: Callcenter = Callcenter;
 
+#[contract]
 impl Callcenter {
     /// Read the value of the counter
     pub fn query_counter(&self, counter_id: ContractId) -> i64 {
@@ -109,78 +111,4 @@ impl Callcenter {
     pub fn panik(&self) {
         panic!("panik");
     }
-}
-
-/// Expose `Callcenter::query_counter()` to the host
-#[no_mangle]
-unsafe fn query_counter(arg_len: u32) -> u32 {
-    wrap_call(arg_len, |counter_id| STATE.query_counter(counter_id))
-}
-
-/// Expose `Callcenter::increment_counter()` to the host
-#[no_mangle]
-unsafe fn increment_counter(arg_len: u32) -> u32 {
-    wrap_call(arg_len, |counter_id| STATE.increment_counter(counter_id))
-}
-
-/// Expose `Callcenter::calling_self()` to the host
-#[no_mangle]
-unsafe fn calling_self(arg_len: u32) -> u32 {
-    wrap_call(arg_len, |self_id| STATE.calling_self(self_id))
-}
-
-/// Expose `Callcenter::call_self()` to the host
-#[no_mangle]
-unsafe fn call_self(arg_len: u32) -> u32 {
-    wrap_call(arg_len, |_: ()| STATE.call_self())
-}
-
-/// Expose `Callcenter::call_spend_with_limit` to the host
-#[no_mangle]
-unsafe fn call_spend_with_limit(arg_len: u32) -> u32 {
-    wrap_call(arg_len, |(contract, gas_limit)| {
-        STATE.call_spend_with_limit(contract, gas_limit)
-    })
-}
-
-/// Expose `Callcenter::return_self_id()` to the host
-#[no_mangle]
-unsafe fn return_self_id(arg_len: u32) -> u32 {
-    wrap_call(arg_len, |_: ()| STATE.return_self_id())
-}
-
-/// Expose `Callcenter::return_caller()` to the host
-#[no_mangle]
-unsafe fn return_caller(arg_len: u32) -> u32 {
-    wrap_call(arg_len, |_: ()| STATE.return_caller())
-}
-
-/// Expose `Callcenter::delegate_query()` to the host
-#[no_mangle]
-unsafe fn delegate_query(arg_len: u32) -> u32 {
-    wrap_call(arg_len, |(mod_id, fn_name, fn_arg)| {
-        STATE.delegate_query(mod_id, fn_name, fn_arg)
-    })
-}
-
-/// Expose `Callcenter::query_passthrough()` to the host
-#[no_mangle]
-unsafe fn query_passthrough(arg_len: u32) -> u32 {
-    wrap_call(arg_len, |(fn_name, fn_arg)| {
-        STATE.query_passthrough(fn_name, fn_arg)
-    })
-}
-
-/// Expose `Callcenter::delegate_transaction()` to the host
-#[no_mangle]
-unsafe fn delegate_transaction(arg_len: u32) -> u32 {
-    wrap_call(arg_len, |(mod_id, fn_name, fn_arg)| {
-        STATE.delegate_transaction(mod_id, fn_name, fn_arg)
-    })
-}
-
-/// Expose `Callcenter::panik()` to the host
-#[no_mangle]
-unsafe fn panik(arg_len: u32) -> u32 {
-    wrap_call(arg_len, |()| STATE.panik())
 }

@@ -8,6 +8,7 @@
 
 #![no_std]
 
+use piecrust_macros::contract;
 use piecrust_uplink as uplink;
 use uplink::ContractId;
 
@@ -23,6 +24,7 @@ static mut STATE: Crossover = Crossover {
     value: INITIAL_VALUE,
 };
 
+#[contract]
 impl Crossover {
     // Calls the [`set_back_and_panic`] method of the contract `contract`,
     // which is assumed to be another Crossover contract.
@@ -102,30 +104,4 @@ impl Crossover {
         self.value = to;
         old_val
     }
-}
-
-/// Expose `Crossover::crossover()` to the host
-#[no_mangle]
-unsafe fn crossover(arg_len: u32) -> u32 {
-    uplink::wrap_call(arg_len, |_: ()| STATE.crossover())
-}
-
-/// Expose `Crossover::set_crossover()` to the host
-#[no_mangle]
-unsafe fn set_crossover(arg_len: u32) -> u32 {
-    uplink::wrap_call(arg_len, |arg: i32| STATE.set_crossover(arg))
-}
-
-/// Expose `Crossover::check_consistent_state_on_errors()` to the host
-#[no_mangle]
-unsafe fn check_consistent_state_on_errors(arg_len: u32) -> u32 {
-    uplink::wrap_call(arg_len, |(contract, s, sf, sb)| {
-        STATE.check_consistent_state_on_errors(contract, s, sf, sb)
-    })
-}
-
-/// Expose `Crossover::set_back_and_panic()` to the host
-#[no_mangle]
-unsafe fn set_back_and_panic(arg_len: u32) -> u32 {
-    uplink::wrap_call(arg_len, |(v, vb)| STATE.set_back_and_panic(v, vb))
 }

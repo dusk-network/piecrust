@@ -11,7 +11,7 @@
 extern crate alloc;
 
 use alloc::vec::Vec;
-use piecrust_uplink as uplink;
+use piecrust_macros::contract;
 
 /// Struct that describes the state of the vector contract
 pub struct Vector {
@@ -21,6 +21,7 @@ pub struct Vector {
 /// State of the vector contract
 static mut STATE: Vector = Vector { a: Vec::new() };
 
+#[contract]
 impl Vector {
     /// Push an item to the vector
     pub fn push(&mut self, x: i16) {
@@ -31,16 +32,4 @@ impl Vector {
     pub fn pop(&mut self) -> Option<i16> {
         self.a.pop()
     }
-}
-
-/// Expose `Vector::push()` to the host
-#[no_mangle]
-unsafe fn push(arg_len: u32) -> u32 {
-    uplink::wrap_call(arg_len, |arg| STATE.push(arg))
-}
-
-/// Expose `Vector::pop()` to the host
-#[no_mangle]
-unsafe fn pop(arg_len: u32) -> u32 {
-    uplink::wrap_call(arg_len, |_arg: ()| STATE.pop())
 }

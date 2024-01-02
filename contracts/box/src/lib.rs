@@ -13,7 +13,7 @@ extern crate alloc;
 
 use alloc::boxed::Box;
 
-use piecrust_uplink as uplink;
+use piecrust_macros::contract;
 
 /// Struct that describes the state of the box contract
 // One Box, many `Boxen`
@@ -24,6 +24,7 @@ pub struct Boxen {
 /// State of the box contract
 static mut STATE: Boxen = Boxen { a: None };
 
+#[contract]
 impl Boxen {
     /// Set the data pointed to by the `Box`, or create a new `Box` if it
     /// doesn't exist
@@ -38,16 +39,4 @@ impl Boxen {
     pub fn get(&self) -> Option<i16> {
         self.a.as_ref().map(|i| **i)
     }
-}
-
-/// Expose `Boxen::set()` to the host
-#[no_mangle]
-unsafe fn set(arg_len: u32) -> u32 {
-    uplink::wrap_call(arg_len, |to| STATE.set(to))
-}
-
-/// Expose `Boxen::get()` to the host
-#[no_mangle]
-unsafe fn get(arg_len: u32) -> u32 {
-    uplink::wrap_call(arg_len, |_: ()| STATE.get())
 }

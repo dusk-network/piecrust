@@ -8,7 +8,7 @@
 
 #![no_std]
 
-use piecrust_uplink as uplink;
+use piecrust_macros::contract;
 
 /// Struct that describes the state of the fallible counter contract
 pub struct FallibleCounter {
@@ -18,6 +18,7 @@ pub struct FallibleCounter {
 /// State of the fallible counter contract
 static mut STATE: FallibleCounter = FallibleCounter { value: 0xfc };
 
+#[contract]
 impl FallibleCounter {
     /// Read the value of the counter
     pub fn read_value(&self) -> i64 {
@@ -32,16 +33,4 @@ impl FallibleCounter {
             panic!("Incremental panic");
         }
     }
-}
-
-/// Expose `FallibleCounter::read_value()` to the host
-#[no_mangle]
-unsafe fn read_value(arg_len: u32) -> u32 {
-    uplink::wrap_call(arg_len, |_: ()| STATE.read_value())
-}
-
-/// Expose `FallibleCounter::increment()` to the host
-#[no_mangle]
-unsafe fn increment(arg_len: u32) -> u32 {
-    uplink::wrap_call(arg_len, |panic: bool| STATE.increment(panic))
 }
