@@ -58,6 +58,26 @@ unsafe fn increment(arg_len: u32) -> u32 {
 }
 ```
 
+Or alternatively, a contracts implementation can be annotated with the contract macro:
+```rust
+use piecrust_macros::contract;
+
+...
+
+#[contract]
+impl Counter {
+    pub fn read_value(&self) -> i64 {
+        self.value
+    }
+
+    pub fn increment(&mut self) {
+        let value = self.value + 1;
+    }
+}
+```
+
+This macro will generate the `wrap_call` functions for you.
+
 ## Release History
 
 To see the release history for this crate, please see the [CHANGELOG](./CHANGELOG.md) file.

@@ -2,6 +2,7 @@
 members = [
     "crumbles",
     "piecrust-uplink",
-    "piecrust",
+    "piecrust", 
+    "piecrust-macros",
 ]
 resolver = "2"
