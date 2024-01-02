@@ -4,6 +4,11 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
+//! `piecrust-macros` is a macro library designed to simplify the development of
+//! smart contracts for Dusk's Piecrust virtual machine. It provides macros to
+//! automatically generate the boilerplate code required for interfacing smart
+//! contracts with the Piecrust VM.
+
 #![feature(proc_macro_quote)]
 #![no_std]
 extern crate alloc;
@@ -12,14 +17,40 @@ extern crate proc_macro;
 use alloc::vec::Vec;
 use proc_macro::TokenStream;
 use quote::{format_ident, quote};
-use syn::{parse_macro_input, ImplItem, ItemImpl, Type, TypePath, Visibility};
+use syn::{
+    parse_macro_input, FnArg, ImplItem, ItemImpl, Type, TypePath, Visibility,
+};
 
+/// Exposes functions in a smart contract's implementation block by
+/// automatically generating external call wrappers.
+///
+/// This macro processes each public function in the contract's implementation
+/// block, generating corresponding wrapper functions that facilitate calls from
+/// the Piecrust VM.
+///
+/// # Usage
+///
+/// Simply annotate your contract's `impl` block with `#[contract]`.
+///
+/// ```rust
+/// #[contract]
+/// impl MyContract {
+///     pub fn my_method(&self) {
+///         // Implementation...
+///     }
+/// }
+/// ```
+///
+/// For each public method, a corresponding `no_mangle` function is generated.
+/// Instance methods (`&self`, `&mut self`) assume `STATE` as the state holder
+/// for your contract. Static methods on the implementation block are also
+/// supported and are called directly on the type.
 #[proc_macro_attribute]
 pub fn contract(_attr: TokenStream, item: TokenStream) -> TokenStream {
-    // Grab an implementation block
+    // Parse the annotated implementation block
     let input_impl = parse_macro_input!(item as ItemImpl);
-
-    // Take the last segment of the impl path.
+    // Extract the type for which the implementation is written. Used
+    // specifically for generating correct function calls for static methods.
     let impl_type =
         if let Type::Path(TypePath { path, .. }) = &*input_impl.self_ty {
             path.segments.last().unwrap().ident.clone()
@@ -27,86 +58,58 @@ pub fn contract(_attr: TokenStream, item: TokenStream) -> TokenStream {
             panic!("Expected a type path for the impl block");
         };
 
-    // Will store the generated "wrap_call" functions for each public function
+    // Vec to store the generated "wrap_call" functions for each public function
     // on the impl block
     let mut generated_functions = Vec::new();
 
-    for item in input_impl.clone().items {
+    for item in &input_impl.items {
+        // If the item within an impl block is a public function, continue
         if let ImplItem::Fn(method) = item {
             if matches!(method.vis, Visibility::Public(_)) {
-                let method_name = method.sig.ident;
-                let inputs = method.sig.inputs;
-
-                // Check if the function is an instance method (has `self`)
-                let is_instance_method = inputs
+                let method_name = &method.sig.ident;
+                let is_instance_method = method
+                    .sig
+                    .inputs
                     .iter()
-                    .any(|arg| matches!(arg, syn::FnArg::Receiver(_)));
+                    .any(|arg| matches!(arg, FnArg::Receiver(_)));
 
-                let generated_function = if is_instance_method {
-                    // Determine if the function has additional arguments
-                    // besides `self`
-                    let has_additional_args = inputs.len() > 1;
-
-                    if has_additional_args {
-                        // Prepare a tuple of types for the arguments, skipping
-                        // `self`
-                        let arg_types: Vec<_> = inputs
-                            .iter()
-                            .skip(1)
-                            .map(|arg| match arg {
-                                syn::FnArg::Typed(pat_type) => {
-                                    pat_type.ty.clone()
-                                }
+                // Process function arguments. For instance methods, skip the
+                // first argument (`self`), for static methods, include all
+                // arguments.
+                let (arg_types, arg_pattern): (Vec<_>, Vec<_>) = method
+                    .sig
+                    .inputs
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(i, arg)| {
+                        if i == 0 && is_instance_method {
+                            None
+                        } else {
+                            match arg {
+                                FnArg::Typed(pat_type) => Some((
+                                    pat_type.ty.clone(),
+                                    format_ident!("arg{}", i),
+                                )),
                                 _ => panic!("Expected typed argument"),
-                            })
-                            .collect();
-
-                        // Generate a tuple pattern to unpack the arguments
-                        let arg_pattern: Vec<_> = (0..arg_types.len())
-                            .map(|i| format_ident!("arg{}", i))
-                            .collect();
-
-                        // For an instance method with 1 or more arguments
-                        quote! {
-                            #[no_mangle]
-                            pub unsafe fn #method_name(arg_len: u32) -> u32 {
-                                piecrust_uplink::wrap_call(arg_len, |(#(#arg_pattern),*): (#(#arg_types),*)| {
-                                    STATE.#method_name(#(#arg_pattern),*)
-                                })
                             }
                         }
-                    } else {
-                        // For an instance method with no arguments
-                        quote! {
-                            #[no_mangle]
-                            pub unsafe fn #method_name(arg_len: u32) -> u32 {
-                                piecrust_uplink::wrap_call(arg_len, |_: ()| STATE.#method_name())
-                            }
-                        }
-                    }
+                    })
+                    .unzip();
+
+                // Depending on whether it's an instance method or static
+                // method, generate the call block on either "STATE" or directly
+                // on the type.
+                let call_block = if is_instance_method {
+                    quote! { STATE.#method_name(#(#arg_pattern),*) }
                 } else {
-                    // Logic for static functions
-                    // Prepare a tuple of types for the arguments
-                    let arg_types: Vec<_> = inputs
-                        .iter()
-                        .map(|arg| match arg {
-                            syn::FnArg::Typed(pat_type) => pat_type.ty.clone(),
-                            _ => panic!("Expected typed argument"),
-                        })
-                        .collect();
+                    quote! { #impl_type::#method_name(#(#arg_pattern),*) }
+                };
 
-                    // Generate a tuple pattern to unpack the arguments
-                    let arg_pattern: Vec<_> = (0..arg_types.len())
-                        .map(|i| format_ident!("arg{}", i))
-                        .collect();
-
-                    quote! {
-                        #[no_mangle]
-                        pub unsafe fn #method_name(arg_len: u32) -> u32 {
-                            piecrust_uplink::wrap_call(arg_len, |(#(#arg_pattern),*): (#(#arg_types),*)| {
-                                #impl_type::#method_name(#(#arg_pattern),*)
-                            })
-                        }
+                // Generate the final "wrap_call" function
+                let generated_function = quote! {
+                    #[no_mangle]
+                    pub unsafe fn #method_name(arg_len: u32) -> u32 {
+                        piecrust_uplink::wrap_call(arg_len, |(#(#arg_pattern),*): (#(#arg_types),*)| #call_block)
                     }
                 };
 
@@ -115,9 +118,8 @@ pub fn contract(_attr: TokenStream, item: TokenStream) -> TokenStream {
         }
     }
 
-    // #input_impl takes the original implementation block and adds the
-    // generated "wrap_call" functions for all of the blocks public functions
-    // outside the impl block
+    // Combine the original implementation block with the generated "wrap_call"
+    // functions
     let expanded = quote! {
         #input_impl
 
