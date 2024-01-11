@@ -73,6 +73,23 @@ impl Module {
         Ok(Self { module })
     }
 
+    pub(crate) fn from_bytecode(
+        engine: &Engine,
+        bytecode: &[u8],
+    ) -> io::Result<Self> {
+        let module =
+            dusk_wasmtime::Module::new(engine, bytecode).map_err(|e| {
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!("failed to compile module: {}", e),
+                )
+            })?;
+
+        check_single_memory(&module)?;
+
+        Ok(Self { module })
+    }
+
     pub(crate) fn serialize(&self) -> Vec<u8> {
         self.module
             .serialize()
