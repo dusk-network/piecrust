@@ -5,6 +5,7 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 use alloc::vec::Vec;
+use core::ptr;
 
 use rkyv::{
     archived_root,
@@ -60,7 +61,7 @@ mod ext {
         pub fn caller();
         pub fn limit() -> u64;
         pub fn spent() -> u64;
-        pub fn owner();
+        pub fn owner(contract_id: *const u8) -> i32;
         pub fn self_id();
     }
 }
@@ -141,11 +142,12 @@ where
         composite.pos() as u32
     });
 
+    let contract_id_ptr = contract.as_bytes().as_ptr();
     let fn_name = fn_name.as_bytes();
 
     let ret_len = unsafe {
         ext::c(
-            &contract.as_bytes()[0],
+            contract_id_ptr,
             fn_name.as_ptr(),
             fn_name.len() as u32,
             arg_len,
@@ -196,10 +198,11 @@ pub fn call_raw_with_limit(
     });
 
     let fn_name = fn_name.as_bytes();
+    let contract_id_ptr = contract.as_bytes().as_ptr();
 
     let ret_len = unsafe {
         ext::c(
-            &contract.as_bytes()[0],
+            contract_id_ptr,
             fn_name.as_ptr(),
             fn_name.len() as u32,
             fn_arg.len() as u32,
@@ -239,9 +242,25 @@ where
     }
 }
 
-/// Return the current contract's owner.
-pub fn owner<const N: usize>() -> [u8; N] {
-    unsafe { ext::owner() };
+/// Return the given contract's owner, if the contract exists.
+pub fn owner<const N: usize>(contract: ContractId) -> Option<[u8; N]> {
+    let contract_id_ptr = contract.as_bytes().as_ptr();
+
+    unsafe {
+        match ext::owner(contract_id_ptr) {
+            0 => None,
+            _ => Some(with_arg_buf(|buf| {
+                let ret = archived_root::<[u8; N]>(&buf[..N]);
+                ret.deserialize(&mut Infallible).expect("Infallible")
+            })),
+        }
+    }
+}
+
+/// Returns the current contract's owner.
+pub fn self_owner<const N: usize>() -> [u8; N] {
+    unsafe { ext::owner(ptr::null()) };
+
     with_arg_buf(|buf| {
         let ret = unsafe { archived_root::<[u8; N]>(&buf[..N]) };
         ret.deserialize(&mut Infallible).expect("Infallible")
