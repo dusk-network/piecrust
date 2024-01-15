@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Change `owner` import to accept the contract ID as argument and return
+  non-zero upon success 
+
 ## [0.14.1] - 2024-01-11
 
 ### Fixed

@@ -20,12 +20,17 @@ static mut STATE: Metadata = Metadata;
 impl Metadata {
     /// Read the value of the contract's owner
     pub fn read_owner(&self) -> [u8; 33] {
-        uplink::owner()
+        uplink::self_owner()
     }
 
     /// Read the value of the contract's id
     pub fn read_id(&self) -> ContractId {
         uplink::self_id()
+    }
+
+    /// Read the value of the given contract's owner
+    pub fn read_owner_of(&self, id: ContractId) -> Option<[u8; 33]> {
+        uplink::owner(id)
     }
 }
 
@@ -39,4 +44,10 @@ unsafe fn read_owner(arg_len: u32) -> u32 {
 #[no_mangle]
 unsafe fn read_id(arg_len: u32) -> u32 {
     uplink::wrap_call(arg_len, |_: ()| STATE.read_id())
+}
+
+/// Expose `Metadata::read_owner_of()` to the host
+#[no_mangle]
+unsafe fn read_owner_of(arg_len: u32) -> u32 {
+    uplink::wrap_call(arg_len, |id| STATE.read_owner_of(id))
 }

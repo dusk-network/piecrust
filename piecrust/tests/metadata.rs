@@ -47,3 +47,75 @@ fn metadata() -> Result<(), Error> {
 
     Ok(())
 }
+
+#[test]
+fn owner_of() -> Result<(), Error> {
+    const EXPECTED_OWNER_0: [u8; 33] = [3u8; 33];
+    const EXPECTED_OWNER_1: [u8; 33] = [4u8; 33];
+
+    const CONTRACT_ID_0: ContractId = ContractId::from_bytes([1; 32]);
+    const CONTRACT_ID_1: ContractId = ContractId::from_bytes([2; 32]);
+    const CONTRACT_ID_2: ContractId = ContractId::from_bytes([3; 32]);
+
+    let vm = VM::ephemeral()?;
+
+    let mut session = vm.session(SessionData::builder())?;
+
+    session.deploy(
+        contract_bytecode!("metadata"),
+        ContractData::builder(EXPECTED_OWNER_0).contract_id(CONTRACT_ID_0),
+        LIMIT,
+    )?;
+    session.deploy(
+        contract_bytecode!("metadata"),
+        ContractData::builder(EXPECTED_OWNER_1).contract_id(CONTRACT_ID_1),
+        LIMIT,
+    )?;
+
+    let owner = session
+        .call::<_, Option<[u8; 33]>>(
+            CONTRACT_ID_0,
+            "read_owner_of",
+            &CONTRACT_ID_1,
+            LIMIT,
+        )?
+        .data;
+
+    assert_eq!(
+        owner,
+        Some(EXPECTED_OWNER_1),
+        "The first contract should think the second contract has the correct owner"
+    );
+
+    let owner = session
+        .call::<_, Option<[u8; 33]>>(
+            CONTRACT_ID_1,
+            "read_owner_of",
+            &CONTRACT_ID_0,
+            LIMIT,
+        )?
+        .data;
+
+    assert_eq!(
+        owner,
+        Some(EXPECTED_OWNER_0),
+        "The second contract should think the first contract has the correct owner"
+    );
+
+    let owner = session
+        .call::<_, Option<[u8; 33]>>(
+            CONTRACT_ID_0,
+            "read_owner_of",
+            &CONTRACT_ID_2,
+            LIMIT,
+        )?
+        .data;
+
+    assert_eq!(
+        owner,
+        None,
+        "The first contract should think that the owner of a non-existing contract is None"
+    );
+
+    Ok(())
+}

@@ -72,7 +72,10 @@ impl Imports {
             "limit" => Func::wrap(store, limit),
             "spent" => Func::wrap(store, spent),
             "panic" => Func::wrap(store, panic),
-            "owner" => Func::wrap(store, owner),
+            "owner" => match is_64 {
+                false => Func::wrap(store, wasm32::owner),
+                true => Func::wrap(store, wasm64::owner),
+            },
             "self_id" => Func::wrap(store, self_id),
             #[cfg(feature = "debug")]
             "hdebug" => Func::wrap(store, hdebug),
@@ -386,16 +389,47 @@ fn panic(fenv: Caller<Env>, arg_len: u32) -> WasmtimeResult<()> {
     })?)
 }
 
-fn owner(fenv: Caller<Env>) {
+fn owner(fenv: Caller<Env>, mod_id_ofs: usize) -> WasmtimeResult<i32> {
+    check_ptr(fenv.data().self_instance(), mod_id_ofs, CONTRACT_ID_BYTES)?;
+
     let env = fenv.data();
-    let self_id = env.self_contract_id();
-    let contract_metadata = env
-        .contract_metadata(self_id)
-        .expect("contract metadata should exist");
-    let slice = contract_metadata.owner.as_slice();
-    let len = slice.len();
-    env.self_instance()
-        .with_arg_buf_mut(|arg| arg[..len].copy_from_slice(slice));
+
+    // The null pointer is always zero, so we can use this to check if the
+    // caller wants their own ID.
+    let metadata = if mod_id_ofs == 0 {
+        let self_id = env.self_contract_id();
+
+        let contract_metadata = env
+            .contract_metadata(self_id)
+            .expect("contract metadata should exist");
+
+        Some(contract_metadata)
+    } else {
+        let instance = env.self_instance();
+
+        let mod_id = instance.with_memory(|memory| {
+            let mut mod_id = ContractId::uninitialized();
+            mod_id.as_bytes_mut().copy_from_slice(
+                &memory[mod_id_ofs..][..std::mem::size_of::<ContractId>()],
+            );
+            mod_id
+        });
+
+        env.contract_metadata(&mod_id)
+    };
+
+    match metadata {
+        None => Ok(0),
+        Some(metadata) => {
+            let owner = metadata.owner.as_slice();
+
+            env.self_instance().with_arg_buf_mut(|arg| {
+                arg[..owner.len()].copy_from_slice(owner)
+            });
+
+            Ok(1)
+        }
+    }
 }
 
 fn self_id(fenv: Caller<Env>) {

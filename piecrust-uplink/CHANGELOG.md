@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Add `self_owner` function returning the owner of the calling contract
+
+### Changed
+
+- Change `owner` function to take a `ContractId` as argument and return an `Option<[u8; N]>`
+- Change `owner` extern to take a `*const u8` argument signifying the contract ID
+
 ## [0.9.0] - 2023-12-13
 
 ### Added
