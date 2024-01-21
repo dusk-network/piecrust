@@ -76,7 +76,7 @@ impl CallTree {
         })
     }
 
-    /// Give the current node the amount spent and recusively update amount
+    /// Give the current node the amount spent and recursively update amount
     /// spent to accurately reflect what each node spent during each call.
     pub(crate) fn update_spent(&mut self, spent: u64) {
         if let Some(inner) = self.0 {
@@ -192,7 +192,7 @@ impl CallTreeNode {
 
 /// An iterator over a [`CallTree`].
 ///
-/// It starts at the righmost node and proceeds leftward towards its siblings,
+/// It starts at the rightmost node and proceeds leftward towards its siblings,
 /// up toward the root.
 struct CallTreeIter<'a> {
     tree: Option<Subtree>,
