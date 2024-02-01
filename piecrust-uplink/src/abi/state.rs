@@ -22,6 +22,9 @@ use crate::{
 pub mod arg_buf {
     use crate::ARGBUF_LEN;
 
+    use core::ptr;
+    use core::slice;
+
     #[no_mangle]
     static mut A: [u64; ARGBUF_LEN / 8] = [0; ARGBUF_LEN / 8];
 
@@ -29,14 +32,11 @@ pub mod arg_buf {
     where
         F: FnOnce(&mut [u8]) -> R,
     {
-        let buf = unsafe { &mut A };
-        let first = &mut buf[0];
-        let slice = unsafe {
-            let first_byte: &mut u8 = core::mem::transmute(first);
-            core::slice::from_raw_parts_mut(first_byte, ARGBUF_LEN)
-        };
-
-        f(slice)
+        unsafe {
+            let addr = ptr::addr_of_mut!(A);
+            let slice = slice::from_raw_parts_mut(addr as _, ARGBUF_LEN);
+            f(slice)
+        }
     }
 }
 
