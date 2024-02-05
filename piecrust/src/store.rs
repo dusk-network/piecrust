@@ -406,8 +406,13 @@ fn write_commit<P: AsRef<Path>>(
     let mut index = base
         .as_ref()
         .map_or(ContractIndex::default(), |base| base.index.clone());
-    for c in &commit_contracts {
-        index.insert(*c.0, &c.1.memory);
+
+    for (contract_id, contract_data) in &commit_contracts {
+        if contract_data.is_new {
+            index.remove_and_insert(*contract_id, &contract_data.memory);
+        } else {
+            index.insert(*contract_id, &contract_data.memory);
+        }
     }
 
     let root = *index.root();
@@ -497,6 +502,7 @@ fn write_commit_inner<P: AsRef<Path>>(
 
         let mut pages = BTreeSet::new();
 
+        // Write dirty pages and keep track of the page indices.
         for (dirty_page, _, page_index) in contract_data.memory.dirty_pages() {
             let page_path = page_path(&memory_dir, *page_index);
             fs::write(page_path, dirty_page)?;
@@ -507,13 +513,16 @@ fn write_commit_inner<P: AsRef<Path>>(
         let module_path = bytecode_path.with_extension(OBJECTCODE_EXTENSION);
         let metadata_path = bytecode_path.with_extension(METADATA_EXTENSION);
 
-        // If the contract already existed in the base commit, we hard link the
-        // bytecode, module, and metadata files to avoid duplicating them,
-        // otherwise we write them to disk.
+        // If the contract is new, we write the bytecode, module, and metadata
+        // files to disk, otherwise we hard link them to avoid duplicating them.
         //
         // Also, if there is a base commit, we hard link the pages of the
         // contracts that are not dirty.
-        if let Some(base) = &directories.base {
+        if contract_data.is_new {
+            fs::write(bytecode_path, &contract_data.bytecode)?;
+            fs::write(module_path, &contract_data.module.serialize())?;
+            fs::write(metadata_path, &contract_data.metadata)?;
+        } else if let Some(base) = &directories.base {
             if let Some(elem) = base.inner.index.get(contract) {
                 let base_bytecode_path = base.bytecode_dir.join(&contract_hex);
                 let base_module_path =
@@ -539,10 +548,6 @@ fn write_commit_inner<P: AsRef<Path>>(
                     }
                 }
             }
-        } else {
-            fs::write(bytecode_path, &contract_data.bytecode)?;
-            fs::write(module_path, &contract_data.module.serialize())?;
-            fs::write(metadata_path, &contract_data.metadata)?;
         }
     }
 

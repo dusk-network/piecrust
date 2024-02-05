@@ -396,6 +396,47 @@ impl Session {
         })
     }
 
+    /// Migrates a `contract` to a new `bytecode`, performing modifications to
+    /// its state as specified by the closure.
+    ///
+    /// The closure takes a contract ID of where the new contract will be
+    /// available during the migration, and a mutable reference to a session,
+    /// allowing the caller to perform calls and other operations on the new
+    /// (and old) contract.
+    ///
+    /// At the end of the migration, the new contract will be available at the
+    /// given `contract` ID, and the old contract will be removed from the
+    /// state.
+    ///
+    /// # Errors
+    /// The migration may error during execution for a myriad of reasons. The
+    /// caller is encouraged to drop the `Session` should an error occur as it
+    /// will more than likely be left in an inconsistent state.
+    pub fn migrate<'a, A, D, F, const N: usize>(
+        mut self,
+        contract: ContractId,
+        bytecode: &[u8],
+        deploy_data: D,
+        deploy_gas_limit: u64,
+        closure: F,
+    ) -> Result<Self, Error>
+    where
+        A: 'a + for<'b> Serialize<StandardBufSerializer<'b>>,
+        D: Into<ContractData<'a, A, N>>,
+        F: FnOnce(ContractId, &mut Session) -> Result<(), Error>,
+    {
+        let new_contract =
+            self.deploy(bytecode, deploy_data, deploy_gas_limit)?;
+        closure(new_contract, &mut self)?;
+
+        self.inner
+            .contract_session
+            .replace(contract, new_contract)
+            .map_err(|err| PersistenceError(Arc::new(err)))?;
+
+        Ok(self)
+    }
+
     /// Execute a *feeder* call on the current state of this session.
     ///
     /// Feeder calls are used to have the contract be able to report larger

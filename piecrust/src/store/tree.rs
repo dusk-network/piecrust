@@ -158,6 +158,11 @@ impl ContractIndex {
             .insert(position_from_contract(&contract), *element.tree.root());
     }
 
+    pub fn remove_and_insert(&mut self, contract: ContractId, memory: &Memory) {
+        self.contracts.remove(&contract);
+        self.insert(contract, memory);
+    }
+
     pub fn root(&self) -> Ref<Hash> {
         self.tree.root()
     }

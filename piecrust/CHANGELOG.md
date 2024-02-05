@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Add `Session::migrate` to allow for swapping contract code [#313]
+
 ## [0.15.0] - 2024-01-24
 
 ### Changed
@@ -345,6 +349,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [#234]: https://github.com/dusk-network/piecrust/pull/234
 
 <!-- ISSUES -->
+[#301]: https://github.com/dusk-network/piecrust/issues/313
 [#301]: https://github.com/dusk-network/piecrust/issues/301
 [#296]: https://github.com/dusk-network/piecrust/issues/296
 [#287]: https://github.com/dusk-network/piecrust/issues/287

@@ -27,6 +27,7 @@ pub struct ContractDataEntry {
     pub module: Module,
     pub metadata: Metadata,
     pub memory: Memory,
+    pub is_new: bool,
 }
 
 /// The representation of a session with a [`ContractStore`].
@@ -231,6 +232,7 @@ impl ContractSession {
                                     module,
                                     metadata,
                                     memory,
+                                    is_new: false,
                                 })
                                 .clone();
 
@@ -296,8 +298,30 @@ impl ContractSession {
                 module,
                 metadata,
                 memory,
+                is_new: true,
             },
         );
+
+        Ok(())
+    }
+
+    /// Remove the `old_contract` and move the `new_contract` to the
+    /// `old_contract`, effectively replacing the `old_contract` with
+    /// `new_contract`.
+    pub fn replace(
+        &mut self,
+        old_contract: ContractId,
+        new_contract: ContractId,
+    ) -> io::Result<()> {
+        let new_contract_data =
+            self.contracts.remove(&new_contract).ok_or_else(|| {
+                io::Error::new(
+                    io::ErrorKind::Other,
+                    format!("Contract '{new_contract}' not found"),
+                )
+            })?;
+
+        self.contracts.insert(old_contract, new_contract_data);
 
         Ok(())
     }
