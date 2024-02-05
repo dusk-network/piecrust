@@ -6,6 +6,7 @@ members = [
     "constructor",
     "counter",
     "debugger",
+    "double_counter",
     "eventer",
     "everest",
     "fallible_counter",
