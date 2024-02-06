@@ -148,3 +148,63 @@ fn contracts_persistence() -> Result<(), Error> {
     );
     Ok(())
 }
+
+#[test]
+fn migration() -> Result<(), Error> {
+    let vm = VM::ephemeral()?;
+    let mut session = vm.session(SessionData::builder())?;
+
+    let contract = session.deploy(
+        contract_bytecode!("counter"),
+        ContractData::builder(OWNER),
+        LIMIT,
+    )?;
+
+    session.call::<_, ()>(contract, "increment", &(), LIMIT)?;
+    session.call::<_, ()>(contract, "increment", &(), LIMIT)?;
+
+    let root = session.commit()?;
+
+    let mut session = vm.session(SessionData::builder().base(root))?;
+
+    session = session.migrate(
+        contract,
+        contract_bytecode!("double_counter"),
+        ContractData::builder(OWNER),
+        LIMIT,
+        |new_contract, session| {
+            let old_counter_value = session
+                .call::<_, i64>(contract, "read_value", &(), LIMIT)?
+                .data;
+
+            let (left_counter_value, _) = session
+                .call::<_, (i64, i64)>(new_contract, "read_values", &(), LIMIT)?
+                .data;
+
+            let diff = old_counter_value - left_counter_value;
+            for _ in 0..diff {
+                session.call::<_, ()>(
+                    new_contract,
+                    "increment_left",
+                    &(),
+                    LIMIT,
+                )?;
+            }
+
+            Ok(())
+        },
+    )?;
+
+    let root = session.commit()?;
+
+    let mut session = vm.session(SessionData::builder().base(root))?;
+
+    let (left_counter, right_counter) = session
+        .call::<_, (i64, i64)>(contract, "read_values", &(), LIMIT)?
+        .data;
+
+    assert_eq!(left_counter, 0xfe);
+    assert_eq!(right_counter, 0xcf);
+
+    Ok(())
+}
