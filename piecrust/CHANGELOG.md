@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Add `Session::migrate` to allow for swapping contract code [#313]
 
+### Changed
+
+- Upgrade `dusk-wasmtime` to version `17`
+
 ## [0.15.0] - 2024-01-24
 
 ### Changed
