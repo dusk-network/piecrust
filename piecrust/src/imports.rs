@@ -209,7 +209,9 @@ pub(crate) fn c(
     let callee_limit = if gas_limit > 0 && gas_limit < caller_remaining {
         gas_limit
     } else {
-        caller_remaining * GAS_PASS_PCT / 100
+        let div = caller_remaining / 100 * GAS_PASS_PCT;
+        let rem = caller_remaining % 100 * GAS_PASS_PCT / 100;
+        div + rem
     };
 
     let with_memory = |memory: &mut [u8]| -> Result<_, Error> {
