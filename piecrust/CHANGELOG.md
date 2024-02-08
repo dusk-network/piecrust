@@ -15,6 +15,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Upgrade `dusk-wasmtime` to version `17`
 
+### Fixed
+
+- Fix overflow in gas limit calculation in inter-contract call
+
 ## [0.15.0] - 2024-01-24
 
 ### Changed
