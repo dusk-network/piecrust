@@ -45,6 +45,12 @@ impl Hoster {
             false => String::from("PROOF IS INVALID"),
         }
     }
+
+    /// Call 'get_counter' function available from the host, and return the
+    /// result
+    pub fn host_get_counter(&self) -> i64 {
+        uplink::host_query("get_counter", ())
+    }
 }
 
 /// Expose `Hoster::host_hash()` to the host
@@ -59,4 +65,10 @@ unsafe fn host_verify(arg_len: u32) -> u32 {
     uplink::wrap_call(arg_len, |(proof, public_inputs)| {
         STATE.host_verify(proof, public_inputs)
     })
+}
+
+/// Expose `Hoster::host_counter()` to the host
+#[no_mangle]
+unsafe fn host_get_counter(arg_len: u32) -> u32 {
+    uplink::wrap_call(arg_len, |()| STATE.host_get_counter())
 }
