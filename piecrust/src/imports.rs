@@ -138,12 +138,12 @@ pub(crate) fn hq(
 ) -> WasmtimeResult<u32> {
     let env = fenv.data_mut();
 
-    let instance = env.self_instance();
+    let mut instance = env.self_instance();
 
     let name_len = name_len as usize;
 
-    check_ptr(instance, name_ofs, name_len)?;
-    check_arg(instance, arg_len)?;
+    check_ptr(&instance, name_ofs, name_len)?;
+    check_arg(&instance, arg_len)?;
 
     let name = instance.with_memory(|buf| {
         // performance: use a dedicated buffer here?
@@ -163,11 +163,11 @@ pub(crate) fn hd(
 ) -> WasmtimeResult<u32> {
     let env = fenv.data_mut();
 
-    let instance = env.self_instance();
+    let mut instance = env.self_instance();
 
     let name_len = name_len as usize;
 
-    check_ptr(instance, name_ofs, name_len)?;
+    check_ptr(&instance, name_ofs, name_len)?;
 
     let name = instance.with_memory(|buf| {
         // performance: use a dedicated buffer here?
@@ -194,13 +194,13 @@ pub(crate) fn c(
 ) -> WasmtimeResult<i32> {
     let env = fenv.data_mut();
 
-    let instance = env.self_instance();
+    let mut instance = env.self_instance();
 
     let name_len = name_len as usize;
 
-    check_ptr(instance, mod_id_ofs, CONTRACT_ID_BYTES)?;
-    check_ptr(instance, name_ofs, name_len)?;
-    check_arg(instance, arg_len)?;
+    check_ptr(&instance, mod_id_ofs, CONTRACT_ID_BYTES)?;
+    check_ptr(&instance, name_ofs, name_len)?;
+    check_arg(&instance, arg_len)?;
 
     let argbuf_ofs = instance.arg_buffer_offset();
 
@@ -222,12 +222,8 @@ pub(crate) fn c(
             &memory[mod_id_ofs..][..std::mem::size_of::<ContractId>()],
         );
 
-        let callee_stack_element = env
-            .push_callstack(mod_id, callee_limit)
-            .expect("pushing to the callstack should succeed");
-        let callee = env
-            .instance(&callee_stack_element.contract_id)
-            .expect("callee instance should exist");
+        let mut callee = env.instance(mod_id)?;
+        env.push_callstack(mod_id, callee_limit, callee.mem_len());
 
         callee.snap().map_err(|err| Error::MemorySnapshotFailure {
             reason: None,
@@ -242,7 +238,7 @@ pub(crate) fn c(
         let ret_len = callee
             .call(name, arg.len() as u32, callee_limit)
             .map_err(Error::normalize)?;
-        check_arg(callee, ret_len as u32)?;
+        check_arg(&callee, ret_len as u32)?;
 
         // copy back result
         callee.read_argument(&mut memory[argbuf_ofs..][..ret_len as usize]);
@@ -291,8 +287,8 @@ pub(crate) fn emit(
 
     let topic_len = topic_len as usize;
 
-    check_ptr(instance, topic_ofs, topic_len)?;
-    check_arg(instance, arg_len)?;
+    check_ptr(&instance, topic_ofs, topic_len)?;
+    check_arg(&instance, arg_len)?;
 
     let data = instance.with_arg_buf(|buf| {
         let arg_len = arg_len as usize;
@@ -327,7 +323,7 @@ fn feed(mut fenv: Caller<Env>, arg_len: u32) -> WasmtimeResult<()> {
     let env = fenv.data_mut();
     let instance = env.self_instance();
 
-    check_arg(instance, arg_len)?;
+    check_arg(&instance, arg_len)?;
 
     let data = instance.with_arg_buf(|buf| {
         let arg_len = arg_len as usize;
@@ -342,7 +338,7 @@ fn hdebug(mut fenv: Caller<Env>, msg_len: u32) -> WasmtimeResult<()> {
     let env = fenv.data_mut();
     let instance = env.self_instance();
 
-    check_arg(instance, msg_len)?;
+    check_arg(&instance, msg_len)?;
 
     Ok(instance.with_arg_buf(|buf| {
         let slice = &buf[..msg_len as usize];
@@ -365,7 +361,7 @@ fn limit(fenv: Caller<Env>) -> u64 {
 
 fn spent(fenv: Caller<Env>) -> u64 {
     let env = fenv.data();
-    let instance = env.self_instance();
+    let mut instance = env.self_instance();
 
     let limit = env.limit();
     let remaining = instance.get_remaining_gas();
@@ -377,7 +373,7 @@ fn panic(fenv: Caller<Env>, arg_len: u32) -> WasmtimeResult<()> {
     let env = fenv.data();
     let instance = env.self_instance();
 
-    check_arg(instance, arg_len)?;
+    check_arg(&instance, arg_len)?;
 
     Ok(instance.with_arg_buf(|buf| {
         let slice = &buf[..arg_len as usize];
@@ -392,7 +388,7 @@ fn panic(fenv: Caller<Env>, arg_len: u32) -> WasmtimeResult<()> {
 }
 
 fn owner(fenv: Caller<Env>, mod_id_ofs: usize) -> WasmtimeResult<i32> {
-    check_ptr(fenv.data().self_instance(), mod_id_ofs, CONTRACT_ID_BYTES)?;
+    check_ptr(&fenv.data().self_instance(), mod_id_ofs, CONTRACT_ID_BYTES)?;
 
     let env = fenv.data();
 

@@ -13,10 +13,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Change to have one instance per contract function call [#325]
 - Upgrade `dusk-wasmtime` to version `17`
 
 ### Fixed
 
+- Fix bad dereferences in caused by instance reclamation [#325]
 - Fix overflow in gas limit calculation in inter-contract call
 
 ## [0.15.0] - 2024-01-24
@@ -357,6 +359,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [#234]: https://github.com/dusk-network/piecrust/pull/234
 
 <!-- ISSUES -->
+[#325]: https://github.com/dusk-network/piecrust/issues/325
 [#301]: https://github.com/dusk-network/piecrust/issues/313
 [#301]: https://github.com/dusk-network/piecrust/issues/301
 [#296]: https://github.com/dusk-network/piecrust/issues/296
