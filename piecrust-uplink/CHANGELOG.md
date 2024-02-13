@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Change `wrap_call` function to support `bytecheck`-based integrity check of arguments [#324]
+
 ## [0.10.0] - 2024-01-24
 
 ### Added
@@ -152,6 +156,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - First `piecrust-uplink` release
 
 <!-- ISSUES -->
+[#324]: https://github.com/dusk-network/piecrust/issues/324
 [#301]: https://github.com/dusk-network/piecrust/issues/301
 [#271]: https://github.com/dusk-network/piecrust/issues/271
 [#268]: https://github.com/dusk-network/piecrust/issues/268

@@ -11,7 +11,8 @@ use rkyv::ser::serializers::{
     BufferScratch, BufferSerializer, CompositeSerializer,
 };
 use rkyv::ser::Serializer;
-use rkyv::{archived_root, Archive, Deserialize, Infallible, Serialize};
+use rkyv::validation::validators::DefaultValidator;
+use rkyv::{check_archived_root, Archive, Deserialize, Infallible, Serialize};
 
 use crate::types::StandardBufSerializer;
 
@@ -21,14 +22,16 @@ use crate::types::StandardBufSerializer;
 pub fn wrap_call<A, R, F>(arg_len: u32, f: F) -> u32
 where
     A: Archive,
-    A::Archived: Deserialize<A, Infallible>,
+    A::Archived: Deserialize<A, Infallible>
+        + for<'b> bytecheck::CheckBytes<DefaultValidator<'b>>,
     R: for<'a> Serialize<StandardBufSerializer<'a>>,
     F: Fn(A) -> R,
 {
     with_arg_buf(|buf| {
         let slice = &buf[..arg_len as usize];
 
-        let aa: &A::Archived = unsafe { archived_root::<A>(slice) };
+        let aa: &A::Archived = check_archived_root::<A>(slice)
+            .expect("Argument should correctly deserialize");
         let a: A = aa.deserialize(&mut Infallible).unwrap();
 
         let ret = f(a);
