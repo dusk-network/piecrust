@@ -339,6 +339,7 @@ impl Session {
     ) -> Result<CallReceipt<R>, Error>
     where
         A: for<'b> Serialize<StandardBufSerializer<'b>>,
+        A::Archived: for<'b> CheckBytes<DefaultValidator<'b>>,
         R: Archive,
         R::Archived: Deserialize<R, Infallible>
             + for<'b> CheckBytes<DefaultValidator<'b>>,
@@ -462,6 +463,7 @@ impl Session {
     ) -> Result<CallReceipt<R>, Error>
     where
         A: for<'b> Serialize<StandardBufSerializer<'b>>,
+        A::Archived: for<'b> CheckBytes<DefaultValidator<'b>>,
         R: Archive,
         R::Archived: Deserialize<R, Infallible>
             + for<'b> CheckBytes<DefaultValidator<'b>>,

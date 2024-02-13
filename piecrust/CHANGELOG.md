@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Change `call` and `feeder_call` functions to support `bytecheck`-based integrity check of arguments [#324]
+
 ### Added
 
 - Add `Session::migrate` to allow for swapping contract code [#313]
@@ -362,6 +366,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 <!-- ISSUES -->
 [#327]: https://github.com/dusk-network/piecrust/issues/327
 [#325]: https://github.com/dusk-network/piecrust/issues/325
+[#324]: https://github.com/dusk-network/piecrust/issues/324
 [#301]: https://github.com/dusk-network/piecrust/issues/313
 [#301]: https://github.com/dusk-network/piecrust/issues/301
 [#296]: https://github.com/dusk-network/piecrust/issues/296

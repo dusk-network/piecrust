@@ -64,7 +64,7 @@ pub fn panic_msg_gets_through() -> Result<(), Error> {
     let receipt = session.call::<_, Result<(), ContractError>>(
         callcenter_id,
         "call_spend_with_limit",
-        &(spender_id, 1000u64),
+        &(spender_id, 1175u64),
         LIMIT,
     )?;
 
@@ -125,8 +125,8 @@ pub fn contract_sets_call_limit() -> Result<(), Error> {
         LIMIT,
     )?;
 
-    const FIRST_LIMIT: u64 = 1000;
-    const SECOND_LIMIT: u64 = 2000;
+    const FIRST_LIMIT: u64 = 1175;
+    const SECOND_LIMIT: u64 = 2175;
 
     let receipt = session_1st.call::<_, Result<(), ContractError>>(
         callcenter_id,

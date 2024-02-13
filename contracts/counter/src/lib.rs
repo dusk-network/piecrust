@@ -35,11 +35,11 @@ impl Counter {
 /// Expose `Counter::read_value()` to the host
 #[no_mangle]
 unsafe fn read_value(arg_len: u32) -> u32 {
-    uplink::wrap_call(arg_len, |_: ()| STATE.read_value())
+    uplink::wrap_call_unchecked(arg_len, |_: ()| STATE.read_value())
 }
 
 /// Expose `Counter::increment()` to the host
 #[no_mangle]
 unsafe fn increment(arg_len: u32) -> u32 {
-    uplink::wrap_call(arg_len, |_: ()| STATE.increment())
+    uplink::wrap_call_unchecked(arg_len, |_: ()| STATE.increment())
 }
