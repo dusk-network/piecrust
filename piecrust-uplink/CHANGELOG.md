@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Add `wrap_call_unchecked` function for calls with no argument checking [#324]
+
 ### Changed
 
 - Change `wrap_call` function to support `bytecheck`-based integrity check of arguments [#324]
