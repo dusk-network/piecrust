@@ -5,7 +5,6 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 use std::io;
-use std::mem::MaybeUninit;
 use std::ops::{Deref, DerefMut};
 
 use dusk_wasmtime::{Instance, Module, Mutability, Store, ValType};
@@ -18,47 +17,15 @@ use crate::store::Memory;
 use crate::Error;
 
 pub struct WrappedInstance {
-    inner: *mut WrappedInstanceInner,
-    original: bool,
-}
-
-impl Clone for WrappedInstance {
-    fn clone(&self) -> Self {
-        Self {
-            inner: self.inner,
-            original: false,
-        }
-    }
-}
-
-impl Drop for WrappedInstance {
-    fn drop(&mut self) {
-        if self.original {
-            unsafe {
-                let _ = Box::from_raw(self.inner);
-            }
-        }
-    }
-}
-
-impl Deref for WrappedInstance {
-    type Target = WrappedInstanceInner;
-
-    fn deref(&self) -> &Self::Target {
-        unsafe { &*self.inner }
-    }
-}
-
-impl DerefMut for WrappedInstance {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        unsafe { &mut *self.inner }
-    }
+    instance: Instance,
+    arg_buf_ofs: usize,
+    store: Store<Env>,
+    memory: Memory,
 }
 
 pub(crate) struct Env {
     self_id: ContractId,
     session: Session,
-    instance: MaybeUninit<WrappedInstance>,
 }
 
 impl Deref for Env {
@@ -76,8 +43,20 @@ impl DerefMut for Env {
 }
 
 impl Env {
-    pub fn self_instance(&self) -> WrappedInstance {
-        unsafe { self.instance.assume_init_ref().clone() }
+    pub fn self_instance<'b>(&self) -> &'b mut WrappedInstance {
+        let stack_element = self
+            .session
+            .nth_from_top(0)
+            .expect("there should be at least one element in the call stack");
+        self.instance(&stack_element.contract_id)
+            .expect("instance should exist")
+    }
+
+    pub fn instance<'b>(
+        &self,
+        contract_id: &ContractId,
+    ) -> Option<&'b mut WrappedInstance> {
+        self.session.instance(contract_id)
     }
 
     pub fn limit(&self) -> u64 {
@@ -115,7 +94,6 @@ impl WrappedInstance {
         let env = Env {
             self_id: contract_id,
             session,
-            instance: MaybeUninit::uninit(),
         };
 
         let module =
@@ -199,35 +177,28 @@ impl WrappedInstance {
         // A memory is no longer new after one instantiation
         memory.is_new = false;
 
-        let inner = WrappedInstanceInner {
+        let wrapped = WrappedInstance {
             store,
             instance,
             arg_buf_ofs,
             memory,
         };
 
-        let mut instance = WrappedInstance {
-            inner: Box::into_raw(Box::new(inner)),
-            original: true,
-        };
-        let instance_clone = instance.clone();
-
-        instance.store.data_mut().instance = MaybeUninit::new(instance_clone);
-
-        Ok(instance)
+        Ok(wrapped)
     }
-}
 
-pub struct WrappedInstanceInner {
-    instance: Instance,
-    arg_buf_ofs: usize,
-    store: Store<Env>,
-    memory: Memory,
-}
-
-impl WrappedInstanceInner {
     pub(crate) fn snap(&mut self) -> io::Result<()> {
         self.memory.snap()?;
+        Ok(())
+    }
+
+    pub(crate) fn revert(&mut self) -> io::Result<()> {
+        self.memory.revert()?;
+        Ok(())
+    }
+
+    pub(crate) fn apply(&mut self) -> io::Result<()> {
+        self.memory.apply()?;
         Ok(())
     }
 
@@ -265,6 +236,11 @@ impl WrappedInstanceInner {
     /// Returns the current length of the memory.
     pub(crate) fn mem_len(&self) -> usize {
         self.memory.current_len
+    }
+
+    /// Sets the length of the memory.
+    pub(crate) fn set_len(&mut self, len: usize) {
+        self.memory.current_len = len;
     }
 
     pub(crate) fn with_arg_buf<F, R>(&self, f: F) -> R
@@ -366,7 +342,7 @@ impl WrappedInstanceInner {
 }
 
 fn map_call_err(
-    instance: &mut WrappedInstanceInner,
+    instance: &mut WrappedInstance,
     err: dusk_wasmtime::Error,
 ) -> Error {
     if instance.get_remaining_gas() == 0 {
