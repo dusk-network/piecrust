@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.16.0] - 2024-02-14
+
 ### Changed
 
 - Change `call` and `feeder_call` functions to support `bytecheck`-based integrity check of arguments [#324]
@@ -395,7 +397,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [#93]: https://github.com/dusk-network/piecrust/issues/93
 
 <!-- VERSIONS -->
-[Unreleased]: https://github.com/dusk-network/piecrust/compare/piecrust-0.15.0...HEAD
+[Unreleased]: https://github.com/dusk-network/piecrust/compare/piecrust-0.16.0...HEAD
+[0.16.0]: https://github.com/dusk-network/piecrust/compare/piecrust-0.15.0...piecrust-0.16.0
 [0.15.0]: https://github.com/dusk-network/piecrust/compare/piecrust-0.14.1...piecrust-0.15.0
 [0.14.1]: https://github.com/dusk-network/piecrust/compare/piecrust-0.14.0...piecrust-0.14.1
 [0.14.0]: https://github.com/dusk-network/piecrust/compare/piecrust-0.13.0...piecrust-0.14.0
