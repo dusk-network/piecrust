@@ -236,16 +236,8 @@ impl HostQueries {
         self.map.insert(name.into(), Arc::new(query));
     }
 
-    pub fn call(
-        &self,
-        session: &mut Session,
-        name: &str,
-        buf: &mut [u8],
-        len: u32,
-    ) -> Option<u32> {
-        self.map
-            .get(name)
-            .map(|host_query| host_query(session, buf, len))
+    pub fn call(&self, name: &str, buf: &mut [u8], len: u32) -> Option<u32> {
+        self.map.get(name).map(|host_query| host_query(buf, len))
     }
 }
 
@@ -256,18 +248,5 @@ impl HostQueries {
 /// function, and should be processed first. Once this is done, the implementor
 /// should emplace the return of the query in the same buffer, and return the
 /// length written.
-///
-/// The host query will have access to the underlying session, and can use it to
-/// perform calls to other contracts.
-///
-/// # Panics
-/// If any error occurs during the execution, the implementer is encouraged to
-/// signal this error by panicking.
-pub trait HostQuery:
-    Send + Sync + Fn(&mut Session, &mut [u8], u32) -> u32
-{
-}
-impl<F> HostQuery for F where
-    F: Send + Sync + Fn(&mut Session, &mut [u8], u32) -> u32
-{
-}
+pub trait HostQuery: Send + Sync + Fn(&mut [u8], u32) -> u32 {}
+impl<F> HostQuery for F where F: Send + Sync + Fn(&mut [u8], u32) -> u32 {}

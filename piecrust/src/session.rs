@@ -554,10 +554,7 @@ impl Session {
         buf: &mut [u8],
         arg_len: u32,
     ) -> Option<u32> {
-        let mut session = self.clone();
-        self.inner
-            .host_queries
-            .call(&mut session, name, buf, arg_len)
+        self.inner.host_queries.call(name, buf, arg_len)
     }
 
     pub(crate) fn nth_from_top(&self, n: usize) -> Option<CallTreeElem> {
