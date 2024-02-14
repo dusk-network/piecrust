@@ -17,7 +17,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Allow for a `HostQuery` to take a `&mut Session` [#327]
 - Change to have one instance per contract function call [#325]
 - Upgrade `dusk-wasmtime` to version `17`
 
@@ -364,7 +363,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [#234]: https://github.com/dusk-network/piecrust/pull/234
 
 <!-- ISSUES -->
-[#327]: https://github.com/dusk-network/piecrust/issues/327
 [#325]: https://github.com/dusk-network/piecrust/issues/325
 [#324]: https://github.com/dusk-network/piecrust/issues/324
 [#301]: https://github.com/dusk-network/piecrust/issues/313

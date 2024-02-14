@@ -6,10 +6,7 @@
 
 use dusk_plonk::prelude::*;
 use once_cell::sync::Lazy;
-use piecrust::{
-    contract_bytecode, ContractData, Error, Session, SessionData, VM,
-};
-use piecrust_uplink::ContractId;
+use piecrust::{contract_bytecode, ContractData, Error, SessionData, VM};
 use rand::rngs::OsRng;
 use rkyv::Deserialize;
 
@@ -33,7 +30,7 @@ fn get_prover_verifier() -> &'static (Prover, Verifier) {
     &PROVER_VERIFIER
 }
 
-fn hash(_: &mut Session, buf: &mut [u8], len: u32) -> u32 {
+fn hash(buf: &mut [u8], len: u32) -> u32 {
     let a = unsafe { rkyv::archived_root::<Vec<u8>>(&buf[..len as usize]) };
     let v: Vec<u8> = a.deserialize(&mut rkyv::Infallible).unwrap();
 
@@ -43,7 +40,7 @@ fn hash(_: &mut Session, buf: &mut [u8], len: u32) -> u32 {
     32
 }
 
-fn verify_proof(_: &mut Session, buf: &mut [u8], len: u32) -> u32 {
+fn verify_proof(buf: &mut [u8], len: u32) -> u32 {
     let a = unsafe {
         rkyv::archived_root::<(Proof, Vec<BlsScalar>)>(&buf[..len as usize])
     };
@@ -61,24 +58,10 @@ fn verify_proof(_: &mut Session, buf: &mut [u8], len: u32) -> u32 {
     valid_bytes.len() as u32
 }
 
-pub const COUNTER_ID: ContractId = ContractId::from_bytes([1; 32]);
-
-fn get_counter(session: &mut Session, buf: &mut [u8], _: u32) -> u32 {
-    let receipt = session
-        .call_raw(COUNTER_ID, "read_value", &*buf, u64::MAX)
-        .expect("calling the counter contract should succeed");
-
-    let data = receipt.data;
-    buf[..data.len()].copy_from_slice(&data);
-
-    data.len() as u32
-}
-
 fn new_ephemeral_vm() -> Result<VM, Error> {
     let mut vm = VM::ephemeral()?;
     vm.register_host_query("hash", hash);
     vm.register_host_query("verify_proof", verify_proof);
-    vm.register_host_query("get_counter", get_counter);
     Ok(vm)
 }
 
@@ -100,35 +83,6 @@ pub fn host_hash() -> Result<(), Error> {
         .expect("query should succeed")
         .data;
     assert_eq!(blake3::hash(&[0u8, 1, 2]).as_bytes(), &h);
-
-    Ok(())
-}
-
-/// Queries a contract for the value held in the counter contract through the
-/// host, using a host query.
-#[test]
-fn host_counter() -> Result<(), Error> {
-    let vm = new_ephemeral_vm()?;
-
-    let mut session = vm.session(SessionData::builder())?;
-
-    session.deploy(
-        contract_bytecode!("counter"),
-        ContractData::builder(OWNER).contract_id(COUNTER_ID),
-        LIMIT,
-    )?;
-
-    let id = session.deploy(
-        contract_bytecode!("host"),
-        ContractData::builder(OWNER),
-        LIMIT,
-    )?;
-
-    let counter = session
-        .call::<_, i64>(id, "host_get_counter", &(), LIMIT)?
-        .data;
-
-    assert_eq!(counter, 0xfc);
 
     Ok(())
 }
