@@ -115,20 +115,8 @@ impl DerefMut for Env {
 }
 
 impl Env {
-    pub fn self_instance<'b>(&self) -> &'b mut WrappedInstance {
-        let stack_element = self
-            .session
-            .nth_from_top(0)
-            .expect("there should be at least one element in the call stack");
-        self.instance(&stack_element.contract_id)
-            .expect("instance should exist")
-    }
-
-    pub fn instance<'b>(
-        &self,
-        contract_id: &ContractId,
-    ) -> Option<&'b mut WrappedInstance> {
-        self.session.instance(contract_id)
+    pub fn self_instance(&self) -> WrappedInstance {
+        unsafe { self.instance.assume_init_ref().clone() }
     }
 
     pub fn limit(&self) -> u64 {
@@ -274,16 +262,6 @@ impl WrappedInstance {
         Ok(())
     }
 
-    pub(crate) fn revert(&mut self) -> io::Result<()> {
-        self.memory.revert()?;
-        Ok(())
-    }
-
-    pub(crate) fn apply(&mut self) -> io::Result<()> {
-        self.memory.apply()?;
-        Ok(())
-    }
-
     // Write argument into instance
     pub(crate) fn write_argument(&mut self, arg: &[u8]) {
         self.with_arg_buf_mut(|buf| buf[..arg.len()].copy_from_slice(arg))
@@ -318,11 +296,6 @@ impl WrappedInstance {
     /// Returns the current length of the memory.
     pub(crate) fn mem_len(&self) -> usize {
         self.memory.current_len
-    }
-
-    /// Sets the length of the memory.
-    pub(crate) fn set_len(&mut self, len: usize) {
-        self.memory.current_len = len;
     }
 
     pub(crate) fn with_arg_buf<F, R>(&self, f: F) -> R
