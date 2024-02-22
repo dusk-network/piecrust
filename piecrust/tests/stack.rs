@@ -17,7 +17,7 @@ pub fn push_pop() -> Result<(), Error> {
 
     let id = session.deploy(
         contract_bytecode!("stack"),
-        ContractData::builder(OWNER),
+        ContractData::builder().owner(OWNER),
         LIMIT,
     )?;
 
@@ -45,7 +45,7 @@ pub fn multi_push_pop() -> Result<(), Error> {
 
     let id = session.deploy(
         contract_bytecode!("stack"),
-        ContractData::builder(OWNER),
+        ContractData::builder().owner(OWNER),
         LIMIT,
     )?;
 

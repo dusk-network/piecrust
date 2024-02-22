@@ -17,7 +17,7 @@ fn counter_read_simple() -> Result<(), Error> {
 
     let id = session.deploy(
         contract_bytecode!("counter"),
-        ContractData::builder(OWNER),
+        ContractData::builder().owner(OWNER),
         LIMIT,
     )?;
 
@@ -37,7 +37,7 @@ fn counter_read_write_simple() -> Result<(), Error> {
 
     let id = session.deploy(
         contract_bytecode!("counter"),
-        ContractData::builder(OWNER),
+        ContractData::builder().owner(OWNER),
         LIMIT,
     )?;
 
@@ -64,12 +64,12 @@ fn call_through_c() -> Result<(), Error> {
 
     let counter_id = session.deploy(
         contract_bytecode!("counter"),
-        ContractData::builder(OWNER),
+        ContractData::builder().owner(OWNER),
         LIMIT,
     )?;
     let c_example_id = session.deploy(
         contract_bytecode!("c_example"),
-        ContractData::builder(OWNER),
+        ContractData::builder().owner(OWNER),
         LIMIT,
     )?;
 
@@ -79,7 +79,7 @@ fn call_through_c() -> Result<(), Error> {
                 c_example_id,
                 "increment_and_read",
                 &counter_id,
-                LIMIT
+                LIMIT,
             )?
             .data,
         0xfd
@@ -96,7 +96,7 @@ fn increment_panic() -> Result<(), Error> {
 
     let counter_id = session.deploy(
         contract_bytecode!("fallible_counter"),
-        ContractData::builder(OWNER),
+        ContractData::builder().owner(OWNER),
         LIMIT,
     )?;
 

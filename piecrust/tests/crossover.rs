@@ -30,12 +30,16 @@ fn crossover() -> Result<(), Error> {
 
     session.deploy(
         contract_bytecode!("crossover"),
-        ContractData::builder(OWNER).contract_id(CROSSOVER_ONE),
+        ContractData::builder()
+            .owner(OWNER)
+            .contract_id(CROSSOVER_ONE),
         LIMIT,
     )?;
     session.deploy(
         contract_bytecode!("crossover"),
-        ContractData::builder(OWNER).contract_id(CROSSOVER_TWO),
+        ContractData::builder()
+            .owner(OWNER)
+            .contract_id(CROSSOVER_TWO),
         LIMIT,
     )?;
 

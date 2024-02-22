@@ -16,7 +16,7 @@ pub fn merkle_root() -> Result<(), Error> {
 
     let id = session.deploy(
         contract_bytecode!("merkle"),
-        ContractData::builder(OWNER),
+        ContractData::builder().owner(OWNER),
         LIMIT,
     )?;
 

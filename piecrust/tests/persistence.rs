@@ -21,12 +21,12 @@ fn session_commits_persistence() -> Result<(), Error> {
         let mut session = vm.session(SessionData::builder())?;
         id_1 = session.deploy(
             contract_bytecode!("counter"),
-            ContractData::builder(OWNER),
+            ContractData::builder().owner(OWNER),
             LIMIT,
         )?;
         id_2 = session.deploy(
             contract_bytecode!("box"),
-            ContractData::builder(OWNER),
+            ContractData::builder().owner(OWNER),
             LIMIT,
         )?;
 
@@ -106,12 +106,12 @@ fn contracts_persistence() -> Result<(), Error> {
     let mut session = vm.session(SessionData::builder())?;
     let id_1 = session.deploy(
         contract_bytecode!("counter"),
-        ContractData::builder(OWNER),
+        ContractData::builder().owner(OWNER),
         LIMIT,
     )?;
     let id_2 = session.deploy(
         contract_bytecode!("box"),
-        ContractData::builder(OWNER),
+        ContractData::builder().owner(OWNER),
         LIMIT,
     )?;
 
@@ -156,7 +156,7 @@ fn migration() -> Result<(), Error> {
 
     let contract = session.deploy(
         contract_bytecode!("counter"),
-        ContractData::builder(OWNER),
+        ContractData::builder().owner(OWNER),
         LIMIT,
     )?;
 
@@ -170,7 +170,7 @@ fn migration() -> Result<(), Error> {
     session = session.migrate(
         contract,
         contract_bytecode!("double_counter"),
-        ContractData::builder(OWNER),
+        ContractData::builder().owner(OWNER),
         LIMIT,
         |new_contract, session| {
             let old_counter_value = session

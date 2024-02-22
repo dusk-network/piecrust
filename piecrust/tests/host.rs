@@ -73,7 +73,7 @@ pub fn host_hash() -> Result<(), Error> {
 
     let id = session.deploy(
         contract_bytecode!("host"),
-        ContractData::builder(OWNER),
+        ContractData::builder().owner(OWNER),
         LIMIT,
     )?;
 
@@ -143,7 +143,7 @@ pub fn host_proof() -> Result<(), Error> {
 
     let id = session.deploy(
         contract_bytecode!("host"),
-        ContractData::builder(OWNER),
+        ContractData::builder().owner(OWNER),
         LIMIT,
     )?;
 

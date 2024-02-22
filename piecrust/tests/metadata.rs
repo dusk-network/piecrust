@@ -19,7 +19,7 @@ fn metadata() -> Result<(), Error> {
 
     let id = session.deploy(
         contract_bytecode!("metadata"),
-        ContractData::builder(EXPECTED_OWNER),
+        ContractData::builder().owner(EXPECTED_OWNER),
         LIMIT,
     )?;
 
@@ -63,12 +63,16 @@ fn owner_of() -> Result<(), Error> {
 
     session.deploy(
         contract_bytecode!("metadata"),
-        ContractData::builder(EXPECTED_OWNER_0).contract_id(CONTRACT_ID_0),
+        ContractData::builder()
+            .owner(EXPECTED_OWNER_0)
+            .contract_id(CONTRACT_ID_0),
         LIMIT,
     )?;
     session.deploy(
         contract_bytecode!("metadata"),
-        ContractData::builder(EXPECTED_OWNER_1).contract_id(CONTRACT_ID_1),
+        ContractData::builder()
+            .owner(EXPECTED_OWNER_1)
+            .contract_id(CONTRACT_ID_1),
         LIMIT,
     )?;
 

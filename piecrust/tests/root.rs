@@ -17,7 +17,7 @@ pub fn state_root_calculation() -> Result<(), Error> {
     let mut session = vm.session(SessionData::builder())?;
     let id_1 = session.deploy(
         contract_bytecode!("counter"),
-        ContractData::builder(OWNER),
+        ContractData::builder().owner(OWNER),
         LIMIT,
     )?;
 
@@ -34,7 +34,7 @@ pub fn state_root_calculation() -> Result<(), Error> {
     let mut session = vm.session(SessionData::builder().base(commit_1))?;
     let id_2 = session.deploy(
         contract_bytecode!("box"),
-        ContractData::builder(OWNER),
+        ContractData::builder().owner(OWNER),
         LIMIT,
     )?;
     session.call::<i16, ()>(id_2, "set", &0x11, LIMIT)?;
@@ -66,7 +66,7 @@ pub fn inclusion_proofs() -> Result<(), Error> {
 
     let counter_id = session.deploy(
         contract_bytecode!("counter"),
-        ContractData::builder(OWNER),
+        ContractData::builder().owner(OWNER),
         LIMIT,
     )?;
 

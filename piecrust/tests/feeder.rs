@@ -19,7 +19,7 @@ fn feed() -> Result<(), Error> {
 
     let id = session.deploy(
         contract_bytecode!("feeder"),
-        ContractData::builder(OWNER),
+        ContractData::builder().owner(OWNER),
         LIMIT,
     )?;
 
@@ -57,7 +57,7 @@ fn feed_errors_when_normal_call() -> Result<(), Error> {
 
     let id = session.deploy(
         contract_bytecode!("feeder"),
-        ContractData::builder(OWNER),
+        ContractData::builder().owner(OWNER),
         LIMIT,
     )?;
 

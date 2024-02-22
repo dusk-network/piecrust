@@ -7,8 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Add `ContractDataBuilder::owner` to allow for setting the owner of a contract
+  on deploy time [#336]
+
 ### Changed
 
+- Make `owner` field optional in `ContractData` and `ContractDataBuilder` [#336]
 - Change `ContractData` and `ContractDataBuilder` to take a `Vec<u8>` as owner
   instead of `[u8; N]` [#336]
 - Use empty constructor arguments by default [#316]

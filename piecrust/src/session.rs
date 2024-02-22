@@ -209,6 +209,9 @@ impl Session {
     ///
     /// [`ContractId`]: ContractId
     /// [`PersistenceError`]: PersistenceError
+    ///
+    /// # Panics
+    /// If `deploy_data` does not specify an owner, this will panic.
     pub fn deploy<'a, A, D>(
         &mut self,
         bytecode: &[u8],
@@ -248,7 +251,9 @@ impl Session {
             contract_id,
             bytecode,
             constructor_arg,
-            deploy_data.owner.to_vec(),
+            deploy_data
+                .owner
+                .expect("Owner must be specified when deploying a contract"),
             gas_limit,
         )?;
 

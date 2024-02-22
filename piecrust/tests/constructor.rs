@@ -18,7 +18,9 @@ fn constructor() -> Result<(), Error> {
 
     let id = session.deploy(
         contract_bytecode!("constructor"),
-        ContractData::builder(OWNER).constructor_arg(&0xabu8),
+        ContractData::builder()
+            .owner(OWNER)
+            .constructor_arg(&0xabu8),
         LIMIT,
     )?;
 
@@ -80,7 +82,7 @@ fn empty_constructor_argument() -> Result<(), Error> {
 
     let id = session.deploy(
         contract_bytecode!("empty_constructor"),
-        ContractData::builder(OWNER),
+        ContractData::builder().owner(OWNER),
         LIMIT,
     )?;
 

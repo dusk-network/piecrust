@@ -16,7 +16,7 @@ use crate::error::Error;
 pub struct ContractData<'a, A> {
     pub(crate) contract_id: Option<ContractId>,
     pub(crate) constructor_arg: Option<&'a A>,
-    pub(crate) owner: Vec<u8>,
+    pub(crate) owner: Option<Vec<u8>>,
 }
 
 // `()` is done on purpose, since by default it should be that the constructor
@@ -26,11 +26,11 @@ impl<'a> ContractData<'a, ()> {
     ///
     /// This function returns a builder that can be used to set optional fields
     /// in contract deployment.
-    pub fn builder(owner: impl Into<Vec<u8>>) -> ContractDataBuilder<'a, ()> {
+    pub fn builder() -> ContractDataBuilder<'a, ()> {
         ContractDataBuilder {
             contract_id: None,
             constructor_arg: None,
-            owner: owner.into(),
+            owner: None,
         }
     }
 }
@@ -43,7 +43,7 @@ impl<'a, A> From<ContractDataBuilder<'a, A>> for ContractData<'a, A> {
 
 pub struct ContractDataBuilder<'a, A> {
     contract_id: Option<ContractId>,
-    owner: Vec<u8>,
+    owner: Option<Vec<u8>>,
     constructor_arg: Option<&'a A>,
 }
 
@@ -61,6 +61,12 @@ impl<'a, A> ContractDataBuilder<'a, A> {
             owner: self.owner,
             constructor_arg: Some(arg),
         }
+    }
+
+    /// Set the owner of the contract.
+    pub fn owner(mut self, owner: impl Into<Vec<u8>>) -> Self {
+        self.owner = Some(owner.into());
+        self
     }
 
     pub fn build(self) -> ContractData<'a, A> {
