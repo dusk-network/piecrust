@@ -9,10 +9,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.16.0] - 2024-02-14
 
-### Changed
-
-- Change `call` and `feeder_call` functions to support `bytecheck`-based integrity check of arguments [#324]
-
 ### Added
 
 - Add `Session::migrate` to allow for swapping contract code [#313]
@@ -20,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Upgrade `dusk-wasmtime` to version `17`
+- Change `call` and `feeder_call` functions to support `bytecheck`-based integrity check of arguments [#324]
 
 ### Fixed
 
