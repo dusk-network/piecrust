@@ -406,10 +406,18 @@ impl Session {
     /// given `contract` ID, and the old contract will be removed from the
     /// state.
     ///
+    /// If the `owner` of a contract is not set, it will be set to the owner of
+    /// the contract being replaced. If it is set, then it will be used as the
+    /// new owner.
+    ///
     /// # Errors
     /// The migration may error during execution for a myriad of reasons. The
     /// caller is encouraged to drop the `Session` should an error occur as it
     /// will more than likely be left in an inconsistent state.
+    ///
+    /// # Panics
+    /// If the owner of the new contract is not set in `deploy_data`, and the
+    /// contract being replaced does not exist, this will panic.
     pub fn migrate<'a, A, D, F>(
         mut self,
         contract: ContractId,
@@ -423,8 +431,25 @@ impl Session {
         D: Into<ContractData<'a, A>>,
         F: FnOnce(ContractId, &mut Session) -> Result<(), Error>,
     {
+        let mut new_contract_data = deploy_data.into();
+
+        // If the contract being replaced exists, and the caller did not specify
+        // an owner, set the owner to the owner of the contract being replaced.
+        if let Some(old_contract_data) = self
+            .inner
+            .contract_session
+            .contract(contract)
+            .map_err(|err| PersistenceError(Arc::new(err)))?
+        {
+            if new_contract_data.owner.is_none() {
+                new_contract_data.owner =
+                    Some(old_contract_data.metadata.data().owner.clone());
+            }
+        }
+
         let new_contract =
-            self.deploy(bytecode, deploy_data, deploy_gas_limit)?;
+            self.deploy(bytecode, new_contract_data, deploy_gas_limit)?;
+
         closure(new_contract, &mut self)?;
 
         self.inner

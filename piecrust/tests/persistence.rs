@@ -170,7 +170,7 @@ fn migration() -> Result<(), Error> {
     session = session.migrate(
         contract,
         contract_bytecode!("double_counter"),
-        ContractData::builder().owner(OWNER),
+        ContractData::builder(),
         LIMIT,
         |new_contract, session| {
             let old_counter_value = session
@@ -205,6 +205,75 @@ fn migration() -> Result<(), Error> {
 
     assert_eq!(left_counter, 0xfe);
     assert_eq!(right_counter, 0xcf);
+
+    Ok(())
+}
+
+#[test]
+fn migration_new_owner() -> Result<(), Error> {
+    let vm = VM::ephemeral()?;
+    let mut session = vm.session(SessionData::builder())?;
+
+    const OWNER: [u8; 33] = [1u8; 33];
+    const NEW_OWNER: [u8; 33] = [2u8; 33];
+
+    let contract = session.deploy(
+        contract_bytecode!("counter"),
+        ContractData::builder().owner(OWNER),
+        LIMIT,
+    )?;
+
+    let root = session.commit()?;
+
+    let mut session = vm.session(SessionData::builder().base(root))?;
+
+    session = session.migrate(
+        contract,
+        contract_bytecode!("metadata"),
+        ContractData::builder().owner(NEW_OWNER),
+        LIMIT,
+        |_, _| Ok(()),
+    )?;
+
+    let owner = session
+        .call::<_, [u8; 33]>(contract, "read_owner", &(), LIMIT)?
+        .data;
+
+    assert_eq!(owner, NEW_OWNER);
+
+    Ok(())
+}
+
+#[test]
+fn migration_old_owner() -> Result<(), Error> {
+    let vm = VM::ephemeral()?;
+    let mut session = vm.session(SessionData::builder())?;
+
+    const OWNER: [u8; 33] = [1u8; 33];
+
+    let contract = session.deploy(
+        contract_bytecode!("counter"),
+        ContractData::builder().owner(OWNER),
+        LIMIT,
+    )?;
+
+    let root = session.commit()?;
+
+    let mut session = vm.session(SessionData::builder().base(root))?;
+
+    session = session.migrate(
+        contract,
+        contract_bytecode!("metadata"),
+        ContractData::builder(),
+        LIMIT,
+        |_, _| Ok(()),
+    )?;
+
+    let owner = session
+        .call::<_, [u8; 33]>(contract, "read_owner", &(), LIMIT)?
+        .data;
+
+    assert_eq!(owner, OWNER);
 
     Ok(())
 }

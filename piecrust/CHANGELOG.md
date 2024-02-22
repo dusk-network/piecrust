@@ -14,6 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Change `migrate` to take the owner of the contract being replaced if it is
+  not set by the caller [#336]
 - Make `owner` field optional in `ContractData` and `ContractDataBuilder` [#336]
 - Change `ContractData` and `ContractDataBuilder` to take a `Vec<u8>` as owner
   instead of `[u8; N]` [#336]
