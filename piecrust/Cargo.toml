@@ -16,7 +16,7 @@ license = "MPL-2.0"
 crumbles = { version = "0.3", path = "../crumbles" }
 piecrust-uplink = { version = "0.11", path = "../piecrust-uplink" }
 
-dusk-wasmtime = { version = "17", default-features = false, features = ["cranelift", "parallel-compilation"] }
+dusk-wasmtime = { version = "18", default-features = false, features = ["cranelift", "runtime", "parallel-compilation"] }
 bytecheck = "0.6"
 rkyv = { version = "0.7", features = ["size_32", "validation"] }
 blake3 = "1"

@@ -7,11 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.16.0] - 2024-02-14
-
 ### Changed
 
-- Change `call` and `feeder_call` functions to support `bytecheck`-based integrity check of arguments [#324]
+- Upgrade `dusk-wasmtime` to version `18`
+
+## [0.16.0] - 2024-02-14
 
 ### Added
 
@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Upgrade `dusk-wasmtime` to version `17`
+- Change `call` and `feeder_call` functions to support `bytecheck`-based integrity check of arguments [#324]
 
 ### Fixed
 
