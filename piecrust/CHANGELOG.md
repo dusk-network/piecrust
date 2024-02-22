@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Use empty constructor arguments by default [#316]
 - Upgrade `dusk-wasmtime` to version `18`
 
 ## [0.16.0] - 2024-02-14
@@ -366,6 +367,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 <!-- ISSUES -->
 [#325]: https://github.com/dusk-network/piecrust/issues/325
 [#324]: https://github.com/dusk-network/piecrust/issues/324
+[#316]: https://github.com/dusk-network/piecrust/issues/316
 [#301]: https://github.com/dusk-network/piecrust/issues/313
 [#301]: https://github.com/dusk-network/piecrust/issues/301
 [#296]: https://github.com/dusk-network/piecrust/issues/296

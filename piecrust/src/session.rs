@@ -289,22 +289,13 @@ impl Session {
             let instance =
                 self.instance(&contract_id).expect("instance should exist");
 
-            let has_init = instance.is_function_exported(INIT_METHOD);
-            if has_init && arg.is_none() {
-                return Err(InitalizationError(
-                    "Contract has constructor but no argument was provided"
-                        .into(),
-                ));
-            }
-
-            if let Some(arg) = arg {
-                if !has_init {
-                    return Err(InitalizationError(
-                        "Argument was provided but contract has no constructor"
-                            .into(),
-                    ));
-                }
-
+            if instance.is_function_exported(INIT_METHOD) {
+                // If no argument was provided, we call the constructor anyway,
+                // but with an empty argument. The alternative is to panic, but
+                // that assumes that the caller of `deploy` knows that the
+                // contract has a constructor in the first place, which might
+                // not be the case, such as when ingesting untrusted bytecode.
+                let arg = arg.unwrap_or_default();
                 self.call_inner(contract_id, INIT_METHOD, arg, gas_limit)?;
             }
 
