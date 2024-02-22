@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Change `ContractData` and `ContractDataBuilder` to take a `Vec<u8>` as owner
+  instead of `[u8; N]` [#336]
 - Use empty constructor arguments by default [#316]
 - Upgrade `dusk-wasmtime` to version `18`
 
@@ -32,7 +34,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Change `owner` import to accept the contract ID as argument and return
-  non-zero upon success 
+  non-zero upon success
 
 ## [0.14.1] - 2024-01-11
 
@@ -72,11 +74,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Added
 
-- Add `Session::memory_pages` allowing for inclusion  proofs of pages [#273]
+- Add `Session::memory_pages` allowing for inclusion proofs of pages [#273]
 
 ## Changed
 
-- Change state tree to  distinguish between 32 and 64 bit smart contracts [#273]
+- Change state tree to distinguish between 32 and 64 bit smart contracts [#273]
 
 ## [0.12.0] - 2023-11-01
 
@@ -84,8 +86,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Support `memory64` smart contracts [#281]
 - Add some `Error` variants:
-  * `InvalidFunction`
-  * `InvalidMemory`
+    * `InvalidFunction`
+    * `InvalidMemory`
 - Add `once_cell` dependency
 
 ## Changed
@@ -104,19 +106,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Remove 4 page - 256KiB - minimum memory requirement for contracts
 - Remove `Clone` derivation for `Error`
 - Remove some `Error` variants, along with `From` implementations:
-  * `CompileError`
-  * `DeserializeError`
-  * `ExportError`
-  * `InstantiationError`
-  * `InvalidFunctionSignature`
-  * `MemorySetupError`
-  * `ParsingError`
-  * `SerializeError`
-  * `Trap`
+    * `CompileError`
+    * `DeserializeError`
+    * `ExportError`
+    * `InstantiationError`
+    * `InvalidFunctionSignature`
+    * `MemorySetupError`
+    * `ParsingError`
+    * `SerializeError`
+    * `Trap`
 
 ## Fixed
 
--  Fix  loading of compiled contracts from  state transported from different
+- Fix loading of compiled contracts from state transported from different
   platforms [#287]
 
 ## [0.11.0] - 2023-10-11
@@ -190,8 +192,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Change commit write behavior to  write dirty pages instead of diffs [#253]
-- Change memory backend  to use `crumbles` instead of `libc` directly  [#253]
+- Change commit write behavior to write dirty pages instead of diffs [#253]
+- Change memory backend to use `crumbles` instead of `libc` directly  [#253]
 
 ### Removed
 
@@ -209,13 +211,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Change imports 
+- Change imports
 - Change diffing algorithm to not delegate growth to `bsdiff`
 - Change memory growth algorithm to not require copying to temp file
 
 ### Fixed
 
-- Fix  behavior of imports on  out of bounds pointers [#249]
+- Fix behavior of imports on out of bounds pointers [#249]
 - Fix SIGBUS caused by improper memory growth
 
 ## [0.7.0] - 2023-07-19
@@ -310,7 +312,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Change `owner` parameter type in `ModuleData::builder` to be `[u8; N]` [#201] 
+- Change `owner` parameter type in `ModuleData::builder` to be `[u8; N]` [#201]
 
 ### Fixed
 
@@ -362,9 +364,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - First `piecrust` release
 
 <!-- PULLS -->
+
 [#234]: https://github.com/dusk-network/piecrust/pull/234
 
 <!-- ISSUES -->
+
+[#336]: https://github.com/dusk-network/piecrust/issues/336
 [#325]: https://github.com/dusk-network/piecrust/issues/325
 [#324]: https://github.com/dusk-network/piecrust/issues/324
 [#316]: https://github.com/dusk-network/piecrust/issues/316
@@ -400,6 +405,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [#93]: https://github.com/dusk-network/piecrust/issues/93
 
 <!-- VERSIONS -->
+
 [Unreleased]: https://github.com/dusk-network/piecrust/compare/piecrust-0.16.0...HEAD
 [0.16.0]: https://github.com/dusk-network/piecrust/compare/piecrust-0.15.0...piecrust-0.16.0
 [0.15.0]: https://github.com/dusk-network/piecrust/compare/piecrust-0.14.1...piecrust-0.15.0

@@ -34,6 +34,7 @@ const MAX_META_SIZE: usize = ARGBUF_LEN;
 pub const INIT_METHOD: &str = "init";
 
 unsafe impl Send for Session {}
+
 unsafe impl Sync for Session {}
 
 /// A running mutation to a state.
@@ -208,7 +209,7 @@ impl Session {
     ///
     /// [`ContractId`]: ContractId
     /// [`PersistenceError`]: PersistenceError
-    pub fn deploy<'a, A, D, const N: usize>(
+    pub fn deploy<'a, A, D>(
         &mut self,
         bytecode: &[u8],
         deploy_data: D,
@@ -216,7 +217,7 @@ impl Session {
     ) -> Result<ContractId, Error>
     where
         A: 'a + for<'b> Serialize<StandardBufSerializer<'b>>,
-        D: Into<ContractData<'a, A, N>>,
+        D: Into<ContractData<'a, A>>,
     {
         let mut deploy_data = deploy_data.into();
 
@@ -404,7 +405,7 @@ impl Session {
     /// The migration may error during execution for a myriad of reasons. The
     /// caller is encouraged to drop the `Session` should an error occur as it
     /// will more than likely be left in an inconsistent state.
-    pub fn migrate<'a, A, D, F, const N: usize>(
+    pub fn migrate<'a, A, D, F>(
         mut self,
         contract: ContractId,
         bytecode: &[u8],
@@ -414,7 +415,7 @@ impl Session {
     ) -> Result<Self, Error>
     where
         A: 'a + for<'b> Serialize<StandardBufSerializer<'b>>,
-        D: Into<ContractData<'a, A, N>>,
+        D: Into<ContractData<'a, A>>,
         F: FnOnce(ContractId, &mut Session) -> Result<(), Error>,
     {
         let new_contract =
