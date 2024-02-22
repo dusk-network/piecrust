@@ -73,20 +73,20 @@ fn constructor() -> Result<(), Error> {
 }
 
 #[test]
-fn missing_init() -> Result<(), Error> {
+fn empty_constructor_argument() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 
     let mut session = vm.session(SessionData::builder())?;
 
-    let result = session.deploy(
-        contract_bytecode!("counter"),
-        ContractData::builder(OWNER).constructor_arg(&0xabu8),
+    let id = session.deploy(
+        contract_bytecode!("empty_constructor"),
+        ContractData::builder(OWNER),
         LIMIT,
-    );
+    )?;
 
-    assert!(
-        result.is_err(),
-        "deploy with data when the 'init' method is not exported should fail with an error"
+    assert_eq!(
+        session.call::<_, u8>(id, "read_value", &(), LIMIT)?.data,
+        0x10
     );
 
     Ok(())
