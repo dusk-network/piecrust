@@ -438,6 +438,58 @@ impl Session {
         Ok(self)
     }
 
+    /// Migrates a `contract` to a new `bytecode`, performing modifications to
+    /// its state as specified by the closure.
+    ///
+    /// The closure takes a contract ID of where the new contract will be
+    /// available during the migration, and a mutable reference to a session,
+    /// allowing the caller to perform calls and other operations on the new
+    /// (and old) contract.
+    ///
+    /// At the end of the migration, the new contract will be available at the
+    /// given `contract` ID, and the old contract will be removed from the
+    /// state. The owner of the new contract will be the same as the owner of
+    /// the old contract.
+    ///
+    /// # Errors
+    /// The migration may error during execution for a myriad of reasons. The
+    /// caller is encouraged to drop the `Session` should an error occur as it
+    /// will more than likely be left in an inconsistent state.
+    pub fn migrate_with_owner<'a, A, F>(
+        mut self,
+        contract: ContractId,
+        bytecode: &[u8],
+        constructor_arg: Option<&'a A>,
+        deploy_gas_limit: u64,
+        closure: F,
+    ) -> Result<Self, Error>
+    where
+        A: 'a + for<'b> Serialize<StandardBufSerializer<'b>>,
+        F: FnOnce(ContractId, &mut Session) -> Result<(), Error>,
+    {
+        const OWNER_LEN: usize = 32;
+        let contract_metadata = self.inner.contract_session.contract_metadata(&contract).expect("contract metadata should exist");
+        let owner = &contract_metadata.owner;
+        assert_eq!(owner.len(), OWNER_LEN);
+        let owner: [u8; OWNER_LEN] = owner.as_slice().try_into()
+            .unwrap_or_else(|_| panic!("Expected owner of len {OWNER_LEN}"));
+        let deploy_data = ContractData {
+            contract_id: None,
+            constructor_arg,
+            owner,
+        };
+        let new_contract =
+            self.deploy(bytecode, deploy_data, deploy_gas_limit)?;
+        closure(new_contract, &mut self)?;
+
+        self.inner
+            .contract_session
+            .replace(contract, new_contract)
+            .map_err(|err| PersistenceError(Arc::new(err)))?;
+
+        Ok(self)
+    }
+
     /// Execute a *feeder* call on the current state of this session.
     ///
     /// Feeder calls are used to have the contract be able to report larger

@@ -6,7 +6,8 @@
 
 use piecrust::{contract_bytecode, ContractData, Error, SessionData, VM};
 
-const OWNER: [u8; 32] = [0u8; 32];
+const OWNER: [u8; 32] = [1u8; 32];
+const OWNER2: [u8; 32] = [2u8; 32];
 const LIMIT: u64 = 1_000_000;
 
 #[test]
@@ -170,7 +171,75 @@ fn migration() -> Result<(), Error> {
     session = session.migrate(
         contract,
         contract_bytecode!("double_counter"),
+        ContractData::builder(OWNER2),
+        LIMIT,
+        |new_contract, session| {
+            let old_counter_value = session
+                .call::<_, i64>(contract, "read_value", &(), LIMIT)?
+                .data;
+
+            let (left_counter_value, _) = session
+                .call::<_, (i64, i64)>(new_contract, "read_values", &(), LIMIT)?
+                .data;
+
+            let diff = old_counter_value - left_counter_value;
+            for _ in 0..diff {
+                session.call::<_, ()>(
+                    new_contract,
+                    "increment_left",
+                    &(),
+                    LIMIT,
+                )?;
+            }
+
+            Ok(())
+        },
+    )?;
+
+    const OWNER_LEN: usize = 32;
+    let contract_metadata = session.contract_metadata(&contract).expect("contract metadata should exist");
+    let owner = &contract_metadata.owner;
+    assert_eq!(owner.len(), OWNER_LEN);
+    let owner: [u8; OWNER_LEN] = owner.as_slice().try_into()
+        .unwrap_or_else(|_| panic!("Expected owner of len {OWNER_LEN}"));
+    println!("owner after migration={:?}", owner);
+
+    let root = session.commit()?;
+
+    let mut session = vm.session(SessionData::builder().base(root))?;
+
+    let (left_counter, right_counter) = session
+        .call::<_, (i64, i64)>(contract, "read_values", &(), LIMIT)?
+        .data;
+
+    assert_eq!(left_counter, 0xfe);
+    assert_eq!(right_counter, 0xcf);
+
+    Ok(())
+}
+
+#[test]
+fn migration2() -> Result<(), Error> {
+    let vm = VM::ephemeral()?;
+    let mut session = vm.session(SessionData::builder())?;
+
+    let contract = session.deploy(
+        contract_bytecode!("counter"),
         ContractData::builder(OWNER),
+        LIMIT,
+    )?;
+
+    session.call::<_, ()>(contract, "increment", &(), LIMIT)?;
+    session.call::<_, ()>(contract, "increment", &(), LIMIT)?;
+
+    // let root = session.commit()?;
+
+    // let mut session = vm.session(SessionData::builder().base(root))?;
+
+    session = session.migrate_with_owner(
+        contract,
+        contract_bytecode!("double_counter"),
+        None::<&()>,
         LIMIT,
         |new_contract, session| {
             let old_counter_value = session
