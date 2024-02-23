@@ -20,7 +20,9 @@ pub fn deploy_with_id() -> Result<(), Error> {
     let mut session = vm.session(SessionData::builder())?;
     session.deploy(
         bytecode,
-        ContractData::builder(OWNER).contract_id(contract_id),
+        ContractData::builder()
+            .owner(OWNER)
+            .contract_id(contract_id),
         LIMIT,
     )?;
 

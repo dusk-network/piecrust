@@ -21,7 +21,7 @@ fn read_write_session() -> Result<(), Error> {
         let mut session = vm.session(SessionData::builder())?;
         let id = session.deploy(
             contract_bytecode!("counter"),
-            ContractData::builder(OWNER),
+            ContractData::builder().owner(OWNER),
             LIMIT,
         )?;
 
@@ -44,7 +44,7 @@ fn read_write_session() -> Result<(), Error> {
     let mut other_session = vm.session(SessionData::builder())?;
     let id = other_session.deploy(
         contract_bytecode!("counter"),
-        ContractData::builder(OWNER),
+        ContractData::builder().owner(OWNER),
         LIMIT,
     )?;
 
@@ -76,7 +76,7 @@ fn commit_restore() -> Result<(), Error> {
     let mut session_1 = vm.session(SessionData::builder())?;
     let id = session_1.deploy(
         contract_bytecode!("counter"),
-        ContractData::builder(OWNER),
+        ContractData::builder().owner(OWNER),
         LIMIT,
     )?;
     // commit 1
@@ -125,12 +125,12 @@ fn commit_restore_two_contracts_session() -> Result<(), Error> {
     let mut session = vm.session(SessionData::builder())?;
     let id_1 = session.deploy(
         contract_bytecode!("counter"),
-        ContractData::builder(OWNER),
+        ContractData::builder().owner(OWNER),
         LIMIT,
     )?;
     let id_2 = session.deploy(
         contract_bytecode!("box"),
-        ContractData::builder(OWNER),
+        ContractData::builder().owner(OWNER),
         LIMIT,
     )?;
 
@@ -190,7 +190,7 @@ fn multiple_commits() -> Result<(), Error> {
     let mut session = vm.session(SessionData::builder())?;
     let id = session.deploy(
         contract_bytecode!("counter"),
-        ContractData::builder(OWNER),
+        ContractData::builder().owner(OWNER),
         LIMIT,
     )?;
     // commit 1
@@ -240,12 +240,12 @@ fn root_equal_on_err() -> Result<(), Error> {
 
     let callcenter_id = session.deploy(
         contract_bytecode!("callcenter"),
-        ContractData::builder(OWNER),
+        ContractData::builder().owner(OWNER),
         LIMIT,
     )?;
     let counter_id = session.deploy(
         contract_bytecode!("counter"),
-        ContractData::builder(OWNER),
+        ContractData::builder().owner(OWNER),
         LIMIT,
     )?;
 
@@ -311,7 +311,7 @@ fn concurrent_sessions() -> Result<(), Error> {
     let mut session = vm.session(SessionData::builder())?;
     let counter = session.deploy(
         contract_bytecode!("counter"),
-        ContractData::builder(OWNER),
+        ContractData::builder().owner(OWNER),
         LIMIT,
     )?;
 
@@ -405,7 +405,7 @@ fn make_session(vm: &VM) -> Result<(Session, ContractId), Error> {
         vm.session(SessionData::builder().insert("height", HEIGHT)?)?;
     let contract_id = session.deploy(
         contract_bytecode!("everest"),
-        ContractData::builder(OWNER),
+        ContractData::builder().owner(OWNER),
         LIMIT,
     )?;
     Ok((session, contract_id))

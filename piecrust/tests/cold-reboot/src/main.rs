@@ -10,6 +10,7 @@ use std::path::{Path, PathBuf};
 use std::{env, fs};
 
 use piecrust::{ContractData, ContractId, SessionData, VM};
+
 const COUNTER_ID: ContractId = {
     let mut bytes = [0u8; 32];
     bytes[0] = 99;
@@ -28,7 +29,7 @@ fn initialize_counter<P: AsRef<Path>>(
 
     session.deploy(
         counter_bytecode,
-        ContractData::builder(OWNER).contract_id(COUNTER_ID),
+        ContractData::builder().owner(OWNER).contract_id(COUNTER_ID),
         u64::MAX,
     )?;
     session.call::<_, ()>(COUNTER_ID, "increment", &(), u64::MAX)?;

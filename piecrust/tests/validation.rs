@@ -17,7 +17,7 @@ fn out_of_bounds() -> Result<(), Error> {
 
     let c_example_id = session.deploy(
         contract_bytecode!("c_example"),
-        ContractData::builder(OWNER),
+        ContractData::builder().owner(OWNER),
         LIMIT,
     )?;
 
@@ -37,7 +37,7 @@ fn bad_contract() -> Result<(), Error> {
     let _ = session
         .deploy(
             contract_bytecode!("invalid"),
-            ContractData::builder(OWNER),
+            ContractData::builder().owner(OWNER),
             LIMIT,
         )
         .expect_err("Deploying an invalid contract should error");

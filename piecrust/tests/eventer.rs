@@ -17,7 +17,7 @@ pub fn vm_center_events() -> Result<(), Error> {
 
     let eventer_id = session.deploy(
         contract_bytecode!("eventer"),
-        ContractData::builder(OWNER),
+        ContractData::builder().owner(OWNER),
         LIMIT,
     )?;
 

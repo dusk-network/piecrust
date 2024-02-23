@@ -18,7 +18,7 @@ pub fn box_set_get() -> Result<(), Error> {
 
     let id = session.deploy(
         contract_bytecode!("box"),
-        ContractData::builder(OWNER),
+        ContractData::builder().owner(OWNER),
         LIMIT,
     )?;
 
@@ -43,7 +43,7 @@ pub fn box_set_get_raw() -> Result<(), Error> {
 
     let id = session.deploy(
         contract_bytecode!("box"),
-        ContractData::builder(OWNER),
+        ContractData::builder().owner(OWNER),
         LIMIT,
     )?;
 

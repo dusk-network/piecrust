@@ -17,7 +17,7 @@ pub fn fibo() -> Result<(), Error> {
 
     let id = session.deploy(
         contract_bytecode!("fibonacci"),
-        ContractData::builder(OWNER),
+        ContractData::builder().owner(OWNER),
         LIMIT,
     )?;
 

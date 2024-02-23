@@ -13,43 +13,41 @@ use rkyv::{Archive, Deserialize, Serialize};
 
 use crate::error::Error;
 
-pub struct ContractData<'a, A, const N: usize> {
+pub struct ContractData<'a, A> {
     pub(crate) contract_id: Option<ContractId>,
     pub(crate) constructor_arg: Option<&'a A>,
-    pub(crate) owner: [u8; N],
+    pub(crate) owner: Option<Vec<u8>>,
 }
 
 // `()` is done on purpose, since by default it should be that the constructor
 // takes no argument.
-impl<'a, const N: usize> ContractData<'a, (), N> {
+impl<'a> ContractData<'a, ()> {
     /// Build a deploy data structure.
     ///
     /// This function returns a builder that can be used to set optional fields
     /// in contract deployment.
-    pub fn builder(owner: [u8; N]) -> ContractDataBuilder<'a, (), N> {
+    pub fn builder() -> ContractDataBuilder<'a, ()> {
         ContractDataBuilder {
             contract_id: None,
             constructor_arg: None,
-            owner,
+            owner: None,
         }
     }
 }
 
-impl<'a, A, const N: usize> From<ContractDataBuilder<'a, A, N>>
-    for ContractData<'a, A, N>
-{
-    fn from(builder: ContractDataBuilder<'a, A, N>) -> Self {
+impl<'a, A> From<ContractDataBuilder<'a, A>> for ContractData<'a, A> {
+    fn from(builder: ContractDataBuilder<'a, A>) -> Self {
         builder.build()
     }
 }
 
-pub struct ContractDataBuilder<'a, A, const N: usize> {
+pub struct ContractDataBuilder<'a, A> {
     contract_id: Option<ContractId>,
-    owner: [u8; N],
+    owner: Option<Vec<u8>>,
     constructor_arg: Option<&'a A>,
 }
 
-impl<'a, A, const N: usize> ContractDataBuilder<'a, A, N> {
+impl<'a, A> ContractDataBuilder<'a, A> {
     /// Set the deployment contract ID.
     pub fn contract_id(mut self, id: ContractId) -> Self {
         self.contract_id = Some(id);
@@ -57,7 +55,7 @@ impl<'a, A, const N: usize> ContractDataBuilder<'a, A, N> {
     }
 
     /// Set the constructor argument for deployment.
-    pub fn constructor_arg<B>(self, arg: &B) -> ContractDataBuilder<B, N> {
+    pub fn constructor_arg<B>(self, arg: &B) -> ContractDataBuilder<B> {
         ContractDataBuilder {
             contract_id: self.contract_id,
             owner: self.owner,
@@ -65,7 +63,13 @@ impl<'a, A, const N: usize> ContractDataBuilder<'a, A, N> {
         }
     }
 
-    pub fn build(self) -> ContractData<'a, A, N> {
+    /// Set the owner of the contract.
+    pub fn owner(mut self, owner: impl Into<Vec<u8>>) -> Self {
+        self.owner = Some(owner.into());
+        self
+    }
+
+    pub fn build(self) -> ContractData<'a, A> {
         ContractData {
             contract_id: self.contract_id,
             constructor_arg: self.constructor_arg,

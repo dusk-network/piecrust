@@ -17,7 +17,7 @@ pub fn debug() -> Result<(), Error> {
 
     let id = session.deploy(
         contract_bytecode!("debugger"),
-        ContractData::builder(OWNER),
+        ContractData::builder().owner(OWNER),
         LIMIT,
     )?;
 

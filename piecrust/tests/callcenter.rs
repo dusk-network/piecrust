@@ -18,7 +18,7 @@ pub fn cc_read_counter() -> Result<(), Error> {
 
     let counter_id = session.deploy(
         contract_bytecode!("counter"),
-        ContractData::builder(OWNER),
+        ContractData::builder().owner(OWNER),
         LIMIT,
     )?;
 
@@ -29,7 +29,7 @@ pub fn cc_read_counter() -> Result<(), Error> {
 
     let center_id = session.deploy(
         contract_bytecode!("callcenter"),
-        ContractData::builder(OWNER),
+        ContractData::builder().owner(OWNER),
         LIMIT,
     )?;
 
@@ -50,7 +50,7 @@ pub fn cc_direct() -> Result<(), Error> {
 
     let counter_id = session.deploy(
         contract_bytecode!("counter"),
-        ContractData::builder(OWNER),
+        ContractData::builder().owner(OWNER),
         LIMIT,
     )?;
 
@@ -60,7 +60,7 @@ pub fn cc_direct() -> Result<(), Error> {
 
     let center_id = session.deploy(
         contract_bytecode!("callcenter"),
-        ContractData::builder(OWNER),
+        ContractData::builder().owner(OWNER),
         LIMIT,
     )?;
 
@@ -99,7 +99,7 @@ pub fn cc_passthrough() -> Result<(), Error> {
 
     let center_id = session.deploy(
         contract_bytecode!("callcenter"),
-        ContractData::builder(OWNER),
+        ContractData::builder().owner(OWNER),
         LIMIT,
     )?;
 
@@ -122,12 +122,12 @@ pub fn cc_delegated_read() -> Result<(), Error> {
 
     let counter_id = session.deploy(
         contract_bytecode!("counter"),
-        ContractData::builder(OWNER),
+        ContractData::builder().owner(OWNER),
         LIMIT,
     )?;
     let center_id = session.deploy(
         contract_bytecode!("callcenter"),
-        ContractData::builder(OWNER),
+        ContractData::builder().owner(OWNER),
         LIMIT,
     )?;
 
@@ -159,12 +159,12 @@ pub fn cc_delegated_write() -> Result<(), Error> {
     let mut session = vm.session(SessionData::builder())?;
     let counter_id = session.deploy(
         contract_bytecode!("counter"),
-        ContractData::builder(OWNER),
+        ContractData::builder().owner(OWNER),
         LIMIT,
     )?;
     let center_id = session.deploy(
         contract_bytecode!("callcenter"),
-        ContractData::builder(OWNER),
+        ContractData::builder().owner(OWNER),
         LIMIT,
     )?;
 
@@ -190,7 +190,7 @@ pub fn cc_self() -> Result<(), Error> {
 
     let center_id = session.deploy(
         contract_bytecode!("callcenter"),
-        ContractData::builder(OWNER),
+        ContractData::builder().owner(OWNER),
         LIMIT,
     )?;
 
@@ -211,7 +211,7 @@ pub fn cc_caller() -> Result<(), Error> {
 
     let center_id = session.deploy(
         contract_bytecode!("callcenter"),
-        ContractData::builder(OWNER),
+        ContractData::builder().owner(OWNER),
         LIMIT,
     )?;
 
@@ -231,7 +231,7 @@ pub fn cc_caller_uninit() -> Result<(), Error> {
 
     let center_id = session.deploy(
         contract_bytecode!("callcenter"),
-        ContractData::builder(OWNER),
+        ContractData::builder().owner(OWNER),
         LIMIT,
     )?;
 
@@ -250,7 +250,7 @@ pub fn cc_self_id() -> Result<(), Error> {
 
     let center_id = session.deploy(
         contract_bytecode!("callcenter"),
-        ContractData::builder(OWNER),
+        ContractData::builder().owner(OWNER),
         LIMIT,
     )?;
 

@@ -89,7 +89,13 @@
 //! const LIMIT: u64 = 1_000_000;
 //!
 //! let mut session = vm.session(SessionData::builder()).unwrap();
-//! let counter_id = session.deploy(contract_bytecode!("counter"), ContractData::builder(OWNER), LIMIT).unwrap();
+//! let counter_id = session
+//!     .deploy(
+//!         contract_bytecode!("counter"),
+//!         ContractData::builder().owner(OWNER),
+//!         LIMIT,
+//!     )
+//!     .unwrap();
 //!
 //! assert_eq!(session.call::<_, i64>(counter_id, "read_value", &(), LIMIT).unwrap().data, 0xfc);
 //! session.call::<_, ()>(counter_id, "increment", &(), LIMIT).unwrap();

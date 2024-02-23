@@ -18,12 +18,12 @@ pub fn gas_get_used() -> Result<(), Error> {
 
     let counter_id = session.deploy(
         contract_bytecode!("counter"),
-        ContractData::builder(OWNER),
+        ContractData::builder().owner(OWNER),
         LIMIT,
     )?;
     let center_id = session.deploy(
         contract_bytecode!("callcenter"),
-        ContractData::builder(OWNER),
+        ContractData::builder().owner(OWNER),
         LIMIT,
     )?;
 
@@ -52,12 +52,12 @@ pub fn panic_msg_gets_through() -> Result<(), Error> {
 
     let spender_id = session.deploy(
         contract_bytecode!("spender"),
-        ContractData::builder(OWNER),
+        ContractData::builder().owner(OWNER),
         LIMIT,
     )?;
     let callcenter_id = session.deploy(
         contract_bytecode!("callcenter"),
-        ContractData::builder(OWNER),
+        ContractData::builder().owner(OWNER),
         LIMIT,
     )?;
 
@@ -83,7 +83,7 @@ pub fn fails_with_out_of_gas() -> Result<(), Error> {
 
     let counter_id = session.deploy(
         contract_bytecode!("counter"),
-        ContractData::builder(OWNER),
+        ContractData::builder().owner(OWNER),
         LIMIT,
     )?;
 
@@ -105,23 +105,23 @@ pub fn contract_sets_call_limit() -> Result<(), Error> {
 
     session_1st.deploy(
         contract_bytecode!("spender"),
-        ContractData::builder(OWNER),
+        ContractData::builder().owner(OWNER),
         LIMIT,
     )?;
     session_1st.deploy(
         contract_bytecode!("callcenter"),
-        ContractData::builder(OWNER),
+        ContractData::builder().owner(OWNER),
         LIMIT,
     )?;
 
     let spender_id = session_2nd.deploy(
         contract_bytecode!("spender"),
-        ContractData::builder(OWNER),
+        ContractData::builder().owner(OWNER),
         LIMIT,
     )?;
     let callcenter_id = session_2nd.deploy(
         contract_bytecode!("callcenter"),
-        ContractData::builder(OWNER),
+        ContractData::builder().owner(OWNER),
         LIMIT,
     )?;
 
@@ -159,7 +159,7 @@ pub fn limit_and_spent() -> Result<(), Error> {
 
     let spender_id = session.deploy(
         contract_bytecode!("spender"),
-        ContractData::builder(OWNER),
+        ContractData::builder().owner(OWNER),
         LIMIT,
     )?;
 
