@@ -465,14 +465,14 @@ impl Session {
     /// Feeder calls are used to have the contract be able to report larger
     /// amounts of data to the host via the channel included in this call.
     ///
-    /// These calls are always performed with the maximum amount of gas, since
-    /// the contracts may spend quite a large amount in an effort to report
-    /// data.
+    /// These calls should be performed with a large amount of gas, since the
+    /// contracts may spend quite a large amount in an effort to report data.
     pub fn feeder_call<A, R>(
         &mut self,
         contract: ContractId,
         fn_name: &str,
         fn_arg: &A,
+        gas_limit: u64,
         feeder: mpsc::Sender<Vec<u8>>,
     ) -> Result<CallReceipt<R>, Error>
     where
@@ -483,7 +483,7 @@ impl Session {
             + for<'b> CheckBytes<DefaultValidator<'b>>,
     {
         self.inner.feeder = Some(feeder);
-        let r = self.call(contract, fn_name, fn_arg, u64::MAX);
+        let r = self.call(contract, fn_name, fn_arg, gas_limit);
         self.inner.feeder = None;
         r
     }
@@ -500,10 +500,11 @@ impl Session {
         contract: ContractId,
         fn_name: &str,
         fn_arg: V,
+        gas_limit: u64,
         feeder: mpsc::Sender<Vec<u8>>,
     ) -> Result<CallReceipt<Vec<u8>>, Error> {
         self.inner.feeder = Some(feeder);
-        let r = self.call_raw(contract, fn_name, fn_arg, u64::MAX);
+        let r = self.call_raw(contract, fn_name, fn_arg, gas_limit);
         self.inner.feeder = None;
         r
     }

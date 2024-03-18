@@ -24,10 +24,12 @@ fn feed() -> Result<(), Error> {
     )?;
 
     const FEED_NUM: u32 = 10;
+    const GAS_LIMIT: u64 = 1_000_000;
 
     let (sender, receiver) = mpsc::channel();
 
-    session.feeder_call::<_, ()>(id, "feed_num", &FEED_NUM, sender)?;
+    session
+        .feeder_call::<_, ()>(id, "feed_num", &FEED_NUM, GAS_LIMIT, sender)?;
 
     let numbers = receiver
         .into_iter()
