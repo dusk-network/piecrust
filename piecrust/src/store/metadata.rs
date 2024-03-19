@@ -5,13 +5,14 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 use std::fs::File;
-use std::io;
 use std::path::Path;
 use std::sync::Arc;
+use std::{io, mem};
 
 use memmap2::{Mmap, MmapOptions};
 
 use crate::contract::ContractMetadata;
+use crate::{Error, Session};
 
 /// Contract metadata pertaining to a given contract but maintained by the host.
 #[derive(Debug, Clone)]
@@ -56,6 +57,19 @@ impl Metadata {
 
     pub(crate) fn data(&self) -> &ContractMetadata {
         &self.data
+    }
+
+    pub(crate) fn set_data(
+        &mut self,
+        data: ContractMetadata,
+    ) -> Result<(), Error> {
+        let bytes = Session::serialize_data(&data)?;
+
+        let mut new = Self::new(bytes, data)
+            .map_err(|err| Error::PersistenceError(Arc::new(err)))?;
+        mem::swap(self, &mut new);
+
+        Ok(())
     }
 }
 

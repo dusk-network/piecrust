@@ -7,10 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+
 ### Changed
 
 - Change `Session::feeder_call` and `Session::feeder_call_raw` to allow for the
   caller to specify the gas limit [#344]
+
+### Fixed
+
+- Fix `Session::migrate` to replace the contract ID in the new contract's
+  metadata to the old contract's ID [#347]
 
 ## [0.17.0] - 2024-02-28
 
@@ -384,6 +390,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- ISSUES -->
 
+[#347]: https://github.com/dusk-network/piecrust/issues/347
 [#344]: https://github.com/dusk-network/piecrust/issues/344
 [#336]: https://github.com/dusk-network/piecrust/issues/336
 [#325]: https://github.com/dusk-network/piecrust/issues/325
