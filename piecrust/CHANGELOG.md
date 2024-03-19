@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Fix `Session::migrate` to replace the contract ID in the new contract's
+  metadata to the old contract's ID [#347]
+
 ## [0.17.0] - 2024-02-28
 
 ### Added
@@ -379,6 +384,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- ISSUES -->
 
+[#347]: https://github.com/dusk-network/piecrust/issues/347
 [#336]: https://github.com/dusk-network/piecrust/issues/336
 [#325]: https://github.com/dusk-network/piecrust/issues/325
 [#324]: https://github.com/dusk-network/piecrust/issues/324

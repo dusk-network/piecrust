@@ -454,8 +454,7 @@ impl Session {
 
         self.inner
             .contract_session
-            .replace(contract, new_contract)
-            .map_err(|err| PersistenceError(Arc::new(err)))?;
+            .replace(contract, new_contract)?;
 
         Ok(self)
     }
