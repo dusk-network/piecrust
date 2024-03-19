@@ -4,7 +4,9 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use piecrust::{contract_bytecode, ContractData, Error, SessionData, VM};
+use piecrust::{
+    contract_bytecode, ContractData, ContractId, Error, SessionData, VM,
+};
 
 const OWNER: [u8; 32] = [0u8; 32];
 const LIMIT: u64 = 1_000_000;
@@ -274,6 +276,43 @@ fn migration_old_owner() -> Result<(), Error> {
         .data;
 
     assert_eq!(owner, OWNER);
+
+    Ok(())
+}
+
+#[test]
+fn migration_self_id_remains_same() -> Result<(), Error> {
+    let vm = VM::ephemeral()?;
+    let mut session = vm.session(SessionData::builder())?;
+
+    const OWNER: [u8; 33] = [1u8; 33];
+
+    let contract_id = session.deploy(
+        contract_bytecode!("counter"),
+        ContractData::builder().owner(OWNER),
+        LIMIT,
+    )?;
+
+    let root = session.commit()?;
+
+    let mut session = vm.session(SessionData::builder().base(root))?;
+
+    session = session.migrate(
+        contract_id,
+        contract_bytecode!("metadata"),
+        ContractData::builder(),
+        LIMIT,
+        |_, _| Ok(()),
+    )?;
+
+    let new_contract_id = session
+        .call::<_, ContractId>(contract_id, "read_id", &(), LIMIT)?
+        .data;
+
+    assert_eq!(
+        contract_id, new_contract_id,
+        "The contract ID as seen by the contract should remain the same"
+    );
 
     Ok(())
 }
