@@ -7,7 +7,7 @@ categories = ["wasm", "no-std", "cryptography::cryptocurrencies"]
 keywords = ["virtual", "machine", "smart", "contract", "wasm"]
 
 repository = "https://github.com/dusk-network/piecrust"
-version = "0.17.0"
+version = "0.17.1"
 
 edition = "2021"
 license = "MPL-2.0"
