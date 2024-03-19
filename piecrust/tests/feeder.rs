@@ -24,10 +24,12 @@ fn feed() -> Result<(), Error> {
     )?;
 
     const FEED_NUM: u32 = 10;
+    const GAS_LIMIT: u64 = 1_000_000;
 
     let (sender, receiver) = mpsc::channel();
 
-    session.feeder_call::<_, ()>(id, "feed_num", &FEED_NUM, sender)?;
+    session
+        .feeder_call::<_, ()>(id, "feed_num", &FEED_NUM, GAS_LIMIT, sender)?;
 
     let numbers = receiver
         .into_iter()
@@ -66,6 +68,32 @@ fn feed_errors_when_normal_call() -> Result<(), Error> {
     session
         .call::<_, ()>(id, "feed_num", &FEED_NUM, LIMIT)
         .expect_err("Call should error when not called with `feeder_call` or `feeder_call_raw`");
+
+    Ok(())
+}
+
+#[test]
+fn feed_out_of_gas() -> Result<(), Error> {
+    let vm = VM::ephemeral()?;
+
+    let mut session = vm.session(SessionData::builder())?;
+
+    let id = session.deploy(
+        contract_bytecode!("feeder"),
+        ContractData::builder().owner(OWNER),
+        LIMIT,
+    )?;
+
+    const FEED_NUM: u32 = 100;
+    const GAS_LIMIT: u64 = 1_000;
+
+    let (sender, _receiver) = mpsc::channel();
+
+    let err = session
+        .feeder_call::<_, ()>(id, "feed_num", &FEED_NUM, GAS_LIMIT, sender)
+        .expect_err("Call should error when out of gas");
+
+    assert!(matches!(err, Error::OutOfGas));
 
     Ok(())
 }
