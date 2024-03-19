@@ -71,3 +71,29 @@ fn feed_errors_when_normal_call() -> Result<(), Error> {
 
     Ok(())
 }
+
+#[test]
+fn feed_out_of_gas() -> Result<(), Error> {
+    let vm = VM::ephemeral()?;
+
+    let mut session = vm.session(SessionData::builder())?;
+
+    let id = session.deploy(
+        contract_bytecode!("feeder"),
+        ContractData::builder().owner(OWNER),
+        LIMIT,
+    )?;
+
+    const FEED_NUM: u32 = 100;
+    const GAS_LIMIT: u64 = 1_000;
+
+    let (sender, _receiver) = mpsc::channel();
+
+    let err = session
+        .feeder_call::<_, ()>(id, "feed_num", &FEED_NUM, GAS_LIMIT, sender)
+        .expect_err("Call should error when out of gas");
+
+    assert!(matches!(err, Error::OutOfGas));
+
+    Ok(())
+}
