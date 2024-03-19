@@ -8,7 +8,7 @@ use std::collections::btree_map::Entry::{Occupied, Vacant};
 use std::collections::BTreeMap;
 use std::fmt::Debug;
 use std::path::{Path, PathBuf};
-use std::sync::mpsc;
+use std::sync::{mpsc, Arc};
 use std::{io, mem};
 
 use dusk_wasmtime::Engine;
@@ -20,6 +20,7 @@ use crate::store::{
     Bytecode, Call, Commit, Memory, Metadata, Module, BYTECODE_DIR, MEMORY_DIR,
     METADATA_EXTENSION, OBJECTCODE_EXTENSION, PAGE_SIZE,
 };
+use crate::Error;
 
 #[derive(Debug, Clone)]
 pub struct ContractDataEntry {
@@ -312,14 +313,21 @@ impl ContractSession {
         &mut self,
         old_contract: ContractId,
         new_contract: ContractId,
-    ) -> io::Result<()> {
-        let new_contract_data =
+    ) -> Result<(), Error> {
+        let mut new_contract_data =
             self.contracts.remove(&new_contract).ok_or_else(|| {
-                io::Error::new(
+                Error::PersistenceError(Arc::new(io::Error::new(
                     io::ErrorKind::Other,
                     format!("Contract '{new_contract}' not found"),
-                )
+                )))
             })?;
+
+        // The new contract should have the ID of the old contract in its
+        // metadata.
+        new_contract_data.metadata.set_data(ContractMetadata {
+            contract_id: old_contract,
+            owner: new_contract_data.metadata.data().owner.clone(),
+        })?;
 
         self.contracts.insert(old_contract, new_contract_data);
 
