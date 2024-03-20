@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Add `Error::ArgumentBufferOverflow` variant [#343]
+
+### Fixed
+
+- Fix possible under/overflows reported by audit [#343]
+
 
 ### Changed
 
@@ -392,6 +400,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 [#347]: https://github.com/dusk-network/piecrust/issues/347
 [#344]: https://github.com/dusk-network/piecrust/issues/344
+[#343]: https://github.com/dusk-network/piecrust/issues/343
 [#336]: https://github.com/dusk-network/piecrust/issues/336
 [#325]: https://github.com/dusk-network/piecrust/issues/325
 [#324]: https://github.com/dusk-network/piecrust/issues/324

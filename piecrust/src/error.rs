@@ -22,6 +22,8 @@ pub type Compo = CompositeSerializerError<
 /// The error type returned by the piecrust VM.
 #[derive(Error, Debug)]
 pub enum Error {
+    #[error("Argument buffer overflow: {len} > {max_len}")]
+    ArgumentBufferOverflow { len: usize, max_len: usize },
     #[error("Commit error: {0}")]
     CommitError(Cow<'static, str>),
     #[error(transparent)]

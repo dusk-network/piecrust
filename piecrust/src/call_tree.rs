@@ -150,6 +150,9 @@ impl Drop for CallTree {
 unsafe fn update_spent(node: *mut CallTreeNode) {
     let node = &mut *node;
     node.children.iter_mut().for_each(|&mut child| unsafe {
+        // It should be impossible for this to underflow since the amount spent
+        // in all child nodes is always less than or equal to the amount spent
+        // in the parent node.
         node.elem.spent -= (*child).elem.spent;
         update_spent(child);
     });

@@ -761,7 +761,7 @@ impl Session {
                 io: Arc::new(err),
             })?;
 
-        let arg_len = instance.write_bytes_to_arg_buffer(&fdata);
+        let arg_len = instance.write_bytes_to_arg_buffer(&fdata)?;
         let ret_len = instance
             .call(fname, arg_len, limit)
             .map_err(|err| {

@@ -263,10 +263,23 @@ impl WrappedInstance {
         })
     }
 
-    pub(crate) fn write_bytes_to_arg_buffer(&mut self, buf: &[u8]) -> u32 {
+    pub(crate) fn write_bytes_to_arg_buffer(
+        &mut self,
+        buf: &[u8],
+    ) -> Result<u32, Error> {
         self.with_arg_buf_mut(|arg_buffer| {
+            if buf.len() > arg_buffer.len() {
+                return Err(Error::MemoryAccessOutOfBounds {
+                    offset: 0,
+                    len: buf.len(),
+                    mem_len: ARGBUF_LEN,
+                });
+            }
+
             arg_buffer[..buf.len()].copy_from_slice(buf);
-            buf.len() as u32
+            // It is safe to cast to u32 because the length of the buffer is
+            // guaranteed to be less than 4GiB.
+            Ok(buf.len() as u32)
         })
     }
 

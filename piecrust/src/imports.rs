@@ -91,7 +91,16 @@ pub fn check_ptr(
 ) -> Result<(), Error> {
     let mem_len = instance.with_memory(|mem| mem.len());
 
-    if offset + len >= mem_len {
+    let end =
+        offset
+            .checked_add(len)
+            .ok_or(Error::MemoryAccessOutOfBounds {
+                offset,
+                len,
+                mem_len,
+            })?;
+
+    if end >= mem_len {
         return Err(Error::MemoryAccessOutOfBounds {
             offset,
             len,
