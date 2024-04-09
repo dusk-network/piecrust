@@ -46,7 +46,7 @@ impl Write for ArgbufWriter {
             return Err(fmt::Error);
         }
 
-        state::with_arg_buf(|buf| {
+        state::with_arg_buf(|buf, _| {
             buf[self.0..new_ofs].copy_from_slice(bytes);
         });
 

@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Add contract charge setting method [#353] 
+- Add contract allowance setting method and a corresponding passing mechanism [#350] 
+
 ## [0.11.0] - 2024-02-14
 
 ### Added
@@ -162,6 +167,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - First `piecrust-uplink` release
 
 <!-- ISSUES -->
+[#353]: https://github.com/dusk-network/piecrust/issues/353
+[#350]: https://github.com/dusk-network/piecrust/issues/350
 [#324]: https://github.com/dusk-network/piecrust/issues/324
 [#301]: https://github.com/dusk-network/piecrust/issues/301
 [#271]: https://github.com/dusk-network/piecrust/issues/271
