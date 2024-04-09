@@ -19,6 +19,7 @@ use crate::Error;
 pub struct WrappedInstance {
     instance: Instance,
     arg_buf_ofs: usize,
+    arg_buf_b_ofs: usize,
     store: Store<Env>,
     memory: Memory,
 }
@@ -26,6 +27,7 @@ pub struct WrappedInstance {
 pub(crate) struct Env {
     self_id: ContractId,
     session: Session,
+    free: bool,
 }
 
 impl Deref for Env {
@@ -87,6 +89,7 @@ impl WrappedInstance {
         contract_id: ContractId,
         contract: &WrappedContract,
         memory: Memory,
+        free: bool,
     ) -> Result<Self, Error> {
         let mut memory = memory;
         let engine = session.engine().clone();
@@ -94,6 +97,7 @@ impl WrappedInstance {
         let env = Env {
             self_id: contract_id,
             session,
+            free,
         };
 
         let module =
@@ -174,6 +178,21 @@ impl WrappedInstance {
             return Err(Error::InvalidArgumentBuffer);
         }
 
+        let arg_buf_b_ofs = if is_64 {
+            instance
+                .get_global(&mut store, "B")
+                .expect("B should be exported")
+                .get(&mut store)
+                .i64()
+                .ok_or(Error::InvalidArgumentBuffer)? as usize
+        } else {
+            instance
+                .get_global(&mut store, "B")
+                .expect("B should be exported")
+                .get(&mut store)
+                .i32()
+                .ok_or(Error::InvalidArgumentBuffer)? as usize
+        };
         // A memory is no longer new after one instantiation
         memory.is_new = false;
 
@@ -181,6 +200,7 @@ impl WrappedInstance {
             store,
             instance,
             arg_buf_ofs,
+            arg_buf_b_ofs,
             memory,
         };
 
@@ -207,9 +227,17 @@ impl WrappedInstance {
         self.with_arg_buf_mut(|buf| buf[..arg.len()].copy_from_slice(arg))
     }
 
+    pub(crate) fn write_argument_b(&mut self, arg: &[u8]) {
+        self.with_arg_buf_b_mut(|buf| buf[..arg.len()].copy_from_slice(arg))
+    }
+
     // Read argument from instance
     pub(crate) fn read_argument(&mut self, arg: &mut [u8]) {
         self.with_arg_buf(|buf| arg.copy_from_slice(&buf[..arg.len()]))
+    }
+
+    pub(crate) fn read_argument_b(&mut self, arg: &mut [u8]) {
+        self.with_arg_buf_b(|buf| arg.copy_from_slice(&buf[..arg.len()]))
     }
 
     pub(crate) fn read_bytes_from_arg_buffer(&self, arg_len: u32) -> Vec<u8> {
@@ -253,11 +281,31 @@ impl WrappedInstance {
         )
     }
 
+    pub(crate) fn with_arg_buf_b<F, R>(&self, f: F) -> R
+    where
+        F: FnOnce(&[u8]) -> R,
+    {
+        let offset = self.arg_buf_b_ofs;
+        self.with_memory(
+            |memory_bytes| f(&memory_bytes[offset..][..ARGBUF_LEN]),
+        )
+    }
+
     pub(crate) fn with_arg_buf_mut<F, R>(&mut self, f: F) -> R
     where
         F: FnOnce(&mut [u8]) -> R,
     {
         let offset = self.arg_buf_ofs;
+        self.with_memory_mut(|memory_bytes| {
+            f(&mut memory_bytes[offset..][..ARGBUF_LEN])
+        })
+    }
+    
+    pub(crate) fn with_arg_buf_b_mut<F, R>(&mut self, f: F) -> R
+    where
+        F: FnOnce(&mut [u8]) -> R,
+    {
+        let offset = self.arg_buf_b_ofs;
         self.with_memory_mut(|memory_bytes| {
             f(&mut memory_bytes[offset..][..ARGBUF_LEN])
         })
@@ -307,6 +355,16 @@ impl WrappedInstance {
         self.store.get_fuel().expect("Fuel is enabled")
     }
 
+    pub fn set_free(&mut self) {
+        self.store.data_mut().free = true;
+    }
+
+    pub fn reset_free(&mut self) -> bool {
+        let b = self.store.data().free;
+        self.store.data_mut().free = false;
+        b
+    }
+
     pub fn is_function_exported<N: AsRef<str>>(&mut self, name: N) -> bool {
         self.instance
             .get_func(&mut self.store, name.as_ref())
@@ -351,6 +409,10 @@ impl WrappedInstance {
 
     pub fn arg_buffer_offset(&self) -> usize {
         self.arg_buf_ofs
+    }
+
+    pub fn arg_buffer_b_offset(&self) -> usize {
+        self.arg_buf_b_ofs
     }
 }
 

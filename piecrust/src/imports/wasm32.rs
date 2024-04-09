@@ -53,6 +53,10 @@ pub(crate) fn emit(
     imports::emit(fenv, topic_ofs as usize, topic_len, arg_len)
 }
 
+pub(crate) fn set_free(fenv: Caller<Env>) -> WasmtimeResult<()> {
+    imports::set_free(fenv)
+}
+
 pub(crate) fn owner(fenv: Caller<Env>, mod_id_ofs: u32) -> WasmtimeResult<i32> {
     imports::owner(fenv, mod_id_ofs as usize)
 }
