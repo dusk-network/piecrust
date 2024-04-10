@@ -604,7 +604,6 @@ impl Session {
             contract_id,
             &contract,
             store_data.memory,
-            false,
         )?;
 
         Ok(instance)
@@ -763,6 +762,7 @@ impl Session {
             })?;
 
         let arg_len = instance.write_bytes_to_arg_buffer(&fdata)?;
+        instance.clear_arg_buffer_b();
         let ret_len = instance
             .call(fname, arg_len, limit)
             .map_err(|err| {
@@ -778,21 +778,19 @@ impl Session {
             })
             .map_err(Error::normalize)?;
         let ret = instance.read_bytes_from_arg_buffer(ret_len as u32);
+        let ret_b = instance.read_from_arg_buffer_b();
+        let allowance = *ret_b.first().unwrap_or(&0u64);
+        let charge = *ret_b.get(1).unwrap_or(&0u64);
 
         let mut spent = limit - instance.get_remaining_gas();
-	
-       if instance.reset_free() {
-            // the call has been paid for by the target contract
-            // so we can set the spent amount to zero,
-            // note that gas spent between the end of
-            // the transfer contract's spend_and_execute method
-            // and here needs to be estimated in spend_and_execute
-            // as we have no way of charging the contract here
-            // without making an extra contract call
-            // (which we could do but it'd be really wasteful and worth more
-            // points than the few points we lose on an imprecise
-            // estimate)
+
+        if allowance > 0 {
+            // the call has been paid for by the contract so we can set
+            // the spent amount to zero,
             spent = 0;
+        } else {
+            // add possible contract's charge
+            spent += charge;
         }
 
         for elem in self.inner.call_tree.iter() {

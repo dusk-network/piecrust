@@ -6,9 +6,10 @@
 
 use std::io;
 use std::ops::{Deref, DerefMut};
+use std::ptr;
 
 use dusk_wasmtime::{Instance, Module, Mutability, Store, ValType};
-use piecrust_uplink::{ContractId, Event, ARGBUF_LEN};
+use piecrust_uplink::{ContractId, Event, ARGBUF_B_LEN, ARGBUF_LEN};
 
 use crate::contract::WrappedContract;
 use crate::imports::Imports;
@@ -27,7 +28,6 @@ pub struct WrappedInstance {
 pub(crate) struct Env {
     self_id: ContractId,
     session: Session,
-    free: bool,
 }
 
 impl Deref for Env {
@@ -89,7 +89,6 @@ impl WrappedInstance {
         contract_id: ContractId,
         contract: &WrappedContract,
         memory: Memory,
-        free: bool,
     ) -> Result<Self, Error> {
         let mut memory = memory;
         let engine = session.engine().clone();
@@ -97,7 +96,6 @@ impl WrappedInstance {
         let env = Env {
             self_id: contract_id,
             session,
-            free,
         };
 
         let module =
@@ -247,6 +245,20 @@ impl WrappedInstance {
         })
     }
 
+    pub(crate) fn read_from_arg_buffer_b(&self) -> Vec<u64> {
+        self.with_arg_buf_b(|bbuf| {
+            bbuf.chunks_exact(std::mem::size_of::<u64>())
+                .map(|chunk| u64::from_le_bytes(chunk.try_into().unwrap()))
+                .collect()
+        })
+    }
+
+    pub(crate) fn clear_arg_buffer_b(&mut self) {
+        self.with_arg_buf_b_mut(|bbuf| {
+            unsafe { ptr::write_bytes(bbuf.as_mut_ptr(), 0u8, ARGBUF_B_LEN) };
+        });
+    }
+
     pub(crate) fn with_memory<F, R>(&self, f: F) -> R
     where
         F: FnOnce(&[u8]) -> R,
@@ -286,9 +298,9 @@ impl WrappedInstance {
         F: FnOnce(&[u8]) -> R,
     {
         let offset = self.arg_buf_b_ofs;
-        self.with_memory(
-            |memory_bytes| f(&memory_bytes[offset..][..ARGBUF_LEN]),
-        )
+        self.with_memory(|memory_bytes| {
+            f(&memory_bytes[offset..][..ARGBUF_B_LEN])
+        })
     }
 
     pub(crate) fn with_arg_buf_mut<F, R>(&mut self, f: F) -> R
@@ -300,14 +312,14 @@ impl WrappedInstance {
             f(&mut memory_bytes[offset..][..ARGBUF_LEN])
         })
     }
-    
+
     pub(crate) fn with_arg_buf_b_mut<F, R>(&mut self, f: F) -> R
     where
         F: FnOnce(&mut [u8]) -> R,
     {
         let offset = self.arg_buf_b_ofs;
         self.with_memory_mut(|memory_bytes| {
-            f(&mut memory_bytes[offset..][..ARGBUF_LEN])
+            f(&mut memory_bytes[offset..][..ARGBUF_B_LEN])
         })
     }
 
@@ -353,16 +365,6 @@ impl WrappedInstance {
 
     pub fn get_remaining_gas(&mut self) -> u64 {
         self.store.get_fuel().expect("Fuel is enabled")
-    }
-
-    pub fn set_free(&mut self) {
-        self.store.data_mut().free = true;
-    }
-
-    pub fn reset_free(&mut self) -> bool {
-        let b = self.store.data().free;
-        self.store.data_mut().free = false;
-        b
     }
 
     pub fn is_function_exported<N: AsRef<str>>(&mut self, name: N) -> bool {

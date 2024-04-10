@@ -68,10 +68,6 @@ impl Imports {
                 false => Func::wrap(store, wasm32::emit),
                 true => Func::wrap(store, wasm64::emit),
             },
-            "set_free" => match is_64 {
-                false => Func::wrap(store, wasm32::set_free),
-                true => Func::wrap(store, wasm64::set_free),
-            },
             "feed" => Func::wrap(store, feed),
             "limit" => Func::wrap(store, limit),
             "spent" => Func::wrap(store, spent),
@@ -230,7 +226,7 @@ pub(crate) fn c(
 
     let with_memory = |memory: &mut [u8]| -> Result<_, Error> {
         let arg_buf = &memory[argbuf_ofs..][..ARGBUF_LEN];
-        let arg_buf_b = &memory[argbuf_b_ofs..][..ARGBUF_B_LEN as usize];
+        let arg_buf_b = &memory[argbuf_b_ofs..][..ARGBUF_B_LEN];
 
         let mut mod_id = ContractId::uninitialized();
         mod_id.as_bytes_mut().copy_from_slice(
@@ -252,7 +248,7 @@ pub(crate) fn c(
         let name = core::str::from_utf8(&memory[name_ofs..][..name_len])?;
 
         let arg = &arg_buf[..arg_len as usize];
-        let arg_b = &arg_buf_b[..ARGBUF_B_LEN as usize];
+        let arg_b = &arg_buf_b[..ARGBUF_B_LEN];
 
         callee.write_argument(arg);
         callee.write_argument_b(arg_b);
@@ -263,9 +259,7 @@ pub(crate) fn c(
 
         // copy back result
         callee.read_argument(&mut memory[argbuf_ofs..][..ret_len as usize]);
-        callee.read_argument_b(
-            &mut memory[argbuf_b_ofs..][..ARGBUF_B_LEN as usize],
-        );
+        callee.read_argument_b(&mut memory[argbuf_b_ofs..][..ARGBUF_B_LEN]);
 
         let callee_remaining = callee.get_remaining_gas();
         let callee_spent = callee_limit - callee_remaining;
@@ -327,13 +321,6 @@ pub(crate) fn emit(
 
     env.emit(topic, data);
 
-    Ok(())
-}
-
-pub(crate) fn set_free(mut fenv: Caller<Env>) -> WasmtimeResult<()> {
-    let env = fenv.data_mut();
-    let instance = env.self_instance();
-    instance.set_free();
     Ok(())
 }
 
