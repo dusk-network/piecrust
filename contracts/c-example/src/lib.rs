@@ -10,6 +10,10 @@ use std::ptr;
 #[no_mangle]
 pub static mut A: [u8; 65536] = [0; 65536];
 
+// Define second argument buffer for the Economic Protocol
+#[no_mangle]
+pub static mut B: [u8; 16] = [0; 16];
+
 // ==== Host functions ====
 //
 // These functions are provided by the host. See `piecrust-uplink` for a full
