@@ -84,6 +84,7 @@ unsafe fn increment_and_read(_: i32) -> i32 {
 // effort to trigger an error.
 #[no_mangle]
 unsafe fn out_of_bounds(_: i32) -> i32 {
+    #[allow(overflowing_literals)]
     ext::hd(4398046511103 as *const u8, 2);
     0
 }
