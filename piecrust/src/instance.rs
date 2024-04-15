@@ -130,7 +130,7 @@ impl WrappedInstance {
                     return Err(Error::InvalidFunction(func_name.to_string()));
                 }
                 let param = params.next().unwrap();
-                if param != ValType::I32 {
+                if !param.matches(&ValType::I32) {
                     return Err(Error::InvalidFunction(func_name.to_string()));
                 }
 
@@ -140,7 +140,7 @@ impl WrappedInstance {
                     return Err(Error::InvalidFunction(func_name.to_string()));
                 }
                 let result = results.next().unwrap();
-                if result != ValType::I32 {
+                if !result.matches(&ValType::I32) {
                     return Err(Error::InvalidFunction(func_name.to_string()));
                 }
             }

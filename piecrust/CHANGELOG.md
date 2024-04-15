@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Upgrade `dusk-wasmtime` to version `19`
+
 ## [0.18.0] - 2024-03-27
 
 ### Added
