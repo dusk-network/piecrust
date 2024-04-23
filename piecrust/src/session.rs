@@ -12,7 +12,9 @@ use std::sync::{mpsc, Arc};
 
 use bytecheck::CheckBytes;
 use dusk_wasmtime::{Engine, LinearMemory, MemoryCreator, MemoryType};
-use piecrust_uplink::{ContractId, Event, ARGBUF_LEN, SCRATCH_BUF_BYTES};
+use piecrust_uplink::{
+    ContractId, EconomicMode, Event, ARGBUF_LEN, SCRATCH_BUF_BYTES,
+};
 use rkyv::ser::serializers::{
     BufferScratch, BufferSerializer, CompositeSerializer,
 };
@@ -381,7 +383,7 @@ impl Session {
             return Err(InitalizationError("init call not allowed".into()));
         }
 
-        let (data, gas_spent, call_tree) =
+        let (data, gas_spent, call_tree, economic_mode) =
             self.call_inner(contract, fn_name, fn_arg.into(), gas_limit)?;
         let events = mem::take(&mut self.inner.events);
 
@@ -391,6 +393,7 @@ impl Session {
             events,
             call_tree,
             data,
+            economic_mode,
         })
     }
 
@@ -748,7 +751,7 @@ impl Session {
         fname: &str,
         fdata: Vec<u8>,
         limit: u64,
-    ) -> Result<(Vec<u8>, u64, CallTree), Error> {
+    ) -> Result<(Vec<u8>, u64, CallTree, EconomicMode), Error> {
         let stack_element = self.push_callstack(contract, limit)?;
         let instance = self
             .instance(&stack_element.contract_id)
@@ -762,7 +765,7 @@ impl Session {
             })?;
 
         let arg_len = instance.write_bytes_to_arg_buffer(&fdata)?;
-        instance.clear_arg_buffer_b();
+        instance.clear_eco_mode();
         let ret_len = instance
             .call(fname, arg_len, limit)
             .map_err(|err| {
@@ -778,20 +781,9 @@ impl Session {
             })
             .map_err(Error::normalize)?;
         let ret = instance.read_bytes_from_arg_buffer(ret_len as u32);
-        let ret_b = instance.read_from_arg_buffer_b();
-        let allowance = *ret_b.first().unwrap_or(&0u64);
-        let charge = *ret_b.get(1).unwrap_or(&0u64);
+        let economic_mode = instance.read_eco_mode();
 
-        let mut spent = limit - instance.get_remaining_gas();
-
-        if allowance > 0 {
-            // the call has been paid for by the contract so we can set
-            // the spent amount to zero,
-            spent = 0;
-        } else {
-            // add possible contract's charge
-            spent += charge;
-        }
+        let spent = limit - instance.get_remaining_gas();
 
         for elem in self.inner.call_tree.iter() {
             let instance = self
@@ -810,7 +802,7 @@ impl Session {
         mem::swap(&mut self.inner.call_tree, &mut call_tree);
         call_tree.update_spent(spent);
 
-        Ok((ret, spent, call_tree))
+        Ok((ret, spent, call_tree, economic_mode))
     }
 
     pub fn contract_metadata(
@@ -840,6 +832,9 @@ pub struct CallReceipt<T> {
 
     /// The data returned by the called contract.
     pub data: T,
+
+    /// Economic mode applied during the execution of the call.
+    pub economic_mode: EconomicMode,
 }
 
 impl CallReceipt<Vec<u8>> {
@@ -860,6 +855,7 @@ impl CallReceipt<Vec<u8>> {
             events: self.events,
             call_tree: self.call_tree,
             data,
+            economic_mode: self.economic_mode,
         })
     }
 }

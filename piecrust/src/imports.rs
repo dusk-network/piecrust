@@ -13,7 +13,8 @@ use dusk_wasmtime::{
     Caller, Extern, Func, Module, Result as WasmtimeResult, Store,
 };
 use piecrust_uplink::{
-    ContractError, ContractId, ARGBUF_B_LEN, ARGBUF_LEN, CONTRACT_ID_BYTES,
+    ContractError, ContractId, ARGBUF_LEN, CONTRACT_ID_BYTES, ECO_MODE_BUF_LEN,
+    ECO_MODE_LEN,
 };
 
 use crate::instance::{Env, WrappedInstance};
@@ -212,7 +213,7 @@ pub(crate) fn c(
     check_arg(instance, arg_len)?;
 
     let argbuf_ofs = instance.arg_buffer_offset();
-    let argbuf_b_ofs = instance.arg_buffer_b_offset();
+    let eco_mode_ofs = instance.eco_mode_offset();
 
     let caller_remaining = instance.get_remaining_gas();
 
@@ -226,7 +227,6 @@ pub(crate) fn c(
 
     let with_memory = |memory: &mut [u8]| -> Result<_, Error> {
         let arg_buf = &memory[argbuf_ofs..][..ARGBUF_LEN];
-        let arg_buf_b = &memory[argbuf_b_ofs..][..ARGBUF_B_LEN];
 
         let mut mod_id = ContractId::uninitialized();
         mod_id.as_bytes_mut().copy_from_slice(
@@ -248,10 +248,8 @@ pub(crate) fn c(
         let name = core::str::from_utf8(&memory[name_ofs..][..name_len])?;
 
         let arg = &arg_buf[..arg_len as usize];
-        let arg_b = &arg_buf_b[..ARGBUF_B_LEN];
 
         callee.write_argument(arg);
-        callee.write_argument_b(arg_b);
         let ret_len = callee
             .call(name, arg.len() as u32, callee_limit)
             .map_err(Error::normalize)?;
@@ -259,7 +257,10 @@ pub(crate) fn c(
 
         // copy back result
         callee.read_argument(&mut memory[argbuf_ofs..][..ret_len as usize]);
-        callee.read_argument_b(&mut memory[argbuf_b_ofs..][..ARGBUF_B_LEN]);
+        callee.read_eco_mode_buf(
+            &mut memory[eco_mode_ofs..][ECO_MODE_LEN..ECO_MODE_BUF_LEN],
+        );
+        callee.clear_eco_mode();
 
         let callee_remaining = callee.get_remaining_gas();
         let callee_spent = callee_limit - callee_remaining;
