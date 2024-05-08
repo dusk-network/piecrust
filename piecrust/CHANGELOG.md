@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.19.0] - 2024-05-08
+
 ### Added
 
 - Add contract's charge applying mechanism [#353]
@@ -453,7 +455,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- VERSIONS -->
 
-[Unreleased]: https://github.com/dusk-network/piecrust/compare/piecrust-0.18.1...HEAD
+[Unreleased]: https://github.com/dusk-network/piecrust/compare/piecrust-0.19.0...HEAD
+[0.19.0]: https://github.com/dusk-network/piecrust/compare/piecrust-0.18.1...piecrust-0.19.0
 [0.18.1]: https://github.com/dusk-network/piecrust/compare/piecrust-0.18.0...piecrust-0.18.1
 [0.18.0]: https://github.com/dusk-network/piecrust/compare/piecrust-0.17.0...piecrust-0.18.0
 [0.17.0]: https://github.com/dusk-network/piecrust/compare/piecrust-0.16.0...piecrust-0.17.0
