@@ -13,7 +13,8 @@ use dusk_wasmtime::{
     Caller, Extern, Func, Module, Result as WasmtimeResult, Store,
 };
 use piecrust_uplink::{
-    ContractError, ContractId, ARGBUF_LEN, CONTRACT_ID_BYTES,
+    ContractError, ContractId, ARGBUF_LEN, CONTRACT_ID_BYTES, ECO_MODE_BUF_LEN,
+    ECO_MODE_LEN,
 };
 
 use crate::instance::{Env, WrappedInstance};
@@ -212,6 +213,7 @@ pub(crate) fn c(
     check_arg(instance, arg_len)?;
 
     let argbuf_ofs = instance.arg_buffer_offset();
+    let eco_mode_ofs = instance.eco_mode_offset();
 
     let caller_remaining = instance.get_remaining_gas();
 
@@ -255,6 +257,10 @@ pub(crate) fn c(
 
         // copy back result
         callee.read_argument(&mut memory[argbuf_ofs..][..ret_len as usize]);
+        callee.read_eco_mode_buf(
+            &mut memory[eco_mode_ofs..][ECO_MODE_LEN..ECO_MODE_BUF_LEN],
+        );
+        callee.clear_eco_mode();
 
         let callee_remaining = callee.get_remaining_gas();
         let callee_spent = callee_limit - callee_remaining;

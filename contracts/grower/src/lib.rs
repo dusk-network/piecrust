@@ -29,7 +29,7 @@ static mut STATE: Grower = Grower(Vec::new());
 impl Grower {
     /// Appends the bytes sent in the argument buffer to the state vector.
     fn append(&mut self, len: usize) {
-        with_arg_buf(|buf| {
+        with_arg_buf(|buf, _| {
             self.0.extend_from_slice(&buf[..len]);
         });
     }
@@ -37,7 +37,7 @@ impl Grower {
     /// Parses offset and length from the argument buffer, and copies the bytes
     /// at said offset and length on the state vector to the argument buffer.
     fn view(&self, arg_len: usize) -> usize {
-        with_arg_buf(|buf| {
+        with_arg_buf(|buf, _| {
             if arg_len != 8 {
                 panic!("Bad arguments");
             }
@@ -62,7 +62,7 @@ impl Grower {
 
     /// Emplace the length of the state vector into the argument buffer.
     fn len(&self) -> usize {
-        with_arg_buf(|buf| {
+        with_arg_buf(|buf, _| {
             let len = self.0.len() as u32;
             let len_bytes = len.to_le_bytes();
             buf[..4].copy_from_slice(&len_bytes);

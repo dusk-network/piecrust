@@ -83,3 +83,9 @@ pub const SCRATCH_BUF_BYTES: usize = 64;
 
 /// The size of the argument buffer in bytes
 pub const ARGBUF_LEN: usize = 64 * 1024;
+
+/// The size of the economic mode buffer in bytes
+pub const ECO_MODE_BUF_LEN: usize = ECO_MODE_LEN * 2;
+
+/// Size of a single economic mode object
+pub const ECO_MODE_LEN: usize = 9;

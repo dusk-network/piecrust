@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Add contract's charge applying mechanism [#353]
+- Add contract's allowance passing and applying mechanism [#350]
+
 ## [0.18.1] - 2024-04-24
 
 ### Changed
@@ -406,6 +411,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- ISSUES -->
 
+[#353]: https://github.com/dusk-network/piecrust/issues/353
+[#350]: https://github.com/dusk-network/piecrust/issues/350
 [#347]: https://github.com/dusk-network/piecrust/issues/347
 [#344]: https://github.com/dusk-network/piecrust/issues/344
 [#343]: https://github.com/dusk-network/piecrust/issues/343

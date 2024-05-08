@@ -4,7 +4,6 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use alloc::vec::Vec;
 use core::ptr;
 
 use rkyv::{
@@ -15,31 +14,46 @@ use rkyv::{
 };
 
 use crate::{
-    ContractError, ContractId, StandardBufSerializer, CONTRACT_ID_BYTES,
-    SCRATCH_BUF_BYTES,
+    ContractError, ContractId, EconomicMode, RawResult, StandardBufSerializer,
+    CONTRACT_ID_BYTES, ECO_MODE_BUF_LEN, ECO_MODE_LEN, SCRATCH_BUF_BYTES,
 };
 
 pub mod arg_buf {
-    use crate::ARGBUF_LEN;
-
+    use crate::{EconomicMode, ARGBUF_LEN, ECO_MODE_BUF_LEN, ECO_MODE_LEN};
     use core::ptr;
     use core::slice;
 
     #[no_mangle]
     static mut A: [u64; ARGBUF_LEN / 8] = [0; ARGBUF_LEN / 8];
 
+    #[no_mangle]
+    static mut ECO_MODE: [u8; ECO_MODE_BUF_LEN] = [0u8; ECO_MODE_BUF_LEN];
+
     pub fn with_arg_buf<F, R>(f: F) -> R
     where
-        F: FnOnce(&mut [u8]) -> R,
+        F: FnOnce(&mut [u8], &mut [u8]) -> R,
     {
         unsafe {
             let addr = ptr::addr_of_mut!(A);
             let slice = slice::from_raw_parts_mut(addr as _, ARGBUF_LEN);
-            f(slice)
+            let addr_eco_mode = ptr::addr_of_mut!(ECO_MODE);
+            let slice_eco_mode =
+                slice::from_raw_parts_mut(addr_eco_mode as _, ECO_MODE_BUF_LEN);
+            f(slice, slice_eco_mode)
+        }
+    }
+
+    pub fn set_eco_mode(eco_mode: EconomicMode) {
+        unsafe {
+            let addr_eco_mode = ptr::addr_of_mut!(ECO_MODE);
+            let slice_eco_mode =
+                slice::from_raw_parts_mut(addr_eco_mode as _, ECO_MODE_LEN);
+            eco_mode.write(slice_eco_mode);
         }
     }
 }
 
+pub(crate) use arg_buf::set_eco_mode;
 pub(crate) use arg_buf::with_arg_buf;
 
 mod ext {
@@ -73,7 +87,7 @@ where
     Ret: Archive,
     Ret::Archived: Deserialize<Ret, Infallible>,
 {
-    let arg_len = with_arg_buf(|buf| {
+    let arg_len = with_arg_buf(|buf, _| {
         let mut sbuf = [0u8; SCRATCH_BUF_BYTES];
         let scratch = BufferScratch::new(&mut sbuf);
         let ser = BufferSerializer::new(buf);
@@ -88,7 +102,7 @@ where
 
     let ret_len = unsafe { ext::hq(name_ptr, name_len, arg_len) };
 
-    with_arg_buf(|buf| {
+    with_arg_buf(|buf, _| {
         let slice = &buf[..ret_len as usize];
         let ret = unsafe { archived_root::<Ret>(slice) };
         ret.deserialize(&mut Infallible).expect("Infallible")
@@ -132,7 +146,7 @@ where
     Ret: Archive,
     Ret::Archived: Deserialize<Ret, Infallible>,
 {
-    let arg_len = with_arg_buf(|buf| {
+    let arg_len = with_arg_buf(|buf, _| {
         let mut sbuf = [0u8; SCRATCH_BUF_BYTES];
         let scratch = BufferScratch::new(&mut sbuf);
         let ser = BufferSerializer::new(buf);
@@ -155,7 +169,7 @@ where
         )
     };
 
-    with_arg_buf(|buf| {
+    with_arg_buf(|buf, _| {
         if ret_len < 0 {
             Err(ContractError::from_parts(ret_len, buf))
         } else {
@@ -175,8 +189,24 @@ pub fn call_raw(
     contract: ContractId,
     fn_name: &str,
     fn_arg: &[u8],
-) -> Result<Vec<u8>, ContractError> {
+) -> Result<RawResult, ContractError> {
     call_raw_with_limit(contract, fn_name, fn_arg, 0)
+}
+
+/// Allows the contract to set allowance which will be used
+/// to pay for the current call, under the condition that contract's
+/// current balance is greater or equal to the allowance
+/// and the allowance is sufficient to cover gas cost.
+/// This call is of no consequence if the above conditions are not met.
+pub fn set_allowance(allowance: u64) {
+    set_eco_mode(EconomicMode::Allowance(allowance));
+}
+
+/// Allows the contract to set charge which will be used
+/// as a fee. If charge is greater than gas spent,
+/// the difference will be added to contract's balance.
+pub fn set_charge(charge: u64) {
+    set_eco_mode(EconomicMode::Charge(charge));
 }
 
 /// Calls the function with name `fn_name` of the given `contract` using
@@ -192,8 +222,8 @@ pub fn call_raw_with_limit(
     fn_name: &str,
     fn_arg: &[u8],
     gas_limit: u64,
-) -> Result<Vec<u8>, ContractError> {
-    with_arg_buf(|buf| {
+) -> Result<RawResult, ContractError> {
+    with_arg_buf(|buf, _| {
         buf[..fn_arg.len()].copy_from_slice(fn_arg);
     });
 
@@ -210,11 +240,16 @@ pub fn call_raw_with_limit(
         )
     };
 
-    with_arg_buf(|buf| {
+    with_arg_buf(|buf, eco_mode_buf| {
         if ret_len < 0 {
             Err(ContractError::from_parts(ret_len, buf))
         } else {
-            Ok(buf[..ret_len as usize].to_vec())
+            Ok(RawResult::new(
+                buf[..ret_len as usize].to_vec(),
+                EconomicMode::read(
+                    &eco_mode_buf[ECO_MODE_LEN..ECO_MODE_BUF_LEN],
+                ),
+            ))
         }
     })
 }
@@ -234,7 +269,7 @@ where
     unsafe {
         match ext::hd(name, name_len) as usize {
             0 => None,
-            arg_pos => Some(with_arg_buf(|buf| {
+            arg_pos => Some(with_arg_buf(|buf, _| {
                 let ret = archived_root::<D>(&buf[..arg_pos]);
                 ret.deserialize(&mut Infallible).expect("Infallible")
             })),
@@ -249,7 +284,7 @@ pub fn owner<const N: usize>(contract: ContractId) -> Option<[u8; N]> {
     unsafe {
         match ext::owner(contract_id_ptr) {
             0 => None,
-            _ => Some(with_arg_buf(|buf| {
+            _ => Some(with_arg_buf(|buf, _| {
                 let ret = archived_root::<[u8; N]>(&buf[..N]);
                 ret.deserialize(&mut Infallible).expect("Infallible")
             })),
@@ -261,7 +296,7 @@ pub fn owner<const N: usize>(contract: ContractId) -> Option<[u8; N]> {
 pub fn self_owner<const N: usize>() -> [u8; N] {
     unsafe { ext::owner(ptr::null()) };
 
-    with_arg_buf(|buf| {
+    with_arg_buf(|buf, _| {
         let ret = unsafe { archived_root::<[u8; N]>(&buf[..N]) };
         ret.deserialize(&mut Infallible).expect("Infallible")
     })
@@ -270,7 +305,7 @@ pub fn self_owner<const N: usize>() -> [u8; N] {
 /// Return the current contract's id.
 pub fn self_id() -> ContractId {
     unsafe { ext::self_id() };
-    let id: ContractId = with_arg_buf(|buf| {
+    let id: ContractId = with_arg_buf(|buf, _| {
         let ret =
             unsafe { archived_root::<ContractId>(&buf[..CONTRACT_ID_BYTES]) };
         ret.deserialize(&mut Infallible).expect("Infallible")
@@ -283,7 +318,7 @@ pub fn self_id() -> ContractId {
 /// to be called.
 pub fn caller() -> ContractId {
     unsafe { ext::caller() };
-    with_arg_buf(|buf| {
+    with_arg_buf(|buf, _| {
         let ret = unsafe {
             archived_root::<ContractId>(
                 &buf[..core::mem::size_of::<Archived<ContractId>>()],
@@ -308,7 +343,7 @@ pub fn emit<D>(topic: &'static str, data: D)
 where
     for<'a> D: Serialize<StandardBufSerializer<'a>>,
 {
-    with_arg_buf(|buf| {
+    with_arg_buf(|buf, _| {
         let mut sbuf = [0u8; SCRATCH_BUF_BYTES];
         let scratch = BufferScratch::new(&mut sbuf);
         let ser = BufferSerializer::new(buf);
@@ -334,7 +369,7 @@ pub fn feed<D>(data: D)
 where
     for<'a> D: Serialize<StandardBufSerializer<'a>>,
 {
-    with_arg_buf(|buf| {
+    with_arg_buf(|buf, _| {
         let mut sbuf = [0u8; SCRATCH_BUF_BYTES];
         let scratch = BufferScratch::new(&mut sbuf);
         let ser = BufferSerializer::new(buf);
