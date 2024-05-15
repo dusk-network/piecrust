@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Changed
 
+- Make storage instructions cost 4 gas per byte [#359]
 - Upgrade `dusk-wasmtime` to version `21.0.0-alpha` [#359]
 
 ## [0.19.0] - 2024-05-08

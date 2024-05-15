@@ -64,7 +64,7 @@ pub fn panic_msg_gets_through() -> Result<(), Error> {
     let receipt = session.call::<_, Result<(), ContractError>>(
         callcenter_id,
         "call_spend_with_limit",
-        &(spender_id, 1175u64),
+        &(spender_id, 4845u64),
         LIMIT,
     )?;
 
