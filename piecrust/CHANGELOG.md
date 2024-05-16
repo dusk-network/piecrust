@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## Changed
+
+- Make storage instructions cost 4 gas per byte [#359]
+- Upgrade `dusk-wasmtime` to version `21.0.0-alpha` [#359]
+
 ## [0.19.0] - 2024-05-08
 
 ### Added
@@ -413,6 +418,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- ISSUES -->
 
+[#359]: https://github.com/dusk-network/piecrust/issues/359
 [#353]: https://github.com/dusk-network/piecrust/issues/353
 [#350]: https://github.com/dusk-network/piecrust/issues/350
 [#347]: https://github.com/dusk-network/piecrust/issues/347

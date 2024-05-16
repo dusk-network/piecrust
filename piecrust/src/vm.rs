@@ -12,7 +12,7 @@ use std::sync::Arc;
 use std::thread;
 
 use dusk_wasmtime::{
-    Config, Engine, ModuleVersionStrategy, OptLevel, Strategy,
+    Config, Engine, ModuleVersionStrategy, OperatorCost, OptLevel, Strategy,
     WasmBacktraceDetails,
 };
 use tempfile::tempdir;
@@ -56,6 +56,39 @@ fn config() -> Config {
 
     // Support 64-bit memories
     config.wasm_memory64(true);
+
+    const BYTE_STORE_COST: i64 = 4;
+    const BYTE4_STORE_COST: i64 = 4 * BYTE_STORE_COST;
+    const BYTE8_STORE_COST: i64 = 8 * BYTE_STORE_COST;
+    const BYTE16_STORE_COST: i64 = 16 * BYTE_STORE_COST;
+
+    config.operator_cost(OperatorCost {
+        I32Store: BYTE4_STORE_COST,
+        F32Store: BYTE4_STORE_COST,
+        I32Store8: BYTE4_STORE_COST,
+        I32Store16: BYTE4_STORE_COST,
+        I32AtomicStore: BYTE4_STORE_COST,
+        I32AtomicStore8: BYTE4_STORE_COST,
+        I32AtomicStore16: BYTE4_STORE_COST,
+
+        I64Store: BYTE8_STORE_COST,
+        F64Store: BYTE8_STORE_COST,
+        I64Store8: BYTE8_STORE_COST,
+        I64Store16: BYTE8_STORE_COST,
+        I64Store32: BYTE8_STORE_COST,
+        I64AtomicStore: BYTE8_STORE_COST,
+        I64AtomicStore8: BYTE8_STORE_COST,
+        I64AtomicStore16: BYTE8_STORE_COST,
+        I64AtomicStore32: BYTE8_STORE_COST,
+
+        V128Store: BYTE16_STORE_COST,
+        V128Store8Lane: BYTE16_STORE_COST,
+        V128Store16Lane: BYTE16_STORE_COST,
+        V128Store32Lane: BYTE16_STORE_COST,
+        V128Store64Lane: BYTE16_STORE_COST,
+
+        ..Default::default()
+    });
 
     config
 }
