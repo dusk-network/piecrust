@@ -4,6 +4,7 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
+use std::any::Any;
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::fmt::{self, Debug, Formatter};
@@ -269,8 +270,8 @@ impl HostQueries {
         self.map.insert(name.into(), Arc::new(query));
     }
 
-    pub fn call(&self, name: &str, buf: &mut [u8], len: u32) -> Option<u32> {
-        self.map.get(name).map(|host_query| host_query(buf, len))
+    pub fn get(&self, name: &str) -> Option<&dyn HostQuery> {
+        self.map.get(name).map(|q| q.as_ref())
     }
 }
 
@@ -281,5 +282,54 @@ impl HostQueries {
 /// function, and should be processed first. Once this is done, the implementor
 /// should emplace the return of the query in the same buffer, and return the
 /// length written.
-pub trait HostQuery: Send + Sync + Fn(&mut [u8], u32) -> u32 {}
-impl<F> HostQuery for F where F: Send + Sync + Fn(&mut [u8], u32) -> u32 {}
+///
+/// Implementers of `Fn(&mut [u8], u32) -> u32` can be used as a `HostQuery`,
+/// but the cost will be 0.
+pub trait HostQuery: Send + Sync {
+    /// Deserialize the argument buffer and return the price of the query.
+    ///
+    /// The buffer passed will be of the length of the argument the contract
+    /// used to call the query.
+    ///
+    /// Any information needed to perform the query after deserializing the
+    /// argument should be stored in `arg`, and will be passed to [`execute`],
+    /// if there's enough gas to execute the query.
+    ///
+    /// [`execute`]: HostQuery::execute
+    fn deserialize_and_price(
+        &self,
+        arg_buf: &[u8],
+        arg: &mut Box<dyn Any>,
+    ) -> u64;
+
+    /// Perform the query and return the length of the result written to the
+    /// argument buffer.
+    ///
+    /// The whole argument buffer is passed, together with any information
+    /// stored in `arg` previously, during [`deserialize_and_price`].
+    ///
+    /// [`deserialize_and_price`]: HostQuery::deserialize_and_price
+    fn execute(&self, arg: &Box<dyn Any>, arg_buf: &mut [u8]) -> u32;
+}
+
+/// An implementer of `Fn(&mut [u8], u32) -> u32` can be used as a `HostQuery`,
+/// and the cost will be 0.
+impl<F> HostQuery for F
+where
+    F: Send + Sync + Fn(&mut [u8], u32) -> u32,
+{
+    fn deserialize_and_price(
+        &self,
+        arg_buf: &[u8],
+        arg: &mut Box<dyn Any>,
+    ) -> u64 {
+        let len = Box::new(arg_buf.len() as u32);
+        *arg = len;
+        0
+    }
+
+    fn execute(&self, arg: &Box<dyn Any>, arg_buf: &mut [u8]) -> u32 {
+        let arg_len = *arg.downcast_ref::<u32>().unwrap();
+        self(arg_buf, arg_len)
+    }
+}
