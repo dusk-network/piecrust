@@ -7,6 +7,7 @@
 mod wasm32;
 mod wasm64;
 
+use std::any::Any;
 use std::sync::Arc;
 
 use dusk_wasmtime::{
@@ -161,9 +162,28 @@ pub(crate) fn hq(
             .map(ToOwned::to_owned)
     })?;
 
-    Ok(instance
-        .with_arg_buf_mut(|buf| env.host_query(&name, buf, arg_len))
-        .ok_or(Error::MissingHostQuery(name))?)
+    // Get the host query if it exists.
+    let host_query =
+        env.host_query(&name).ok_or(Error::MissingHostQuery(name))?;
+    let mut arg: Box<dyn Any> = Box::new(());
+
+    // Price the query, allowing for an early exit if the gas is insufficient.
+    let query_cost = instance.with_arg_buf(|arg_buf| {
+        let arg_len = arg_len as usize;
+        let arg_buf = &arg_buf[..arg_len];
+        host_query.deserialize_and_price(arg_buf, &mut arg)
+    });
+
+    // If the gas is insufficient, return an error.
+    let gas_remaining = instance.get_remaining_gas();
+    if gas_remaining < query_cost {
+        instance.set_remaining_gas(0);
+        Err(Error::OutOfGas)?;
+    }
+    instance.set_remaining_gas(gas_remaining - query_cost);
+
+    // Execute the query and return the result.
+    Ok(instance.with_arg_buf_mut(|arg_buf| host_query.execute(&arg, arg_buf)))
 }
 
 pub(crate) fn hd(

@@ -45,6 +45,11 @@ impl Hoster {
             false => String::from("PROOF IS INVALID"),
         }
     }
+
+    /// Call 'very_expensive' function via the host
+    pub fn host_very_expensive(&self) {
+        uplink::host_query::<_, ()>("very_expensive", ());
+    }
 }
 
 /// Expose `Hoster::host_hash()` to the host
@@ -59,4 +64,10 @@ unsafe fn host_verify(arg_len: u32) -> u32 {
     uplink::wrap_call(arg_len, |(proof, public_inputs)| {
         STATE.host_verify(proof, public_inputs)
     })
+}
+
+/// Expose `Hoster::host_very_expensive()` to the host
+#[no_mangle]
+unsafe fn host_very_expensive(arg_len: u32) -> u32 {
+    uplink::wrap_call(arg_len, |_: ()| STATE.host_very_expensive())
 }

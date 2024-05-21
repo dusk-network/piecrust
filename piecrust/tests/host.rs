@@ -6,9 +6,12 @@
 
 use dusk_plonk::prelude::*;
 use once_cell::sync::Lazy;
-use piecrust::{contract_bytecode, ContractData, Error, SessionData, VM};
+use piecrust::{
+    contract_bytecode, ContractData, Error, HostQuery, SessionData, VM,
+};
 use rand::rngs::OsRng;
 use rkyv::Deserialize;
+use std::any::Any;
 
 const OWNER: [u8; 32] = [0u8; 32];
 const LIMIT: u64 = 1_000_000;
@@ -58,10 +61,27 @@ fn verify_proof(buf: &mut [u8], len: u32) -> u32 {
     valid_bytes.len() as u32
 }
 
+struct VeryExpensiveQuery;
+
+impl HostQuery for VeryExpensiveQuery {
+    fn deserialize_and_price(
+        &self,
+        _arg_buf: &[u8],
+        _arg: &mut Box<dyn Any>,
+    ) -> u64 {
+        u64::MAX
+    }
+
+    fn execute(&self, _arg: &Box<dyn Any>, _arg_buf: &mut [u8]) -> u32 {
+        unreachable!("Query will never be executed since its price is too high")
+    }
+}
+
 fn new_ephemeral_vm() -> Result<VM, Error> {
     let mut vm = VM::ephemeral()?;
     vm.register_host_query("hash", hash);
     vm.register_host_query("verify_proof", verify_proof);
+    vm.register_host_query("very_expensive", VeryExpensiveQuery);
     Ok(vm)
 }
 
@@ -83,6 +103,27 @@ pub fn host_hash() -> Result<(), Error> {
         .expect("query should succeed")
         .data;
     assert_eq!(blake3::hash(&[0u8, 1, 2]).as_bytes(), &h);
+
+    Ok(())
+}
+
+#[test]
+pub fn host_very_expensive_oog() -> Result<(), Error> {
+    let vm = new_ephemeral_vm()?;
+
+    let mut session = vm.session(SessionData::builder())?;
+
+    let id = session.deploy(
+        contract_bytecode!("host"),
+        ContractData::builder().owner(OWNER),
+        LIMIT,
+    )?;
+
+    let err = session
+        .call::<_, String>(id, "host_very_expensive", &(), LIMIT)
+        .expect_err("query should fail since it's too expensive");
+
+    assert!(matches!(err, Error::OutOfGas));
 
     Ok(())
 }

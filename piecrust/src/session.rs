@@ -30,7 +30,7 @@ use crate::error::Error::{self, InitalizationError, PersistenceError};
 use crate::instance::WrappedInstance;
 use crate::store::{ContractSession, PageOpening, PAGE_SIZE};
 use crate::types::StandardBufSerializer;
-use crate::vm::HostQueries;
+use crate::vm::{HostQueries, HostQuery};
 
 const MAX_META_SIZE: usize = ARGBUF_LEN;
 pub const INIT_METHOD: &str = "init";
@@ -522,7 +522,7 @@ impl Session {
             .inner
             .contract_session
             .contract(contract_id)
-            .map_err(|err| Error::PersistenceError(Arc::new(err)))?
+            .map_err(|err| PersistenceError(Arc::new(err)))?
             .map(|data| data.memory.current_len))
     }
 
@@ -612,13 +612,8 @@ impl Session {
         Ok(instance)
     }
 
-    pub(crate) fn host_query(
-        &self,
-        name: &str,
-        buf: &mut [u8],
-        arg_len: u32,
-    ) -> Option<u32> {
-        self.inner.host_queries.call(name, buf, arg_len)
+    pub(crate) fn host_query(&self, name: &str) -> Option<&dyn HostQuery> {
+        self.inner.host_queries.get(name)
     }
 
     pub(crate) fn nth_from_top(&self, n: usize) -> Option<CallTreeElem> {
