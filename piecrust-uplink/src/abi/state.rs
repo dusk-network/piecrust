@@ -76,6 +76,8 @@ mod ext {
         pub fn limit() -> u64;
         pub fn spent() -> u64;
         pub fn owner(contract_id: *const u8) -> i32;
+        pub fn free_limit(contract_id: *const u8) -> i32;
+        pub fn free_price_hint(contract_id: *const u8) -> i32;
         pub fn self_id();
     }
 }
@@ -288,6 +290,37 @@ pub fn owner<const N: usize>(contract: ContractId) -> Option<[u8; N]> {
                 let ret = archived_root::<[u8; N]>(&buf[..N]);
                 ret.deserialize(&mut Infallible).expect("Infallible")
             })),
+        }
+    }
+}
+
+/// Returns given contract's free limit, if the contract exists and if it
+/// has a free limit set.
+pub fn free_limit(contract: ContractId) -> Option<u64> {
+    let contract_id_ptr = contract.as_bytes().as_ptr();
+    unsafe {
+        match ext::free_limit(contract_id_ptr) as usize {
+            0 => None,
+            arg_pos => with_arg_buf(|buf, _| {
+                let ret = archived_root::<Option<u64>>(&buf[..arg_pos]);
+                ret.deserialize(&mut Infallible).expect("Infallible")
+            }),
+        }
+    }
+}
+
+/// Returns given contract's free gas price hint, if the contract exists and
+/// if it has a free price hint set.
+pub fn free_price_hint(contract: ContractId) -> Option<(u64, u64)> {
+    let contract_id_ptr = contract.as_bytes().as_ptr();
+
+    unsafe {
+        match ext::free_price_hint(contract_id_ptr) as usize {
+            0 => None,
+            arg_pos => with_arg_buf(|buf, _| {
+                let ret = archived_root::<Option<(u64, u64)>>(&buf[..arg_pos]);
+                ret.deserialize(&mut Infallible).expect("Infallible")
+            }),
         }
     }
 }
