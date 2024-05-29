@@ -17,6 +17,8 @@ pub struct ContractData<'a, A> {
     pub(crate) contract_id: Option<ContractId>,
     pub(crate) constructor_arg: Option<&'a A>,
     pub(crate) owner: Option<Vec<u8>>,
+    pub(crate) free_limit: Option<u64>,
+    pub(crate) free_price_hint: Option<(u64, u64)>,
 }
 
 // `()` is done on purpose, since by default it should be that the constructor
@@ -31,6 +33,8 @@ impl<'a> ContractData<'a, ()> {
             contract_id: None,
             constructor_arg: None,
             owner: None,
+            free_limit: None,
+            free_price_hint: None,
         }
     }
 }
@@ -45,6 +49,8 @@ pub struct ContractDataBuilder<'a, A> {
     contract_id: Option<ContractId>,
     owner: Option<Vec<u8>>,
     constructor_arg: Option<&'a A>,
+    free_limit: Option<u64>,
+    free_price_hint: Option<(u64, u64)>,
 }
 
 impl<'a, A> ContractDataBuilder<'a, A> {
@@ -60,6 +66,8 @@ impl<'a, A> ContractDataBuilder<'a, A> {
             contract_id: self.contract_id,
             owner: self.owner,
             constructor_arg: Some(arg),
+            free_limit: self.free_limit,
+            free_price_hint: self.free_price_hint,
         }
     }
 
@@ -69,11 +77,25 @@ impl<'a, A> ContractDataBuilder<'a, A> {
         self
     }
 
+    /// Set the gas limit for the the free execution of contract's methods.
+    pub fn free_limit(mut self, free_limit: u64) -> Self {
+        self.free_limit = Some(free_limit);
+        self
+    }
+
+    /// Set the gas price hint for the the free execution of contract's methods.
+    pub fn free_price_hint(mut self, price_hint: (u64, u64)) -> Self {
+        self.free_price_hint = Some(price_hint);
+        self
+    }
+
     pub fn build(self) -> ContractData<'a, A> {
         ContractData {
             contract_id: self.contract_id,
             constructor_arg: self.constructor_arg,
             owner: self.owner,
+            free_limit: self.free_limit,
+            free_price_hint: self.free_price_hint,
         }
     }
 }
@@ -83,6 +105,8 @@ impl<'a, A> ContractDataBuilder<'a, A> {
 pub struct ContractMetadata {
     pub contract_id: ContractId,
     pub owner: Vec<u8>,
+    pub free_limit: Option<u64>,
+    pub free_price_hint: Option<(u64, u64)>,
 }
 
 #[derive(Clone)]

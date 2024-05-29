@@ -10,6 +10,7 @@ mod wasm64;
 use std::any::Any;
 use std::sync::Arc;
 
+use crate::contract::ContractMetadata;
 use dusk_wasmtime::{
     Caller, Extern, Func, Module, Result as WasmtimeResult, Store,
 };
@@ -77,6 +78,14 @@ impl Imports {
             "owner" => match is_64 {
                 false => Func::wrap(store, wasm32::owner),
                 true => Func::wrap(store, wasm64::owner),
+            },
+            "free_limit" => match is_64 {
+                false => Func::wrap(store, wasm32::free_limit),
+                true => Func::wrap(store, wasm64::free_limit),
+            },
+            "free_price_hint" => match is_64 {
+                false => Func::wrap(store, wasm32::free_price_hint),
+                true => Func::wrap(store, wasm64::free_price_hint),
             },
             "self_id" => Func::wrap(store, self_id),
             #[cfg(feature = "debug")]
@@ -426,14 +435,10 @@ fn panic(fenv: Caller<Env>, arg_len: u32) -> WasmtimeResult<()> {
     })?)
 }
 
-fn owner(fenv: Caller<Env>, mod_id_ofs: usize) -> WasmtimeResult<i32> {
-    check_ptr(fenv.data().self_instance(), mod_id_ofs, CONTRACT_ID_BYTES)?;
-
-    let env = fenv.data();
-
+fn get_metadata(env: &mut Env, mod_id_ofs: usize) -> Option<&ContractMetadata> {
     // The null pointer is always zero, so we can use this to check if the
     // caller wants their own ID.
-    let metadata = if mod_id_ofs == 0 {
+    if mod_id_ofs == 0 {
         let self_id = env.self_contract_id();
 
         let contract_metadata = env
@@ -452,19 +457,75 @@ fn owner(fenv: Caller<Env>, mod_id_ofs: usize) -> WasmtimeResult<i32> {
             mod_id
         });
 
-        env.contract_metadata(&mod_id)
-    };
+        if env.instance(&mod_id).is_none() {
+            let _ = env.create_instance(mod_id);
+        }
 
-    match metadata {
+        env.contract_metadata(&mod_id)
+    }
+}
+
+fn owner(mut fenv: Caller<Env>, mod_id_ofs: usize) -> WasmtimeResult<i32> {
+    let instance = fenv.data().self_instance();
+    check_ptr(instance, mod_id_ofs, CONTRACT_ID_BYTES)?;
+    let env = fenv.data_mut();
+    match get_metadata(env, mod_id_ofs) {
         None => Ok(0),
         Some(metadata) => {
             let owner = metadata.owner.as_slice();
 
-            env.self_instance().with_arg_buf_mut(|arg| {
+            instance.with_arg_buf_mut(|arg| {
                 arg[..owner.len()].copy_from_slice(owner)
             });
 
             Ok(1)
+        }
+    }
+}
+
+fn free_limit(mut fenv: Caller<Env>, mod_id_ofs: usize) -> WasmtimeResult<i32> {
+    let instance = fenv.data().self_instance();
+    check_ptr(instance, mod_id_ofs, CONTRACT_ID_BYTES)?;
+    let env = fenv.data_mut();
+    match get_metadata(env, mod_id_ofs) {
+        None => Ok(0),
+        Some(metadata) => {
+            let free_limit = metadata.free_limit;
+
+            let len = instance.with_arg_buf_mut(|arg| {
+                let vec = rkyv::to_bytes::<_, 8>(&free_limit)
+                    .expect("Serialization should succeed");
+                let slice = vec.as_slice();
+                arg[..slice.len()].copy_from_slice(slice);
+                slice.len()
+            });
+
+            Ok(len as i32)
+        }
+    }
+}
+
+fn free_price_hint(
+    mut fenv: Caller<Env>,
+    mod_id_ofs: usize,
+) -> WasmtimeResult<i32> {
+    let instance = fenv.data().self_instance();
+    check_ptr(instance, mod_id_ofs, CONTRACT_ID_BYTES)?;
+    let env = fenv.data_mut();
+    match get_metadata(env, mod_id_ofs) {
+        None => Ok(0),
+        Some(metadata) => {
+            let free_price_hint = metadata.free_price_hint;
+
+            let len = instance.with_arg_buf_mut(|arg| {
+                let vec = rkyv::to_bytes::<_, 16>(&free_price_hint)
+                    .expect("Serialization should succeed");
+                let slice = vec.as_slice();
+                arg[..slice.len()].copy_from_slice(slice);
+                slice.len()
+            });
+
+            Ok(len as i32)
         }
     }
 }

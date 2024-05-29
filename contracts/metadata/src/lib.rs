@@ -32,6 +32,16 @@ impl Metadata {
     pub fn read_owner_of(&self, id: ContractId) -> Option<[u8; 33]> {
         uplink::owner(id)
     }
+
+    /// Read the value of the given contract's free limit
+    pub fn read_free_limit_of(&self, id: ContractId) -> Option<u64> {
+        uplink::free_limit(id)
+    }
+
+    /// Read the value of the given contract's free price hint
+    pub fn read_free_price_hint_of(&self, id: ContractId) -> Option<(u64, u64)> {
+        uplink::free_price_hint(id)
+    }
 }
 
 /// Expose `Metadata::read_owner()` to the host
@@ -50,4 +60,16 @@ unsafe fn read_id(arg_len: u32) -> u32 {
 #[no_mangle]
 unsafe fn read_owner_of(arg_len: u32) -> u32 {
     uplink::wrap_call(arg_len, |id| STATE.read_owner_of(id))
+}
+
+/// Expose `Metadata::read_free_limit_of()` to the host
+#[no_mangle]
+unsafe fn read_free_limit_of(arg_len: u32) -> u32 {
+    uplink::wrap_call(arg_len, |id| STATE.read_free_limit_of(id))
+}
+
+/// Expose `Metadata::read_free_price_hint_of()` to the host
+#[no_mangle]
+unsafe fn read_free_price_hint_of(arg_len: u32) -> u32 {
+    uplink::wrap_call(arg_len, |id| STATE.read_free_price_hint_of(id))
 }

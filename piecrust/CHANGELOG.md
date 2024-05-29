@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Apply charging mechanism for host queries [#359]
 - Add `HostQuery::execute` and `HostQuery::deserialize_and_price` [#359]
+- Add support for metadata elements: free limit and free price hint [#357] 
 
 ## Changed
 
@@ -425,6 +426,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 <!-- ISSUES -->
 
 [#359]: https://github.com/dusk-network/piecrust/issues/359
+[#357]: https://github.com/dusk-network/piecrust/issues/357
 [#353]: https://github.com/dusk-network/piecrust/issues/353
 [#350]: https://github.com/dusk-network/piecrust/issues/350
 [#347]: https://github.com/dusk-network/piecrust/issues/347
