@@ -18,6 +18,8 @@ use crate::{
     CONTRACT_ID_BYTES, ECO_MODE_BUF_LEN, ECO_MODE_LEN, SCRATCH_BUF_BYTES,
 };
 
+const LEN_U64: usize = core::mem::size_of::<u64>();
+
 pub mod arg_buf {
     use crate::{EconomicMode, ARGBUF_LEN, ECO_MODE_BUF_LEN, ECO_MODE_LEN};
     use core::ptr;
@@ -301,9 +303,14 @@ pub fn free_limit(contract: ContractId) -> Option<u64> {
     unsafe {
         match ext::free_limit(contract_id_ptr) as usize {
             0 => None,
-            arg_pos => with_arg_buf(|buf, _| {
-                let ret = archived_root::<Option<u64>>(&buf[..arg_pos]);
-                ret.deserialize(&mut Infallible).expect("Infallible")
+            _ => with_arg_buf(|buf, _| {
+                if buf[0] == 0 {
+                    None
+                } else {
+                    let mut value_bytes = [0; LEN_U64];
+                    value_bytes.copy_from_slice(&buf[1..LEN_U64 + 1]);
+                    Some(u64::from_le_bytes(value_bytes))
+                }
             }),
         }
     }
@@ -317,9 +324,18 @@ pub fn free_price_hint(contract: ContractId) -> Option<(u64, u64)> {
     unsafe {
         match ext::free_price_hint(contract_id_ptr) as usize {
             0 => None,
-            arg_pos => with_arg_buf(|buf, _| {
-                let ret = archived_root::<Option<(u64, u64)>>(&buf[..arg_pos]);
-                ret.deserialize(&mut Infallible).expect("Infallible")
+            _ => with_arg_buf(|buf, _| {
+                if buf[0] == 0 {
+                    None
+                } else {
+                    let mut value_bytes = [0; LEN_U64];
+                    value_bytes.copy_from_slice(&buf[1..LEN_U64 + 1]);
+                    let num = u64::from_le_bytes(value_bytes);
+                    value_bytes
+                        .copy_from_slice(&buf[LEN_U64 + 1..LEN_U64 * 2 + 1]);
+                    let denom = u64::from_le_bytes(value_bytes);
+                    Some((num, denom))
+                }
             }),
         }
     }
