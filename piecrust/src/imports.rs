@@ -24,6 +24,8 @@ use crate::Error;
 
 pub const GAS_PASS_PCT: u64 = 93;
 
+const LEN_U64: usize = core::mem::size_of::<u64>();
+
 pub(crate) struct Imports;
 
 impl Imports {
@@ -490,14 +492,19 @@ fn free_limit(mut fenv: Caller<Env>, mod_id_ofs: usize) -> WasmtimeResult<i32> {
     match get_metadata(env, mod_id_ofs) {
         None => Ok(0),
         Some(metadata) => {
-            let free_limit = metadata.free_limit;
-
             let len = instance.with_arg_buf_mut(|arg| {
-                let vec = rkyv::to_bytes::<_, 8>(&free_limit)
-                    .expect("Serialization should succeed");
-                let slice = vec.as_slice();
-                arg[..slice.len()].copy_from_slice(slice);
-                slice.len()
+                match metadata.free_limit {
+                    Some(free_limit) => {
+                        arg[0] = 1;
+                        arg[1..LEN_U64 + 1]
+                            .copy_from_slice(&free_limit.to_le_bytes()[..]);
+                    }
+                    _ => {
+                        arg[0] = 0;
+                        arg[1..LEN_U64 + 1].fill(0);
+                    }
+                }
+                LEN_U64 + 1
             });
 
             Ok(len as i32)
@@ -515,14 +522,21 @@ fn free_price_hint(
     match get_metadata(env, mod_id_ofs) {
         None => Ok(0),
         Some(metadata) => {
-            let free_price_hint = metadata.free_price_hint;
-
             let len = instance.with_arg_buf_mut(|arg| {
-                let vec = rkyv::to_bytes::<_, 16>(&free_price_hint)
-                    .expect("Serialization should succeed");
-                let slice = vec.as_slice();
-                arg[..slice.len()].copy_from_slice(slice);
-                slice.len()
+                match metadata.free_price_hint {
+                    Some((num, denom)) => {
+                        arg[0] = 1;
+                        arg[1..LEN_U64 + 1]
+                            .copy_from_slice(&num.to_le_bytes()[..]);
+                        arg[LEN_U64 + 1..LEN_U64 * 2 + 1]
+                            .copy_from_slice(&denom.to_le_bytes()[..]);
+                    }
+                    _ => {
+                        arg[0] = 0;
+                        arg[1..LEN_U64 * 2 + 1].fill(0);
+                    }
+                }
+                LEN_U64 * 2 + 1
             });
 
             Ok(len as i32)
