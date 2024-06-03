@@ -10,6 +10,7 @@ mod wasm64;
 use std::any::Any;
 use std::sync::Arc;
 
+use crate::contract::ContractMetadata;
 use dusk_wasmtime::{
     Caller, Extern, Func, Module, Result as WasmtimeResult, Store,
 };
@@ -22,6 +23,8 @@ use crate::instance::{Env, WrappedInstance};
 use crate::Error;
 
 pub const GAS_PASS_PCT: u64 = 93;
+
+const LEN_U64: usize = core::mem::size_of::<u64>();
 
 pub(crate) struct Imports;
 
@@ -77,6 +80,14 @@ impl Imports {
             "owner" => match is_64 {
                 false => Func::wrap(store, wasm32::owner),
                 true => Func::wrap(store, wasm64::owner),
+            },
+            "free_limit" => match is_64 {
+                false => Func::wrap(store, wasm32::free_limit),
+                true => Func::wrap(store, wasm64::free_limit),
+            },
+            "free_price_hint" => match is_64 {
+                false => Func::wrap(store, wasm32::free_price_hint),
+                true => Func::wrap(store, wasm64::free_price_hint),
             },
             "self_id" => Func::wrap(store, self_id),
             #[cfg(feature = "debug")]
@@ -426,18 +437,14 @@ fn panic(fenv: Caller<Env>, arg_len: u32) -> WasmtimeResult<()> {
     })?)
 }
 
-fn owner(fenv: Caller<Env>, mod_id_ofs: usize) -> WasmtimeResult<i32> {
-    check_ptr(fenv.data().self_instance(), mod_id_ofs, CONTRACT_ID_BYTES)?;
-
-    let env = fenv.data();
-
+fn get_metadata(env: &mut Env, mod_id_ofs: usize) -> Option<&ContractMetadata> {
     // The null pointer is always zero, so we can use this to check if the
     // caller wants their own ID.
-    let metadata = if mod_id_ofs == 0 {
-        let self_id = env.self_contract_id();
+    if mod_id_ofs == 0 {
+        let self_id = env.self_contract_id().to_owned();
 
         let contract_metadata = env
-            .contract_metadata(self_id)
+            .contract_metadata(&self_id)
             .expect("contract metadata should exist");
 
         Some(contract_metadata)
@@ -453,14 +460,19 @@ fn owner(fenv: Caller<Env>, mod_id_ofs: usize) -> WasmtimeResult<i32> {
         });
 
         env.contract_metadata(&mod_id)
-    };
+    }
+}
 
-    match metadata {
+fn owner(mut fenv: Caller<Env>, mod_id_ofs: usize) -> WasmtimeResult<i32> {
+    let instance = fenv.data().self_instance();
+    check_ptr(instance, mod_id_ofs, CONTRACT_ID_BYTES)?;
+    let env = fenv.data_mut();
+    match get_metadata(env, mod_id_ofs) {
         None => Ok(0),
         Some(metadata) => {
             let owner = metadata.owner.as_slice();
 
-            env.self_instance().with_arg_buf_mut(|arg| {
+            instance.with_arg_buf_mut(|arg| {
                 arg[..owner.len()].copy_from_slice(owner)
             });
 
@@ -469,14 +481,73 @@ fn owner(fenv: Caller<Env>, mod_id_ofs: usize) -> WasmtimeResult<i32> {
     }
 }
 
-fn self_id(fenv: Caller<Env>) {
-    let env = fenv.data();
-    let self_id = env.self_contract_id();
+fn free_limit(mut fenv: Caller<Env>, mod_id_ofs: usize) -> WasmtimeResult<i32> {
+    let instance = fenv.data().self_instance();
+    check_ptr(instance, mod_id_ofs, CONTRACT_ID_BYTES)?;
+    let env = fenv.data_mut();
+    match get_metadata(env, mod_id_ofs) {
+        None => Ok(0),
+        Some(metadata) => {
+            let len = instance.with_arg_buf_mut(|arg| {
+                match metadata.free_limit {
+                    Some(free_limit) => {
+                        arg[0] = 1;
+                        arg[1..LEN_U64 + 1]
+                            .copy_from_slice(&free_limit.to_le_bytes()[..]);
+                    }
+                    _ => {
+                        arg[0] = 0;
+                        arg[1..LEN_U64 + 1].fill(0);
+                    }
+                }
+                LEN_U64 + 1
+            });
+
+            Ok(len as i32)
+        }
+    }
+}
+
+fn free_price_hint(
+    mut fenv: Caller<Env>,
+    mod_id_ofs: usize,
+) -> WasmtimeResult<i32> {
+    let instance = fenv.data().self_instance();
+    check_ptr(instance, mod_id_ofs, CONTRACT_ID_BYTES)?;
+    let env = fenv.data_mut();
+    match get_metadata(env, mod_id_ofs) {
+        None => Ok(0),
+        Some(metadata) => {
+            let len = instance.with_arg_buf_mut(|arg| {
+                match metadata.free_price_hint {
+                    Some((num, denom)) => {
+                        arg[0] = 1;
+                        arg[1..LEN_U64 + 1]
+                            .copy_from_slice(&num.to_le_bytes()[..]);
+                        arg[LEN_U64 + 1..LEN_U64 * 2 + 1]
+                            .copy_from_slice(&denom.to_le_bytes()[..]);
+                    }
+                    _ => {
+                        arg[0] = 0;
+                        arg[1..LEN_U64 * 2 + 1].fill(0);
+                    }
+                }
+                LEN_U64 * 2 + 1
+            });
+
+            Ok(len as i32)
+        }
+    }
+}
+
+fn self_id(mut fenv: Caller<Env>) {
+    let env = fenv.data_mut();
+    let self_id = env.self_contract_id().to_owned();
     let contract_metadata = env
-        .contract_metadata(self_id)
+        .contract_metadata(&self_id)
         .expect("contract metadata should exist");
-    let slice = contract_metadata.contract_id.as_bytes();
+    let slice = contract_metadata.contract_id.to_bytes();
     let len = slice.len();
     env.self_instance()
-        .with_arg_buf_mut(|arg| arg[..len].copy_from_slice(slice));
+        .with_arg_buf_mut(|arg| arg[..len].copy_from_slice(&slice));
 }

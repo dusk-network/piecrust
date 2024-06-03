@@ -123,3 +123,131 @@ fn owner_of() -> Result<(), Error> {
 
     Ok(())
 }
+
+#[test]
+fn free_limit_and_price_hint_of() -> Result<(), Error> {
+    const OWNER_0: [u8; 33] = [3u8; 33];
+    const OWNER_1: [u8; 33] = [4u8; 33];
+
+    const EXPECTED_FREE_LIMIT_0: u64 = 10_000_000;
+    const EXPECTED_FREE_LIMIT_1: u64 = 20_000_000;
+    const EXPECTED_FREE_PRICE_HINT_0: (u64, u64) = (2, 1);
+    const EXPECTED_FREE_PRICE_HINT_1: (u64, u64) = (3, 1);
+
+    const CONTRACT_ID_0: ContractId = ContractId::from_bytes([1; 32]);
+    const CONTRACT_ID_1: ContractId = ContractId::from_bytes([2; 32]);
+    const CONTRACT_ID_2: ContractId = ContractId::from_bytes([3; 32]);
+
+    let vm = VM::ephemeral()?;
+
+    let mut session = vm.session(SessionData::builder())?;
+
+    session.deploy(
+        contract_bytecode!("metadata"),
+        ContractData::builder()
+            .owner(OWNER_0)
+            .contract_id(CONTRACT_ID_0)
+            .free_limit(EXPECTED_FREE_LIMIT_0)
+            .free_price_hint(EXPECTED_FREE_PRICE_HINT_0),
+        LIMIT,
+    )?;
+    session.deploy(
+        contract_bytecode!("metadata"),
+        ContractData::builder()
+            .owner(OWNER_1)
+            .contract_id(CONTRACT_ID_1)
+            .free_limit(EXPECTED_FREE_LIMIT_1)
+            .free_price_hint(EXPECTED_FREE_PRICE_HINT_1),
+        LIMIT,
+    )?;
+
+    let free_limit = session
+        .call::<_, Option<u64>>(
+            CONTRACT_ID_0,
+            "read_free_limit_of",
+            &CONTRACT_ID_1,
+            LIMIT,
+        )?
+        .data;
+
+    assert_eq!(
+        free_limit,
+        Some(EXPECTED_FREE_LIMIT_1),
+        "contract 0 should think that contract 1 has the correct free limit"
+    );
+
+    let free_limit = session
+        .call::<_, Option<u64>>(
+            CONTRACT_ID_1,
+            "read_free_limit_of",
+            &CONTRACT_ID_0,
+            LIMIT,
+        )?
+        .data;
+
+    assert_eq!(
+        free_limit,
+        Some(EXPECTED_FREE_LIMIT_0),
+        "contract 1 should think that contract 0 has the correct free limit"
+    );
+
+    let free_limit = session
+        .call::<_, Option<u64>>(
+            CONTRACT_ID_0,
+            "read_free_limit_of",
+            &CONTRACT_ID_2,
+            LIMIT,
+        )?
+        .data;
+
+    assert_eq!(
+        free_limit,
+        None,
+        "contract 0 should think that the free_limit of a non-existing contract is None" );
+
+    let free_price_hint = session
+        .call::<_, Option<(u64, u64)>>(
+            CONTRACT_ID_0,
+            "read_free_price_hint_of",
+            &CONTRACT_ID_1,
+            LIMIT,
+        )?
+        .data;
+
+    assert_eq!(
+        free_price_hint,
+        Some(EXPECTED_FREE_PRICE_HINT_1),
+        "contract 0 should think that contract 1 has the correct free price hint" );
+
+    let free_price_hint = session
+        .call::<_, Option<(u64, u64)>>(
+            CONTRACT_ID_1,
+            "read_free_price_hint_of",
+            &CONTRACT_ID_0,
+            LIMIT,
+        )?
+        .data;
+
+    assert_eq!(
+        free_price_hint,
+        Some(EXPECTED_FREE_PRICE_HINT_0),
+        "contract 1 should think that contract 0 has the correct free price
+    hint"
+    );
+
+    let free_price_hint = session
+        .call::<_, Option<(u64, u64)>>(
+            CONTRACT_ID_0,
+            "read_free_price_hint_of",
+            &CONTRACT_ID_2,
+            LIMIT,
+        )?
+        .data;
+
+    assert_eq!(
+        free_price_hint,
+        None,
+        "contract 0 should think that the free price hint of a non-existing contract is none" );
+
+    Ok(())
+}

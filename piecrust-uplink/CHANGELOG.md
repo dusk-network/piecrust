@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Add support for metadata elements: free limit and free price hint [#357]
 - Add contract charge setting method [#353] 
 - Add contract allowance setting method and a corresponding passing mechanism [#350] 
 
@@ -169,6 +170,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - First `piecrust-uplink` release
 
 <!-- ISSUES -->
+[#357]: https://github.com/dusk-network/piecrust/issues/357
 [#353]: https://github.com/dusk-network/piecrust/issues/353
 [#350]: https://github.com/dusk-network/piecrust/issues/350
 [#324]: https://github.com/dusk-network/piecrust/issues/324

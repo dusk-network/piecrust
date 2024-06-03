@@ -327,6 +327,8 @@ impl ContractSession {
         new_contract_data.metadata.set_data(ContractMetadata {
             contract_id: old_contract,
             owner: new_contract_data.metadata.data().owner.clone(),
+            free_limit: new_contract_data.metadata.data().free_limit,
+            free_price_hint: new_contract_data.metadata.data().free_price_hint,
         })?;
 
         self.contracts.insert(old_contract, new_contract_data);
@@ -336,9 +338,10 @@ impl ContractSession {
 
     /// Provides metadata of the contract with a given `contract_id`.
     pub fn contract_metadata(
-        &self,
+        &mut self,
         contract_id: &ContractId,
     ) -> Option<&ContractMetadata> {
+        let _ = self.contract(*contract_id);
         self.contracts
             .get(contract_id)
             .map(|store_data| store_data.metadata.data())

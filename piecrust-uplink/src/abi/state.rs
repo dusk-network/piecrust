@@ -18,6 +18,8 @@ use crate::{
     CONTRACT_ID_BYTES, ECO_MODE_BUF_LEN, ECO_MODE_LEN, SCRATCH_BUF_BYTES,
 };
 
+const LEN_U64: usize = core::mem::size_of::<u64>();
+
 pub mod arg_buf {
     use crate::{EconomicMode, ARGBUF_LEN, ECO_MODE_BUF_LEN, ECO_MODE_LEN};
     use core::ptr;
@@ -76,6 +78,8 @@ mod ext {
         pub fn limit() -> u64;
         pub fn spent() -> u64;
         pub fn owner(contract_id: *const u8) -> i32;
+        pub fn free_limit(contract_id: *const u8) -> i32;
+        pub fn free_price_hint(contract_id: *const u8) -> i32;
         pub fn self_id();
     }
 }
@@ -288,6 +292,51 @@ pub fn owner<const N: usize>(contract: ContractId) -> Option<[u8; N]> {
                 let ret = archived_root::<[u8; N]>(&buf[..N]);
                 ret.deserialize(&mut Infallible).expect("Infallible")
             })),
+        }
+    }
+}
+
+/// Returns given contract's free limit, if the contract exists and if it
+/// has a free limit set.
+pub fn free_limit(contract: ContractId) -> Option<u64> {
+    let contract_id_ptr = contract.as_bytes().as_ptr();
+    unsafe {
+        match ext::free_limit(contract_id_ptr) {
+            0 => None,
+            _ => with_arg_buf(|buf, _| {
+                if buf[0] == 0 {
+                    None
+                } else {
+                    let mut value_bytes = [0; LEN_U64];
+                    value_bytes.copy_from_slice(&buf[1..LEN_U64 + 1]);
+                    Some(u64::from_le_bytes(value_bytes))
+                }
+            }),
+        }
+    }
+}
+
+/// Returns given contract's free gas price hint, if the contract exists and
+/// if it has a free price hint set.
+pub fn free_price_hint(contract: ContractId) -> Option<(u64, u64)> {
+    let contract_id_ptr = contract.as_bytes().as_ptr();
+
+    unsafe {
+        match ext::free_price_hint(contract_id_ptr) {
+            0 => None,
+            _ => with_arg_buf(|buf, _| {
+                if buf[0] == 0 {
+                    None
+                } else {
+                    let mut value_bytes = [0; LEN_U64];
+                    value_bytes.copy_from_slice(&buf[1..LEN_U64 + 1]);
+                    let num = u64::from_le_bytes(value_bytes);
+                    value_bytes
+                        .copy_from_slice(&buf[LEN_U64 + 1..LEN_U64 * 2 + 1]);
+                    let denom = u64::from_le_bytes(value_bytes);
+                    Some((num, denom))
+                }
+            }),
         }
     }
 }

@@ -257,11 +257,14 @@ impl Session {
                 .owner
                 .expect("Owner must be specified when deploying a contract"),
             gas_limit,
+            deploy_data.free_limit,
+            deploy_data.free_price_hint,
         )?;
 
         Ok(contract_id)
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn do_deploy(
         &mut self,
         contract_id: ContractId,
@@ -269,6 +272,8 @@ impl Session {
         arg: Option<Vec<u8>>,
         owner: Vec<u8>,
         gas_limit: u64,
+        free_limit: Option<u64>,
+        free_price_hint: Option<(u64, u64)>,
     ) -> Result<(), Error> {
         if self.inner.contract_session.contract_deployed(contract_id) {
             return Err(InitalizationError(
@@ -278,7 +283,12 @@ impl Session {
 
         let wrapped_contract =
             WrappedContract::new(&self.engine, bytecode, None::<&[u8]>)?;
-        let contract_metadata = ContractMetadata { contract_id, owner };
+        let contract_metadata = ContractMetadata {
+            contract_id,
+            owner,
+            free_limit,
+            free_price_hint,
+        };
         let metadata_bytes = Self::serialize_data(&contract_metadata)?;
 
         self.inner
@@ -622,7 +632,7 @@ impl Session {
 
     /// Creates a new instance of the given contract, returning its memory
     /// length.
-    fn create_instance(
+    pub(crate) fn create_instance(
         &mut self,
         contract: ContractId,
     ) -> Result<usize, Error> {
@@ -801,7 +811,7 @@ impl Session {
     }
 
     pub fn contract_metadata(
-        &self,
+        &mut self,
         contract_id: &ContractId,
     ) -> Option<&ContractMetadata> {
         self.inner.contract_session.contract_metadata(contract_id)
