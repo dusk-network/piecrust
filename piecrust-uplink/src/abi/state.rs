@@ -301,7 +301,7 @@ pub fn owner<const N: usize>(contract: ContractId) -> Option<[u8; N]> {
 pub fn free_limit(contract: ContractId) -> Option<u64> {
     let contract_id_ptr = contract.as_bytes().as_ptr();
     unsafe {
-        match ext::free_limit(contract_id_ptr) as usize {
+        match ext::free_limit(contract_id_ptr) {
             0 => None,
             _ => with_arg_buf(|buf, _| {
                 if buf[0] == 0 {
@@ -322,7 +322,7 @@ pub fn free_price_hint(contract: ContractId) -> Option<(u64, u64)> {
     let contract_id_ptr = contract.as_bytes().as_ptr();
 
     unsafe {
-        match ext::free_price_hint(contract_id_ptr) as usize {
+        match ext::free_price_hint(contract_id_ptr) {
             0 => None,
             _ => with_arg_buf(|buf, _| {
                 if buf[0] == 0 {
