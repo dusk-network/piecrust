@@ -811,7 +811,7 @@ impl Session {
     }
 
     pub fn contract_metadata(
-        &self,
+        &mut self,
         contract_id: &ContractId,
     ) -> Option<&ContractMetadata> {
         self.inner.contract_session.contract_metadata(contract_id)

@@ -441,10 +441,10 @@ fn get_metadata(env: &mut Env, mod_id_ofs: usize) -> Option<&ContractMetadata> {
     // The null pointer is always zero, so we can use this to check if the
     // caller wants their own ID.
     if mod_id_ofs == 0 {
-        let self_id = env.self_contract_id();
+        let self_id = env.self_contract_id().to_owned();
 
         let contract_metadata = env
-            .contract_metadata(self_id)
+            .contract_metadata(&self_id)
             .expect("contract metadata should exist");
 
         Some(contract_metadata)
@@ -458,10 +458,6 @@ fn get_metadata(env: &mut Env, mod_id_ofs: usize) -> Option<&ContractMetadata> {
             );
             mod_id
         });
-
-        if env.instance(&mod_id).is_none() {
-            let _ = env.create_instance(mod_id);
-        }
 
         env.contract_metadata(&mod_id)
     }
@@ -544,14 +540,14 @@ fn free_price_hint(
     }
 }
 
-fn self_id(fenv: Caller<Env>) {
-    let env = fenv.data();
-    let self_id = env.self_contract_id();
+fn self_id(mut fenv: Caller<Env>) {
+    let env = fenv.data_mut();
+    let self_id = env.self_contract_id().to_owned();
     let contract_metadata = env
-        .contract_metadata(self_id)
+        .contract_metadata(&self_id)
         .expect("contract metadata should exist");
-    let slice = contract_metadata.contract_id.as_bytes();
+    let slice = contract_metadata.contract_id.to_bytes();
     let len = slice.len();
     env.self_instance()
-        .with_arg_buf_mut(|arg| arg[..len].copy_from_slice(slice));
+        .with_arg_buf_mut(|arg| arg[..len].copy_from_slice(&slice));
 }

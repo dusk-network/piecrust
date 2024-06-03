@@ -338,9 +338,10 @@ impl ContractSession {
 
     /// Provides metadata of the contract with a given `contract_id`.
     pub fn contract_metadata(
-        &self,
+        &mut self,
         contract_id: &ContractId,
     ) -> Option<&ContractMetadata> {
+        let _ = self.contract(*contract_id);
         self.contracts
             .get(contract_id)
             .map(|store_data| store_data.metadata.data())
