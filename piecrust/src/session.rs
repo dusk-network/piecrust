@@ -632,7 +632,7 @@ impl Session {
 
     /// Creates a new instance of the given contract, returning its memory
     /// length.
-    pub(crate) fn create_instance(
+    fn create_instance(
         &mut self,
         contract: ContractId,
     ) -> Result<usize, Error> {

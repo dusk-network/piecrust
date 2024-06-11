@@ -206,13 +206,6 @@ pub fn set_allowance(allowance: u64) {
     set_eco_mode(EconomicMode::Allowance(allowance));
 }
 
-/// Allows the contract to set charge which will be used
-/// as a fee. If charge is greater than gas spent,
-/// the difference will be added to contract's balance.
-pub fn set_charge(charge: u64) {
-    set_eco_mode(EconomicMode::Charge(charge));
-}
-
 /// Calls the function with name `fn_name` of the given `contract` using
 /// `fn_arg` as argument, allowing it to spend the given `gas_limit`.
 ///
