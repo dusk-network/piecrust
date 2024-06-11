@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed
+
+- Removed the 'charge' portion of the economic protocol [#365]
+
 ## [0.13.0] - 2024-06-05
 
 ### Added
@@ -175,6 +179,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - First `piecrust-uplink` release
 
 <!-- ISSUES -->
+[#365]: https://github.com/dusk-network/piecrust/issues/365
 [#357]: https://github.com/dusk-network/piecrust/issues/357
 [#353]: https://github.com/dusk-network/piecrust/issues/353
 [#350]: https://github.com/dusk-network/piecrust/issues/350

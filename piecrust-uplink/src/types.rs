@@ -163,14 +163,12 @@ impl RawResult {
 #[archive_attr(derive(CheckBytes))]
 pub enum EconomicMode {
     Allowance(u64),
-    Charge(u64),
     None,
     Unknown,
 }
 
 impl EconomicMode {
     const ALLOWANCE: u8 = 1;
-    const CHARGE: u8 = 2;
     const NONE: u8 = 0;
 
     pub fn write(&self, buf: &mut [u8]) {
@@ -185,10 +183,6 @@ impl EconomicMode {
             Allowance(allowance) => {
                 write_value(allowance, buf);
                 buf[0] = Self::ALLOWANCE;
-            }
-            Charge(charge) => {
-                write_value(charge, buf);
-                buf[0] = Self::CHARGE;
             }
             None => {
                 zero_buf(buf);
@@ -206,7 +200,6 @@ impl EconomicMode {
         };
         match buf[0] {
             Self::ALLOWANCE => Allowance(value()),
-            Self::CHARGE => Charge(value()),
             Self::NONE => None,
             _ => Unknown,
         }
