@@ -7,15 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed
+
+- Remove economic protocol-related functionality
+
 ## [0.20.0] - 2024-06-05
 
-## Added
+### Added
 
 - Apply charging mechanism for host queries [#359]
 - Add `HostQuery::execute` and `HostQuery::deserialize_and_price` [#359]
 - Add support for metadata elements: free limit and free price hint [#357] 
 
-## Changed
+### Changed
 
 - Drop `Fn(&mut [u8], u32) -> u32` bound for `HostQuery` [#359]
 - Make storage instructions cost 4 gas per byte [#359]
