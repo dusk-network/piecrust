@@ -6,7 +6,6 @@
 
 use alloc::string::String;
 use alloc::vec::Vec;
-use core::ptr;
 
 use bytecheck::CheckBytes;
 use rkyv::{
@@ -14,8 +13,7 @@ use rkyv::{
     Archive, Deserialize, Serialize,
 };
 
-use crate::{ECO_MODE_LEN, SCRATCH_BUF_BYTES};
-use EconomicMode::*;
+use crate::SCRATCH_BUF_BYTES;
 
 /// And event emitted by a contract.
 #[derive(
@@ -134,74 +132,5 @@ impl core::fmt::Display for ContractId {
             write!(f, "{:02x}", &byte)?
         }
         Ok(())
-    }
-}
-
-#[derive(Debug, Clone)]
-/// Result of the `raw` contract calls.
-pub struct RawResult {
-    pub data: Vec<u8>,
-    pub economic_mode: EconomicMode,
-}
-
-impl RawResult {
-    pub fn new(data: Vec<u8>, eco_mode: EconomicMode) -> Self {
-        Self {
-            data,
-            economic_mode: eco_mode,
-        }
-    }
-    pub fn empty() -> Self {
-        Self {
-            data: Vec::new(),
-            economic_mode: EconomicMode::None,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Archive, Deserialize, Serialize, Eq, PartialEq)]
-#[archive_attr(derive(CheckBytes))]
-pub enum EconomicMode {
-    Allowance(u64),
-    None,
-    Unknown,
-}
-
-impl EconomicMode {
-    const ALLOWANCE: u8 = 1;
-    const NONE: u8 = 0;
-
-    pub fn write(&self, buf: &mut [u8]) {
-        fn write_value(value: &u64, buf: &mut [u8]) {
-            let slice = &mut buf[1..ECO_MODE_LEN];
-            slice.copy_from_slice(&value.to_le_bytes()[..]);
-        }
-        fn zero_buf(buf: &mut [u8]) {
-            unsafe { ptr::write_bytes(buf.as_mut_ptr(), 0u8, ECO_MODE_LEN) }
-        }
-        match self {
-            Allowance(allowance) => {
-                write_value(allowance, buf);
-                buf[0] = Self::ALLOWANCE;
-            }
-            None => {
-                zero_buf(buf);
-                buf[0] = Self::NONE;
-            }
-            _ => panic!("Incorrect economic mode"),
-        }
-    }
-
-    pub fn read(buf: &[u8]) -> Self {
-        let value = || {
-            let mut value_bytes = [0; 8];
-            value_bytes.copy_from_slice(&buf[1..ECO_MODE_LEN]);
-            u64::from_le_bytes(value_bytes)
-        };
-        match buf[0] {
-            Self::ALLOWANCE => Allowance(value()),
-            Self::NONE => None,
-            _ => Unknown,
-        }
     }
 }

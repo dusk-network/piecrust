@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
+- Remove all economic protocol-related functionality
 - Removed the 'charge' portion of the economic protocol [#365]
 
 ## [0.13.0] - 2024-06-05
