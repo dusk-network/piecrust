@@ -6,12 +6,9 @@
 
 use std::io;
 use std::ops::{Deref, DerefMut};
-use std::ptr;
 
 use dusk_wasmtime::{Instance, Module, Mutability, Store, ValType};
-use piecrust_uplink::{
-    ContractId, EconomicMode, Event, ARGBUF_LEN, ECO_MODE_LEN,
-};
+use piecrust_uplink::{ContractId, Event, ARGBUF_LEN};
 
 use crate::contract::WrappedContract;
 use crate::imports::Imports;
@@ -22,7 +19,6 @@ use crate::Error;
 pub struct WrappedInstance {
     instance: Instance,
     arg_buf_ofs: usize,
-    eco_mode_ofs: usize,
     store: Store<Env>,
     memory: Memory,
 }
@@ -178,21 +174,6 @@ impl WrappedInstance {
             return Err(Error::InvalidArgumentBuffer);
         }
 
-        let eco_mode_ofs = if is_64 {
-            instance
-                .get_global(&mut store, "ECO_MODE")
-                .expect("ECO_MODE should be exported")
-                .get(&mut store)
-                .i64()
-                .ok_or(Error::InvalidArgumentBuffer)? as usize
-        } else {
-            instance
-                .get_global(&mut store, "ECO_MODE")
-                .expect("ECO_MODE should be exported")
-                .get(&mut store)
-                .i32()
-                .ok_or(Error::InvalidArgumentBuffer)? as usize
-        };
         // A memory is no longer new after one instantiation
         memory.is_new = false;
 
@@ -200,7 +181,6 @@ impl WrappedInstance {
             store,
             instance,
             arg_buf_ofs,
-            eco_mode_ofs,
             memory,
         };
 
@@ -232,27 +212,11 @@ impl WrappedInstance {
         self.with_arg_buf(|buf| arg.copy_from_slice(&buf[..arg.len()]))
     }
 
-    pub(crate) fn read_eco_mode_buf(&mut self, arg: &mut [u8]) {
-        self.with_eco_mode_buf(|buf| arg.copy_from_slice(&buf[..arg.len()]))
-    }
-
     pub(crate) fn read_bytes_from_arg_buffer(&self, arg_len: u32) -> Vec<u8> {
         self.with_arg_buf(|abuf| {
             let slice = &abuf[..arg_len as usize];
             slice.to_vec()
         })
-    }
-
-    pub(crate) fn read_eco_mode(&self) -> EconomicMode {
-        self.with_eco_mode_buf(EconomicMode::read)
-    }
-
-    pub(crate) fn clear_eco_mode(&mut self) {
-        self.with_eco_mode_buf_mut(|eco_mode_buf| {
-            unsafe {
-                ptr::write_bytes(eco_mode_buf.as_mut_ptr(), 0u8, ECO_MODE_LEN)
-            };
-        });
     }
 
     pub(crate) fn with_memory<F, R>(&self, f: F) -> R
@@ -289,16 +253,6 @@ impl WrappedInstance {
         )
     }
 
-    pub(crate) fn with_eco_mode_buf<F, R>(&self, f: F) -> R
-    where
-        F: FnOnce(&[u8]) -> R,
-    {
-        let offset = self.eco_mode_ofs;
-        self.with_memory(|memory_bytes| {
-            f(&memory_bytes[offset..][..ECO_MODE_LEN])
-        })
-    }
-
     pub(crate) fn with_arg_buf_mut<F, R>(&mut self, f: F) -> R
     where
         F: FnOnce(&mut [u8]) -> R,
@@ -306,16 +260,6 @@ impl WrappedInstance {
         let offset = self.arg_buf_ofs;
         self.with_memory_mut(|memory_bytes| {
             f(&mut memory_bytes[offset..][..ARGBUF_LEN])
-        })
-    }
-
-    pub(crate) fn with_eco_mode_buf_mut<F, R>(&mut self, f: F) -> R
-    where
-        F: FnOnce(&mut [u8]) -> R,
-    {
-        let offset = self.eco_mode_ofs;
-        self.with_memory_mut(|memory_bytes| {
-            f(&mut memory_bytes[offset..][..ECO_MODE_LEN])
         })
     }
 
@@ -407,10 +351,6 @@ impl WrappedInstance {
 
     pub fn arg_buffer_offset(&self) -> usize {
         self.arg_buf_ofs
-    }
-
-    pub fn eco_mode_offset(&self) -> usize {
-        self.eco_mode_ofs
     }
 }
 

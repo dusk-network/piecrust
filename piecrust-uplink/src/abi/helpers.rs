@@ -31,7 +31,7 @@ where
     R: for<'a> Serialize<StandardBufSerializer<'a>>,
     F: Fn(A) -> R,
 {
-    with_arg_buf(|buf, _| {
+    with_arg_buf(|buf| {
         let slice = &buf[..arg_len as usize];
 
         let aa: &A::Archived = check_archived_root::<A>(slice)
@@ -60,7 +60,7 @@ where
     R: for<'a> Serialize<StandardBufSerializer<'a>>,
     F: Fn(A) -> R,
 {
-    with_arg_buf(|buf, _| {
+    with_arg_buf(|buf| {
         let slice = &buf[..arg_len as usize];
 
         let aa: &A::Archived = unsafe { archived_root::<A>(slice) };

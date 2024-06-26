@@ -42,7 +42,7 @@ impl Callcenter {
         fn_arg: Vec<u8>,
     ) -> Result<Vec<u8>, ContractError> {
         uplink::debug!("raw query {fn_name} at {contract_id:?}");
-        uplink::call_raw(contract_id, &fn_name, &fn_arg).map(|r|r.data)
+        uplink::call_raw(contract_id, &fn_name, &fn_arg)
     }
 
     /// Pass the current query
@@ -62,7 +62,7 @@ impl Callcenter {
         fn_name: String,
         fn_arg: Vec<u8>,
     ) -> Vec<u8> {
-        uplink::call_raw(contract_id, &fn_name, &fn_arg).unwrap().data
+        uplink::call_raw(contract_id, &fn_name, &fn_arg).unwrap()
     }
 
     /// Check whether the current caller is the contract itself
