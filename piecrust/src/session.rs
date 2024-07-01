@@ -255,8 +255,6 @@ impl Session {
                 .owner
                 .expect("Owner must be specified when deploying a contract"),
             gas_limit,
-            deploy_data.free_limit,
-            deploy_data.free_price_hint,
         )?;
 
         Ok(contract_id)
@@ -270,8 +268,6 @@ impl Session {
         arg: Option<Vec<u8>>,
         owner: Vec<u8>,
         gas_limit: u64,
-        free_limit: Option<u64>,
-        free_price_hint: Option<(u64, u64)>,
     ) -> Result<(), Error> {
         if self.inner.contract_session.contract_deployed(contract_id) {
             return Err(InitalizationError(
@@ -281,12 +277,7 @@ impl Session {
 
         let wrapped_contract =
             WrappedContract::new(&self.engine, bytecode, None::<&[u8]>)?;
-        let contract_metadata = ContractMetadata {
-            contract_id,
-            owner,
-            free_limit,
-            free_price_hint,
-        };
+        let contract_metadata = ContractMetadata { contract_id, owner };
         let metadata_bytes = Self::serialize_data(&contract_metadata)?;
 
         self.inner

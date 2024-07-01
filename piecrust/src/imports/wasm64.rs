@@ -56,17 +56,3 @@ pub(crate) fn emit(
 pub(crate) fn owner(fenv: Caller<Env>, mod_id_ofs: u64) -> WasmtimeResult<i32> {
     imports::owner(fenv, mod_id_ofs as usize)
 }
-
-pub(crate) fn free_limit(
-    fenv: Caller<Env>,
-    mod_id_ofs: u64,
-) -> WasmtimeResult<i32> {
-    imports::free_limit(fenv, mod_id_ofs as usize)
-}
-
-pub(crate) fn free_price_hint(
-    fenv: Caller<Env>,
-    mod_id_ofs: u64,
-) -> WasmtimeResult<i32> {
-    imports::free_price_hint(fenv, mod_id_ofs as usize)
-}

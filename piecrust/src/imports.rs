@@ -23,8 +23,6 @@ use crate::Error;
 
 pub const GAS_PASS_PCT: u64 = 93;
 
-const LEN_U64: usize = core::mem::size_of::<u64>();
-
 pub(crate) struct Imports;
 
 impl Imports {
@@ -79,14 +77,6 @@ impl Imports {
             "owner" => match is_64 {
                 false => Func::wrap(store, wasm32::owner),
                 true => Func::wrap(store, wasm64::owner),
-            },
-            "free_limit" => match is_64 {
-                false => Func::wrap(store, wasm32::free_limit),
-                true => Func::wrap(store, wasm64::free_limit),
-            },
-            "free_price_hint" => match is_64 {
-                false => Func::wrap(store, wasm32::free_price_hint),
-                true => Func::wrap(store, wasm64::free_price_hint),
             },
             "self_id" => Func::wrap(store, self_id),
             #[cfg(feature = "debug")]
@@ -471,65 +461,6 @@ fn owner(mut fenv: Caller<Env>, mod_id_ofs: usize) -> WasmtimeResult<i32> {
             });
 
             Ok(1)
-        }
-    }
-}
-
-fn free_limit(mut fenv: Caller<Env>, mod_id_ofs: usize) -> WasmtimeResult<i32> {
-    let instance = fenv.data().self_instance();
-    check_ptr(instance, mod_id_ofs, CONTRACT_ID_BYTES)?;
-    let env = fenv.data_mut();
-    match get_metadata(env, mod_id_ofs) {
-        None => Ok(0),
-        Some(metadata) => {
-            let len = instance.with_arg_buf_mut(|arg| {
-                match metadata.free_limit {
-                    Some(free_limit) => {
-                        arg[0] = 1;
-                        arg[1..LEN_U64 + 1]
-                            .copy_from_slice(&free_limit.to_le_bytes()[..]);
-                    }
-                    _ => {
-                        arg[0] = 0;
-                        arg[1..LEN_U64 + 1].fill(0);
-                    }
-                }
-                LEN_U64 + 1
-            });
-
-            Ok(len as i32)
-        }
-    }
-}
-
-fn free_price_hint(
-    mut fenv: Caller<Env>,
-    mod_id_ofs: usize,
-) -> WasmtimeResult<i32> {
-    let instance = fenv.data().self_instance();
-    check_ptr(instance, mod_id_ofs, CONTRACT_ID_BYTES)?;
-    let env = fenv.data_mut();
-    match get_metadata(env, mod_id_ofs) {
-        None => Ok(0),
-        Some(metadata) => {
-            let len = instance.with_arg_buf_mut(|arg| {
-                match metadata.free_price_hint {
-                    Some((num, denom)) => {
-                        arg[0] = 1;
-                        arg[1..LEN_U64 + 1]
-                            .copy_from_slice(&num.to_le_bytes()[..]);
-                        arg[LEN_U64 + 1..LEN_U64 * 2 + 1]
-                            .copy_from_slice(&denom.to_le_bytes()[..]);
-                    }
-                    _ => {
-                        arg[0] = 0;
-                        arg[1..LEN_U64 * 2 + 1].fill(0);
-                    }
-                }
-                LEN_U64 * 2 + 1
-            });
-
-            Ok(len as i32)
         }
     }
 }

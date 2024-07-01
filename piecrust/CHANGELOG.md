@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Fix incomplete removal of economic protocol functionality
+
 ## [0.21.0] - 2024-06-26
 
 ### Removed

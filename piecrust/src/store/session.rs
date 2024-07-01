@@ -327,8 +327,6 @@ impl ContractSession {
         new_contract_data.metadata.set_data(ContractMetadata {
             contract_id: old_contract,
             owner: new_contract_data.metadata.data().owner.clone(),
-            free_limit: new_contract_data.metadata.data().free_limit,
-            free_price_hint: new_contract_data.metadata.data().free_price_hint,
         })?;
 
         self.contracts.insert(old_contract, new_contract_data);
