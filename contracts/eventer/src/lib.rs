@@ -8,6 +8,9 @@
 
 #![no_std]
 
+extern crate alloc;
+use alloc::vec::Vec;
+
 use piecrust_uplink as uplink;
 
 /// Struct that describes the state of the eventer contract
@@ -23,10 +26,23 @@ impl Eventer {
             uplink::emit("number", i);
         }
     }
+
+    pub fn emit_input(&mut self, input: Vec<u8>) -> (u64, u64) {
+        let spent_before = uplink::spent();
+        uplink::emit("input", input);
+        let spent_after = uplink::spent();
+        (spent_before, spent_after)
+    }
 }
 
 /// Expose `Eventer::emit_num()` to the host
 #[no_mangle]
 unsafe fn emit_events(arg_len: u32) -> u32 {
     uplink::wrap_call(arg_len, |num| STATE.emit_num(num))
+}
+
+/// Expose `Eventer::emit_input()` to the host
+#[no_mangle]
+unsafe fn emit_input(arg_len: u32) -> u32 {
+    uplink::wrap_call(arg_len, |input| STATE.emit_input(input))
 }
