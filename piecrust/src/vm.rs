@@ -18,6 +18,7 @@ use dusk_wasmtime::{
 };
 use tempfile::tempdir;
 
+use crate::config::BYTE_STORE_COST;
 use crate::session::{Session, SessionData};
 use crate::store::ContractStore;
 use crate::Error::{self, PersistenceError};
@@ -58,7 +59,6 @@ fn config() -> Config {
     // Support 64-bit memories
     config.wasm_memory64(true);
 
-    const BYTE_STORE_COST: i64 = 4;
     const BYTE4_STORE_COST: i64 = 4 * BYTE_STORE_COST;
     const BYTE8_STORE_COST: i64 = 8 * BYTE_STORE_COST;
     const BYTE16_STORE_COST: i64 = 16 * BYTE_STORE_COST;

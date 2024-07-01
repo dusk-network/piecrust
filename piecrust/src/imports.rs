@@ -18,6 +18,7 @@ use piecrust_uplink::{
     ContractError, ContractId, ARGBUF_LEN, CONTRACT_ID_BYTES,
 };
 
+use crate::config::BYTE_STORE_COST;
 use crate::instance::{Env, WrappedInstance};
 use crate::Error;
 
@@ -323,6 +324,16 @@ pub(crate) fn emit(
 
     check_ptr(instance, topic_ofs, topic_len)?;
     check_arg(instance, arg_len)?;
+
+    // charge for each byte emitted in an event
+    let gas_remaining = instance.get_remaining_gas();
+    let gas_cost = BYTE_STORE_COST as u64 * (topic_len as u64 + arg_len as u64);
+
+    if gas_cost > gas_remaining {
+        instance.set_remaining_gas(0);
+        Err(Error::OutOfGas)?;
+    }
+    instance.set_remaining_gas(gas_remaining - gas_cost);
 
     let data = instance.with_arg_buf(|buf| {
         let arg_len = arg_len as usize;
