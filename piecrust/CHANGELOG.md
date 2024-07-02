@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Added `deploy_raw` method for serialized constructor arguments [#371]
+
 ### Changed
 
 - Make each event byte cost the same as a storage byte [#359]
@@ -441,6 +445,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- ISSUES -->
 
+[#371]: https://github.com/dusk-network/piecrust/issues/371
 [#359]: https://github.com/dusk-network/piecrust/issues/359
 [#357]: https://github.com/dusk-network/piecrust/issues/357
 [#353]: https://github.com/dusk-network/piecrust/issues/353
