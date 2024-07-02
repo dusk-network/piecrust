@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Make each event byte cost the same as a storage byte [#359]
+
 ### Fixed
 
 - Fix incomplete removal of economic protocol functionality

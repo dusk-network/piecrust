@@ -118,6 +118,7 @@
 #[macro_use]
 mod bytecode_macro;
 mod call_tree;
+mod config;
 mod contract;
 mod error;
 mod imports;

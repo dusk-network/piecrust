@@ -38,3 +38,55 @@ pub fn vm_center_events() -> Result<(), Error> {
 
     Ok(())
 }
+
+#[test]
+pub fn event_costs() -> Result<(), Error> {
+    let vm = VM::ephemeral()?;
+
+    let mut session = vm.session(SessionData::builder())?;
+
+    let eventer_id = session.deploy(
+        contract_bytecode!("eventer"),
+        ContractData::builder().owner(OWNER),
+        LIMIT,
+    )?;
+
+    // This call is to "prime" the contract
+    let _ = session.call::<_, (u64, u64)>(
+        eventer_id,
+        "emit_input",
+        &vec![1u8; 100],
+        LIMIT,
+    )?;
+
+    let mut costs = vec![];
+
+    for size in (4..=40).step_by(4) {
+        let input = vec![1u8; size];
+        let (spent_before, spent_after) = session
+            .call::<_, (u64, u64)>(eventer_id, "emit_input", &input, LIMIT)?
+            .data;
+        let cost = spent_after - spent_before;
+        print!("{cost} ");
+        costs.push(cost);
+    }
+
+    // cost grows linearly with the amount of bytes processed, at a predictable
+    // rate.
+    //
+    // NOTE: it is not possible to directly test emission costs, unless this is
+    //       externally configurable
+    let mut cost_diffs = Vec::with_capacity(costs.len() - 1);
+    for i in 0..costs.len() - 1 {
+        cost_diffs.push(costs[i + 1] - costs[i]);
+    }
+    let (ref_cost_diff, cost_diffs) = cost_diffs.split_first().unwrap();
+    for cost_diff in cost_diffs {
+        assert_eq!(
+            cost_diff, ref_cost_diff,
+            "cost should grow at a linear rate"
+        );
+    }
+
+    Ok(())
+}
