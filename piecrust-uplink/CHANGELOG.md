@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.15.0] - 2024-07-03
+
 ### Fixed
 
 - Fix incomplete removal of economic protocol functionality
@@ -210,7 +212,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [#136]: https://github.com/dusk-network/piecrust/issues/136
 
 <!-- VERSIONS -->
-[Unreleased]: https://github.com/dusk-network/piecrust/compare/uplink-0.14.0...HEAD
+[Unreleased]: https://github.com/dusk-network/piecrust/compare/uplink-0.15.0...HEAD
+[0.15.0]: https://github.com/dusk-network/piecrust/compare/uplink-0.14.0...uplink-0.15.0
 [0.14.0]: https://github.com/dusk-network/piecrust/compare/uplink-0.13.0...uplink-0.14.0
 [0.13.0]: https://github.com/dusk-network/piecrust/compare/uplink-0.12.0...uplink-0.13.0
 [0.12.0]: https://github.com/dusk-network/piecrust/compare/uplink-0.11.0...uplink-0.12.0
