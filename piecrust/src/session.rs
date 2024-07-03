@@ -222,16 +222,7 @@ impl Session {
         A: 'a + for<'b> Serialize<StandardBufSerializer<'b>>,
         D: Into<ContractData<'a, A>>,
     {
-        let mut deploy_data = deploy_data.into();
-
-        match deploy_data.contract_id {
-            Some(_) => (),
-            _ => {
-                let hash = blake3::hash(bytecode);
-                deploy_data.contract_id =
-                    Some(ContractId::from_bytes(hash.into()));
-            }
-        };
+        let deploy_data = deploy_data.into();
 
         let mut constructor_arg = None;
         if let Some(arg) = deploy_data.constructor_arg {
@@ -246,14 +237,52 @@ impl Session {
             constructor_arg = Some(self.inner.buffer[0..pos].to_vec());
         }
 
-        let contract_id = deploy_data.contract_id.unwrap();
-        self.do_deploy(
-            contract_id,
+        self.deploy_raw(
+            deploy_data.contract_id,
             bytecode,
             constructor_arg,
             deploy_data
                 .owner
                 .expect("Owner must be specified when deploying a contract"),
+            gas_limit,
+        )
+    }
+
+    /// Deploy a contract, returning its [`ContractId`]. If ID is not provided,
+    /// it is computed using a `blake3` hash of the `bytecode`. Contracts using
+    /// the `memory64` proposal are accepted in just the same way as 32-bit
+    /// contracts, and their handling is totally transparent.
+    ///
+    /// Since a deployment may execute some contract initialization code, that
+    /// code will be metered and executed with the given `gas_limit`.
+    ///
+    /// # Errors
+    /// It is possible that a collision between contract IDs occurs, even for
+    /// different contract IDs. This is due to the fact that all contracts have
+    /// to fit into a sparse merkle tree with `2^32` positions, and as such
+    /// a 256-bit number has to be mapped into a 32-bit number.
+    ///
+    /// If such a collision occurs, [`PersistenceError`] will be returned.
+    ///
+    /// [`ContractId`]: ContractId
+    /// [`PersistenceError`]: PersistenceError
+    pub fn deploy_raw(
+        &mut self,
+        contract_id: Option<ContractId>,
+        bytecode: &[u8],
+        constructor_arg: Option<Vec<u8>>,
+        owner: Vec<u8>,
+        gas_limit: u64,
+    ) -> Result<ContractId, Error> {
+        let contract_id = contract_id.unwrap_or({
+            let hash = blake3::hash(bytecode);
+            ContractId::from_bytes(hash.into())
+        });
+        self.do_deploy(
+            contract_id,
+            bytecode,
+            constructor_arg,
+            owner,
             gas_limit,
         )?;
 
