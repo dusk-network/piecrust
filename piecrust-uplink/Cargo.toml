@@ -16,6 +16,7 @@ license = "MPL-2.0"
 rkyv = { version = "0.7", default-features = false, features = ["size_32", "alloc", "validation"] }
 bytecheck = { version = "0.6", default-features = false }
 dlmalloc = { version = "0.2", optional = true, features = ["global"] }
+blake2b_simd = { version = "1", default-features = false }
 
 [features]
 abi = []
@@ -24,3 +25,7 @@ debug = []
 [package.metadata.docs.rs]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
+
+[dev-dependencies]
+hex = "0.4"
+rand = "0.8"

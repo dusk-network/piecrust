@@ -78,6 +78,13 @@ pub use types::*;
 mod error;
 pub use error::*;
 
+#[doc(hidden)]
+mod hash;
+pub use hash::*;
+
+mod gen_contract_id;
+pub use gen_contract_id::*;
+
 /// How many bytes to use for scratch space when serializing
 pub const SCRATCH_BUF_BYTES: usize = 64;
 
