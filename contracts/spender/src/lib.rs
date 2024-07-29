@@ -25,7 +25,7 @@ impl Spender {
         let limit = uplink::limit();
         let spent_before = uplink::spent();
 
-        match uplink::caller().is_uninitialized() {
+        match uplink::caller().is_none() {
             // if this contract has not been called by another contract,
             // i.e. has been called directly from the outside, call the function
             // via the host and return the limit and spent values before and

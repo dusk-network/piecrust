@@ -79,7 +79,8 @@ impl Crossover {
     ) {
         self.set_crossover(value_to_set);
 
-        let caller = uplink::caller();
+        let caller =
+            uplink::caller().expect("Should be called by another contract");
         uplink::debug!("calling back {caller:?}");
 
         uplink::call::<_, ()>(caller, "set_crossover", &value_to_set_back)

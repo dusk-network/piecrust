@@ -76,19 +76,17 @@ impl Callcenter {
     }
 
     /// Return the caller of this contract
-    pub fn return_caller(&self) -> ContractId {
+    pub fn return_caller(&self) -> Option<ContractId> {
         uplink::caller()
     }
 
     /// Make sure that the caller of this contract is the contract itself
     pub fn call_self(&self) -> Result<bool, ContractError> {
         let self_id = uplink::self_id();
-        let caller = uplink::caller();
-
-        match caller.is_uninitialized() {
-            true => uplink::call(self_id, "call_self", &())
+        match uplink::caller() {
+            None => uplink::call(self_id, "call_self", &())
                 .expect("querying self should succeed"),
-            false => Ok(caller == self_id),
+            Some(caller) => Ok(caller == self_id),
         }
     }
 
