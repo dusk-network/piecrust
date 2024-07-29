@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Add `impl PartialEq<[u8; 32]> for ContractId` [#375]
+
 ## [0.15.0] - 2024-07-03
 
 ### Fixed
@@ -188,6 +192,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - First `piecrust-uplink` release
 
 <!-- ISSUES -->
+[#375]: https://github.com/dusk-network/piecrust/issues/375
 [#365]: https://github.com/dusk-network/piecrust/issues/365
 [#357]: https://github.com/dusk-network/piecrust/issues/357
 [#353]: https://github.com/dusk-network/piecrust/issues/353

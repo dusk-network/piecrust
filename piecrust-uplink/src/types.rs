@@ -117,6 +117,12 @@ impl AsMut<[u8]> for ContractId {
     }
 }
 
+impl PartialEq<[u8; CONTRACT_ID_BYTES]> for ContractId {
+    fn eq(&self, other: &[u8; CONTRACT_ID_BYTES]) -> bool {
+        self.0.eq(other)
+    }
+}
+
 impl core::fmt::Debug for ContractId {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         core::fmt::Display::fmt(self, f)
