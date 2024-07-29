@@ -235,9 +235,9 @@ pub fn cc_caller_uninit() -> Result<(), Error> {
         LIMIT,
     )?;
 
-    let caller: ContractId =
+    let caller: Option<ContractId> =
         session.call(center_id, "return_caller", &(), LIMIT)?.data;
-    assert_eq!(caller, ContractId::uninitialized());
+    assert_eq!(caller, None);
 
     Ok(())
 }
