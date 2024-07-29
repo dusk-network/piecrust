@@ -11,7 +11,7 @@ use rkyv::{
     archived_root,
     ser::serializers::{BufferScratch, BufferSerializer, CompositeSerializer},
     ser::Serializer,
-    Archive, Archived, Deserialize, Infallible, Serialize,
+    Archive, Deserialize, Infallible, Serialize,
 };
 
 use crate::{
@@ -57,7 +57,7 @@ mod ext {
         pub fn emit(topic: *const u8, topic_len: u32, arg_len: u32);
         pub fn feed(arg_len: u32);
 
-        pub fn caller();
+        pub fn caller() -> i32;
         pub fn limit() -> u64;
         pub fn spent() -> u64;
         pub fn owner(contract_id: *const u8) -> i32;
@@ -269,27 +269,24 @@ pub fn self_owner<const N: usize>() -> [u8; N] {
 /// Return the current contract's id.
 pub fn self_id() -> ContractId {
     unsafe { ext::self_id() };
-    let id: ContractId = with_arg_buf(|buf| {
-        let ret =
-            unsafe { archived_root::<ContractId>(&buf[..CONTRACT_ID_BYTES]) };
-        ret.deserialize(&mut Infallible).expect("Infallible")
-    });
-    id
+    with_arg_buf(|buf| {
+        let mut bytes = [0; CONTRACT_ID_BYTES];
+        bytes.copy_from_slice(&buf[..32]);
+        ContractId::from_bytes(bytes)
+    })
 }
 
-/// Return the ID of the calling contract. The returned id will be
-/// uninitialized if there is no caller - meaning this is the first contract
-/// to be called.
-pub fn caller() -> ContractId {
-    unsafe { ext::caller() };
-    with_arg_buf(|buf| {
-        let ret = unsafe {
-            archived_root::<ContractId>(
-                &buf[..core::mem::size_of::<Archived<ContractId>>()],
-            )
-        };
-        ret.deserialize(&mut Infallible).expect("Infallible")
-    })
+/// Returns the ID of the calling contract, or `None` if this is the first
+/// contract to be called.
+pub fn caller() -> Option<ContractId> {
+    match unsafe { ext::caller() } {
+        0 => None,
+        _ => with_arg_buf(|buf| {
+            let mut bytes = [0; CONTRACT_ID_BYTES];
+            bytes.copy_from_slice(&buf[..32]);
+            Some(ContractId::from_bytes(bytes))
+        }),
+    }
 }
 
 /// Returns the gas limit with which the contact was called.

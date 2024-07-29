@@ -63,13 +63,6 @@ pub const CONTRACT_ID_BYTES: usize = 32;
 pub struct ContractId([u8; CONTRACT_ID_BYTES]);
 
 impl ContractId {
-    /// Creates a placeholder [`ContractId`] until the host deploys the contract
-    /// and sets a real [`ContractId`]. This can also be used to determine if a
-    /// contract is the first to be called.
-    pub const fn uninitialized() -> Self {
-        ContractId([0u8; CONTRACT_ID_BYTES])
-    }
-
     /// Creates a new [`ContractId`] from an array of bytes
     pub const fn from_bytes(bytes: [u8; CONTRACT_ID_BYTES]) -> Self {
         Self(bytes)
@@ -90,12 +83,6 @@ impl ContractId {
     /// [`ContractId`]
     pub fn as_bytes_mut(&mut self) -> &mut [u8] {
         &mut self.0
-    }
-
-    /// Determines whether the [`ContractId`] is uninitialized, which can be
-    /// used to check if this contract is the first to be called.
-    pub fn is_uninitialized(&self) -> bool {
-        self == &Self::uninitialized()
     }
 }
 
