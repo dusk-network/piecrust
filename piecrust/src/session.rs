@@ -12,7 +12,9 @@ use std::sync::{mpsc, Arc};
 
 use bytecheck::CheckBytes;
 use dusk_wasmtime::{Engine, LinearMemory, MemoryCreator, MemoryType};
-use piecrust_uplink::{ContractId, Event, ARGBUF_LEN, SCRATCH_BUF_BYTES};
+use piecrust_uplink::{
+    ContractId, Event, ARGBUF_LEN, CONTRACT_ID_BYTES, SCRATCH_BUF_BYTES,
+};
 use rkyv::ser::serializers::{
     BufferScratch, BufferSerializer, CompositeSerializer,
 };
@@ -138,7 +140,7 @@ impl Session {
         data: SessionData,
     ) -> Self {
         let inner = SessionInner {
-            current: ContractId::uninitialized(),
+            current: ContractId::from_bytes([0; CONTRACT_ID_BYTES]),
             call_tree: CallTree::new(),
             instances: BTreeMap::new(),
             debug: vec![],

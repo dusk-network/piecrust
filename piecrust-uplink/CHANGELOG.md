@@ -11,6 +11,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Add `impl PartialEq<[u8; 32]> for ContractId` [#375]
 
+### Changed
+
+- Change `callee` function to return `Option<ContractId>`
+- Change `callee` ABI to return an integer
+
 ## [0.15.0] - 2024-07-03
 
 ### Fixed

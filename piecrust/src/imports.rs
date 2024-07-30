@@ -217,7 +217,7 @@ pub(crate) fn hd(
 
 pub(crate) fn c(
     mut fenv: Caller<Env>,
-    mod_id_ofs: usize,
+    callee_ofs: usize,
     name_ofs: usize,
     name_len: u32,
     arg_len: u32,
@@ -229,7 +229,7 @@ pub(crate) fn c(
 
     let name_len = name_len as usize;
 
-    check_ptr(instance, mod_id_ofs, CONTRACT_ID_BYTES)?;
+    check_ptr(instance, callee_ofs, CONTRACT_ID_BYTES)?;
     check_ptr(instance, name_ofs, name_len)?;
     check_arg(instance, arg_len)?;
 
@@ -248,13 +248,14 @@ pub(crate) fn c(
     let with_memory = |memory: &mut [u8]| -> Result<_, Error> {
         let arg_buf = &memory[argbuf_ofs..][..ARGBUF_LEN];
 
-        let mut mod_id = ContractId::uninitialized();
-        mod_id.as_bytes_mut().copy_from_slice(
-            &memory[mod_id_ofs..][..std::mem::size_of::<ContractId>()],
+        let mut callee_bytes = [0; CONTRACT_ID_BYTES];
+        callee_bytes.copy_from_slice(
+            &memory[callee_ofs..callee_ofs + CONTRACT_ID_BYTES],
         );
+        let callee_id = ContractId::from_bytes(callee_bytes);
 
         let callee_stack_element = env
-            .push_callstack(mod_id, callee_limit)
+            .push_callstack(callee_id, callee_limit)
             .expect("pushing to the callstack should succeed");
         let callee = env
             .instance(&callee_stack_element.contract_id)
@@ -351,17 +352,20 @@ pub(crate) fn emit(
     Ok(())
 }
 
-fn caller(env: Caller<Env>) {
+fn caller(env: Caller<Env>) -> i32 {
     let env = env.data();
 
-    let mod_id = env
-        .nth_from_top(1)
-        .map_or(ContractId::uninitialized(), |elem| elem.contract_id);
-
-    env.self_instance().with_arg_buf_mut(|arg| {
-        arg[..std::mem::size_of::<ContractId>()]
-            .copy_from_slice(mod_id.as_bytes())
-    })
+    match env.nth_from_top(1) {
+        Some(call_tree_elem) => {
+            let instance = env.self_instance();
+            instance.with_arg_buf_mut(|buf| {
+                let caller = call_tree_elem.contract_id;
+                buf[..CONTRACT_ID_BYTES].copy_from_slice(caller.as_bytes());
+            });
+            1
+        }
+        None => 0,
+    }
 }
 
 fn feed(mut fenv: Caller<Env>, arg_len: u32) -> WasmtimeResult<()> {
@@ -432,10 +436,13 @@ fn panic(fenv: Caller<Env>, arg_len: u32) -> WasmtimeResult<()> {
     })?)
 }
 
-fn get_metadata(env: &mut Env, mod_id_ofs: usize) -> Option<&ContractMetadata> {
+fn get_metadata(
+    env: &mut Env,
+    contract_id_ofs: usize,
+) -> Option<&ContractMetadata> {
     // The null pointer is always zero, so we can use this to check if the
     // caller wants their own ID.
-    if mod_id_ofs == 0 {
+    if contract_id_ofs == 0 {
         let self_id = env.self_contract_id().to_owned();
 
         let contract_metadata = env
@@ -446,15 +453,15 @@ fn get_metadata(env: &mut Env, mod_id_ofs: usize) -> Option<&ContractMetadata> {
     } else {
         let instance = env.self_instance();
 
-        let mod_id = instance.with_memory(|memory| {
-            let mut mod_id = ContractId::uninitialized();
-            mod_id.as_bytes_mut().copy_from_slice(
-                &memory[mod_id_ofs..][..std::mem::size_of::<ContractId>()],
+        let contract_id = instance.with_memory(|memory| {
+            let mut contract_id_bytes = [0u8; CONTRACT_ID_BYTES];
+            contract_id_bytes.copy_from_slice(
+                &memory[contract_id_ofs..][..CONTRACT_ID_BYTES],
             );
-            mod_id
+            ContractId::from_bytes(contract_id_bytes)
         });
 
-        env.contract_metadata(&mod_id)
+        env.contract_metadata(&contract_id)
     }
 }
 
