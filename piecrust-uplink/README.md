@@ -1,8 +1,8 @@
 # π-crust Uplink
 
-[![Repository](https://img.shields.io/badge/github-piecrust-blueviolet?logo=github)](https://github.com/dusk-network/piecrust)
+[![Repository](https://img.shields.io/badge/github-piecrust%20uplink-blueviolet?logo=github)](https://github.com/dusk-network/piecrust/tree/main/piecrust-uplink)
 ![Build Status](https://github.com/dusk-network/piecrust/workflows/build/badge.svg)
-[![Documentation](https://img.shields.io/badge/docs-piecrust-blue?logo=rust)](https://docs.rs/piecrust-uplink/)
+[![Documentation](https://img.shields.io/badge/docs-piecrust%20uplink-blue?logo=rust)](https://docs.rs/piecrust-uplink/)
 
 Piecrust Uplink is the library that allows you to build smart contracts directly on top of Dusk's Piecrust virtual machine. 
 
@@ -12,7 +12,7 @@ The library allows users of the contract platform to manage the interface and st
 
 Add `piecrust_uplink` as a dependency to your contract project:
 ```sh
-cargo install piecrust_uplink
+cargo add piecrust_uplink
 ```
 
 To make use of `uplink`, import the dependency in your project and mark it as `no_std`:
