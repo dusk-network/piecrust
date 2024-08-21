@@ -6,7 +6,8 @@ This workspace contains individual contract examples. These examples demonstrate
 
 - [Box](box/): A contract for managing a boxed i16 value with set and get operations.
 - [Callcenter](callcenter/): Inter-contract call example.
-- [Constructor](constructor/): Contract with a constructor.
+- [Initializer](initializer/): Contract that makes use of the init method.
+- [Empty Initializer](empty_initializer/): Contract that makes use of an init method without arguments.
 - [Counter](counter/): Counter contract that both reads and writes state.
 - [Crossover](crossover/): Bi-directional inter-contract call example.
 - [Debugger](debugger/): Example of in-contract debug calls.

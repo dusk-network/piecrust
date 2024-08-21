@@ -4,28 +4,31 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-//! Contract that provides and example use of the constructor.
+//! Contract that provides an example use of the init method.
+//! The init method provides a way to initialize the state of the contract and execute other logic only once at the time of deployment.
+//! 
+//! The init method can be partially compared to the functionality of a constructor in other languages.
 
 #![no_std]
 
 use piecrust_uplink as uplink;
 
-/// Struct that describes the state of the Constructor contract
-pub struct EmptyConstructor {
+/// Struct that describes the state of the Init contract
+pub struct EmptyInitializer {
     value: u8,
 }
 
-impl EmptyConstructor {
+impl EmptyInitializer {
     pub fn init(&mut self) {
         self.value = 0x10;
     }
 }
 
-/// State of the EmptyConstructor contract
-static mut STATE: EmptyConstructor = EmptyConstructor { value: 0x00 };
+/// State of the EmptyInitializer contract
+static mut STATE: EmptyInitializer = EmptyInitializer { value: 0x00 };
 
-impl EmptyConstructor {
-    /// Read the value of the constructor contract state
+impl EmptyInitializer {
+    /// Read the value of the contract state
     pub fn read_value(&self) -> u8 {
         self.value
     }
@@ -37,19 +40,19 @@ impl EmptyConstructor {
     }
 }
 
-/// Expose `EmptyConstructor::read_value()` to the host
+/// Expose `EmptyInitializer::read_value()` to the host
 #[no_mangle]
 unsafe fn read_value(arg_len: u32) -> u32 {
     uplink::wrap_call(arg_len, |_: ()| STATE.read_value())
 }
 
-/// Expose `EmptyConstructor::increment()` to the host
+/// Expose `EmptyInitializer::increment()` to the host
 #[no_mangle]
 unsafe fn increment(arg_len: u32) -> u32 {
     uplink::wrap_call(arg_len, |_: ()| STATE.increment())
 }
 
-/// Expose `EmptyConstructor::init()` to the host
+/// Expose `EmptyInitializer::init()` to the host
 #[no_mangle]
 unsafe fn init(arg_len: u32) -> u32 {
     uplink::wrap_call(arg_len, |()| STATE.init())

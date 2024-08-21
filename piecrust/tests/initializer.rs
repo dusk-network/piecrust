@@ -11,16 +11,14 @@ const OWNER: [u8; 32] = [0u8; 32];
 const LIMIT: u64 = 1_000_000;
 
 #[test]
-fn constructor() -> Result<(), Error> {
+fn init() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 
     let mut session = vm.session(SessionData::builder())?;
 
     let id = session.deploy(
-        contract_bytecode!("constructor"),
-        ContractData::builder()
-            .owner(OWNER)
-            .constructor_arg(&0xabu8),
+        contract_bytecode!("initializer"),
+        ContractData::builder().owner(OWNER).init_arg(&0xabu8),
         LIMIT,
     )?;
 
@@ -75,13 +73,13 @@ fn constructor() -> Result<(), Error> {
 }
 
 #[test]
-fn empty_constructor_argument() -> Result<(), Error> {
+fn empty_init_argument() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 
     let mut session = vm.session(SessionData::builder())?;
 
     let id = session.deploy(
-        contract_bytecode!("empty_constructor"),
+        contract_bytecode!("empty_initializer"),
         ContractData::builder().owner(OWNER),
         LIMIT,
     )?;

@@ -226,8 +226,8 @@ impl Session {
     {
         let deploy_data = deploy_data.into();
 
-        let mut constructor_arg = None;
-        if let Some(arg) = deploy_data.constructor_arg {
+        let mut init_arg = None;
+        if let Some(arg) = deploy_data.init_arg {
             let mut sbuf = [0u8; SCRATCH_BUF_BYTES];
             let scratch = BufferScratch::new(&mut sbuf);
             let ser = BufferSerializer::new(&mut self.inner.buffer[..]);
@@ -236,13 +236,13 @@ impl Session {
             ser.serialize_value(arg)?;
             let pos = ser.pos();
 
-            constructor_arg = Some(self.inner.buffer[0..pos].to_vec());
+            init_arg = Some(self.inner.buffer[0..pos].to_vec());
         }
 
         self.deploy_raw(
             deploy_data.contract_id,
             bytecode,
-            constructor_arg,
+            init_arg,
             deploy_data
                 .owner
                 .expect("Owner must be specified when deploying a contract"),
@@ -272,7 +272,7 @@ impl Session {
         &mut self,
         contract_id: Option<ContractId>,
         bytecode: &[u8],
-        constructor_arg: Option<Vec<u8>>,
+        init_arg: Option<Vec<u8>>,
         owner: Vec<u8>,
         gas_limit: u64,
     ) -> Result<ContractId, Error> {
@@ -280,13 +280,7 @@ impl Session {
             let hash = blake3::hash(bytecode);
             ContractId::from_bytes(hash.into())
         });
-        self.do_deploy(
-            contract_id,
-            bytecode,
-            constructor_arg,
-            owner,
-            gas_limit,
-        )?;
+        self.do_deploy(contract_id, bytecode, init_arg, owner, gas_limit)?;
 
         Ok(contract_id)
     }
@@ -328,10 +322,10 @@ impl Session {
                 self.instance(&contract_id).expect("instance should exist");
 
             if instance.is_function_exported(INIT_METHOD) {
-                // If no argument was provided, we call the constructor anyway,
+                // If no argument was provided, we call the init method anyway,
                 // but with an empty argument. The alternative is to panic, but
                 // that assumes that the caller of `deploy` knows that the
-                // contract has a constructor in the first place, which might
+                // contract has an init method in the first place, which might
                 // not be the case, such as when ingesting untrusted bytecode.
                 let arg = arg.unwrap_or_default();
                 self.call_inner(contract_id, INIT_METHOD, arg, gas_limit)?;
