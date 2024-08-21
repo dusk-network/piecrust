@@ -245,7 +245,12 @@ pub(crate) fn c(
         div + rem
     };
 
-    let with_memory = |memory: &mut [u8]| -> Result<_, Error> {
+    enum WithMemoryError {
+        BeforePush(Error),
+        AfterPush(Error),
+    }
+
+    let with_memory = |memory: &mut [u8]| -> Result<_, WithMemoryError> {
         let arg_buf = &memory[argbuf_ofs..][..ARGBUF_LEN];
 
         let mut callee_bytes = [0; CONTRACT_ID_BYTES];
@@ -256,25 +261,31 @@ pub(crate) fn c(
 
         let callee_stack_element = env
             .push_callstack(callee_id, callee_limit)
-            .expect("pushing to the callstack should succeed");
+            .map_err(WithMemoryError::BeforePush)?;
         let callee = env
             .instance(&callee_stack_element.contract_id)
             .expect("callee instance should exist");
 
-        callee.snap().map_err(|err| Error::MemorySnapshotFailure {
-            reason: None,
-            io: Arc::new(err),
-        })?;
+        callee
+            .snap()
+            .map_err(|err| Error::MemorySnapshotFailure {
+                reason: None,
+                io: Arc::new(err),
+            })
+            .map_err(WithMemoryError::AfterPush)?;
 
-        let name = core::str::from_utf8(&memory[name_ofs..][..name_len])?;
+        let name = core::str::from_utf8(&memory[name_ofs..][..name_len])
+            .map_err(|e| WithMemoryError::AfterPush(e.into()))?;
 
         let arg = &arg_buf[..arg_len as usize];
 
         callee.write_argument(arg);
         let ret_len = callee
             .call(name, arg.len() as u32, callee_limit)
-            .map_err(Error::normalize)?;
-        check_arg(callee, ret_len as u32)?;
+            .map_err(Error::normalize)
+            .map_err(WithMemoryError::AfterPush)?;
+        check_arg(callee, ret_len as u32)
+            .map_err(WithMemoryError::AfterPush)?;
 
         // copy back result
         callee.read_argument(&mut memory[argbuf_ofs..][..ret_len as usize]);
@@ -291,7 +302,14 @@ pub(crate) fn c(
             instance.set_remaining_gas(caller_remaining - callee_spent);
             ret_len
         }
-        Err(mut err) => {
+        Err(WithMemoryError::BeforePush(err)) => {
+            let c_err = ContractError::from(err);
+            instance.with_arg_buf_mut(|buf| {
+                c_err.to_parts(buf);
+            });
+            c_err.into()
+        }
+        Err(WithMemoryError::AfterPush(mut err)) => {
             if let Err(io_err) = env.revert_callstack() {
                 err = Error::MemorySnapshotFailure {
                     reason: Some(Arc::new(err)),

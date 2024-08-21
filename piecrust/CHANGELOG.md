@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Fix behavior of calling a non-existent contract in `c` import
+
 ## [0.23.0] - 2024-08-01
 
 ### Changed

@@ -128,6 +128,7 @@ impl From<Error> for ContractError {
         match err {
             Error::OutOfGas => Self::OutOfGas,
             Error::Panic(msg) => Self::Panic(msg),
+            Error::ContractDoesNotExist(_) => Self::DoesNotExist,
             _ => Self::Unknown,
         }
     }
