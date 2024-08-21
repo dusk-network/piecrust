@@ -27,6 +27,7 @@ use core::str;
 pub enum ContractError {
     Panic(String),
     OutOfGas,
+    DoesNotExist,
     Unknown,
 }
 
@@ -57,6 +58,7 @@ impl ContractError {
         match code {
             -1 => Self::Panic(get_msg(slice)),
             -2 => Self::OutOfGas,
+            -3 => Self::DoesNotExist,
             i32::MIN => Self::Unknown,
             _ => unreachable!("The host must guarantee that the code is valid"),
         }
@@ -81,6 +83,7 @@ impl ContractError {
                 -1
             }
             Self::OutOfGas => -2,
+            Self::DoesNotExist => -3,
             Self::Unknown => i32::MIN,
         }
     }
@@ -91,6 +94,7 @@ impl From<ContractError> for i32 {
         match err {
             ContractError::Panic(_) => -1,
             ContractError::OutOfGas => -2,
+            ContractError::DoesNotExist => -3,
             ContractError::Unknown => i32::MIN,
         }
     }
@@ -101,6 +105,9 @@ impl Display for ContractError {
         match self {
             ContractError::Panic(msg) => write!(f, "Panic: {msg}"),
             ContractError::OutOfGas => write!(f, "OutOfGas"),
+            ContractError::DoesNotExist => {
+                write!(f, "Contract does not exist")
+            }
             ContractError::Unknown => write!(f, "Unknown"),
         }
     }
