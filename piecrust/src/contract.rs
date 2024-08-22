@@ -15,11 +15,11 @@ use crate::error::Error;
 
 pub struct ContractData<'a, A> {
     pub(crate) contract_id: Option<ContractId>,
-    pub(crate) constructor_arg: Option<&'a A>,
+    pub(crate) init_arg: Option<&'a A>,
     pub(crate) owner: Option<Vec<u8>>,
 }
 
-// `()` is done on purpose, since by default it should be that the constructor
+// `()` is done on purpose, since by default it should be that the initializer
 // takes no argument.
 impl<'a> ContractData<'a, ()> {
     /// Build a deploy data structure.
@@ -29,7 +29,7 @@ impl<'a> ContractData<'a, ()> {
     pub fn builder() -> ContractDataBuilder<'a, ()> {
         ContractDataBuilder {
             contract_id: None,
-            constructor_arg: None,
+            init_arg: None,
             owner: None,
         }
     }
@@ -44,7 +44,7 @@ impl<'a, A> From<ContractDataBuilder<'a, A>> for ContractData<'a, A> {
 pub struct ContractDataBuilder<'a, A> {
     contract_id: Option<ContractId>,
     owner: Option<Vec<u8>>,
-    constructor_arg: Option<&'a A>,
+    init_arg: Option<&'a A>,
 }
 
 impl<'a, A> ContractDataBuilder<'a, A> {
@@ -54,13 +54,21 @@ impl<'a, A> ContractDataBuilder<'a, A> {
         self
     }
 
-    /// Set the constructor argument for deployment.
-    pub fn constructor_arg<B>(self, arg: &B) -> ContractDataBuilder<B> {
+    /// Set the initializer argument for deployment.
+    /// This is the argument that will be passed to the contract's `init`
+    /// function.
+    pub fn init_arg<B>(self, arg: &B) -> ContractDataBuilder<B> {
         ContractDataBuilder {
             contract_id: self.contract_id,
             owner: self.owner,
-            constructor_arg: Some(arg),
+            init_arg: Some(arg),
         }
+    }
+
+    /// Deprecated: Use `init_arg` instead.
+    #[deprecated(note = "Use `init_arg` instead of `constructor_arg`")]
+    pub fn constructor_arg<B>(self, arg: &B) -> ContractDataBuilder<B> {
+        self.init_arg(arg)
     }
 
     /// Set the owner of the contract.
@@ -72,7 +80,7 @@ impl<'a, A> ContractDataBuilder<'a, A> {
     pub fn build(self) -> ContractData<'a, A> {
         ContractData {
             contract_id: self.contract_id,
-            constructor_arg: self.constructor_arg,
+            init_arg: self.init_arg,
             owner: self.owner,
         }
     }

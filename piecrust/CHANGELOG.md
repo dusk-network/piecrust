@@ -16,6 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Change `callee` import to return an integer
+- Change `constructor_arg` to `init_arg`
+- Change all references to `constructor` either to `init` or `initializer`
 
 ## [0.22.0] - 2024-07-03
 

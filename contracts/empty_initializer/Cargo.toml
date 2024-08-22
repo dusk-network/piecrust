@@ -1,8 +1,8 @@
 [package]
-name = "constructor"
+name = "empty_initializer"
 version = "0.1.0"
 authors = [
-    "Milosz Muszynski <milosz@dusk.network>",
+    "Eduardo Leegwater Simões <eduardo@dusk.network>",
 ]
 edition = "2021"
 
