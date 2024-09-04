@@ -36,6 +36,23 @@ pub fn vm_center_events() -> Result<(), Error> {
         assert_eq!(events[index].data, i.to_le_bytes());
     }
 
+    let receipt = session.call::<_, ()>(
+        eventer_id,
+        "emit_events_raw",
+        &EVENT_NUM,
+        LIMIT,
+    )?;
+
+    let events = receipt.events;
+    assert_eq!(events.len() as u32, EVENT_NUM);
+
+    for i in 0..EVENT_NUM {
+        let index = i as usize;
+        assert_eq!(events[index].source, eventer_id);
+        assert_eq!(events[index].topic, "number");
+        assert_eq!(events[index].data, i.to_le_bytes());
+    }
+
     Ok(())
 }
 
