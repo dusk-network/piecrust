@@ -299,7 +299,7 @@ pub fn spent() -> u64 {
     unsafe { ext::spent() }
 }
 
-/// Emits an event with the given data.
+/// Emits an event with the given data, serializing it using [`rkyv`].
 pub fn emit<D>(topic: &'static str, data: D)
 where
     for<'a> D: Serialize<StandardBufSerializer<'a>>,
@@ -313,6 +313,23 @@ where
 
         composite.serialize_value(&data).unwrap();
         let arg_len = composite.pos() as u32;
+
+        let topic_ptr = topic.as_ptr();
+        let topic_len = topic.len() as u32;
+
+        unsafe { ext::emit(topic_ptr, topic_len, arg_len) }
+    });
+}
+
+/// Emits an event with the given data.
+pub fn emit_raw(topic: &'static str, data: impl AsRef<[u8]>) {
+    with_arg_buf(|buf| {
+        let data = data.as_ref();
+
+        let arg_len = data.len();
+        buf[..arg_len].copy_from_slice(&data);
+
+        let arg_len = arg_len as u32;
 
         let topic_ptr = topic.as_ptr();
         let topic_len = topic.len() as u32;
