@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.17.0] - 2024-09-04
+
 ### Added
 
 - Add `emit_raw` and `feed_raw` functions
@@ -233,7 +235,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [#136]: https://github.com/dusk-network/piecrust/issues/136
 
 <!-- VERSIONS -->
-[Unreleased]: https://github.com/dusk-network/piecrust/compare/uplink-0.16.0...HEAD
+[Unreleased]: https://github.com/dusk-network/piecrust/compare/uplink-0.17.0...HEAD
+[0.17.0]: https://github.com/dusk-network/piecrust/compare/uplink-0.16.0...uplink-0.17.0
 [0.16.0]: https://github.com/dusk-network/piecrust/compare/uplink-0.15.0...uplink-0.16.0
 [0.15.0]: https://github.com/dusk-network/piecrust/compare/uplink-0.14.0...uplink-0.15.0
 [0.14.0]: https://github.com/dusk-network/piecrust/compare/uplink-0.13.0...uplink-0.14.0
