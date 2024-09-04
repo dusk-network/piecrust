@@ -338,7 +338,7 @@ pub fn emit_raw(topic: &'static str, data: impl AsRef<[u8]>) {
     });
 }
 
-/// Feeds the host with data.
+/// Feeds the host with data, serializing it using [`rkyv`].
 ///
 /// This is only allowed to be called in the context of a `feed_call`, and
 /// will error out otherwise. It is meant for contracts to be able to report
@@ -356,6 +356,24 @@ where
 
         composite.serialize_value(&data).unwrap();
         let arg_len = composite.pos() as u32;
+
+        unsafe { ext::feed(arg_len) }
+    });
+}
+
+/// Feeds the host with data.
+///
+/// This is only allowed to be called in the context of a `feed_call`, and
+/// will error out otherwise. It is meant for contracts to be able to report
+/// large amounts of data to the host, in the span of a single call.
+pub fn feed_raw(data: impl AsRef<[u8]>) {
+    with_arg_buf(|buf| {
+        let data = data.as_ref();
+
+        let arg_len = data.len();
+        buf[..arg_len].copy_from_slice(&data);
+
+        let arg_len = arg_len as u32;
 
         unsafe { ext::feed(arg_len) }
     });
