@@ -27,6 +27,13 @@ impl Eventer {
         }
     }
 
+    /// Emits an event with the given number, using `emit_raw`
+    pub fn emit_num_raw(&mut self, num: u32) {
+        for i in 0..num {
+            uplink::emit_raw("number", i.to_le_bytes());
+        }
+    }
+
     pub fn emit_input(&mut self, input: Vec<u8>) -> (u64, u64) {
         let spent_before = uplink::spent();
         uplink::emit("input", input);
@@ -39,6 +46,12 @@ impl Eventer {
 #[no_mangle]
 unsafe fn emit_events(arg_len: u32) -> u32 {
     uplink::wrap_call(arg_len, |num| STATE.emit_num(num))
+}
+
+/// Expose `Eventer::emit_num_raw()` to the host
+#[no_mangle]
+unsafe fn emit_events_raw(arg_len: u32) -> u32 {
+    uplink::wrap_call(arg_len, |num| STATE.emit_num_raw(num))
 }
 
 /// Expose `Eventer::emit_input()` to the host
