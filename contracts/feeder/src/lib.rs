@@ -25,10 +25,23 @@ impl Feeder {
             uplink::feed(i);
         }
     }
+
+    /// Feed the host with 32-bit integers sequentially in the `0..num` range.
+    pub fn feed_num_raw(&self, num: u32) {
+        for i in 0..num {
+            uplink::feed_raw(i.to_le_bytes());
+        }
+    }
 }
 
 /// Expose `Feeder::feed_num()` to the host
 #[no_mangle]
 unsafe fn feed_num(arg_len: u32) -> u32 {
     uplink::wrap_call(arg_len, |num| STATE.feed_num(num))
+}
+
+/// Expose `Feeder::feed_num_raw()` to the host
+#[no_mangle]
+unsafe fn feed_num_raw(arg_len: u32) -> u32 {
+    uplink::wrap_call(arg_len, |num| STATE.feed_num_raw(num))
 }

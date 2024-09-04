@@ -26,10 +26,42 @@ fn feed() -> Result<(), Error> {
     const FEED_NUM: u32 = 10;
     const GAS_LIMIT: u64 = 1_000_000;
 
-    let (sender, receiver) = mpsc::channel();
+    let (first_sender, receiver) = mpsc::channel();
 
-    session
-        .feeder_call::<_, ()>(id, "feed_num", &FEED_NUM, GAS_LIMIT, sender)?;
+    session.feeder_call::<_, ()>(
+        id,
+        "feed_num",
+        &FEED_NUM,
+        GAS_LIMIT,
+        first_sender,
+    )?;
+
+    let numbers = receiver
+        .into_iter()
+        .map(|data| {
+            rkyv::from_bytes(&data).expect("Fed data should be a number")
+        })
+        .collect::<Vec<u32>>();
+
+    assert_eq!(
+        numbers.len(),
+        FEED_NUM as usize,
+        "The correct number of numbers should be fed"
+    );
+
+    for (i, n) in numbers.into_iter().enumerate() {
+        assert_eq!(i as u32, n, "Numbers should be fed in order");
+    }
+
+    let (second_sender, receiver) = mpsc::channel();
+
+    session.feeder_call::<_, ()>(
+        id,
+        "feed_num_raw",
+        &FEED_NUM,
+        GAS_LIMIT,
+        second_sender,
+    )?;
 
     let numbers = receiver
         .into_iter()
