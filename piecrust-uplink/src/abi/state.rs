@@ -300,7 +300,7 @@ pub fn spent() -> u64 {
 }
 
 /// Emits an event with the given data, serializing it using [`rkyv`].
-pub fn emit<D>(topic: &'static str, data: D)
+pub fn emit<D>(topic: &str, data: D)
 where
     for<'a> D: Serialize<StandardBufSerializer<'a>>,
 {
@@ -322,7 +322,7 @@ where
 }
 
 /// Emits an event with the given data.
-pub fn emit_raw(topic: &'static str, data: impl AsRef<[u8]>) {
+pub fn emit_raw(topic: &str, data: impl AsRef<[u8]>) {
     with_arg_buf(|buf| {
         let data = data.as_ref();
 
