@@ -70,12 +70,14 @@ impl ContractStore {
     /// [`delete`]: ContractStore::delete_commit
     /// [`session spawning`]: ContractStore::session
     pub fn new<P: AsRef<Path>>(engine: Engine, dir: P) -> io::Result<Self> {
+        println!("00001");
         let root_dir = dir.as_ref();
 
         fs::create_dir_all(root_dir)?;
 
         let (call, calls) = mpsc::channel();
         let commits = read_all_commits(&engine, root_dir)?;
+        println!("00002");
 
         let loop_root_dir = root_dir.to_path_buf();
 
@@ -179,6 +181,7 @@ fn read_all_commits<P: AsRef<Path>>(
 
     for entry in fs::read_dir(root_dir)? {
         let entry = entry?;
+        println!("entry={:?}", entry.path());
         if entry.path().is_dir() {
             let commit = read_commit(engine, entry.path())?;
             let root = *commit.index.root();
@@ -211,10 +214,12 @@ fn commit_from_dir<P: AsRef<Path>>(
     engine: &Engine,
     dir: P,
 ) -> io::Result<Commit> {
+    println!("00003");
     let dir = dir.as_ref();
 
     let index_path = dir.join(INDEX_FILE);
     let index = index_from_path(index_path)?;
+    println!("00004");
 
     let bytecode_dir = dir.join(BYTECODE_DIR);
     let memory_dir = dir.join(MEMORY_DIR);
@@ -418,6 +423,7 @@ fn write_commit<P: AsRef<Path>>(
     base: Option<Commit>,
     commit_contracts: BTreeMap<ContractId, ContractDataEntry>,
 ) -> io::Result<Commit> {
+    println!("ROOT DIR = {:?}", root_dir.as_ref());
     let root_dir = root_dir.as_ref();
 
     let mut index = base
@@ -486,6 +492,9 @@ fn write_commit_inner<P: AsRef<Path>, S: AsRef<str>>(
         bytecode_dir: PathBuf,
         memory_dir: PathBuf,
         base: Option<Base>,
+        main_dir: PathBuf,
+        bytecode_main_dir: PathBuf,
+        memory_main_dir: PathBuf,
     }
 
     let directories = {
@@ -494,6 +503,15 @@ fn write_commit_inner<P: AsRef<Path>, S: AsRef<str>>(
 
         let memory_dir = commit_dir.join(MEMORY_DIR);
         fs::create_dir_all(&memory_dir)?;
+
+        let main_dir = root_dir.parent().expect("root parent should exist").join(MAIN_DIR);
+        fs::create_dir_all(&main_dir)?;
+
+        let bytecode_main_dir = main_dir.join(BYTECODE_DIR);
+        fs::create_dir_all(&bytecode_main_dir)?;
+
+        let memory_main_dir = main_dir.join(MEMORY_DIR);
+        fs::create_dir_all(&memory_main_dir)?;
 
         Directories {
             bytecode_dir,
@@ -510,6 +528,9 @@ fn write_commit_inner<P: AsRef<Path>, S: AsRef<str>>(
                     inner,
                 }
             }),
+            main_dir,
+            bytecode_main_dir,
+            memory_main_dir,
         }
     };
 
@@ -520,13 +541,12 @@ fn write_commit_inner<P: AsRef<Path>, S: AsRef<str>>(
 
         let memory_dir = directories.memory_dir.join(&contract_hex);
 
-        let main_dir = root_dir.join(MAIN_DIR);
-        let main_memory_dir = main_dir.join(MEMORY_DIR).join(&contract_hex);
-        println!("MAIN_DIR={:?}", main_dir);
-        println!("MAIN_MEMORY_DIR={:?}", main_memory_dir);
+        let memory_main_dir = directories.memory_main_dir.join(&contract_hex);
+        println!("MAIN_DIR={:?}", directories.main_dir);
+        println!("MAIN_MEMORY_DIR={:?}", memory_main_dir);
 
         fs::create_dir_all(&memory_dir)?;
-        fs::create_dir_all(&main_memory_dir)?;
+        fs::create_dir_all(&memory_main_dir)?;
 
         let mut pages = BTreeSet::new();
 
@@ -534,19 +554,22 @@ fn write_commit_inner<P: AsRef<Path>, S: AsRef<str>>(
         let mut dp_count = 0;
         for (dirty_page, _, page_index) in contract_data.memory.dirty_pages() {
             let page_path1 = page_path(&memory_dir, *page_index);
-            let page_path2: PathBuf = page_path_main(&main_memory_dir, *page_index, commit_id.as_ref());
+            // let page_path2: PathBuf = page_path_main(&memory_main_dir, *page_index, commit_id.as_ref());
             fs::write(page_path1.clone(), dirty_page)?;
-            fs::write(page_path2.clone(), dirty_page)?;
+            // fs::write(page_path2.clone(), dirty_page)?;
             println!("FILE WRITTEN {:?}", page_path1);
-            println!("FILE WRITTEN MAIN {:?}", page_path2);
+            // println!("FILE WRITTEN MAIN {:?}", page_path2);
             pages.insert(*page_index);
             dp_count += 1;
         }
-        println!("MEMORY_DIR {:?} dirty pages={}", memory_dir, dp_count);
+        println!("MEMORY_DIR {:?} dirty pages={}", memory_main_dir, dp_count);
 
         let bytecode_path = directories.bytecode_dir.join(&contract_hex);
         let module_path = bytecode_path.with_extension(OBJECTCODE_EXTENSION);
         let metadata_path = bytecode_path.with_extension(METADATA_EXTENSION);
+
+        let module_main_path = directories.bytecode_main_dir.with_extension(OBJECTCODE_EXTENSION);
+        let metadata_main_path = directories.bytecode_main_dir.with_extension(METADATA_EXTENSION);
 
         // If the contract is new, we write the bytecode, module, and metadata
         // files to disk, otherwise we hard link them to avoid duplicating them.
@@ -557,6 +580,10 @@ fn write_commit_inner<P: AsRef<Path>, S: AsRef<str>>(
             fs::write(bytecode_path, &contract_data.bytecode)?;
             fs::write(module_path, &contract_data.module.serialize())?;
             fs::write(metadata_path, &contract_data.metadata)?;
+            // we write them to the main location
+            // fs::write(directories.bytecode_main_dir.as_path(), &contract_data.bytecode)?;
+            // fs::write(module_main_path, &contract_data.module.serialize())?;
+            // fs::write(metadata_main_path, &contract_data.metadata)?;
         } else if let Some(base) = &directories.base {
             if let Some(elem) = base.inner.index.get(contract) {
                 let base_bytecode_path = base.bytecode_dir.join(&contract_hex);
