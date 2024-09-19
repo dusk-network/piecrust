@@ -210,6 +210,11 @@ fn page_path_main<P: AsRef<Path>, S: AsRef<str>>(memory_dir: P, page_index: usiz
     memory_dir.as_ref().join(format!("{page_index}_{commit_id}"))
 }
 
+fn index_path_main<P: AsRef<Path>, S: AsRef<str>>(main_dir: P, commit_id: S) -> PathBuf {
+    let commit_id = commit_id.as_ref();
+    main_dir.as_ref().join(format!("{INDEX_FILE}_{commit_id}"))
+}
+
 fn commit_from_dir<P: AsRef<Path>>(
     engine: &Engine,
     dir: P,
@@ -661,6 +666,7 @@ fn write_commit_inner<P: AsRef<Path>, S: AsRef<str>>(
     }
 
     let index_path = commit_dir.join(INDEX_FILE);
+    let index_main_path = index_path_main(directories.main_dir, commit_id);
     let index_bytes = rkyv::to_bytes::<_, 128>(&index)
         .map_err(|err| {
             io::Error::new(
@@ -669,7 +675,9 @@ fn write_commit_inner<P: AsRef<Path>, S: AsRef<str>>(
             )
         })?
         .to_vec();
-    fs::write(index_path, index_bytes)?;
+    fs::write(index_path, index_bytes.clone())?;
+    println!("INDEX MAIN PATH={:?}", index_main_path);
+    fs::write(index_main_path, index_bytes)?;
 
     Ok(Commit { index })
 }
