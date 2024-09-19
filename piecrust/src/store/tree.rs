@@ -80,8 +80,8 @@ pub type Tree = dusk_merkle::Tree<Hash, C_HEIGHT, C_ARITY>;
 #[derive(Debug, Clone, Archive, Deserialize, Serialize)]
 #[archive_attr(derive(CheckBytes))]
 pub struct ContractIndex {
-    tree: Tree,
-    contracts: BTreeMap<ContractId, ContractIndexElement>,
+    pub tree: Tree,
+    pub contracts: BTreeMap<ContractId, ContractIndexElement>,
 }
 
 impl Default for ContractIndex {
@@ -151,9 +151,11 @@ impl ContractIndex {
         for (dirty_page, _, page_index) in memory.dirty_pages() {
             element.page_indices.insert(*page_index);
             let hash = Hash::new(dirty_page);
+            // println!("INSERTING PAGE INDEX={}", *page_index);
             element.tree.insert(*page_index as u64, hash);
         }
 
+        // println!("INSERTING ELEMENT with page_indices={:?}", element.page_indices);
         self.tree
             .insert(position_from_contract(&contract), *element.tree.root());
     }

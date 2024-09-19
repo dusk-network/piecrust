@@ -19,6 +19,7 @@ use std::fmt::{Debug, Formatter};
 use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 use std::{fs, io, thread};
+use std::time::SystemTime;
 
 use dusk_wasmtime::Engine;
 use piecrust_uplink::ContractId;
@@ -37,6 +38,7 @@ const MEMORY_DIR: &str = "memory";
 const INDEX_FILE: &str = "index";
 const OBJECTCODE_EXTENSION: &str = "a";
 const METADATA_EXTENSION: &str = "m";
+const MAIN_DIR: &str = "main";
 
 /// A store for all contract commits.
 pub struct ContractStore {
@@ -200,6 +202,11 @@ fn page_path<P: AsRef<Path>>(memory_dir: P, page_index: usize) -> PathBuf {
     memory_dir.as_ref().join(format!("{page_index}"))
 }
 
+fn page_path_main<P: AsRef<Path>, S: AsRef<str>>(memory_dir: P, page_index: usize, commit_id: S) -> PathBuf {
+    let commit_id = commit_id.as_ref();
+    memory_dir.as_ref().join(format!("{page_index}_{commit_id}"))
+}
+
 fn commit_from_dir<P: AsRef<Path>>(
     engine: &Engine,
     dir: P,
@@ -313,7 +320,14 @@ fn sync_loop<P: AsRef<Path>>(
                 base,
                 replier,
             } => {
+                let start = SystemTime::now();
+                println!("WRITE COMMIT START");
                 let io_result = write_commit(root_dir, &mut commits, base, contracts);
+                let stop = SystemTime::now();
+                println!(
+                    "WRITE COMMIT FINISHED, ELAPSED TIME={:?}",
+                    stop.duration_since(start).expect("duration should work")
+                );
                 let _ = replier.send(io_result);
             }
             // Copy all commits and send them back to the caller.
@@ -326,6 +340,7 @@ fn sync_loop<P: AsRef<Path>>(
             // in it is held by at least one session using `Call::SessionHold` -
             // queue it for deletion once no session is holding it.
             Call::CommitDelete { commit: root, replier } => {
+                println!("COMMIT DELETE {}", hex::encode(root));
                 if sessions.contains_key(&root) {
                     match delete_bag.entry(root) {
                         Vacant(entry) => {
@@ -349,6 +364,7 @@ fn sync_loop<P: AsRef<Path>>(
                 base,
                 replier,
             } => {
+                println!("COMMIT HOLD {}", hex::encode(base));
                 let base_commit = commits.get(&base).cloned();
 
                 if base_commit.is_some() {
@@ -371,6 +387,7 @@ fn sync_loop<P: AsRef<Path>>(
             Call::SessionDrop(base) => match sessions.entry(base) {
                 Vacant(_) => unreachable!("If a session is dropped there must be a session hold entry"),
                 Occupied(mut entry) => {
+                    println!("SESSION DROP {}", hex::encode(base));
                     *entry.get_mut() -= 1;
 
                     if *entry.get() == 0 {
@@ -415,9 +432,11 @@ fn write_commit<P: AsRef<Path>>(
         }
     }
 
+
     let root = *index.root();
     let root_hex = hex::encode(root);
-    let commit_dir = root_dir.join(root_hex);
+    println!("COMMIT ID = {}", root_hex);
+    let commit_dir = root_dir.join(root_hex.clone());
 
     // Don't write the commit if it already exists on disk. This may happen if
     // the same transactions on the same base commit for example.
@@ -431,6 +450,7 @@ fn write_commit<P: AsRef<Path>>(
         base,
         index,
         commit_contracts,
+        root_hex,
     ) {
         Ok(commit) => {
             commits.insert(root, commit.clone());
@@ -444,13 +464,15 @@ fn write_commit<P: AsRef<Path>>(
 }
 
 /// Writes a commit to disk.
-fn write_commit_inner<P: AsRef<Path>>(
+fn write_commit_inner<P: AsRef<Path>, S: AsRef<str>>(
     root_dir: P,
     commit_dir: P,
     base: Option<Commit>,
     index: ContractIndex,
     commit_contracts: BTreeMap<ContractId, ContractDataEntry>,
+    commit_id: S,
 ) -> io::Result<Commit> {
+    println!("WRITE_COMMIT_INNER: root_dir={:?} commit_dir={:?}", root_dir.as_ref(), commit_dir.as_ref());
     let root_dir = root_dir.as_ref();
     let commit_dir = commit_dir.as_ref();
 
@@ -498,16 +520,29 @@ fn write_commit_inner<P: AsRef<Path>>(
 
         let memory_dir = directories.memory_dir.join(&contract_hex);
 
+        let main_dir = root_dir.join(MAIN_DIR);
+        let main_memory_dir = main_dir.join(MEMORY_DIR).join(&contract_hex);
+        println!("MAIN_DIR={:?}", main_dir);
+        println!("MAIN_MEMORY_DIR={:?}", main_memory_dir);
+
         fs::create_dir_all(&memory_dir)?;
+        fs::create_dir_all(&main_memory_dir)?;
 
         let mut pages = BTreeSet::new();
 
         // Write dirty pages and keep track of the page indices.
+        let mut dp_count = 0;
         for (dirty_page, _, page_index) in contract_data.memory.dirty_pages() {
-            let page_path = page_path(&memory_dir, *page_index);
-            fs::write(page_path, dirty_page)?;
+            let page_path1 = page_path(&memory_dir, *page_index);
+            let page_path2: PathBuf = page_path_main(&main_memory_dir, *page_index, commit_id.as_ref());
+            fs::write(page_path1.clone(), dirty_page)?;
+            fs::write(page_path2.clone(), dirty_page)?;
+            println!("FILE WRITTEN {:?}", page_path1);
+            println!("FILE WRITTEN MAIN {:?}", page_path2);
             pages.insert(*page_index);
+            dp_count += 1;
         }
+        println!("MEMORY_DIR {:?} dirty pages={}", memory_dir, dp_count);
 
         let bytecode_path = directories.bytecode_dir.join(&contract_hex);
         let module_path = bytecode_path.with_extension(OBJECTCODE_EXTENSION);
@@ -552,6 +587,8 @@ fn write_commit_inner<P: AsRef<Path>>(
     }
 
     if let Some(base) = &directories.base {
+        let mut bytecode_etc_hard_links = 0;
+        let mut pages_hard_links = 0;
         for (contract, elem) in base.inner.index.iter() {
             if !commit_contracts.contains_key(contract) {
                 let contract_hex = hex::encode(contract);
@@ -574,9 +611,13 @@ fn write_commit_inner<P: AsRef<Path>>(
 
                 fs::create_dir_all(&memory_dir)?;
 
+                // println!("HARD LINK BYTECODE {:?} {:?}", base_bytecode_path, bytecode_path);
                 fs::hard_link(base_bytecode_path, bytecode_path)?;
+                // println!("HARD LINK MODULE {:?}", base_module_path);
                 fs::hard_link(base_module_path, module_path)?;
+                // println!("HARD LINK METADATA {:?}", base_metadata_path);
                 fs::hard_link(base_metadata_path, metadata_path)?;
+                bytecode_etc_hard_links += 1;
 
                 for page_index in &elem.page_indices {
                     let new_page_path = page_path(&memory_dir, *page_index);
@@ -584,9 +625,11 @@ fn write_commit_inner<P: AsRef<Path>>(
                         page_path(&base_memory_dir, *page_index);
 
                     fs::hard_link(base_page_path, new_page_path)?;
+                    pages_hard_links += 1;
                 }
             }
         }
+        println!("HARD LINK SUMMARY: bytecode_etc_hard_links={} pages_hard_links={}", bytecode_etc_hard_links, pages_hard_links);
     }
 
     let index_path = commit_dir.join(INDEX_FILE);
@@ -609,6 +652,7 @@ fn delete_commit_dir<P: AsRef<Path>>(
     root: Hash,
 ) -> io::Result<()> {
     let root = hex::encode(root);
+    println!("ACTUAL DELETION OF {}", root);
     let commit_dir = root_dir.as_ref().join(root);
     fs::remove_dir_all(commit_dir)
 }

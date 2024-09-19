@@ -207,10 +207,13 @@ impl VM {
     ) -> Result<Session, Error> {
         let data = data.into();
         let contract_session = match data.base {
-            Some(base) => self
-                .store
-                .session(base.into())
-                .map_err(|err| PersistenceError(Arc::new(err)))?,
+            Some(base) => {
+                println!("SESSION with base {}", hex::encode(base));
+                self
+                    .store
+                    .session(base.into())
+                    .map_err(|err| PersistenceError(Arc::new(err)))?
+            },
             _ => self.store.genesis_session(),
         };
         Ok(Session::new(
