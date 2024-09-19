@@ -207,12 +207,12 @@ fn page_path<P: AsRef<Path>>(memory_dir: P, page_index: usize) -> PathBuf {
 
 fn page_path_main<P: AsRef<Path>, S: AsRef<str>>(memory_dir: P, page_index: usize, commit_id: S) -> PathBuf {
     let commit_id = commit_id.as_ref();
-    memory_dir.as_ref().join(format!("{page_index}_{commit_id}"))
+    memory_dir.as_ref().join(format!("{commit_id}_{page_index}"))
 }
 
 fn index_path_main<P: AsRef<Path>, S: AsRef<str>>(main_dir: P, commit_id: S) -> PathBuf {
     let commit_id = commit_id.as_ref();
-    main_dir.as_ref().join(format!("{INDEX_FILE}_{commit_id}"))
+    main_dir.as_ref().join(format!("{commit_id}_{INDEX_FILE}"))
 }
 
 fn commit_from_dir<P: AsRef<Path>>(
