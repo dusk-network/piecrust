@@ -18,8 +18,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{Debug, Formatter};
 use std::path::{Path, PathBuf};
 use std::sync::mpsc;
-use std::{fs, io, thread};
 use std::time::SystemTime;
+use std::{fs, io, thread};
 
 use dusk_wasmtime::Engine;
 use piecrust_uplink::ContractId;
@@ -136,6 +136,16 @@ impl ContractStore {
         self.call_with_replier(|replier| Call::CommitDelete { commit, replier })
     }
 
+    /// Finalizes commit
+    ///
+    /// The commit will become a "current" commit
+    pub fn finalize_commit(&self, commit: Hash) -> io::Result<()> {
+        self.call_with_replier(|replier| Call::CommitFinalize {
+            commit,
+            replier,
+        })
+    }
+
     /// Return the handle to the thread running the store's synchronization
     /// loop.
     pub fn sync_loop(&self) -> &thread::Thread {
@@ -205,14 +215,25 @@ fn page_path<P: AsRef<Path>>(memory_dir: P, page_index: usize) -> PathBuf {
     memory_dir.as_ref().join(format!("{page_index}"))
 }
 
-fn page_path_main<P: AsRef<Path>, S: AsRef<str>>(memory_dir: P, page_index: usize, commit_id: S) -> PathBuf {
+fn page_path_main<P: AsRef<Path>, S: AsRef<str>>(
+    memory_dir: P,
+    page_index: usize,
+    commit_id: S,
+) -> io::Result<PathBuf> {
     let commit_id = commit_id.as_ref();
-    memory_dir.as_ref().join(format!("{commit_id}_{page_index}"))
+    let dir = memory_dir.as_ref().join(commit_id);
+    fs::create_dir_all(&dir)?;
+    Ok(dir.join(format!("{page_index}")))
 }
 
-fn index_path_main<P: AsRef<Path>, S: AsRef<str>>(main_dir: P, commit_id: S) -> PathBuf {
+fn index_path_main<P: AsRef<Path>, S: AsRef<str>>(
+    main_dir: P,
+    commit_id: S,
+) -> io::Result<PathBuf> {
     let commit_id = commit_id.as_ref();
-    main_dir.as_ref().join(format!("{commit_id}_{INDEX_FILE}"))
+    let dir = main_dir.as_ref().join(commit_id);
+    fs::create_dir_all(&dir)?;
+    Ok(dir.join(INDEX_FILE))
 }
 
 fn commit_from_dir<P: AsRef<Path>>(
@@ -303,6 +324,10 @@ pub(crate) enum Call {
         commit: Hash,
         replier: mpsc::SyncSender<io::Result<()>>,
     },
+    CommitFinalize {
+        commit: Hash,
+        replier: mpsc::SyncSender<io::Result<()>>,
+    },
     CommitHold {
         base: Hash,
         replier: mpsc::SyncSender<Option<Commit>>,
@@ -365,6 +390,26 @@ fn sync_loop<P: AsRef<Path>>(
                 }
 
                 let io_result = delete_commit_dir(root_dir, root);
+                commits.remove(&root);
+                let _ = replier.send(io_result);
+            }
+            // Finalize commit
+            Call::CommitFinalize { commit: root, replier } => {
+                println!("COMMIT FINALIZE {}", hex::encode(root));
+                if sessions.contains_key(&root) {
+                    match delete_bag.entry(root) {
+                        Vacant(entry) => {
+                            entry.insert(vec![replier]);
+                        }
+                        Occupied(mut entry) => {
+                            entry.get_mut().push(replier);
+                        }
+                    }
+
+                    continue;
+                }
+
+                let io_result = finalize_commit(root, root_dir);
                 commits.remove(&root);
                 let _ = replier.send(io_result);
             }
@@ -443,7 +488,6 @@ fn write_commit<P: AsRef<Path>>(
         }
     }
 
-
     let root = *index.root();
     let root_hex = hex::encode(root);
     println!("COMMIT ID = {}", root_hex);
@@ -483,7 +527,11 @@ fn write_commit_inner<P: AsRef<Path>, S: AsRef<str>>(
     commit_contracts: BTreeMap<ContractId, ContractDataEntry>,
     commit_id: S,
 ) -> io::Result<Commit> {
-    println!("WRITE_COMMIT_INNER: root_dir={:?} commit_dir={:?}", root_dir.as_ref(), commit_dir.as_ref());
+    println!(
+        "WRITE_COMMIT_INNER: root_dir={:?} commit_dir={:?}",
+        root_dir.as_ref(),
+        commit_dir.as_ref()
+    );
     let root_dir = root_dir.as_ref();
     let commit_dir = commit_dir.as_ref();
 
@@ -509,7 +557,10 @@ fn write_commit_inner<P: AsRef<Path>, S: AsRef<str>>(
         let memory_dir = commit_dir.join(MEMORY_DIR);
         fs::create_dir_all(&memory_dir)?;
 
-        let main_dir = root_dir.parent().expect("root parent should exist").join(MAIN_DIR);
+        let main_dir = root_dir
+            .parent()
+            .expect("root parent should exist")
+            .join(MAIN_DIR);
         fs::create_dir_all(&main_dir)?;
 
         let bytecode_main_dir = main_dir.join(BYTECODE_DIR);
@@ -559,7 +610,11 @@ fn write_commit_inner<P: AsRef<Path>, S: AsRef<str>>(
         let mut dp_count = 0;
         for (dirty_page, _, page_index) in contract_data.memory.dirty_pages() {
             let page_path1 = page_path(&memory_dir, *page_index);
-            let page_path2: PathBuf = page_path_main(&memory_main_dir, *page_index, commit_id.as_ref());
+            let page_path2: PathBuf = page_path_main(
+                &memory_main_dir,
+                *page_index,
+                commit_id.as_ref(),
+            )?;
             fs::write(page_path1.clone(), dirty_page)?;
             fs::write(page_path2.clone(), dirty_page)?;
             println!("FILE WRITTEN {:?}", page_path1);
@@ -573,9 +628,12 @@ fn write_commit_inner<P: AsRef<Path>, S: AsRef<str>>(
         let module_path = bytecode_path.with_extension(OBJECTCODE_EXTENSION);
         let metadata_path = bytecode_path.with_extension(METADATA_EXTENSION);
 
-        let bytecode_main_path = directories.bytecode_main_dir.join(&contract_hex);
-        let module_main_path = bytecode_main_path.with_extension(OBJECTCODE_EXTENSION);
-        let metadata_main_path = bytecode_main_path.with_extension(METADATA_EXTENSION);
+        let bytecode_main_path =
+            directories.bytecode_main_dir.join(&contract_hex);
+        let module_main_path =
+            bytecode_main_path.with_extension(OBJECTCODE_EXTENSION);
+        let metadata_main_path =
+            bytecode_main_path.with_extension(METADATA_EXTENSION);
 
         // If the contract is new, we write the bytecode, module, and metadata
         // files to disk, otherwise we hard link them to avoid duplicating them.
@@ -644,7 +702,8 @@ fn write_commit_inner<P: AsRef<Path>, S: AsRef<str>>(
 
                 fs::create_dir_all(&memory_dir)?;
 
-                // println!("HARD LINK BYTECODE {:?} {:?}", base_bytecode_path, bytecode_path);
+                // println!("HARD LINK BYTECODE {:?} {:?}", base_bytecode_path,
+                // bytecode_path);
                 fs::hard_link(base_bytecode_path, bytecode_path)?;
                 // println!("HARD LINK MODULE {:?}", base_module_path);
                 fs::hard_link(base_module_path, module_path)?;
@@ -662,11 +721,14 @@ fn write_commit_inner<P: AsRef<Path>, S: AsRef<str>>(
                 }
             }
         }
-        println!("HARD LINK SUMMARY: bytecode_etc_hard_links={} pages_hard_links={}", bytecode_etc_hard_links, pages_hard_links);
+        println!(
+            "HARD LINK SUMMARY: bytecode_etc_hard_links={} pages_hard_links={}",
+            bytecode_etc_hard_links, pages_hard_links
+        );
     }
 
     let index_path = commit_dir.join(INDEX_FILE);
-    let index_main_path = index_path_main(directories.main_dir, commit_id);
+    let index_main_path = index_path_main(directories.main_dir, commit_id)?;
     let index_bytes = rkyv::to_bytes::<_, 128>(&index)
         .map_err(|err| {
             io::Error::new(
@@ -691,4 +753,23 @@ fn delete_commit_dir<P: AsRef<Path>>(
     println!("ACTUAL DELETION OF {}", root);
     let commit_dir = root_dir.as_ref().join(root);
     fs::remove_dir_all(commit_dir)
+}
+
+/// Finalize commit
+fn finalize_commit<P: AsRef<Path>>(root: Hash, root_dir: P) -> io::Result<()> {
+    let root = hex::encode(root);
+    println!("FINALIZATION OF {}", root);
+    let root_main_dir = root_dir
+        .as_ref()
+        .parent()
+        .expect("Parent should exist")
+        .join(MEMORY_DIR); // todo
+    for entry in fs::read_dir(root_main_dir)? {
+        let entry = entry?;
+        println!("entry={:?}", entry.path());
+        if entry.path().is_file() {
+            fs::copy(entry.path(), root_main_dir.as_path())?;
+        }
+    }
+    Ok(())
 }

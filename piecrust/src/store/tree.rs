@@ -155,7 +155,8 @@ impl ContractIndex {
             element.tree.insert(*page_index as u64, hash);
         }
 
-        // println!("INSERTING ELEMENT with page_indices={:?}", element.page_indices);
+        // println!("INSERTING ELEMENT with page_indices={:?}",
+        // element.page_indices);
         self.tree
             .insert(position_from_contract(&contract), *element.tree.root());
     }

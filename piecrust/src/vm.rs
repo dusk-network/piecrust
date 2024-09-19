@@ -209,11 +209,10 @@ impl VM {
         let contract_session = match data.base {
             Some(base) => {
                 println!("SESSION with base {}", hex::encode(base));
-                self
-                    .store
+                self.store
                     .session(base.into())
                     .map_err(|err| PersistenceError(Arc::new(err)))?
-            },
+            }
             _ => self.store.genesis_session(),
         };
         Ok(Session::new(
@@ -239,11 +238,12 @@ impl VM {
     /// Finalizes the given commit on disk.
     pub fn finalize_commit(&self, root: [u8; 32]) -> Result<(), Error> {
         println!("XFINALIZE COMMIT {}", hex::encode(root));
-        Ok(())
+        self.store
+            .finalize_commit(root.into())
+            .map_err(|err| PersistenceError(Arc::new(err)))
     }
 
-
-        /// Return the root directory of the virtual machine.
+    /// Return the root directory of the virtual machine.
     ///
     /// This is either the directory passed in by using [`new`], or the
     /// temporary directory created using [`ephemeral`].
