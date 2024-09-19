@@ -568,8 +568,9 @@ fn write_commit_inner<P: AsRef<Path>, S: AsRef<str>>(
         let module_path = bytecode_path.with_extension(OBJECTCODE_EXTENSION);
         let metadata_path = bytecode_path.with_extension(METADATA_EXTENSION);
 
-        let module_main_path = directories.bytecode_main_dir.with_extension(OBJECTCODE_EXTENSION);
-        let metadata_main_path = directories.bytecode_main_dir.with_extension(METADATA_EXTENSION);
+        let bytecode_main_path = directories.bytecode_main_dir.join(&contract_hex);
+        let module_main_path = bytecode_main_path.with_extension(OBJECTCODE_EXTENSION);
+        let metadata_main_path = bytecode_main_path.with_extension(METADATA_EXTENSION);
 
         // If the contract is new, we write the bytecode, module, and metadata
         // files to disk, otherwise we hard link them to avoid duplicating them.
@@ -581,9 +582,9 @@ fn write_commit_inner<P: AsRef<Path>, S: AsRef<str>>(
             fs::write(module_path, &contract_data.module.serialize())?;
             fs::write(metadata_path, &contract_data.metadata)?;
             // we write them to the main location
-            // fs::write(directories.bytecode_main_dir.as_path(), &contract_data.bytecode)?;
-            // fs::write(module_main_path, &contract_data.module.serialize())?;
-            // fs::write(metadata_main_path, &contract_data.metadata)?;
+            fs::write(bytecode_main_path, &contract_data.bytecode)?;
+            fs::write(module_main_path, &contract_data.module.serialize())?;
+            fs::write(metadata_main_path, &contract_data.metadata)?;
         } else if let Some(base) = &directories.base {
             if let Some(elem) = base.inner.index.get(contract) {
                 let base_bytecode_path = base.bytecode_dir.join(&contract_hex);
