@@ -554,11 +554,11 @@ fn write_commit_inner<P: AsRef<Path>, S: AsRef<str>>(
         let mut dp_count = 0;
         for (dirty_page, _, page_index) in contract_data.memory.dirty_pages() {
             let page_path1 = page_path(&memory_dir, *page_index);
-            // let page_path2: PathBuf = page_path_main(&memory_main_dir, *page_index, commit_id.as_ref());
+            let page_path2: PathBuf = page_path_main(&memory_main_dir, *page_index, commit_id.as_ref());
             fs::write(page_path1.clone(), dirty_page)?;
-            // fs::write(page_path2.clone(), dirty_page)?;
+            fs::write(page_path2.clone(), dirty_page)?;
             println!("FILE WRITTEN {:?}", page_path1);
-            // println!("FILE WRITTEN MAIN {:?}", page_path2);
+            println!("FILE WRITTEN MAIN {:?}", page_path2);
             pages.insert(*page_index);
             dp_count += 1;
         }
