@@ -285,7 +285,7 @@ fn commit_from_dir<P: AsRef<Path>>(
         }
     }
 
-    let _main_commmit = commit_from_main_dir(engine, dir)?;
+    //let _main_commmit = commit_from_main_dir(engine, dir)?;
 
     Ok(Commit {
         index,
@@ -293,6 +293,7 @@ fn commit_from_dir<P: AsRef<Path>>(
     })
 }
 
+#[allow(dead_code)]
 fn commit_from_main_dir<P: AsRef<Path>>(
     engine: &Engine,
     dir: P,
