@@ -746,7 +746,8 @@ fn write_commit_inner<P: AsRef<Path>, S: AsRef<str>>(
         .to_vec();
     fs::write(index_path, index_bytes.clone())?;
     println!("INDEX MAIN PATH={:?}", index_main_path);
-    fs::write(index_main_path, index_bytes)?;
+    fs::write(index_main_path.clone(), index_bytes)?;
+    paths.push(index_main_path);
 
     Ok(Commit { index, paths })
 }
