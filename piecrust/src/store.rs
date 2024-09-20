@@ -289,7 +289,7 @@ fn commit_from_dir<P: AsRef<Path>>(
         }
     }
 
-    Ok(Commit { index })
+    Ok(Commit { index, paths: Vec::new() })
 }
 
 fn index_from_path<P: AsRef<Path>>(path: P) -> io::Result<ContractIndex> {
@@ -309,6 +309,7 @@ fn index_from_path<P: AsRef<Path>>(path: P) -> io::Result<ContractIndex> {
 #[derive(Debug, Default, Clone)]
 pub(crate) struct Commit {
     index: ContractIndex,
+    paths: Vec<PathBuf>,
 }
 
 pub(crate) enum Call {
@@ -741,7 +742,7 @@ fn write_commit_inner<P: AsRef<Path>, S: AsRef<str>>(
     println!("INDEX MAIN PATH={:?}", index_main_path);
     fs::write(index_main_path, index_bytes)?;
 
-    Ok(Commit { index })
+    Ok(Commit { index, paths: Vec::new() })
 }
 
 /// Delete the given commit's directory.
@@ -764,7 +765,7 @@ fn finalize_commit<P: AsRef<Path>>(root: Hash, root_dir: P) -> io::Result<()> {
         .parent()
         .expect("Parent should exist")
         .join(MEMORY_DIR); // todo
-    for entry in fs::read_dir(root_main_dir)? {
+    for entry in fs::read_dir(&root_main_dir)? {
         let entry = entry?;
         println!("entry={:?}", entry.path());
         if entry.path().is_file() {
