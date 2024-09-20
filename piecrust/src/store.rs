@@ -70,14 +70,12 @@ impl ContractStore {
     /// [`delete`]: ContractStore::delete_commit
     /// [`session spawning`]: ContractStore::session
     pub fn new<P: AsRef<Path>>(engine: Engine, dir: P) -> io::Result<Self> {
-        println!("00001");
         let root_dir = dir.as_ref();
 
         fs::create_dir_all(root_dir)?;
 
         let (call, calls) = mpsc::channel();
         let commits = read_all_commits(&engine, root_dir)?;
-        println!("00002");
 
         let loop_root_dir = root_dir.to_path_buf();
 
@@ -289,7 +287,81 @@ fn commit_from_dir<P: AsRef<Path>>(
         }
     }
 
-    Ok(Commit { index, paths: Vec::new() })
+    let _main_commmit = commit_from_main_dir(engine, dir)?;
+
+    Ok(Commit {
+        index,
+        paths: Vec::new(),
+    })
+}
+
+fn commit_from_main_dir<P: AsRef<Path>>(
+    engine: &Engine,
+    dir: P,
+) -> io::Result<Commit> {
+    let dir = dir.as_ref();
+
+    let index_dir_path = dir;
+    let commit_id = dir.file_name().expect("Filename should exist");
+    let main_path = dir
+        .parent()
+        .expect("Parent should exist")
+        .parent()
+        .expect("Parent should exist")
+        .join(MAIN_DIR);
+    println!(
+        "COMMIT FROM MAIN DIR commit_id={:?} main_path={:?}",
+        commit_id, main_path
+    );
+    let dir = main_path;
+
+    let index_path = if index_dir_path.is_dir() {
+        index_dir_path.join(INDEX_FILE)
+    } else {
+        dir.join(INDEX_FILE)
+    };
+    let index = index_from_path(index_path)?;
+
+    let bytecode_dir = dir.join(BYTECODE_DIR);
+    let _memory_dir = dir.join(MEMORY_DIR);
+
+    for (contract, _contract_index) in index.iter() {
+        let contract_hex = hex::encode(contract);
+
+        // Check that all contracts in the index file have a corresponding
+        // bytecode and memory pages specified.
+        let bytecode_path = bytecode_dir.join(&contract_hex);
+        if !bytecode_path.is_file() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("Non-existing bytecode for contract: {contract_hex}"),
+            ));
+        }
+
+        let module_path = bytecode_path.with_extension(OBJECTCODE_EXTENSION);
+
+        // SAFETY it is safe to deserialize the file here, since we don't use
+        // the module here. We just want to check if the file is valid.
+        if Module::from_file(engine, &module_path).is_err() {
+            let bytecode = Bytecode::from_file(bytecode_path)?;
+            let module = Module::from_bytecode(engine, bytecode.as_ref())
+                .map_err(|err| {
+                    io::Error::new(io::ErrorKind::InvalidData, err)
+                })?;
+            fs::write(module_path, module.serialize())?;
+        }
+
+        // let memory_dir = memory_dir.join(&contract_hex);
+
+        // for page_index in &contract_index.page_indices {
+        //     let _page_path = page_path(&memory_dir, *page_index);
+        // }
+    }
+
+    Ok(Commit {
+        index,
+        paths: Vec::new(),
+    })
 }
 
 fn index_from_path<P: AsRef<Path>>(path: P) -> io::Result<ContractIndex> {
@@ -764,7 +836,11 @@ fn delete_commit_dir<P: AsRef<Path>>(
 }
 
 /// Finalize commit
-fn finalize_commit<P: AsRef<Path>>(root: Hash, _root_dir: P, commit: &Commit) -> io::Result<()> {
+fn finalize_commit<P: AsRef<Path>>(
+    root: Hash,
+    _root_dir: P,
+    commit: &Commit,
+) -> io::Result<()> {
     let root = hex::encode(root);
     println!("FINALIZATION OF {}", root);
     // let root_main_dir = root_dir
@@ -774,7 +850,11 @@ fn finalize_commit<P: AsRef<Path>>(root: Hash, _root_dir: P, commit: &Commit) ->
     //     .join(MEMORY_DIR); // todo
     for src_path in commit.paths.iter() {
         let filename = src_path.file_name().expect("Filename should exist");
-        let dst_dir = src_path.parent().expect("Parent should exist").parent().expect("Parent should exist");
+        let dst_dir = src_path
+            .parent()
+            .expect("Parent should exist")
+            .parent()
+            .expect("Parent should exist");
         let dst_path = dst_dir.join(filename);
         println!("finalize from={:?} to={:?}", src_path, dst_path);
         if src_path.is_file() {

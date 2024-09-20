@@ -172,78 +172,94 @@ impl ContractSession {
         &mut self,
         contract: ContractId,
     ) -> io::Result<Option<ContractDataEntry>> {
+        let commit_id = self.base.as_ref().map(|commit| {
+            let commit_id = commit.index.root();
+            hex::encode(commit_id.as_bytes())
+        });
         match self.contracts.entry(contract) {
-            Vacant(entry) => match &self.base {
-                None => Ok(None),
-                Some(base_commit) => {
-                    let base = base_commit.index.root();
+            Vacant(entry) => {
+                match &self.base {
+                    None => Ok(None),
+                    Some(base_commit) => {
+                        let base = base_commit.index.root();
 
-                    match base_commit.index.contains_key(&contract) {
-                        true => {
-                            let base_hex = hex::encode(*base);
-                            let base_dir = self.root_dir.join(base_hex);
+                        match base_commit.index.contains_key(&contract) {
+                            true => {
+                                let base_hex = hex::encode(*base);
+                                let base_dir = self.root_dir.join(base_hex);
 
-                            let contract_hex = hex::encode(contract);
+                                let contract_hex = hex::encode(contract);
 
-                            let bytecode_path =
-                                base_dir.join(BYTECODE_DIR).join(&contract_hex);
-                            let module_path = bytecode_path
-                                .with_extension(OBJECTCODE_EXTENSION);
-                            let metadata_path = bytecode_path
-                                .with_extension(METADATA_EXTENSION);
-                            let memory_path =
-                                base_dir.join(MEMORY_DIR).join(contract_hex);
+                                let bytecode_path = base_dir
+                                    .join(BYTECODE_DIR)
+                                    .join(&contract_hex);
+                                let module_path = bytecode_path
+                                    .with_extension(OBJECTCODE_EXTENSION);
+                                let metadata_path = bytecode_path
+                                    .with_extension(METADATA_EXTENSION);
+                                let memory_path = base_dir
+                                    .join(MEMORY_DIR)
+                                    .join(contract_hex);
 
-                            let bytecode = Bytecode::from_file(bytecode_path)?;
-                            let module =
-                                Module::from_file(&self.engine, module_path)?;
-                            let metadata = Metadata::from_file(metadata_path)?;
+                                let bytecode =
+                                    Bytecode::from_file(bytecode_path)?;
+                                let module = Module::from_file(
+                                    &self.engine,
+                                    module_path,
+                                )?;
+                                let metadata =
+                                    Metadata::from_file(metadata_path)?;
 
-                            let memory = match base_commit.index.get(&contract)
-                            {
-                                Some(elem) => {
-                                    let page_indices =
-                                        elem.page_indices.clone();
-                                    let memory_path = memory_path.clone();
+                                let memory = match base_commit
+                                    .index
+                                    .get(&contract)
+                                {
+                                    Some(elem) => {
+                                        let page_indices =
+                                            elem.page_indices.clone();
+                                        let memory_path = memory_path.clone();
 
-                                    Memory::from_files(
-                                        module.is_64(),
-                                        move |page_index: usize| {
-                                            match page_indices
-                                                .contains(&page_index)
-                                            {
-                                                true => {
-                                                    let page_path = memory_path
-                                                        .join(format!(
-                                                            "{page_index}"
-                                                        ));
-                                                    Some(page_path)
+                                        Memory::from_files(
+                                            module.is_64(),
+                                            move |page_index: usize| {
+                                                match page_indices
+                                                    .contains(&page_index)
+                                                {
+                                                    true => {
+                                                        let page_path =
+                                                        if commit_id.is_some() && memory_path.join(commit_id.clone().unwrap()).join(format!("{page_index}")).is_file() {
+                                                            memory_path.join(commit_id.clone().unwrap()).join(format!("{page_index}"))
+                                                        } else {
+                                                            memory_path.join(format!("{page_index}"))
+                                                        };
+                                                        Some(page_path)
+                                                    }
+                                                    false => None,
                                                 }
-                                                false => None,
-                                            }
-                                        },
-                                        elem.len,
-                                    )?
-                                }
-                                None => Memory::new(module.is_64())?,
-                            };
+                                            },
+                                            elem.len,
+                                        )?
+                                    }
+                                    None => Memory::new(module.is_64())?,
+                                };
 
-                            let contract = entry
-                                .insert(ContractDataEntry {
-                                    bytecode,
-                                    module,
-                                    metadata,
-                                    memory,
-                                    is_new: false,
-                                })
-                                .clone();
+                                let contract = entry
+                                    .insert(ContractDataEntry {
+                                        bytecode,
+                                        module,
+                                        metadata,
+                                        memory,
+                                        is_new: false,
+                                    })
+                                    .clone();
 
-                            Ok(Some(contract))
+                                Ok(Some(contract))
+                            }
+                            false => Ok(None),
                         }
-                        false => Ok(None),
                     }
                 }
-            },
+            }
             Occupied(entry) => Ok(Some(entry.get().clone())),
         }
     }
