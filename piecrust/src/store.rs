@@ -238,12 +238,10 @@ fn commit_from_dir<P: AsRef<Path>>(
     engine: &Engine,
     dir: P,
 ) -> io::Result<Commit> {
-    println!("00003");
     let dir = dir.as_ref();
 
     let index_path = dir.join(INDEX_FILE);
     let index = index_from_path(index_path)?;
-    println!("00004");
 
     let bytecode_dir = dir.join(BYTECODE_DIR);
     let memory_dir = dir.join(MEMORY_DIR);
@@ -838,16 +836,16 @@ fn delete_commit_dir<P: AsRef<Path>>(
 /// Finalize commit
 fn finalize_commit<P: AsRef<Path>>(
     root: Hash,
-    _root_dir: P,
+    root_dir: P,
     commit: &Commit,
 ) -> io::Result<()> {
+    let main_dir = root_dir
+        .as_ref()
+        .parent()
+        .expect("root parent should exist")
+        .join(MAIN_DIR);
     let root = hex::encode(root);
     println!("FINALIZATION OF {}", root);
-    // let root_main_dir = root_dir
-    //     .as_ref()
-    //     .parent()
-    //     .expect("Parent should exist")
-    //     .join(MEMORY_DIR); // todo
     for src_path in commit.paths.iter() {
         let filename = src_path.file_name().expect("Filename should exist");
         let dst_dir = src_path
@@ -867,5 +865,12 @@ fn finalize_commit<P: AsRef<Path>>(
             println!("removed {:?}", src_dir);
         }
     }
+    for entry in main_dir.read_dir()? {
+        let entry = entry?;
+        if entry.file_name().to_string_lossy().starts_with("fin_"){
+            fs::remove_file(entry.path())?;
+        }
+    }
+    fs::write(main_dir.join(format!("fin_{}", root)), "f")?;
     Ok(())
 }
