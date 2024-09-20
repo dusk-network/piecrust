@@ -410,9 +410,13 @@ fn sync_loop<P: AsRef<Path>>(
                     continue;
                 }
 
-                let io_result = finalize_commit(root, root_dir);
-                commits.remove(&root);
-                let _ = replier.send(io_result);
+                if let Some(commit) = commits.get(&root).cloned() {
+                    let io_result = finalize_commit(root, root_dir, &commit);
+                    commits.remove(&root);
+                    let _ = replier.send(io_result);
+                } else {
+                    let _ = replier.send(Ok(())); // todo: find better way
+                }
             }
             // Increment the hold count of a commit to prevent it from deletion
             // on a `Call::CommitDelete`.
@@ -535,6 +539,7 @@ fn write_commit_inner<P: AsRef<Path>, S: AsRef<str>>(
     );
     let root_dir = root_dir.as_ref();
     let commit_dir = commit_dir.as_ref();
+    let mut paths = Vec::new();
 
     struct Base {
         bytecode_dir: PathBuf,
@@ -618,6 +623,7 @@ fn write_commit_inner<P: AsRef<Path>, S: AsRef<str>>(
             )?;
             fs::write(page_path1.clone(), dirty_page)?;
             fs::write(page_path2.clone(), dirty_page)?;
+            paths.push(page_path2.clone());
             println!("FILE WRITTEN {:?}", page_path1);
             println!("FILE WRITTEN MAIN {:?}", page_path2);
             pages.insert(*page_index);
@@ -742,7 +748,7 @@ fn write_commit_inner<P: AsRef<Path>, S: AsRef<str>>(
     println!("INDEX MAIN PATH={:?}", index_main_path);
     fs::write(index_main_path, index_bytes)?;
 
-    Ok(Commit { index, paths: Vec::new() })
+    Ok(Commit { index, paths })
 }
 
 /// Delete the given commit's directory.
@@ -757,19 +763,27 @@ fn delete_commit_dir<P: AsRef<Path>>(
 }
 
 /// Finalize commit
-fn finalize_commit<P: AsRef<Path>>(root: Hash, root_dir: P) -> io::Result<()> {
+fn finalize_commit<P: AsRef<Path>>(root: Hash, _root_dir: P, commit: &Commit) -> io::Result<()> {
     let root = hex::encode(root);
     println!("FINALIZATION OF {}", root);
-    let root_main_dir = root_dir
-        .as_ref()
-        .parent()
-        .expect("Parent should exist")
-        .join(MEMORY_DIR); // todo
-    for entry in fs::read_dir(&root_main_dir)? {
-        let entry = entry?;
-        println!("entry={:?}", entry.path());
-        if entry.path().is_file() {
-            fs::copy(entry.path(), root_main_dir.as_path())?;
+    // let root_main_dir = root_dir
+    //     .as_ref()
+    //     .parent()
+    //     .expect("Parent should exist")
+    //     .join(MEMORY_DIR); // todo
+    for src_path in commit.paths.iter() {
+        let filename = src_path.file_name().expect("Filename should exist");
+        let dst_dir = src_path.parent().expect("Parent should exist").parent().expect("Parent should exist");
+        let dst_path = dst_dir.join(filename);
+        println!("finalize from={:?} to={:?}", src_path, dst_path);
+        if src_path.is_file() {
+            fs::rename(src_path, dst_path)?;
+        }
+        let src_dir = src_path.parent().expect("Parent should exist");
+        let src_dir_empty = src_dir.read_dir()?.next().is_none(); // todo: make sure this performs well
+        if src_dir_empty {
+            let _ = fs::remove_dir(src_dir);
+            println!("removed {:?}", src_dir);
         }
     }
     Ok(())
