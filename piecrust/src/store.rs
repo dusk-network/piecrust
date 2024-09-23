@@ -787,12 +787,12 @@ fn write_commit_inner<P: AsRef<Path>, S: AsRef<str>>(
         // }
     }
 
-    if let Some(base) = &directories.base {
-        let mut _bytecode_etc_hard_links = 0;
-        let mut _pages_hard_links = 0;
-        for (contract, elem) in base.inner.index.iter() {
-            if !commit_contracts.contains_key(contract) {
-                let contract_hex = hex::encode(contract);
+    // if let Some(base) = &directories.base {
+    //     let mut _bytecode_etc_hard_links = 0;
+    //     let mut _pages_hard_links = 0;
+        // for (contract, elem) in base.inner.index.iter() {
+            // if !commit_contracts.contains_key(contract) {
+                // let contract_hex = hex::encode(contract);
 
                 // let bytecode_path =
                 //     directories.bytecode_dir.join(&contract_hex);
@@ -801,16 +801,16 @@ fn write_commit_inner<P: AsRef<Path>, S: AsRef<str>>(
                 // let metadata_path =
                 //     bytecode_path.with_extension(METADATA_EXTENSION);
 
-                let base_bytecode_path = base.bytecode_dir.join(&contract_hex);
+                // let base_bytecode_path = base.bytecode_dir.join(&contract_hex);
                 // let base_module_path =
                 //     base_bytecode_path.with_extension(OBJECTCODE_EXTENSION);
                 // let base_metadata_path =
                 //     base_bytecode_path.with_extension(METADATA_EXTENSION);
 
-                let memory_dir = directories.memory_dir.join(&contract_hex);
+                // let memory_dir = directories.memory_dir.join(&contract_hex);
                 // let base_memory_dir = base.memory_dir.join(&contract_hex);
 
-                fs::create_dir_all(&memory_dir)?;
+                // fs::create_dir_all(&memory_dir)?;
 
                 // fs::hard_link(base_bytecode_path, bytecode_path)?;
                 // fs::hard_link(base_module_path, module_path)?;
@@ -823,9 +823,9 @@ fn write_commit_inner<P: AsRef<Path>, S: AsRef<str>>(
 
                     // fs::hard_link(base_page_path, new_page_path)?;
                 // }
-            }
-        }
-    }
+            // }
+        // }
+    // }
 
     let index_path = commit_dir.join(INDEX_FILE);
     let index_main_path = index_path_main(directories.main_dir, commit_id)?;

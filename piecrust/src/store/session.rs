@@ -234,10 +234,10 @@ impl ContractSession {
                                                     true => {
                                                         let page_path =
                                                         if commit_id.is_some() && memory_path.join(commit_id.clone().unwrap()).join(format!("{page_index}")).is_file() {
-                                                            println!("xxCONTRACT VARIANT1 {:?}", memory_path.join(commit_id.clone().unwrap()).join(format!("{page_index}")));
+                                                            // println!("xxCONTRACT VARIANT1 {:?}", memory_path.join(commit_id.clone().unwrap()).join(format!("{page_index}")));
                                                             memory_path.join(commit_id.clone().unwrap()).join(format!("{page_index}"))
                                                         } else {
-                                                            println!("xxCONTRACT VARIANT2 {:?}", memory_path.join(format!("{page_index}")));
+                                                            // println!("xxCONTRACT VARIANT2 {:?}", memory_path.join(format!("{page_index}")));
                                                             memory_path.join(format!("{page_index}"))
                                                         };
                                                         Some(page_path)
