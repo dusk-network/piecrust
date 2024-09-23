@@ -757,33 +757,34 @@ fn write_commit_inner<P: AsRef<Path>, S: AsRef<str>>(
             fs::write(bytecode_main_path, &contract_data.bytecode)?;
             fs::write(module_main_path, &contract_data.module.serialize())?;
             fs::write(metadata_main_path, &contract_data.metadata)?;
-        } else if let Some(base) = &directories.base {
-            if let Some(elem) = base.inner.index.get(contract) {
-                let base_bytecode_path = base.bytecode_dir.join(&contract_hex);
-                let base_module_path =
-                    base_bytecode_path.with_extension(OBJECTCODE_EXTENSION);
-                let base_metadata_path =
-                    base_bytecode_path.with_extension(METADATA_EXTENSION);
+        }
+        // else if let Some(base) = &directories.base {
+            // if let Some(elem) = base.inner.index.get(contract) {
+                // let base_bytecode_path = base.bytecode_dir.join(&contract_hex);
+                // let base_module_path =
+                //     base_bytecode_path.with_extension(OBJECTCODE_EXTENSION);
+                // let base_metadata_path =
+                //     base_bytecode_path.with_extension(METADATA_EXTENSION);
 
-                let base_memory_dir = base.memory_dir.join(&contract_hex);
+                // let base_memory_dir = base.memory_dir.join(&contract_hex);
 
-                fs::hard_link(base_bytecode_path, bytecode_path)?;
-                fs::hard_link(base_module_path, module_path)?;
-                fs::hard_link(base_metadata_path, metadata_path)?;
+                // fs::hard_link(base_bytecode_path, bytecode_path)?;
+                // fs::hard_link(base_module_path, module_path)?;
+                // fs::hard_link(base_metadata_path, metadata_path)?;
 
-                for page_index in &elem.page_indices {
+                // for page_index in &elem.page_indices {
                     // Only write the clean pages, since the dirty ones have
                     // already been written.
-                    if !pages.contains(page_index) {
-                        let new_page_path = page_path(&memory_dir, *page_index);
-                        let base_page_path =
-                            page_path(&base_memory_dir, *page_index);
+                    // if !pages.contains(page_index) {
+                        // let new_page_path = page_path(&memory_dir, *page_index);
+                        // let base_page_path =
+                        //     page_path(&base_memory_dir, *page_index);
 
-                        fs::hard_link(base_page_path, new_page_path)?;
-                    }
-                }
-            }
-        }
+                        // fs::hard_link(base_page_path, new_page_path)?;
+                    // }
+                // }
+            // }
+        // }
     }
 
     if let Some(base) = &directories.base {
@@ -793,47 +794,37 @@ fn write_commit_inner<P: AsRef<Path>, S: AsRef<str>>(
             if !commit_contracts.contains_key(contract) {
                 let contract_hex = hex::encode(contract);
 
-                let bytecode_path =
-                    directories.bytecode_dir.join(&contract_hex);
-                let module_path =
-                    bytecode_path.with_extension(OBJECTCODE_EXTENSION);
-                let metadata_path =
-                    bytecode_path.with_extension(METADATA_EXTENSION);
+                // let bytecode_path =
+                //     directories.bytecode_dir.join(&contract_hex);
+                // let module_path =
+                //     bytecode_path.with_extension(OBJECTCODE_EXTENSION);
+                // let metadata_path =
+                //     bytecode_path.with_extension(METADATA_EXTENSION);
 
                 let base_bytecode_path = base.bytecode_dir.join(&contract_hex);
-                let base_module_path =
-                    base_bytecode_path.with_extension(OBJECTCODE_EXTENSION);
-                let base_metadata_path =
-                    base_bytecode_path.with_extension(METADATA_EXTENSION);
+                // let base_module_path =
+                //     base_bytecode_path.with_extension(OBJECTCODE_EXTENSION);
+                // let base_metadata_path =
+                //     base_bytecode_path.with_extension(METADATA_EXTENSION);
 
                 let memory_dir = directories.memory_dir.join(&contract_hex);
-                let base_memory_dir = base.memory_dir.join(&contract_hex);
+                // let base_memory_dir = base.memory_dir.join(&contract_hex);
 
                 fs::create_dir_all(&memory_dir)?;
 
-                // println!("HARD LINK BYTECODE {:?} {:?}", base_bytecode_path,
-                // bytecode_path);
-                fs::hard_link(base_bytecode_path, bytecode_path)?;
-                // println!("HARD LINK MODULE {:?}", base_module_path);
-                fs::hard_link(base_module_path, module_path)?;
-                // println!("HARD LINK METADATA {:?}", base_metadata_path);
-                fs::hard_link(base_metadata_path, metadata_path)?;
-                //bytecode_etc_hard_links += 1;
+                // fs::hard_link(base_bytecode_path, bytecode_path)?;
+                // fs::hard_link(base_module_path, module_path)?;
+                // fs::hard_link(base_metadata_path, metadata_path)?;
 
-                for page_index in &elem.page_indices {
-                    let new_page_path = page_path(&memory_dir, *page_index);
-                    let base_page_path =
-                        page_path(&base_memory_dir, *page_index);
+                // for page_index in &elem.page_indices {
+                    // let new_page_path = page_path(&memory_dir, *page_index);
+                    // let base_page_path =
+                    //     page_path(&base_memory_dir, *page_index);
 
-                    fs::hard_link(base_page_path, new_page_path)?;
-                    //pages_hard_links += 1;
-                }
+                    // fs::hard_link(base_page_path, new_page_path)?;
+                // }
             }
         }
-        // println!(
-        //     "HARD LINK SUMMARY: bytecode_etc_hard_links={}
-        // pages_hard_links={}",     bytecode_etc_hard_links,
-        // pages_hard_links );
     }
 
     let index_path = commit_dir.join(INDEX_FILE);
