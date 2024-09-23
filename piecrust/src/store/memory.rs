@@ -12,10 +12,10 @@ use std::{
     sync::atomic::AtomicUsize,
 };
 
-use crumbles::{LocateFile, Mmap};
+use crumbles::{LoadPage, Mmap};
 use dusk_wasmtime::LinearMemory;
 
-pub const PAGE_SIZE: usize = 0x10000;
+use crate::store::PAGE_SIZE;
 
 const WASM32_MAX_PAGES: usize = 0x10000;
 const WASM64_MAX_PAGES: usize = 0x4000000;
@@ -78,13 +78,13 @@ impl Memory {
         })
     }
 
-    pub fn from_files<FL>(
+    pub fn with_pages<FL>(
         is_64: bool,
-        file_locator: FL,
-        len: usize,
+        page_loader: FL,
+        n_pages: u64,
     ) -> io::Result<Self>
     where
-        FL: 'static + LocateFile,
+        FL: 'static + LoadPage,
     {
         let max_pages = if is_64 {
             WASM64_MAX_PAGES
@@ -94,10 +94,8 @@ impl Memory {
 
         Ok(Self {
             inner: Box::leak(Box::new(MemoryInner {
-                mmap: unsafe {
-                    Mmap::with_files(max_pages, PAGE_SIZE, file_locator)?
-                },
-                current_len: len,
+                mmap: Mmap::with_pages(max_pages, PAGE_SIZE, page_loader)?,
+                current_len: n_pages as usize * PAGE_SIZE,
                 is_new: false,
                 is_64,
                 ref_count: AtomicUsize::new(1),

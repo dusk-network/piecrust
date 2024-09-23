@@ -38,44 +38,43 @@
 
 use std::{
     collections::{btree_map::Entry, BTreeMap},
-    fs::OpenOptions,
     mem::{self, MaybeUninit},
     ops::{Deref, DerefMut},
-    os::fd::AsRawFd,
-    path::PathBuf,
     sync::{Once, OnceLock, RwLock},
     {io, process, ptr, slice},
 };
 
 use libc::{
     c_int, sigaction, sigemptyset, siginfo_t, sigset_t, ucontext_t,
-    MAP_ANONYMOUS, MAP_FAILED, MAP_FIXED, MAP_NORESERVE, MAP_PRIVATE,
-    PROT_NONE, PROT_READ, PROT_WRITE, SA_SIGINFO,
+    MAP_ANONYMOUS, MAP_FAILED, MAP_NORESERVE, MAP_PRIVATE, PROT_NONE,
+    PROT_READ, PROT_WRITE, SA_SIGINFO,
 };
 
 /// A handle to a copy-on-write memory-mapped region that keeps track of which
 /// pages have been written to.
 ///
-/// A `Mmap` may be backed by a set of files, physical memory, or a combination
-/// of both. Use [`new`] to create a new mmap backed entirely by physical
-/// memory, and [`with_files`] to create a new mmap backed by the given
-/// set of files, at the given offsets.
+/// An `Mmap` may be created totally filled with zeros using [`new`], or be
+/// instantiated to use a closure to load the contents of the page using
+/// [`with_pages`]. In cases the `Mmap` will only use the amount of memory
+/// actually accessed during its lifetime.
 ///
 /// It is possible to create snapshots of the memory, which can be used to
 /// revert to a previous state. See [`snap`] for more details.
 ///
 /// Writes are tracked at the page level. This functions as follows:
 ///
-/// - When a region is first mapped, its permissions are set to read-only,
-///   resulting in a segmentation fault when a write is attempted.
-/// - When a write is attempted the segmentation fault is caught using a signal
-///   handler, which proceeds to set the permissions of the page to read-write
-///   while also marking it as dirty in the mmap.
+/// - When a region is first mapped, its permissions are set to none, resulting
+///   in a SIGSEGV when a read or a write are attempted.
+/// - When a read/write is attempted, the SIGSEGV is caught, the page contents
+///   loaded and written to the appropriate location in memory.
+/// - When a write is subsequently attempted, the SIGSEGV is caught using a
+///   signal handler, which proceeds to set the permissions of the page to
+///   read-write while also marking it as dirty.
 ///
 /// `Mmap` is [`Sync`] and [`Send`].
 ///
 /// [`new`]: Mmap::new
-/// [`with_files`]: Mmap::with_files
+/// [`with_pages`]: Mmap::with_pages
 /// [`snap`]: Mmap::snap
 pub struct Mmap(&'static mut MmapInner);
 
@@ -103,13 +102,13 @@ impl Mmap {
     /// # }
     /// ```
     pub fn new(page_number: usize, page_size: usize) -> io::Result<Self> {
-        unsafe { Self::with_files(page_number, page_size, |_| None) }
+        Self::with_pages(page_number, page_size, default_load_page)
     }
 
-    /// Create a new mmap, backed partially by physical memory, and partially
-    /// the files opened by the given file locator. The `file_locator` is a
-    /// closure taking a page index and optionally returning the file meant to
-    /// be used as the backing for that page.
+    /// Create a new mmap, backed by physical memory, that will query for pages
+    /// using the given `page_locator`. Conceptually the page locator is a
+    /// closure, taking a page index and a page buffer as argument, that writes
+    /// the existing contents of that page (if any) to the buffer.
     ///
     /// The size of the memory region is specified by the caller using the
     /// number of pages - `page_number` - and the page size - `page_size`. The
@@ -117,13 +116,8 @@ impl Mmap {
     ///
     /// # Errors
     /// If the underlying call to map memory fails, the function will return an
-    /// error. The files given by the `file_locator` must be guaranteed to
-    /// exist, otherwise a segmentation fault will occur.
-    ///
-    /// # Safety
-    /// The caller must ensure that the given files are not modified while
-    /// they're mapped. Modifying a file while it's mapped will result in
-    /// *Undefined Behavior* (UB).
+    /// error. The pages loaded by the `page_loader` must be not fail to load,
+    /// otherwise the process will halt.
     ///
     /// # Example
     /// ```rust
@@ -135,32 +129,35 @@ impl Mmap {
     ///
     /// use crumbles::Mmap;
     ///
-    /// let mut file = File::open("LICENSE")?;
+    /// const PAGE_SIZE: usize = 65536;
     ///
-    /// let mut contents = Vec::new();
-    /// file.read_to_end(&mut contents)?;
+    /// let mut page = [42; PAGE_SIZE];
     ///
     /// let mmap = unsafe {
-    ///     Mmap::with_files(65536, 65536, move |page_index| {
+    ///     Mmap::with_pages(65536, PAGE_SIZE, move |page_index, buf: &mut [u8]| {
     ///         match page_index {
-    ///             0 => Some(PathBuf::from("LICENSE")),
-    ///             _ => None,
+    ///             0 => {
+    ///                 buf.copy_from_slice(&page);
+    ///                 Ok(PAGE_SIZE)
+    ///             },
+    ///             _ => Ok(0),
     ///         }
     ///     })?
     /// };
-    /// assert_eq!(mmap[..contents.len()], contents[..]);
+    /// assert_eq!(mmap[..PAGE_SIZE], page[..]);
     /// # Ok(())
     /// # }
     /// ```
-    pub unsafe fn with_files<FL>(
-        page_number: usize,
+    pub fn with_pages<LP>(
+        page_index: usize,
         page_size: usize,
-        file_locator: FL,
+        page_loader: LP,
     ) -> io::Result<Self>
     where
-        FL: 'static + LocateFile,
+        LP: 'static + LoadPage,
     {
-        let inner = MmapInner::new(page_number, page_size, file_locator)?;
+        let inner =
+            unsafe { MmapInner::new(page_index, page_size, page_loader)? };
 
         with_global_map_mut(|global_map| {
             let inner = Box::leak(Box::new(inner));
@@ -481,24 +478,32 @@ impl Drop for PageBits {
     }
 }
 
-/// Types that can used to locate a file for a given page.
-pub trait LocateFile: Send + Sync {
-    /// Locate a file for the given page index.
+/// Types that can used to load a page's content.
+pub trait LoadPage: Send + Sync {
+    /// Loads the page's contents at the given `index` and subsequently writes
+    /// it to the given `buf`fer.
     ///
     /// # Errors
-    /// The function may return an error to signal that there was a problem
-    /// looking up a file for the given page index, but should use `Ok(None)`
-    /// when there is no file for the given page index.
-    fn locate_file(&mut self, page_index: usize) -> Option<PathBuf>;
+    /// Implementations are encouraged to error if loading a page's content
+    /// fails, but should return `Ok(0)` if the page's content is not known,
+    /// and not write to the buffer at all. In such a situation, the page
+    /// will be filled zeros.
+    fn load_page(&mut self, index: usize, buf: &mut [u8]) -> io::Result<usize>;
 }
 
-impl<F> LocateFile for F
+/// The default implementation of [`LoadPage`] just returns 0 and never touches
+/// the buffer.
+fn default_load_page(_: usize, _: &mut [u8]) -> io::Result<usize> {
+    Ok(0)
+}
+
+impl<F> LoadPage for F
 where
-    F: FnMut(usize) -> Option<PathBuf>,
+    for<'a> F: FnMut(usize, &'a mut [u8]) -> io::Result<usize>,
     F: Send + Sync,
 {
-    fn locate_file(&mut self, page_index: usize) -> Option<PathBuf> {
-        self(page_index)
+    fn load_page(&mut self, index: usize, buf: &mut [u8]) -> io::Result<usize> {
+        self(index, buf)
     }
 }
 
@@ -508,21 +513,22 @@ struct MmapInner {
 
     page_size: usize,
     page_number: usize,
+    page_buf: Vec<u8>,
 
     mapped_pages: PageBits,
     snapshots: Vec<Snapshot>,
 
-    file_locator: Box<dyn LocateFile>,
+    page_loader: Box<dyn LoadPage>,
 }
 
 impl MmapInner {
-    unsafe fn new<FL>(
+    unsafe fn new<LP>(
         page_number: usize,
         page_size: usize,
-        file_locator: FL,
+        page_loader: LP,
     ) -> io::Result<Self>
     where
-        FL: 'static + LocateFile,
+        LP: 'static + LoadPage,
     {
         setup_action();
 
@@ -559,14 +565,17 @@ impl MmapInner {
             slice::from_raw_parts_mut(ptr.cast(), len)
         };
 
+        let page_buf = vec![0; page_size];
+
         Ok(Self {
             bytes,
             page_size,
             page_number,
+            page_buf,
             mapped_pages,
             // There should always be at least one snapshot
             snapshots: vec![snapshot],
-            file_locator: Box::new(file_locator),
+            page_loader: Box::new(page_loader),
         })
     }
 
@@ -574,11 +583,11 @@ impl MmapInner {
     /// guaranteed to be within the memory region.
     ///
     /// Before segfaulting, the entire memory region is protected with
-    /// `PROT_NONE`. When either a read or a write is attempted, a page will be
-    /// mapped onto the accessed memory, and the permissions will then be set to
-    /// `PROT_READ` for that page. If a write is attempted, a new segfault will
-    /// occur, and the permissions will be set to `PROT_READ | PROT_WRITE` for
-    /// that page.
+    /// `PROT_NONE`. When either a read or a write is attempted, the loaded page
+    /// contents will be copied onto the accessed memory, and the permissions
+    /// will then be set to `PROT_READ` for that page. If a write is attempted,
+    /// a new segfault will occur, and the permissions will be set to `PROT_READ
+    /// | PROT_WRITE` for that page.
     ///
     /// This is possible due to the keeping of two bits per page - one for
     /// whether the page has been mapped, and one for whether the page has
@@ -594,8 +603,8 @@ impl MmapInner {
         let page_addr = start_addr + page_offset;
         let page_size = self.page_size;
 
-        // Map the file given by the file locator, if any, at the given offset.
-        // If we've already mapped it, we don't need to do so again.
+        // Load the page given by the locator, if any, at the given offset.
+        // If we've already loaded it, we don't need to do so again.
         self.mapped_pages.set_and_exec(
             page_index,
             |is_bit_set| -> io::Result<()> {
@@ -603,22 +612,20 @@ impl MmapInner {
                     return Ok(());
                 }
 
-                if let Some(path) = self.file_locator.locate_file(page_index) {
-                    let file =
-                        OpenOptions::new().read(true).write(true).open(path)?;
+                ptr::write_bytes(self.page_buf.as_mut_ptr(), 0, self.page_size);
+                self.page_loader.load_page(page_index, &mut self.page_buf)?;
 
-                    let ptr = libc::mmap(
-                        page_addr as _,
-                        page_size,
-                        PROT_NONE,
-                        MAP_PRIVATE | MAP_FIXED | MAP_NORESERVE,
-                        file.as_raw_fd(),
-                        0,
-                    );
+                let prot = PROT_READ | PROT_WRITE;
+                if libc::mprotect(page_addr as _, page_size, prot) != 0 {
+                    return Err(io::Error::last_os_error());
+                }
 
-                    if ptr == MAP_FAILED {
-                        return Err(io::Error::last_os_error());
-                    }
+                self.bytes[page_offset..][..page_size]
+                    .copy_from_slice(&self.page_buf);
+
+                let prot = PROT_NONE;
+                if libc::mprotect(page_addr as _, page_size, prot) != 0 {
+                    return Err(io::Error::last_os_error());
                 }
 
                 Ok(())

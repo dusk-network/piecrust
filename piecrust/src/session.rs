@@ -7,6 +7,7 @@
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::fmt::{Debug, Formatter};
+use std::io;
 use std::mem;
 use std::sync::{mpsc, Arc};
 
@@ -28,7 +29,7 @@ use crate::call_tree::{CallTree, CallTreeElem};
 use crate::contract::{ContractData, ContractMetadata, WrappedContract};
 use crate::error::Error::{self, InitalizationError, PersistenceError};
 use crate::instance::WrappedInstance;
-use crate::store::{ContractSession, PageOpening, PAGE_SIZE};
+use crate::store::{ContractDataEntry, ContractSession, PAGE_SIZE};
 use crate::types::StandardBufSerializer;
 use crate::vm::{HostQueries, HostQuery};
 
@@ -216,38 +217,27 @@ impl Session {
     /// If `deploy_data` does not specify an owner, this will panic.
     pub fn deploy<'a, A, D>(
         &mut self,
-        bytecode: &[u8],
-        deploy_data: D,
+        contract_id: Option<ContractId>,
+        wasm: Vec<u8>,
+        init_arg: &A,
+        owner: Vec<u8>,
         gas_limit: u64,
     ) -> Result<ContractId, Error>
     where
         A: 'a + for<'b> Serialize<StandardBufSerializer<'b>>,
         D: Into<ContractData<'a, A>>,
     {
-        let deploy_data = deploy_data.into();
+        let mut sbuf = [0u8; SCRATCH_BUF_BYTES];
+        let scratch = BufferScratch::new(&mut sbuf);
+        let ser = BufferSerializer::new(&mut self.inner.buffer[..]);
+        let mut ser = CompositeSerializer::new(ser, scratch, Infallible);
 
-        let mut init_arg = None;
-        if let Some(arg) = deploy_data.init_arg {
-            let mut sbuf = [0u8; SCRATCH_BUF_BYTES];
-            let scratch = BufferScratch::new(&mut sbuf);
-            let ser = BufferSerializer::new(&mut self.inner.buffer[..]);
-            let mut ser = CompositeSerializer::new(ser, scratch, Infallible);
+        ser.serialize_value(init_arg)?;
+        let pos = ser.pos();
 
-            ser.serialize_value(arg)?;
-            let pos = ser.pos();
+        let init_arg = self.inner.buffer[..pos].to_vec();
 
-            init_arg = Some(self.inner.buffer[0..pos].to_vec());
-        }
-
-        self.deploy_raw(
-            deploy_data.contract_id,
-            bytecode,
-            init_arg,
-            deploy_data
-                .owner
-                .expect("Owner must be specified when deploying a contract"),
-            gas_limit,
-        )
+        self.deploy_raw(contract_id, wasm, init_arg, owner, gas_limit)
     }
 
     /// Deploy a contract, returning its [`ContractId`]. If ID is not provided,
@@ -271,16 +261,16 @@ impl Session {
     pub fn deploy_raw(
         &mut self,
         contract_id: Option<ContractId>,
-        bytecode: &[u8],
-        init_arg: Option<Vec<u8>>,
+        wasm: Vec<u8>,
+        init_arg: Vec<u8>,
         owner: Vec<u8>,
         gas_limit: u64,
     ) -> Result<ContractId, Error> {
         let contract_id = contract_id.unwrap_or({
-            let hash = blake3::hash(bytecode);
+            let hash = blake3::hash(&wasm);
             ContractId::from_bytes(hash.into())
         });
-        self.do_deploy(contract_id, bytecode, init_arg, owner, gas_limit)?;
+        self.do_deploy(contract_id, wasm, init_arg, owner, gas_limit)?;
 
         Ok(contract_id)
     }
@@ -288,54 +278,43 @@ impl Session {
     #[allow(clippy::too_many_arguments)]
     fn do_deploy(
         &mut self,
-        contract_id: ContractId,
-        bytecode: &[u8],
-        arg: Option<Vec<u8>>,
+        contract: ContractId,
+        wasm: Vec<u8>,
+        init_arg: Vec<u8>,
         owner: Vec<u8>,
         gas_limit: u64,
     ) -> Result<(), Error> {
-        if self.inner.contract_session.contract_deployed(contract_id) {
-            return Err(InitalizationError(
-                "Deployed error already exists".into(),
-            ));
+        if self
+            .inner
+            .contract_session
+            .contract(contract)
+            .map_err(|err| Error::PersistenceError(Arc::new(err)))?
+            .is_some()
+        {
+            return Err(InitalizationError("Contract already exists".into()));
         }
-
-        let wrapped_contract =
-            WrappedContract::new(&self.engine, bytecode, None::<&[u8]>)?;
-        let contract_metadata = ContractMetadata { contract_id, owner };
-        let metadata_bytes = Self::serialize_data(&contract_metadata)?;
 
         self.inner
             .contract_session
-            .deploy(
-                contract_id,
-                bytecode,
-                wrapped_contract.as_bytes(),
-                contract_metadata,
-                metadata_bytes.as_slice(),
-            )
+            .deploy(contract, wasm, init_arg.clone(), owner)
             .map_err(|err| PersistenceError(Arc::new(err)))?;
 
         let instantiate = || {
-            self.create_instance(contract_id)?;
+            self.create_instance(contract)?;
             let instance =
-                self.instance(&contract_id).expect("instance should exist");
+                self.instance(&contract).expect("instance should exist");
 
+            // If there is an `init` function in the contract, call it with the
+            // `init_arg`.
             if instance.is_function_exported(INIT_METHOD) {
-                // If no argument was provided, we call the init method anyway,
-                // but with an empty argument. The alternative is to panic, but
-                // that assumes that the caller of `deploy` knows that the
-                // contract has an init method in the first place, which might
-                // not be the case, such as when ingesting untrusted bytecode.
-                let arg = arg.unwrap_or_default();
-                self.call_inner(contract_id, INIT_METHOD, arg, gas_limit)?;
+                self.call_inner(contract, INIT_METHOD, init_arg, gas_limit)?;
             }
 
             Ok(())
         };
 
         instantiate().map_err(|err| {
-            self.inner.contract_session.remove_contract(&contract_id);
+            self.inner.contract_session.remove_contract(&contract);
             err
         })
     }
@@ -447,9 +426,10 @@ impl Session {
     pub fn migrate<'a, A, D, F>(
         mut self,
         contract: ContractId,
-        bytecode: &[u8],
-        deploy_data: D,
-        deploy_gas_limit: u64,
+        wasm: Vec<u8>,
+        init_arg: Vec<u8>,
+        owner: Vec<u8>,
+        gas_limit: u64,
         closure: F,
     ) -> Result<Self, Error>
     where
@@ -457,24 +437,8 @@ impl Session {
         D: Into<ContractData<'a, A>>,
         F: FnOnce(ContractId, &mut Session) -> Result<(), Error>,
     {
-        let mut new_contract_data = deploy_data.into();
-
-        // If the contract being replaced exists, and the caller did not specify
-        // an owner, set the owner to the owner of the contract being replaced.
-        if let Some(old_contract_data) = self
-            .inner
-            .contract_session
-            .contract(contract)
-            .map_err(|err| PersistenceError(Arc::new(err)))?
-        {
-            if new_contract_data.owner.is_none() {
-                new_contract_data.owner =
-                    Some(old_contract_data.metadata.data().owner.clone());
-            }
-        }
-
         let new_contract =
-            self.deploy(bytecode, new_contract_data, deploy_gas_limit)?;
+            self.deploy_raw(None, wasm, init_arg, owner, gas_limit)?;
 
         closure(new_contract, &mut self)?;
 
@@ -571,32 +535,6 @@ impl Session {
         }
     }
 
-    /// Return the state root of the current state of the session.
-    ///
-    /// The state root is the root of a merkle tree whose leaves are the hashes
-    /// of the state of of each contract, ordered by their contract ID.
-    ///
-    /// It also doubles as the ID of a commit - the commit root.
-    pub fn root(&self) -> [u8; 32] {
-        self.inner.contract_session.root().into()
-    }
-
-    /// Returns an iterator over the pages (and their indices) of a contract's
-    /// memory, together with a proof of their inclusion in the state.
-    ///
-    /// The proof is a Merkle inclusion proof, and the caller is able to verify
-    /// it by using [`verify`], and matching the root with the one returned by
-    /// [`root`].
-    ///
-    /// [`verify`]: PageOpening::verify
-    /// [`root`]: Session::root
-    pub fn memory_pages(
-        &self,
-        contract: ContractId,
-    ) -> Option<impl Iterator<Item = (usize, &[u8], PageOpening)>> {
-        self.inner.contract_session.memory_pages(contract)
-    }
-
     pub(crate) fn push_event(&mut self, event: Event) {
         self.inner.events.push(event);
     }
@@ -608,29 +546,23 @@ impl Session {
 
     fn new_instance(
         &mut self,
-        contract_id: ContractId,
+        contract: ContractId,
     ) -> Result<WrappedInstance, Error> {
-        let store_data = self
+        let contract_data = self
             .inner
             .contract_session
-            .contract(contract_id)
+            .contract(contract)
             .map_err(|err| PersistenceError(Arc::new(err)))?
-            .ok_or(Error::ContractDoesNotExist(contract_id))?;
-
-        let contract = WrappedContract::new(
-            &self.engine,
-            store_data.bytecode,
-            Some(store_data.module.serialize()),
-        )?;
-
-        self.inner.current = contract_id;
+            .ok_or(Error::ContractDoesNotExist(contract))?;
 
         let instance = WrappedInstance::new(
+            contract,
             self.clone(),
-            contract_id,
-            &contract,
-            store_data.memory,
+            contract_data.module,
+            contract_data.memory,
         )?;
+
+        self.inner.current = contract;
 
         Ok(instance)
     }
@@ -724,7 +656,12 @@ impl Session {
             .contract_session
             .commit()
             .map(Into::into)
-            .map_err(|err| PersistenceError(Arc::new(err)))
+            .map_err(|err| {
+                PersistenceError(Arc::new(io::Error::new(
+                    io::ErrorKind::Other,
+                    err,
+                )))
+            })
     }
 
     #[cfg(feature = "debug")]
@@ -821,11 +758,14 @@ impl Session {
         Ok((ret, spent, call_tree))
     }
 
-    pub fn contract_metadata(
+    pub fn contract_data(
         &mut self,
-        contract_id: &ContractId,
-    ) -> Option<&ContractMetadata> {
-        self.inner.contract_session.contract_metadata(contract_id)
+        contract: ContractId,
+    ) -> Result<Option<ContractDataEntry>, Error> {
+        self.inner
+            .contract_session
+            .contract(contract)
+            .map_err(|err| Error::PersistenceError(Arc::new(err)))
     }
 }
 
@@ -875,14 +815,12 @@ impl CallReceipt<Vec<u8>> {
 #[derive(Debug, Default)]
 pub struct SessionData {
     data: BTreeMap<Cow<'static, str>, Vec<u8>>,
-    pub base: Option<[u8; 32]>,
 }
 
 impl SessionData {
     pub fn builder() -> SessionDataBuilder {
         SessionDataBuilder {
             data: BTreeMap::new(),
-            base: None,
         }
     }
 
@@ -899,7 +837,6 @@ impl From<SessionDataBuilder> for SessionData {
 
 pub struct SessionDataBuilder {
     data: BTreeMap<Cow<'static, str>, Vec<u8>>,
-    base: Option<[u8; 32]>,
 }
 
 impl SessionDataBuilder {
@@ -913,15 +850,7 @@ impl SessionDataBuilder {
         Ok(self)
     }
 
-    pub fn base(mut self, base: [u8; 32]) -> Self {
-        self.base = Some(base);
-        self
-    }
-
-    fn build(&self) -> SessionData {
-        SessionData {
-            data: self.data.clone(),
-            base: self.base,
-        }
+    fn build(self) -> SessionData {
+        SessionData { data: self.data }
     }
 }

@@ -112,3 +112,35 @@ impl Deref for Module {
         &self.module
     }
 }
+
+/// Custom extensions to [`dusk_wasmtime::Module`].
+pub trait ModuleExt {
+    /// Returns whether the module is 64-bit.
+    fn is_64_bit(&self) -> bool;
+
+    /// Returns whether the module declares a single memory.
+    fn has_single_memory(&self) -> bool;
+}
+
+impl ModuleExt for dusk_wasmtime::Module {
+    fn has_single_memory(&self) -> bool {
+        // Ensure the module only has one memory
+        let n_memories = self
+            .exports()
+            .filter_map(|exp| exp.ty().memory().map(|_| ()))
+            .count();
+
+        n_memories != 1
+    }
+
+    fn is_64_bit(&self) -> bool {
+        match self
+            .exports()
+            .filter_map(|exp| exp.ty().memory().map(|mem_ty| mem_ty.is_64()))
+            .next()
+        {
+            Some(is_64) => is_64,
+            None => false,
+        }
+    }
+}

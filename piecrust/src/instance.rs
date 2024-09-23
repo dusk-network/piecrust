@@ -83,21 +83,19 @@ impl Env {
 
 impl WrappedInstance {
     pub fn new(
+        contract: ContractId,
         session: Session,
-        contract_id: ContractId,
-        contract: &WrappedContract,
+        module: Module,
         memory: Memory,
     ) -> Result<Self, Error> {
         let mut memory = memory;
         let engine = session.engine().clone();
 
         let env = Env {
-            self_id: contract_id,
+            self_id: contract,
             session,
         };
 
-        let module =
-            unsafe { Module::deserialize(&engine, contract.as_bytes())? };
         let mut store = Store::new(&engine, env);
 
         // Ensure there is at most one memory exported, and that it is called

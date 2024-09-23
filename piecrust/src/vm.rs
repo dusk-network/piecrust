@@ -8,7 +8,8 @@ use std::any::Any;
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::fmt::{self, Debug, Formatter};
-use std::path::Path;
+use std::io;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::thread;
 
@@ -16,11 +17,11 @@ use dusk_wasmtime::{
     Config, Engine, ModuleVersionStrategy, OperatorCost, OptLevel, Strategy,
     WasmBacktraceDetails,
 };
-use tempfile::tempdir;
+use tempfile::NamedTempFile;
 
 use crate::config::BYTE_STORE_COST;
 use crate::session::{Session, SessionData};
-use crate::store::ContractStore;
+use crate::store::{ContractSession, StateStore, ZERO_HASH};
 use crate::Error::{self, PersistenceError};
 
 fn config() -> Config {
@@ -113,9 +114,9 @@ fn config() -> Config {
 /// [`Deletions`]: VM::delete_commit
 /// [`sync_thread`]: VM::sync_thread
 pub struct VM {
+    state_path: PathBuf,
     engine: Engine,
     host_queries: HostQueries,
-    store: ContractStore,
 }
 
 impl Debug for VM {
@@ -123,38 +124,41 @@ impl Debug for VM {
         f.debug_struct("VM")
             .field("config", self.engine.config())
             .field("host_queries", &self.host_queries)
-            .field("store", &self.store)
+            .field("state_path", &self.state_path)
             .finish()
     }
 }
 
 impl VM {
-    /// Creates a new `VM`, reading the given `dir`ectory for existing commits
-    /// and bytecode.
+    /// Creates a new [`VM`] using the state file at the given path.
     ///
-    /// The directory will be used to save any future session commits made by
-    /// this `VM` instance.
+    /// If there is no state file at the given path, one will be created, and
+    /// populated with an empty state.
     ///
     /// # Errors
-    /// If the directory contains unparseable or inconsistent data.
-    pub fn new<P: AsRef<Path>>(root_dir: P) -> Result<Self, Error> {
-        let config = config();
+    /// If the state file cannot be opened, or the underlying database
+    /// operations fail.
+    pub fn new<P: Into<PathBuf>>(state_path: P) -> Result<Self, Error> {
+        // We only need to open the state DB once to ensure that it is valid.
+        // Any sessions will open a new connection.
+        let state_path = state_path.into();
+        let _ = StateStore::open(ZERO_HASH, &state_path).map_err(|err| {
+            Error::PersistenceError(Arc::new(io::Error::other(err)))
+        })?;
 
+        let config = config();
         let engine = Engine::new(&config).expect(
             "Configuration should be valid since its set at compile time",
         );
 
-        let store = ContractStore::new(engine.clone(), root_dir)
-            .map_err(|err| PersistenceError(Arc::new(err)))?;
-
         Ok(Self {
+            state_path,
             engine,
             host_queries: HostQueries::default(),
-            store,
         })
     }
 
-    /// Creates a new `VM` using a new temporary directory.
+    /// Creates a new `VM` using a new temporary file.
     ///
     /// Any session commits made by this machine should be considered discarded
     /// once this `VM` instance drops.
@@ -162,22 +166,32 @@ impl VM {
     /// # Errors
     /// If creating a temporary directory fails.
     pub fn ephemeral() -> Result<Self, Error> {
-        let tmp = tempdir().map_err(|err| PersistenceError(Arc::new(err)))?;
-        let tmp = tmp.path().to_path_buf();
+        let tmp_state_file = NamedTempFile::new()
+            .map_err(|err| PersistenceError(Arc::new(err)))?;
+        let mut tmp_state_path = tmp_state_file.into_temp_path();
+
+        // we want to keep this temp file, since we can open it multiple times
+        // in the same process
+        let tmp_state_path = tmp_state_path
+            .keep()
+            .map_err(|err| PersistenceError(Arc::new(io::Error::other(err))))?;
+
+        // We only need to open the state DB once to ensure that it is valid.
+        // Any sessions will open a new connection.
+        let state_path = tmp_state_path.to_path_buf();
+        let _ = StateStore::open(ZERO_HASH, &state_path).map_err(|err| {
+            Error::PersistenceError(Arc::new(io::Error::other(err)))
+        })?;
 
         let config = config();
-
         let engine = Engine::new(&config).expect(
             "Configuration should be valid since its set at compile time",
         );
 
-        let store = ContractStore::new(engine.clone(), tmp)
-            .map_err(|err| PersistenceError(Arc::new(err)))?;
-
         Ok(Self {
+            state_path,
             engine,
             host_queries: HostQueries::default(),
-            store,
         })
     }
 
@@ -203,50 +217,55 @@ impl VM {
     /// [`Session`]: Session
     pub fn session(
         &self,
+        base_root: Option<[u8; 32]>,
         data: impl Into<SessionData>,
     ) -> Result<Session, Error> {
-        let data = data.into();
-        let contract_session = match data.base {
-            Some(base) => self
-                .store
-                .session(base.into())
-                .map_err(|err| PersistenceError(Arc::new(err)))?,
-            _ => self.store.genesis_session(),
-        };
+        let state_store = match base_root {
+            Some(root) => StateStore::open(root, &self.state_path),
+            None => StateStore::open(ZERO_HASH, &self.state_path),
+        }
+        .map_err(|err| {
+            Error::PersistenceError(Arc::new(io::Error::other(err)))
+        })?;
+
+        let contract_session =
+            ContractSession::new(self.engine.clone(), state_store);
+
         Ok(Session::new(
             self.engine.clone(),
             contract_session,
             self.host_queries.clone(),
-            data,
+            data.into(),
         ))
     }
 
     /// Return all existing commits.
-    pub fn commits(&self) -> Vec<[u8; 32]> {
-        self.store.commits().into_iter().map(Into::into).collect()
+    pub fn commits(&self) -> Result<Vec<[u8; 32]>, Error> {
+        StateStore::open(ZERO_HASH, &self.state_path)
+            .and_then(|mut state| state.commits())
+            .map_err(|err| {
+                Error::PersistenceError(Arc::new(io::Error::other(err)))
+            })
     }
 
     /// Deletes the given commit from disk.
     pub fn delete_commit(&self, root: [u8; 32]) -> Result<(), Error> {
-        self.store
-            .delete_commit(root.into())
-            .map_err(|err| PersistenceError(Arc::new(err)))
+        StateStore::open(ZERO_HASH, &self.state_path)
+            .and_then(|mut state| state.delete_commit(root))
+            .map_err(|err| {
+                Error::PersistenceError(Arc::new(io::Error::other(err)))
+            })
     }
 
-    /// Return the root directory of the virtual machine.
+    /// Return the path to the state of the virtual machine.
     ///
-    /// This is either the directory passed in by using [`new`], or the
-    /// temporary directory created using [`ephemeral`].
+    /// This is either the path passed in by using [`new`], or the temporary
+    /// directory created when using [`ephemeral`].
     ///
     /// [`new`]: VM::new
     /// [`ephemeral`]: VM::ephemeral
-    pub fn root_dir(&self) -> &Path {
-        self.store.root_dir()
-    }
-
-    /// Returns a reference to the synchronization thread.
-    pub fn sync_thread(&self) -> &thread::Thread {
-        self.store.sync_loop()
+    pub fn state_path(&self) -> &Path {
+        &self.state_path
     }
 }
 

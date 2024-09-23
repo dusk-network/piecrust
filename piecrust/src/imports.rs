@@ -20,6 +20,7 @@ use piecrust_uplink::{
 
 use crate::config::BYTE_STORE_COST;
 use crate::instance::{Env, WrappedInstance};
+use crate::store::ContractDataEntry;
 use crate::Error;
 
 pub const GAS_PASS_PCT: u64 = 93;
@@ -457,17 +458,17 @@ fn panic(fenv: Caller<Env>, arg_len: u32) -> WasmtimeResult<()> {
 fn get_metadata(
     env: &mut Env,
     contract_id_ofs: usize,
-) -> Option<&ContractMetadata> {
+) -> Result<Option<ContractDataEntry>, Error> {
     // The null pointer is always zero, so we can use this to check if the
     // caller wants their own ID.
     if contract_id_ofs == 0 {
         let self_id = env.self_contract_id().to_owned();
 
-        let contract_metadata = env
-            .contract_metadata(&self_id)
+        let contract_data = env
+            .contract_data(self_id)
             .expect("contract metadata should exist");
 
-        Some(contract_metadata)
+        Ok(contract_data)
     } else {
         let instance = env.self_instance();
 
@@ -479,7 +480,7 @@ fn get_metadata(
             ContractId::from_bytes(contract_id_bytes)
         });
 
-        env.contract_metadata(&contract_id)
+        env.contract_data(contract_id)
     }
 }
 
@@ -487,7 +488,7 @@ fn owner(mut fenv: Caller<Env>, mod_id_ofs: usize) -> WasmtimeResult<i32> {
     let instance = fenv.data().self_instance();
     check_ptr(instance, mod_id_ofs, CONTRACT_ID_BYTES)?;
     let env = fenv.data_mut();
-    match get_metadata(env, mod_id_ofs) {
+    match get_metadata(env, mod_id_ofs)? {
         None => Ok(0),
         Some(metadata) => {
             let owner = metadata.owner.as_slice();
@@ -504,10 +505,7 @@ fn owner(mut fenv: Caller<Env>, mod_id_ofs: usize) -> WasmtimeResult<i32> {
 fn self_id(mut fenv: Caller<Env>) {
     let env = fenv.data_mut();
     let self_id = env.self_contract_id().to_owned();
-    let contract_metadata = env
-        .contract_metadata(&self_id)
-        .expect("contract metadata should exist");
-    let slice = contract_metadata.contract_id.to_bytes();
+    let slice = self_id.to_bytes();
     let len = slice.len();
     env.self_instance()
         .with_arg_buf_mut(|arg| arg[..len].copy_from_slice(&slice));

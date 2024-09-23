@@ -11,24 +11,23 @@ use std::path::{Path, PathBuf};
 use std::sync::{mpsc, Arc};
 use std::{io, mem};
 
-use dusk_wasmtime::Engine;
+use dusk_wasmtime::{Engine, Module};
 use piecrust_uplink::ContractId;
+use rusqlite::Result;
 
 use crate::contract::ContractMetadata;
-use crate::store::tree::{Hash, PageOpening};
 use crate::store::{
-    Bytecode, Call, Commit, Memory, Metadata, Module, BYTECODE_DIR, MEMORY_DIR,
-    METADATA_EXTENSION, OBJECTCODE_EXTENSION, PAGE_SIZE,
+    Bytecode, Hash, Memory, Metadata, ModuleExt, StateStore, PAGE_SIZE,
 };
 use crate::Error;
 
 #[derive(Debug, Clone)]
 pub struct ContractDataEntry {
-    pub bytecode: Bytecode,
+    pub wasm: Vec<u8>,
     pub module: Module,
-    pub metadata: Metadata,
+    pub init_arg: Vec<u8>,
+    pub owner: Vec<u8>,
     pub memory: Memory,
-    pub is_new: bool,
 }
 
 /// The representation of a session with a [`ContractStore`].
@@ -44,79 +43,26 @@ pub struct ContractSession {
     contracts: BTreeMap<ContractId, ContractDataEntry>,
     engine: Engine,
 
-    base: Option<Commit>,
-    root_dir: PathBuf,
-
-    call: mpsc::Sender<Call>,
+    store: mem::MaybeUninit<StateStore>,
+    store_init: bool,
 }
 
 impl Debug for ContractSession {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("ContractSession")
             .field("contracts", &self.contracts)
-            .field("base", &self.base)
-            .field("root_dir", &self.root_dir)
             .finish()
     }
 }
 
 impl ContractSession {
-    pub(crate) fn new<P: AsRef<Path>>(
-        root_dir: P,
-        engine: Engine,
-        base: Option<Commit>,
-        call: mpsc::Sender<Call>,
-    ) -> Self {
+    pub(crate) fn new(engine: Engine, store: StateStore) -> Self {
         Self {
             contracts: BTreeMap::new(),
             engine,
-            base,
-            root_dir: root_dir.as_ref().into(),
-            call,
+            store: mem::MaybeUninit::new(store),
+            store_init: true,
         }
-    }
-
-    /// Returns the root that the session would have if one would decide to
-    /// commit it.
-    ///
-    /// Keep in mind that modifications to memories obtained using [`contract`],
-    /// may cause the root to be inconsistent. The caller should ensure that no
-    /// instance of [`Memory`] obtained via this session is being modified when
-    /// calling this function.
-    ///
-    /// [`contract`]: ContractSession::contract
-    pub fn root(&self) -> Hash {
-        let mut commit = self.base.clone().unwrap_or_default();
-        for (contract, entry) in &self.contracts {
-            commit.index.insert(*contract, &entry.memory);
-        }
-        let root = commit.index.root();
-
-        *root
-    }
-
-    /// Returns an iterator through all the pages of a contract, together with a
-    /// proof of their inclusion in the state.
-    pub fn memory_pages(
-        &self,
-        contract: ContractId,
-    ) -> Option<impl Iterator<Item = (usize, &[u8], PageOpening)>> {
-        let mut commit = self.base.clone().unwrap_or_default();
-        for (contract, entry) in &self.contracts {
-            commit.index.insert(*contract, &entry.memory);
-        }
-
-        let contract_data = self.contracts.get(&contract)?;
-        let inclusion_proofs = commit.index.inclusion_proofs(&contract)?;
-
-        let inclusion_proofs =
-            inclusion_proofs.map(move |(page_index, opening)| {
-                let page_offset = page_index * PAGE_SIZE;
-                let page = &contract_data.memory[page_offset..][..PAGE_SIZE];
-                (page_index, page, opening)
-            });
-
-        Some(inclusion_proofs)
     }
 
     /// Commits the given session to disk, consuming the session and adding it
@@ -127,34 +73,29 @@ impl ContractSession {
     /// instance of [`Memory`] obtained via this session is being modified when
     /// calling this function.
     ///
+    /// # Errors
+    /// If this function is called twice.
     /// # Safety
-    /// This method should only be called once, while immediately allowing the
-    /// `ContractSession` to drop.
+    /// The caller is encouraged to drop the session after this has been
+    /// executed, since the underlying store is destroyed.
     ///
     /// [`contract`]: ContractSession::contract
     pub fn commit(&mut self) -> io::Result<Hash> {
-        let (replier, receiver) = mpsc::sync_channel(1);
+        if !self.store_init {
+            return Err(io::Error::other("already committed this store"));
+        }
+        // TODO: Pump all contracts through to the store
 
-        let mut contracts = BTreeMap::new();
-        let mut base = self.base.as_ref().map(|c| Commit {
-            index: c.index.clone(),
-        });
+        let mut store = mem::MaybeUninit::uninit();
+        mem::swap(&mut store, &mut self.store);
+        let mut store = unsafe { store.assume_init() };
 
-        mem::swap(&mut self.contracts, &mut contracts);
-        mem::swap(&mut self.base, &mut base);
+        self.store_init = false;
 
-        self.call
-            .send(Call::Commit {
-                contracts,
-                base,
-                replier,
-            })
-            .expect("The receiver should never drop before sending");
+        let root = store.write_stored().map_err(io::Error::other)?;
+        store.commit().map_err(io::Error::other)?;
 
-        receiver
-            .recv()
-            .expect("The receiver should always receive a reply")
-            .map(|c| *c.index.root())
+        Ok(root)
     }
 
     /// Return the bytecode and memory belonging to the given `contract`, if it
@@ -171,80 +112,52 @@ impl ContractSession {
         &mut self,
         contract: ContractId,
     ) -> io::Result<Option<ContractDataEntry>> {
-        match self.contracts.entry(contract) {
-            Vacant(entry) => match &self.base {
-                None => Ok(None),
-                Some(base_commit) => {
-                    let base = base_commit.index.root();
+        let contract_data = match self.contracts.entry(contract) {
+            Vacant(entry) => {
+                let contract = contract.to_bytes();
+                match self
+                    .store
+                    .safe_assume_init()
+                    .load_contract(contract)
+                    .map_err(io::Error::other)?
+                {
+                    Some(contract_row) => {
+                        // SAFETY: we trust the input from the database
+                        let module = unsafe {
+                            Module::deserialize(
+                                &self.engine,
+                                contract_row.native,
+                            )
+                            .map_err(io::Error::other)?
+                        };
 
-                    match base_commit.index.contains_key(&contract) {
-                        true => {
-                            let base_hex = hex::encode(*base);
-                            let base_dir = self.root_dir.join(base_hex);
+                        let memory = Memory::with_pages(
+                            module.is_64_bit(),
+                            move |page_index: usize, page_buf: &mut [u8]| -> io::Result<usize> {
 
-                            let contract_hex = hex::encode(contract);
+                                todo!("");
+                                Ok(0)
+                            },
+                            contract_row.n_pages,
+                        )?;
 
-                            let bytecode_path =
-                                base_dir.join(BYTECODE_DIR).join(&contract_hex);
-                            let module_path = bytecode_path
-                                .with_extension(OBJECTCODE_EXTENSION);
-                            let metadata_path = bytecode_path
-                                .with_extension(METADATA_EXTENSION);
-                            let memory_path =
-                                base_dir.join(MEMORY_DIR).join(contract_hex);
+                        let contract_data = ContractDataEntry {
+                            wasm: contract_row.wasm,
+                            module,
+                            init_arg: contract_row.init_arg,
+                            owner: contract_row.owner,
+                            memory,
+                        };
 
-                            let bytecode = Bytecode::from_file(bytecode_path)?;
-                            let module =
-                                Module::from_file(&self.engine, module_path)?;
-                            let metadata = Metadata::from_file(metadata_path)?;
-
-                            let memory = match base_commit.index.get(&contract)
-                            {
-                                Some(elem) => {
-                                    let page_indices =
-                                        elem.page_indices.clone();
-                                    let memory_path = memory_path.clone();
-
-                                    Memory::from_files(
-                                        module.is_64(),
-                                        move |page_index: usize| {
-                                            match page_indices
-                                                .contains(&page_index)
-                                            {
-                                                true => {
-                                                    let page_path = memory_path
-                                                        .join(format!(
-                                                            "{page_index}"
-                                                        ));
-                                                    Some(page_path)
-                                                }
-                                                false => None,
-                                            }
-                                        },
-                                        elem.len,
-                                    )?
-                                }
-                                None => Memory::new(module.is_64())?,
-                            };
-
-                            let contract = entry
-                                .insert(ContractDataEntry {
-                                    bytecode,
-                                    module,
-                                    metadata,
-                                    memory,
-                                    is_new: false,
-                                })
-                                .clone();
-
-                            Ok(Some(contract))
-                        }
-                        false => Ok(None),
+                        entry.insert(contract_data).clone()
                     }
+                    None => return Ok(None),
                 }
-            },
-            Occupied(entry) => Ok(Some(entry.get().clone())),
-        }
+            }
+            Occupied(entry) => entry.get().clone(),
+        };
+
+        Ok(Some(contract_data))
     }
 
     /// Remove the given contract from the session.
@@ -252,54 +165,43 @@ impl ContractSession {
         self.contracts.remove(contract);
     }
 
-    /// Checks if contract is deployed
-    pub fn contract_deployed(&mut self, contract_id: ContractId) -> bool {
-        if self.contracts.contains_key(&contract_id) {
-            true
-        } else if let Some(base_commit) = &self.base {
-            base_commit.index.contains_key(&contract_id)
-        } else {
-            false
-        }
-    }
-
     /// Deploys bytecode to the contract store with the given its `contract_id`.
     ///
     /// See [`deploy`] for deploying bytecode without specifying a contract ID.
     ///
     /// [`deploy`]: ContractSession::deploy
-    pub fn deploy<B: AsRef<[u8]>>(
+    pub fn deploy(
         &mut self,
         contract_id: ContractId,
-        bytecode: B,
-        module: B,
-        metadata: ContractMetadata,
-        metadata_bytes: B,
+        wasm: Vec<u8>,
+        init_arg: Vec<u8>,
+        owner: Vec<u8>,
     ) -> io::Result<()> {
-        let bytecode = Bytecode::new(bytecode)?;
-        let module = Module::new(&self.engine, module)?;
-        let metadata = Metadata::new(metadata_bytes, metadata)?;
-        let memory = Memory::new(module.is_64())?;
-
-        // If the position is already filled in the tree, the contract cannot be
-        // inserted.
-        if let Some(base) = self.base.as_ref() {
-            if base.index.contains_key(&contract_id) {
-                return Err(io::Error::new(
-                    io::ErrorKind::Other,
-                    format!("Existing contract '{contract_id}'"),
-                ));
-            }
+        // If the contract already exists, return an error.
+        if let Some(base) = self
+            .store
+            .safe_assume_init()
+            .load_contract(contract_id.to_bytes())
+            .map_err(io::Error::other)?
+        {
+            return Err(io::Error::new(
+                io::ErrorKind::Other,
+                format!("Existing contract '{contract_id}'"),
+            ));
         }
+
+        let module =
+            Module::new(&self.engine, &wasm).map_err(io::Error::other)?;
+        let memory = Memory::new(module.is_64_bit())?;
 
         self.contracts.insert(
             contract_id,
             ContractDataEntry {
-                bytecode,
+                wasm,
                 module,
-                metadata,
+                init_arg,
+                owner,
                 memory,
-                is_new: true,
             },
         );
 
@@ -314,43 +216,38 @@ impl ContractSession {
         old_contract: ContractId,
         new_contract: ContractId,
     ) -> Result<(), Error> {
-        let mut new_contract_data =
-            self.contracts.remove(&new_contract).ok_or_else(|| {
-                Error::PersistenceError(Arc::new(io::Error::new(
-                    io::ErrorKind::Other,
-                    format!("Contract '{new_contract}' not found"),
-                )))
-            })?;
+        todo!("Replace a contract by another in the database");
 
-        // The new contract should have the ID of the old contract in its
-        // metadata.
-        new_contract_data.metadata.set_data(ContractMetadata {
-            contract_id: old_contract,
-            owner: new_contract_data.metadata.data().owner.clone(),
-        })?;
-
-        self.contracts.insert(old_contract, new_contract_data);
-
-        Ok(())
-    }
-
-    /// Provides metadata of the contract with a given `contract_id`.
-    pub fn contract_metadata(
-        &mut self,
-        contract_id: &ContractId,
-    ) -> Option<&ContractMetadata> {
-        let _ = self.contract(*contract_id);
-        self.contracts
-            .get(contract_id)
-            .map(|store_data| store_data.metadata.data())
+        // let mut new_contract_data =
+        //     self.contracts.remove(&new_contract).ok_or_else(|| {
+        //         Error::PersistenceError(Arc::new(io::Error::new(
+        //             io::ErrorKind::Other,
+        //             format!("Contract '{new_contract}' not found"),
+        //         )))
+        //     })?;
+        //
+        // // The new contract should have the ID of the old contract in its
+        // // metadata.
+        // new_contract_data.metadata.set_data(ContractMetadata {
+        //     contract_id: old_contract,
+        //     owner: new_contract_data.metadata.data().owner.clone(),
+        // })?;
+        //
+        // self.contracts.insert(old_contract, new_contract_data);
+        //
+        // Ok(())
     }
 }
 
-impl Drop for ContractSession {
-    fn drop(&mut self) {
-        if let Some(base) = self.base.take() {
-            let root = base.index.root();
-            let _ = self.call.send(Call::SessionDrop(*root));
-        }
+/// This allows us to only take the field, as opposed to the while struct.
+trait SafeMaybeUninit<T>: Sized {
+    fn safe_assume_init(&mut self) -> &mut T;
+}
+
+impl SafeMaybeUninit<StateStore> for mem::MaybeUninit<StateStore> {
+    // SAFETY: we ensure that this is always set, by always dropping after
+    // `fn commit`.
+    fn safe_assume_init(&mut self) -> &mut StateStore {
+        unsafe { self.assume_init_mut() }
     }
 }

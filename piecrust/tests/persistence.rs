@@ -67,7 +67,7 @@ fn session_commits_persistence() -> Result<(), Error> {
     }
 
     {
-        let vm2 = VM::new(vm.root_dir())?;
+        let vm2 = VM::new(vm.state_path())?;
         let mut session = vm2.session(SessionData::builder().base(commit_1))?;
 
         // check if both contracts' state was restored
@@ -84,7 +84,7 @@ fn session_commits_persistence() -> Result<(), Error> {
     }
 
     {
-        let vm3 = VM::new(vm.root_dir())?;
+        let vm3 = VM::new(vm.state_path())?;
         let mut session = vm3.session(SessionData::builder().base(commit_2))?;
 
         // check if both contracts' state was restored
@@ -132,7 +132,7 @@ fn contracts_persistence() -> Result<(), Error> {
 
     let commit_1 = session.commit()?;
 
-    let vm2 = VM::new(vm.root_dir())?;
+    let vm2 = VM::new(vm.state_path())?;
     let mut session2 = vm2.session(SessionData::builder().base(commit_1))?;
 
     // check if both contracts' state was restored
