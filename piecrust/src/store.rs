@@ -187,11 +187,16 @@ fn read_all_commits<P: AsRef<Path>>(
     let root_dir = root_dir.as_ref();
     let mut commits = BTreeMap::new();
 
+    // let commit = read_commit(engine, root_dir, None)?;
+    // let root = *commit.index.root();
+    // commits.insert(root, commit);
+
     for entry in fs::read_dir(root_dir)? {
         let entry = entry?;
         println!("entry={:?}", entry.path());
         if entry.path().is_dir() {
-            let commit = read_commit(engine, entry.path())?;
+            let _commit_id = entry.file_name().to_string_lossy().to_string();
+            let commit = read_commit(engine, entry.path(), None)?;
             let root = *commit.index.root();
             commits.insert(root, commit);
         }
@@ -203,9 +208,10 @@ fn read_all_commits<P: AsRef<Path>>(
 fn read_commit<P: AsRef<Path>>(
     engine: &Engine,
     commit_dir: P,
+    commit_id: Option<String>
 ) -> io::Result<Commit> {
     let commit_dir = commit_dir.as_ref();
-    let commit = commit_from_dir(engine, commit_dir)?;
+    let commit = commit_from_dir(engine, commit_dir, commit_id)?;
     Ok(commit)
 }
 
@@ -237,10 +243,19 @@ fn index_path_main<P: AsRef<Path>, S: AsRef<str>>(
 fn commit_from_dir<P: AsRef<Path>>(
     engine: &Engine,
     dir: P,
+    commit_id: Option<String>,
 ) -> io::Result<Commit> {
     let dir = dir.as_ref();
 
-    let index_path = dir.join(INDEX_FILE);
+    let index_path = match commit_id {
+        Some(commit_id) => {
+            dir.join(commit_id).join(INDEX_FILE)
+        },
+        _ => {
+            dir.join(INDEX_FILE)
+        }
+    };
+    println!("index_path={:?}", index_path);
     let index = index_from_path(index_path)?;
 
     let bytecode_dir = dir.join(BYTECODE_DIR);
@@ -293,6 +308,7 @@ fn commit_from_dir<P: AsRef<Path>>(
     })
 }
 
+// not sure we need it at all, the original reading function "commit_from_dir" should work fine
 #[allow(dead_code)]
 fn commit_from_main_dir<P: AsRef<Path>>(
     engine: &Engine,

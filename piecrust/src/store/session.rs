@@ -16,10 +16,7 @@ use piecrust_uplink::ContractId;
 
 use crate::contract::ContractMetadata;
 use crate::store::tree::{Hash, PageOpening};
-use crate::store::{
-    Bytecode, Call, Commit, Memory, Metadata, Module, BYTECODE_DIR, MEMORY_DIR,
-    METADATA_EXTENSION, OBJECTCODE_EXTENSION, PAGE_SIZE,
-};
+use crate::store::{Bytecode, Call, Commit, Memory, Metadata, Module, BYTECODE_DIR, MEMORY_DIR, METADATA_EXTENSION, OBJECTCODE_EXTENSION, PAGE_SIZE, MAIN_DIR};
 use crate::Error;
 
 #[derive(Debug, Clone)]
@@ -176,6 +173,7 @@ impl ContractSession {
             let commit_id = commit.index.root();
             hex::encode(commit_id.as_bytes())
         });
+        println!("xxCONTRACT commit_id={:?}", commit_id);
         match self.contracts.entry(contract) {
             Vacant(entry) => {
                 match &self.base {
@@ -185,8 +183,9 @@ impl ContractSession {
 
                         match base_commit.index.contains_key(&contract) {
                             true => {
-                                let base_hex = hex::encode(*base);
-                                let base_dir = self.root_dir.join(base_hex);
+                                let _base_hex = hex::encode(*base);
+                                // let base_dir = self.root_dir.join(base_hex);
+                                let base_dir = self.root_dir.parent().expect("Parent should exist").join(MAIN_DIR);
 
                                 let contract_hex = hex::encode(contract);
 
@@ -228,8 +227,10 @@ impl ContractSession {
                                                     true => {
                                                         let page_path =
                                                         if commit_id.is_some() && memory_path.join(commit_id.clone().unwrap()).join(format!("{page_index}")).is_file() {
+                                                            println!("xxCONTRACT VARIANT1 {:?}", memory_path.join(commit_id.clone().unwrap()).join(format!("{page_index}")));
                                                             memory_path.join(commit_id.clone().unwrap()).join(format!("{page_index}"))
                                                         } else {
+                                                            println!("xxCONTRACT VARIANT2 {:?}", memory_path.join(format!("{page_index}")));
                                                             memory_path.join(format!("{page_index}"))
                                                         };
                                                         Some(page_path)
