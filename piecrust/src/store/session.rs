@@ -176,7 +176,6 @@ impl ContractSession {
             let commit_id = commit.index.root();
             hex::encode(commit_id.as_bytes())
         });
-        println!("xxCONTRACT commit_id={:?}", commit_id);
         match self.contracts.entry(contract) {
             Vacant(entry) => {
                 match &self.base {
