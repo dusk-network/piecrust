@@ -67,6 +67,9 @@ pub struct StoredContract {
 /// A handle to the state, ready to perform any operations with it.
 pub struct StateStore(&'static mut StateStoreInner);
 
+unsafe impl Send for StateStore {}
+unsafe impl Sync for StateStore {}
+
 impl Drop for StateStore {
     fn drop(&mut self) {
         if self.0.ref_count.fetch_sub(1, Ordering::SeqCst) == 1 {
@@ -574,7 +577,7 @@ impl StateStore {
     }
 
     /// Commit all the changes made to the store.
-    pub fn commit(mut self) -> Result<()> {
+    pub fn commit(self) -> Result<()> {
         self.0.transaction.with_mut(|inner| {
             let tx = inner.tx.take().expect(
                 "`transaction` fields should be `Some` \

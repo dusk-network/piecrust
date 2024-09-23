@@ -55,6 +55,16 @@ impl Debug for ContractSession {
     }
 }
 
+impl Drop for ContractSession {
+    fn drop(&mut self) {
+        if self.store_init {
+            let mut store = mem::MaybeUninit::uninit();
+            mem::swap(&mut store, &mut self.store);
+            let mut store = unsafe { store.assume_init() };
+        }
+    }
+}
+
 impl ContractSession {
     pub(crate) fn new(engine: Engine, store: StateStore) -> Self {
         Self {
@@ -75,9 +85,6 @@ impl ContractSession {
     ///
     /// # Errors
     /// If this function is called twice.
-    /// # Safety
-    /// The caller is encouraged to drop the session after this has been
-    /// executed, since the underlying store is destroyed.
     ///
     /// [`contract`]: ContractSession::contract
     pub fn commit(&mut self) -> io::Result<Hash> {
@@ -86,6 +93,7 @@ impl ContractSession {
         }
         // TODO: Pump all contracts through to the store
 
+        // move the store out of the
         let mut store = mem::MaybeUninit::uninit();
         mem::swap(&mut store, &mut self.store);
         let mut store = unsafe { store.assume_init() };
@@ -131,12 +139,18 @@ impl ContractSession {
                             .map_err(io::Error::other)?
                         };
 
+                        let mut store = self.store.safe_assume_init().clone();
+
                         let memory = Memory::with_pages(
                             module.is_64_bit(),
                             move |page_index: usize, page_buf: &mut [u8]| -> io::Result<usize> {
-
-                                todo!("");
-                                Ok(0)
+                                match store.load_page(contract, page_index as u64).map_err(io::Error::other)? {
+                                    Some(page) => {
+                                        page_buf.copy_from_slice(&page);
+                                        Ok(PAGE_SIZE)
+                                    }
+                                    None => Ok(0),
+                                }
                             },
                             contract_row.n_pages,
                         )?;
