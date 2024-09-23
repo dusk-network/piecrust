@@ -260,8 +260,8 @@ fn commit_from_dir<P: AsRef<Path>>(
         .expect("Filename or folder name should exist")
         != MAIN_DIR
     {
-        // this means we are in a commit dir, need to back up for bytecode and
-        // memory paths to work correctly
+        // todo: this means we are in a commit dir, need to back up for bytecode
+        // and memory paths to work correctly
         dir.parent().expect("Parent should exist")
     } else {
         dir
@@ -311,80 +311,6 @@ fn commit_from_dir<P: AsRef<Path>>(
                 ));
             }
         }
-    }
-
-    //let _main_commmit = commit_from_main_dir(engine, dir)?;
-
-    Ok(Commit {
-        index,
-        paths: Vec::new(),
-    })
-}
-
-// not sure we need it at all, the original reading function "commit_from_dir"
-// should work fine
-#[allow(dead_code)]
-fn commit_from_main_dir<P: AsRef<Path>>(
-    engine: &Engine,
-    dir: P,
-) -> io::Result<Commit> {
-    let dir = dir.as_ref();
-
-    let index_dir_path = dir;
-    let commit_id = dir.file_name().expect("Filename should exist");
-    let main_path = dir
-        .parent()
-        .expect("Parent should exist")
-        .parent()
-        .expect("Parent should exist")
-        .join(MAIN_DIR);
-    println!(
-        "COMMIT FROM MAIN DIR commit_id={:?} main_path={:?}",
-        commit_id, main_path
-    );
-    let dir = main_path;
-
-    let index_path = if index_dir_path.is_dir() {
-        index_dir_path.join(INDEX_FILE)
-    } else {
-        dir.join(INDEX_FILE)
-    };
-    let index = index_from_path(index_path)?;
-
-    let bytecode_dir = dir.join(BYTECODE_DIR);
-    let _memory_dir = dir.join(MEMORY_DIR);
-
-    for (contract, _contract_index) in index.iter() {
-        let contract_hex = hex::encode(contract);
-
-        // Check that all contracts in the index file have a corresponding
-        // bytecode and memory pages specified.
-        let bytecode_path = bytecode_dir.join(&contract_hex);
-        if !bytecode_path.is_file() {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!("Non-existing bytecode for contract: {contract_hex}"),
-            ));
-        }
-
-        let module_path = bytecode_path.with_extension(OBJECTCODE_EXTENSION);
-
-        // SAFETY it is safe to deserialize the file here, since we don't use
-        // the module here. We just want to check if the file is valid.
-        if Module::from_file(engine, &module_path).is_err() {
-            let bytecode = Bytecode::from_file(bytecode_path)?;
-            let module = Module::from_bytecode(engine, bytecode.as_ref())
-                .map_err(|err| {
-                    io::Error::new(io::ErrorKind::InvalidData, err)
-                })?;
-            fs::write(module_path, module.serialize())?;
-        }
-
-        // let memory_dir = memory_dir.join(&contract_hex);
-
-        // for page_index in &contract_index.page_indices {
-        //     let _page_path = page_path(&memory_dir, *page_index);
-        // }
     }
 
     Ok(Commit {
@@ -705,8 +631,6 @@ fn write_commit_inner<P: AsRef<Path>, S: AsRef<str>>(
         let memory_dir = directories.memory_dir.join(&contract_hex);
 
         let memory_main_dir = directories.memory_main_dir.join(&contract_hex);
-        //println!("MAIN_DIR={:?}", directories.main_dir);
-        //println!("MAIN_MEMORY_DIR={:?}", memory_main_dir);
 
         fs::create_dir_all(&memory_dir)?;
         fs::create_dir_all(&memory_main_dir)?;
@@ -714,7 +638,6 @@ fn write_commit_inner<P: AsRef<Path>, S: AsRef<str>>(
         let mut pages = BTreeSet::new();
 
         // Write dirty pages and keep track of the page indices.
-        let mut _dp_count = 0;
         for (dirty_page, _, page_index) in contract_data.memory.dirty_pages() {
             let page_path1 = page_path(&memory_dir, *page_index);
             let page_path2: PathBuf = page_path_main(
@@ -728,10 +651,7 @@ fn write_commit_inner<P: AsRef<Path>, S: AsRef<str>>(
             //println!("FILE WRITTEN {:?}", page_path1);
             //println!("FILE WRITTEN MAIN {:?}", page_path2);
             pages.insert(*page_index);
-            //dp_count += 1;
         }
-        //println!("MEMORY_DIR {:?} dirty pages={}", memory_main_dir,
-        // dp_count);
 
         let bytecode_path = directories.bytecode_dir.join(&contract_hex);
         let module_path = bytecode_path.with_extension(OBJECTCODE_EXTENSION);
@@ -745,10 +665,7 @@ fn write_commit_inner<P: AsRef<Path>, S: AsRef<str>>(
             bytecode_main_path.with_extension(METADATA_EXTENSION);
 
         // If the contract is new, we write the bytecode, module, and metadata
-        // files to disk, otherwise we hard link them to avoid duplicating them.
-        //
-        // Also, if there is a base commit, we hard link the pages of the
-        // contracts that are not dirty.
+        // files to disk.
         if contract_data.is_new {
             fs::write(bytecode_path, &contract_data.bytecode)?;
             fs::write(module_path, &contract_data.module.serialize())?;
@@ -758,74 +675,7 @@ fn write_commit_inner<P: AsRef<Path>, S: AsRef<str>>(
             fs::write(module_main_path, &contract_data.module.serialize())?;
             fs::write(metadata_main_path, &contract_data.metadata)?;
         }
-        // else if let Some(base) = &directories.base {
-            // if let Some(elem) = base.inner.index.get(contract) {
-                // let base_bytecode_path = base.bytecode_dir.join(&contract_hex);
-                // let base_module_path =
-                //     base_bytecode_path.with_extension(OBJECTCODE_EXTENSION);
-                // let base_metadata_path =
-                //     base_bytecode_path.with_extension(METADATA_EXTENSION);
-
-                // let base_memory_dir = base.memory_dir.join(&contract_hex);
-
-                // fs::hard_link(base_bytecode_path, bytecode_path)?;
-                // fs::hard_link(base_module_path, module_path)?;
-                // fs::hard_link(base_metadata_path, metadata_path)?;
-
-                // for page_index in &elem.page_indices {
-                    // Only write the clean pages, since the dirty ones have
-                    // already been written.
-                    // if !pages.contains(page_index) {
-                        // let new_page_path = page_path(&memory_dir, *page_index);
-                        // let base_page_path =
-                        //     page_path(&base_memory_dir, *page_index);
-
-                        // fs::hard_link(base_page_path, new_page_path)?;
-                    // }
-                // }
-            // }
-        // }
     }
-
-    // if let Some(base) = &directories.base {
-    //     let mut _bytecode_etc_hard_links = 0;
-    //     let mut _pages_hard_links = 0;
-        // for (contract, elem) in base.inner.index.iter() {
-            // if !commit_contracts.contains_key(contract) {
-                // let contract_hex = hex::encode(contract);
-
-                // let bytecode_path =
-                //     directories.bytecode_dir.join(&contract_hex);
-                // let module_path =
-                //     bytecode_path.with_extension(OBJECTCODE_EXTENSION);
-                // let metadata_path =
-                //     bytecode_path.with_extension(METADATA_EXTENSION);
-
-                // let base_bytecode_path = base.bytecode_dir.join(&contract_hex);
-                // let base_module_path =
-                //     base_bytecode_path.with_extension(OBJECTCODE_EXTENSION);
-                // let base_metadata_path =
-                //     base_bytecode_path.with_extension(METADATA_EXTENSION);
-
-                // let memory_dir = directories.memory_dir.join(&contract_hex);
-                // let base_memory_dir = base.memory_dir.join(&contract_hex);
-
-                // fs::create_dir_all(&memory_dir)?;
-
-                // fs::hard_link(base_bytecode_path, bytecode_path)?;
-                // fs::hard_link(base_module_path, module_path)?;
-                // fs::hard_link(base_metadata_path, metadata_path)?;
-
-                // for page_index in &elem.page_indices {
-                    // let new_page_path = page_path(&memory_dir, *page_index);
-                    // let base_page_path =
-                    //     page_path(&base_memory_dir, *page_index);
-
-                    // fs::hard_link(base_page_path, new_page_path)?;
-                // }
-            // }
-        // }
-    // }
 
     let index_path = commit_dir.join(INDEX_FILE);
     let index_main_path = index_path_main(directories.main_dir, commit_id)?;
