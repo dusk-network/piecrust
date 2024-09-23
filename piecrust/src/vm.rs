@@ -237,7 +237,7 @@ impl VM {
 
     /// Finalizes the given commit on disk.
     pub fn finalize_commit(&self, root: [u8; 32]) -> Result<(), Error> {
-        println!("XFINALIZE COMMIT {}", hex::encode(root));
+        //println!("XFINALIZE COMMIT {}", hex::encode(root));
         self.store
             .finalize_commit(root.into())
             .map_err(|err| PersistenceError(Arc::new(err)))
