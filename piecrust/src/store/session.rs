@@ -16,7 +16,10 @@ use piecrust_uplink::ContractId;
 
 use crate::contract::ContractMetadata;
 use crate::store::tree::{Hash, PageOpening};
-use crate::store::{Bytecode, Call, Commit, Memory, Metadata, Module, BYTECODE_DIR, MEMORY_DIR, METADATA_EXTENSION, OBJECTCODE_EXTENSION, PAGE_SIZE, MAIN_DIR};
+use crate::store::{
+    Bytecode, Call, Commit, Memory, Metadata, Module, BYTECODE_DIR, MAIN_DIR,
+    MEMORY_DIR, METADATA_EXTENSION, OBJECTCODE_EXTENSION, PAGE_SIZE,
+};
 use crate::Error;
 
 #[derive(Debug, Clone)]
@@ -179,13 +182,17 @@ impl ContractSession {
                 match &self.base {
                     None => Ok(None),
                     Some(base_commit) => {
-                        let base = base_commit.index.root();
+                        let _base = base_commit.index.root();
 
                         match base_commit.index.contains_key(&contract) {
                             true => {
-                                let _base_hex = hex::encode(*base);
+                                // let base_hex = hex::encode(*base);
                                 // let base_dir = self.root_dir.join(base_hex);
-                                let base_dir = self.root_dir.parent().expect("Parent should exist").join(MAIN_DIR);
+                                let base_dir = self
+                                    .root_dir
+                                    .parent()
+                                    .expect("Parent should exist")
+                                    .join(MAIN_DIR);
 
                                 let contract_hex = hex::encode(contract);
 
