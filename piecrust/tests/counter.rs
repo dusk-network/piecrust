@@ -13,11 +13,13 @@ const LIMIT: u64 = 1_000_000;
 fn counter_read_simple() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 
-    let mut session = vm.session(SessionData::builder())?;
+    let mut session = vm.session(None, SessionData::builder())?;
 
     let id = session.deploy(
+        None,
         contract_bytecode!("counter"),
-        ContractData::builder().owner(OWNER),
+        &(),
+        OWNER,
         LIMIT,
     )?;
 
@@ -33,11 +35,13 @@ fn counter_read_simple() -> Result<(), Error> {
 fn counter_read_write_simple() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 
-    let mut session = vm.session(SessionData::builder())?;
+    let mut session = vm.session(None, SessionData::builder())?;
 
     let id = session.deploy(
+        None,
         contract_bytecode!("counter"),
-        ContractData::builder().owner(OWNER),
+        &(),
+        OWNER,
         LIMIT,
     )?;
 
@@ -60,16 +64,20 @@ fn counter_read_write_simple() -> Result<(), Error> {
 fn call_through_c() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 
-    let mut session = vm.session(SessionData::builder())?;
+    let mut session = vm.session(None, SessionData::builder())?;
 
     let counter_id = session.deploy(
+        None,
         contract_bytecode!("counter"),
-        ContractData::builder().owner(OWNER),
+        &(),
+        OWNER,
         LIMIT,
     )?;
     let c_example_id = session.deploy(
+        None,
         contract_bytecode!("c_example"),
-        ContractData::builder().owner(OWNER),
+        &(),
+        OWNER,
         LIMIT,
     )?;
 
@@ -92,11 +100,13 @@ fn call_through_c() -> Result<(), Error> {
 fn increment_panic() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 
-    let mut session = vm.session(SessionData::builder())?;
+    let mut session = vm.session(None, SessionData::builder())?;
 
     let counter_id = session.deploy(
+        None,
         contract_bytecode!("fallible_counter"),
-        ContractData::builder().owner(OWNER),
+        &(),
+        OWNER,
         LIMIT,
     )?;
 

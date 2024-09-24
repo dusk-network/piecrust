@@ -13,11 +13,13 @@ const LIMIT: u64 = 1_000_000;
 fn out_of_bounds() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 
-    let mut session = vm.session(SessionData::builder())?;
+    let mut session = vm.session(None, SessionData::builder())?;
 
     let c_example_id = session.deploy(
+        None,
         contract_bytecode!("c_example"),
-        ContractData::builder().owner(OWNER),
+        &(),
+        OWNER,
         LIMIT,
     )?;
 
@@ -32,14 +34,10 @@ fn out_of_bounds() -> Result<(), Error> {
 fn bad_contract() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 
-    let mut session = vm.session(SessionData::builder())?;
+    let mut session = vm.session(None, SessionData::builder())?;
 
     let _ = session
-        .deploy(
-            contract_bytecode!("invalid"),
-            ContractData::builder().owner(OWNER),
-            LIMIT,
-        )
+        .deploy(None, contract_bytecode!("invalid"), &(), OWNER, LIMIT)
         .expect_err("Deploying an invalid contract should error");
 
     Ok(())

@@ -89,13 +89,10 @@ fn new_ephemeral_vm() -> Result<VM, Error> {
 pub fn host_hash() -> Result<(), Error> {
     let vm = new_ephemeral_vm()?;
 
-    let mut session = vm.session(SessionData::builder())?;
+    let mut session = vm.session(None, SessionData::builder())?;
 
-    let id = session.deploy(
-        contract_bytecode!("host"),
-        ContractData::builder().owner(OWNER),
-        LIMIT,
-    )?;
+    let id =
+        session.deploy(None, contract_bytecode!("host"), &(), OWNER, LIMIT)?;
 
     let v = vec![0u8, 1, 2];
     let h = session
@@ -111,13 +108,10 @@ pub fn host_hash() -> Result<(), Error> {
 pub fn host_very_expensive_oog() -> Result<(), Error> {
     let vm = new_ephemeral_vm()?;
 
-    let mut session = vm.session(SessionData::builder())?;
+    let mut session = vm.session(None, SessionData::builder())?;
 
-    let id = session.deploy(
-        contract_bytecode!("host"),
-        ContractData::builder().owner(OWNER),
-        LIMIT,
-    )?;
+    let id =
+        session.deploy(None, contract_bytecode!("host"), &(), OWNER, LIMIT)?;
 
     let err = session
         .call::<_, String>(id, "host_very_expensive", &(), LIMIT)
@@ -180,13 +174,10 @@ impl Circuit for TestCircuit {
 pub fn host_proof() -> Result<(), Error> {
     let vm = new_ephemeral_vm()?;
 
-    let mut session = vm.session(SessionData::builder())?;
+    let mut session = vm.session(None, SessionData::builder())?;
 
-    let id = session.deploy(
-        contract_bytecode!("host"),
-        ContractData::builder().owner(OWNER),
-        LIMIT,
-    )?;
+    let id =
+        session.deploy(None, contract_bytecode!("host"), &(), OWNER, LIMIT)?;
 
     // 1. Generate proof and public inputs
     let (prover, _) = get_prover_verifier();

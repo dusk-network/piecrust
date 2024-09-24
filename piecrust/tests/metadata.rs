@@ -15,11 +15,13 @@ fn metadata() -> Result<(), Error> {
 
     let vm = VM::ephemeral()?;
 
-    let mut session = vm.session(SessionData::builder())?;
+    let mut session = vm.session(None, SessionData::builder())?;
 
     let id = session.deploy(
+        None,
         contract_bytecode!("metadata"),
-        ContractData::builder().owner(EXPECTED_OWNER),
+        &(),
+        EXPECTED_OWNER,
         LIMIT,
     )?;
 
@@ -35,7 +37,7 @@ fn metadata() -> Result<(), Error> {
 
     // owner should live across session boundaries
     let commit_id = session.commit()?;
-    let mut session = vm.session(SessionData::builder().base(commit_id))?;
+    let mut session = vm.session(Some(commit_id), SessionData::builder())?;
     let owner = session
         .call::<_, [u8; 33]>(id, "read_owner", &(), LIMIT)?
         .data;
@@ -59,20 +61,20 @@ fn owner_of() -> Result<(), Error> {
 
     let vm = VM::ephemeral()?;
 
-    let mut session = vm.session(SessionData::builder())?;
+    let mut session = vm.session(None, SessionData::builder())?;
 
     session.deploy(
+        Some(CONTRACT_ID_0),
         contract_bytecode!("metadata"),
-        ContractData::builder()
-            .owner(EXPECTED_OWNER_0)
-            .contract_id(CONTRACT_ID_0),
+        &(),
+        EXPECTED_OWNER_0,
         LIMIT,
     )?;
     session.deploy(
+        Some(CONTRACT_ID_1),
         contract_bytecode!("metadata"),
-        ContractData::builder()
-            .owner(EXPECTED_OWNER_1)
-            .contract_id(CONTRACT_ID_1),
+        &(),
+        EXPECTED_OWNER_1,
         LIMIT,
     )?;
 

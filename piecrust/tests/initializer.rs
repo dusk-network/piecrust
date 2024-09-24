@@ -14,11 +14,13 @@ const LIMIT: u64 = 1_000_000;
 fn init() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 
-    let mut session = vm.session(SessionData::builder())?;
+    let mut session = vm.session(None, SessionData::builder())?;
 
     let id = session.deploy(
+        None,
         contract_bytecode!("initializer"),
-        ContractData::builder().owner(OWNER).init_arg(&0xabu8),
+        &0xabu8,
+        OWNER,
         LIMIT,
     )?;
 
@@ -55,7 +57,7 @@ fn init() -> Result<(), Error> {
 
     // initialized state should live through across session boundaries
     let commit_id = session.commit()?;
-    let mut session = vm.session(SessionData::builder().base(commit_id))?;
+    let mut session = vm.session(Some(commit_id), SessionData::builder())?;
     assert_eq!(
         session.call::<_, u8>(id, "read_value", &(), LIMIT)?.data,
         0xac
@@ -76,11 +78,13 @@ fn init() -> Result<(), Error> {
 fn empty_init_argument() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 
-    let mut session = vm.session(SessionData::builder())?;
+    let mut session = vm.session(None, SessionData::builder())?;
 
     let id = session.deploy(
+        None,
         contract_bytecode!("empty_initializer"),
-        ContractData::builder().owner(OWNER),
+        &(),
+        OWNER,
         LIMIT,
     )?;
 

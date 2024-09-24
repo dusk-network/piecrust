@@ -20,15 +20,19 @@ fn session_commits_persistence() -> Result<(), Error> {
 
     let commit_1;
     {
-        let mut session = vm.session(SessionData::builder())?;
+        let mut session = vm.session(None, SessionData::builder())?;
         id_1 = session.deploy(
+            None,
             contract_bytecode!("counter"),
-            ContractData::builder().owner(OWNER),
+            &(),
+            OWNER,
             LIMIT,
         )?;
         id_2 = session.deploy(
+            None,
             contract_bytecode!("box"),
-            ContractData::builder().owner(OWNER),
+            &(),
+            OWNER,
             LIMIT,
         )?;
 
@@ -49,7 +53,7 @@ fn session_commits_persistence() -> Result<(), Error> {
 
     let commit_2;
     {
-        let mut session = vm.session(SessionData::builder().base(commit_1))?;
+        let mut session = vm.session(Some(commit_1), SessionData::builder())?;
 
         session.call::<_, ()>(id_1, "increment", &(), LIMIT)?;
         session.call::<i16, ()>(id_2, "set", &0x12, LIMIT)?;
@@ -68,7 +72,8 @@ fn session_commits_persistence() -> Result<(), Error> {
 
     {
         let vm2 = VM::new(vm.state_path())?;
-        let mut session = vm2.session(SessionData::builder().base(commit_1))?;
+        let mut session =
+            vm2.session(Some(commit_1), SessionData::builder())?;
 
         // check if both contracts' state was restored
         assert_eq!(
@@ -85,7 +90,8 @@ fn session_commits_persistence() -> Result<(), Error> {
 
     {
         let vm3 = VM::new(vm.state_path())?;
-        let mut session = vm3.session(SessionData::builder().base(commit_2))?;
+        let mut session =
+            vm3.session(Some(commit_2), SessionData::builder())?;
 
         // check if both contracts' state was restored
         assert_eq!(
@@ -105,17 +111,16 @@ fn session_commits_persistence() -> Result<(), Error> {
 #[test]
 fn contracts_persistence() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
-    let mut session = vm.session(SessionData::builder())?;
+    let mut session = vm.session(None, SessionData::builder())?;
     let id_1 = session.deploy(
+        None,
         contract_bytecode!("counter"),
-        ContractData::builder().owner(OWNER),
+        &(),
+        OWNER,
         LIMIT,
     )?;
-    let id_2 = session.deploy(
-        contract_bytecode!("box"),
-        ContractData::builder().owner(OWNER),
-        LIMIT,
-    )?;
+    let id_2 =
+        session.deploy(None, contract_bytecode!("box"), &(), OWNER, LIMIT)?;
 
     session.call::<_, ()>(id_1, "increment", &(), LIMIT)?;
     session.call::<i16, ()>(id_2, "set", &0x11, LIMIT)?;
@@ -133,7 +138,7 @@ fn contracts_persistence() -> Result<(), Error> {
     let commit_1 = session.commit()?;
 
     let vm2 = VM::new(vm.state_path())?;
-    let mut session2 = vm2.session(SessionData::builder().base(commit_1))?;
+    let mut session2 = vm2.session(Some(commit_1), SessionData::builder())?;
 
     // check if both contracts' state was restored
     assert_eq!(
@@ -154,11 +159,13 @@ fn contracts_persistence() -> Result<(), Error> {
 #[test]
 fn migration() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
-    let mut session = vm.session(SessionData::builder())?;
+    let mut session = vm.session(None, SessionData::builder())?;
 
     let contract = session.deploy(
+        None,
         contract_bytecode!("counter"),
-        ContractData::builder().owner(OWNER),
+        &(),
+        OWNER,
         LIMIT,
     )?;
 
@@ -167,12 +174,13 @@ fn migration() -> Result<(), Error> {
 
     let root = session.commit()?;
 
-    let mut session = vm.session(SessionData::builder().base(root))?;
+    let mut session = vm.session(Some(root), SessionData::builder())?;
 
     session = session.migrate(
         contract,
         contract_bytecode!("double_counter"),
-        ContractData::builder(),
+        &(),
+        OWNER,
         LIMIT,
         |new_contract, session| {
             let old_counter_value = session
@@ -199,7 +207,7 @@ fn migration() -> Result<(), Error> {
 
     let root = session.commit()?;
 
-    let mut session = vm.session(SessionData::builder().base(root))?;
+    let mut session = vm.session(Some(root), SessionData::builder())?;
 
     let (left_counter, right_counter) = session
         .call::<_, (i64, i64)>(contract, "read_values", &(), LIMIT)?
@@ -214,25 +222,28 @@ fn migration() -> Result<(), Error> {
 #[test]
 fn migration_new_owner() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
-    let mut session = vm.session(SessionData::builder())?;
+    let mut session = vm.session(None, SessionData::builder())?;
 
     const OWNER: [u8; 33] = [1u8; 33];
     const NEW_OWNER: [u8; 33] = [2u8; 33];
 
     let contract = session.deploy(
+        None,
         contract_bytecode!("counter"),
-        ContractData::builder().owner(OWNER),
+        &(),
+        OWNER,
         LIMIT,
     )?;
 
     let root = session.commit()?;
 
-    let mut session = vm.session(SessionData::builder().base(root))?;
+    let mut session = vm.session(Some(root), SessionData::builder())?;
 
     session = session.migrate(
         contract,
         contract_bytecode!("metadata"),
-        ContractData::builder().owner(NEW_OWNER),
+        &(),
+        NEW_OWNER,
         LIMIT,
         |_, _| Ok(()),
     )?;
@@ -247,60 +258,29 @@ fn migration_new_owner() -> Result<(), Error> {
 }
 
 #[test]
-fn migration_old_owner() -> Result<(), Error> {
-    let vm = VM::ephemeral()?;
-    let mut session = vm.session(SessionData::builder())?;
-
-    const OWNER: [u8; 33] = [1u8; 33];
-
-    let contract = session.deploy(
-        contract_bytecode!("counter"),
-        ContractData::builder().owner(OWNER),
-        LIMIT,
-    )?;
-
-    let root = session.commit()?;
-
-    let mut session = vm.session(SessionData::builder().base(root))?;
-
-    session = session.migrate(
-        contract,
-        contract_bytecode!("metadata"),
-        ContractData::builder(),
-        LIMIT,
-        |_, _| Ok(()),
-    )?;
-
-    let owner = session
-        .call::<_, [u8; 33]>(contract, "read_owner", &(), LIMIT)?
-        .data;
-
-    assert_eq!(owner, OWNER);
-
-    Ok(())
-}
-
-#[test]
 fn migration_self_id_remains_same() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
-    let mut session = vm.session(SessionData::builder())?;
+    let mut session = vm.session(None, SessionData::builder())?;
 
     const OWNER: [u8; 33] = [1u8; 33];
 
     let contract_id = session.deploy(
+        None,
         contract_bytecode!("counter"),
-        ContractData::builder().owner(OWNER),
+        &(),
+        OWNER,
         LIMIT,
     )?;
 
     let root = session.commit()?;
 
-    let mut session = vm.session(SessionData::builder().base(root))?;
+    let mut session = vm.session(Some(root), SessionData::builder())?;
 
     session = session.migrate(
         contract_id,
         contract_bytecode!("metadata"),
-        ContractData::builder(),
+        &(),
+        OWNER,
         LIMIT,
         |_, _| Ok(()),
     )?;

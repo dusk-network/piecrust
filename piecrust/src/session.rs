@@ -215,17 +215,16 @@ impl Session {
     ///
     /// # Panics
     /// If `deploy_data` does not specify an owner, this will panic.
-    pub fn deploy<'a, A, D>(
+    pub fn deploy<'a, A>(
         &mut self,
         contract_id: Option<ContractId>,
-        wasm: Vec<u8>,
+        wasm: impl Into<Vec<u8>>,
         init_arg: &A,
-        owner: Vec<u8>,
+        owner: impl Into<Vec<u8>>,
         gas_limit: u64,
     ) -> Result<ContractId, Error>
     where
         A: 'a + for<'b> Serialize<StandardBufSerializer<'b>>,
-        D: Into<ContractData<'a, A>>,
     {
         let mut sbuf = [0u8; SCRATCH_BUF_BYTES];
         let scratch = BufferScratch::new(&mut sbuf);
@@ -261,16 +260,25 @@ impl Session {
     pub fn deploy_raw(
         &mut self,
         contract_id: Option<ContractId>,
-        wasm: Vec<u8>,
-        init_arg: Vec<u8>,
-        owner: Vec<u8>,
+        wasm: impl Into<Vec<u8>>,
+        init_arg: impl Into<Vec<u8>>,
+        owner: impl Into<Vec<u8>>,
         gas_limit: u64,
     ) -> Result<ContractId, Error> {
+        let wasm = wasm.into();
+
         let contract_id = contract_id.unwrap_or({
             let hash = blake3::hash(&wasm);
             ContractId::from_bytes(hash.into())
         });
-        self.do_deploy(contract_id, wasm, init_arg, owner, gas_limit)?;
+
+        self.do_deploy(
+            contract_id,
+            wasm,
+            init_arg.into(),
+            owner.into(),
+            gas_limit,
+        )?;
 
         Ok(contract_id)
     }
@@ -375,11 +383,11 @@ impl Session {
     /// For more information about calls see [`call`].
     ///
     /// [`call`]: Session::call
-    pub fn call_raw<V: Into<Vec<u8>>>(
+    pub fn call_raw(
         &mut self,
         contract: ContractId,
         fn_name: &str,
-        fn_arg: V,
+        fn_arg: impl Into<Vec<u8>>,
         gas_limit: u64,
     ) -> Result<CallReceipt<Vec<u8>>, Error> {
         if fn_name == INIT_METHOD {
@@ -423,22 +431,21 @@ impl Session {
     /// # Panics
     /// If the owner of the new contract is not set in `deploy_data`, and the
     /// contract being replaced does not exist, this will panic.
-    pub fn migrate<'a, A, D, F>(
+    pub fn migrate<'a, A, F>(
         mut self,
         contract: ContractId,
-        wasm: Vec<u8>,
-        init_arg: Vec<u8>,
-        owner: Vec<u8>,
+        wasm: impl Into<Vec<u8>>,
+        init_arg: &A,
+        owner: impl Into<Vec<u8>>,
         gas_limit: u64,
         closure: F,
     ) -> Result<Self, Error>
     where
         A: 'a + for<'b> Serialize<StandardBufSerializer<'b>>,
-        D: Into<ContractData<'a, A>>,
         F: FnOnce(ContractId, &mut Session) -> Result<(), Error>,
     {
         let new_contract =
-            self.deploy_raw(None, wasm, init_arg, owner, gas_limit)?;
+            self.deploy(None, wasm, init_arg, owner, gas_limit)?;
 
         closure(new_contract, &mut self)?;
 

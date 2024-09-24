@@ -12,10 +12,12 @@ const LIMIT: u64 = 1_000_000;
 #[test]
 pub fn state_root_calculation() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
-    let mut session = vm.session(SessionData::builder())?;
+    let mut session = vm.session(None, SessionData::builder())?;
     let id_1 = session.deploy(
+        None,
         contract_bytecode!("counter"),
-        ContractData::builder().owner(OWNER),
+        &(),
+        OWNER,
         LIMIT,
     )?;
 
@@ -29,12 +31,9 @@ pub fn state_root_calculation() -> Result<(), Error> {
         "The commit root is the same as the state root"
     );
 
-    let mut session = vm.session(SessionData::builder().base(commit_1))?;
-    let id_2 = session.deploy(
-        contract_bytecode!("box"),
-        ContractData::builder().owner(OWNER),
-        LIMIT,
-    )?;
+    let mut session = vm.session(Some(commit_1), SessionData::builder())?;
+    let id_2 =
+        session.deploy(None, contract_bytecode!("box"), &(), OWNER, LIMIT)?;
     session.call::<i16, ()>(id_2, "set", &0x11, LIMIT)?;
     session.call::<_, ()>(id_1, "increment", &(), LIMIT)?;
 
@@ -50,7 +49,7 @@ pub fn state_root_calculation() -> Result<(), Error> {
         "The state root should change since the state changes"
     );
 
-    let session = vm.session(SessionData::builder().base(commit_2))?;
+    let session = vm.session(Some(commit_2), SessionData::builder())?;
     let root_3 = session.root();
 
     assert_eq!(root_2, root_3, "The root of a session should be the same if no modifications were made");

@@ -15,11 +15,13 @@ const LIMIT: u64 = 1_000_000;
 fn feed() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 
-    let mut session = vm.session(SessionData::builder())?;
+    let mut session = vm.session(None, SessionData::builder())?;
 
     let id = session.deploy(
+        None,
         contract_bytecode!("feeder"),
-        ContractData::builder().owner(OWNER),
+        &(),
+        OWNER,
         LIMIT,
     )?;
 
@@ -87,11 +89,13 @@ fn feed() -> Result<(), Error> {
 fn feed_errors_when_normal_call() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 
-    let mut session = vm.session(SessionData::builder())?;
+    let mut session = vm.session(None, SessionData::builder())?;
 
     let id = session.deploy(
+        None,
         contract_bytecode!("feeder"),
-        ContractData::builder().owner(OWNER),
+        &(),
+        OWNER,
         LIMIT,
     )?;
 
@@ -108,11 +112,13 @@ fn feed_errors_when_normal_call() -> Result<(), Error> {
 fn feed_out_of_gas() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 
-    let mut session = vm.session(SessionData::builder())?;
+    let mut session = vm.session(None, SessionData::builder())?;
 
     let id = session.deploy(
+        None,
         contract_bytecode!("feeder"),
-        ContractData::builder().owner(OWNER),
+        &(),
+        OWNER,
         LIMIT,
     )?;
 

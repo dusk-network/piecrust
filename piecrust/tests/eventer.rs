@@ -13,11 +13,13 @@ const LIMIT: u64 = 1_000_000;
 pub fn vm_center_events() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 
-    let mut session = vm.session(SessionData::builder())?;
+    let mut session = vm.session(None, SessionData::builder())?;
 
     let eventer_id = session.deploy(
+        None,
         contract_bytecode!("eventer"),
-        ContractData::builder().owner(OWNER),
+        &(),
+        OWNER,
         LIMIT,
     )?;
 
@@ -60,11 +62,13 @@ pub fn vm_center_events() -> Result<(), Error> {
 pub fn event_costs() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 
-    let mut session = vm.session(SessionData::builder())?;
+    let mut session = vm.session(None, SessionData::builder())?;
 
     let eventer_id = session.deploy(
+        None,
         contract_bytecode!("eventer"),
-        ContractData::builder().owner(OWNER),
+        &(),
+        OWNER,
         LIMIT,
     )?;
 

@@ -13,13 +13,10 @@ const LIMIT: u64 = 1_000_000;
 pub fn push_pop() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 
-    let mut session = vm.session(SessionData::builder())?;
+    let mut session = vm.session(None, SessionData::builder())?;
 
-    let id = session.deploy(
-        contract_bytecode!("stack"),
-        ContractData::builder().owner(OWNER),
-        LIMIT,
-    )?;
+    let id =
+        session.deploy(None, contract_bytecode!("stack"), &(), OWNER, LIMIT)?;
 
     let val = 42;
 
@@ -41,13 +38,10 @@ pub fn push_pop() -> Result<(), Error> {
 pub fn multi_push_pop() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 
-    let mut session = vm.session(SessionData::builder())?;
+    let mut session = vm.session(None, SessionData::builder())?;
 
-    let id = session.deploy(
-        contract_bytecode!("stack"),
-        ContractData::builder().owner(OWNER),
-        LIMIT,
-    )?;
+    let id =
+        session.deploy(None, contract_bytecode!("stack"), &(), OWNER, LIMIT)?;
 
     const N: i32 = 16;
 

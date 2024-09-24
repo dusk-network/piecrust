@@ -14,13 +14,10 @@ const LIMIT: u64 = 1_000_000;
 pub fn box_set_get() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 
-    let mut session = vm.session(SessionData::builder())?;
+    let mut session = vm.session(None, SessionData::builder())?;
 
-    let id = session.deploy(
-        contract_bytecode!("box"),
-        ContractData::builder().owner(OWNER),
-        LIMIT,
-    )?;
+    let id =
+        session.deploy(None, contract_bytecode!("box"), &(), OWNER, LIMIT)?;
 
     let value: Option<i16> = session.call(id, "get", &(), LIMIT)?.data;
 
@@ -39,13 +36,10 @@ pub fn box_set_get() -> Result<(), Error> {
 pub fn box_set_get_raw() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 
-    let mut session = vm.session(SessionData::builder())?;
+    let mut session = vm.session(None, SessionData::builder())?;
 
-    let id = session.deploy(
-        contract_bytecode!("box"),
-        ContractData::builder().owner(OWNER),
-        LIMIT,
-    )?;
+    let id =
+        session.deploy(None, contract_bytecode!("box"), &(), OWNER, LIMIT)?;
 
     let value_bytes = session.call_raw(id, "get", vec![], LIMIT)?.data;
     let value = deserialize_value(&value_bytes)?;

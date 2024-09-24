@@ -19,14 +19,8 @@ pub fn deploy_with_id() -> Result<(), Error> {
     let bytecode = contract_bytecode!("counter");
     let some_id = [1u8; 32];
     let contract_id = ContractId::from(some_id);
-    let mut session = vm.session(SessionData::builder())?;
-    session.deploy(
-        bytecode,
-        ContractData::builder()
-            .owner(OWNER)
-            .contract_id(contract_id),
-        LIMIT,
-    )?;
+    let mut session = vm.session(None, SessionData::builder())?;
+    session.deploy(Some(contract_id), bytecode, &(), OWNER, LIMIT)?;
 
     assert_eq!(
         session
@@ -53,12 +47,8 @@ fn call_non_deployed() -> Result<(), Error> {
 
     let bytecode = contract_bytecode!("double_counter");
     let counter_id = ContractId::from_bytes([1; 32]);
-    let mut session = vm.session(SessionData::builder())?;
-    session.deploy(
-        bytecode,
-        ContractData::builder().owner(OWNER).contract_id(counter_id),
-        LIMIT,
-    )?;
+    let mut session = vm.session(None, SessionData::builder())?;
+    session.deploy(Some(counter_id), bytecode, &(), OWNER, LIMIT)?;
 
     let (value, _) = session
         .call::<_, (i64, i64)>(counter_id, "read_values", &(), LIMIT)?

@@ -13,11 +13,13 @@ const LIMIT: u64 = 1_000_000;
 pub fn fibo() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 
-    let mut session = vm.session(SessionData::builder())?;
+    let mut session = vm.session(None, SessionData::builder())?;
 
     let id = session.deploy(
+        None,
         contract_bytecode!("fibonacci"),
-        ContractData::builder().owner(OWNER),
+        &(),
+        OWNER,
         LIMIT,
     )?;
 

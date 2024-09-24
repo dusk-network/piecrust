@@ -14,11 +14,13 @@ const LIMIT: u64 = 40_000_000;
 fn grow_a_bunch() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 
-    let mut session = vm.session(SessionData::builder())?;
+    let mut session = vm.session(None, SessionData::builder())?;
 
     let id = session.deploy(
+        None,
         contract_bytecode!("grower"),
-        ContractData::builder().owner(OWNER),
+        &(),
+        OWNER,
         LIMIT,
     )?;
 
@@ -29,7 +31,7 @@ fn grow_a_bunch() -> Result<(), Error> {
     }
 
     let root = session.commit()?;
-    let mut session = vm.session(SessionData::builder().base(root))?;
+    let mut session = vm.session(Some(root), SessionData::builder())?;
 
     for b in 0..=u8::MAX {
         let offset = b as u32 * ARGBUF_LEN as u32;
@@ -56,17 +58,21 @@ fn grow_a_bunch() -> Result<(), Error> {
 fn error_reverts_growth() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 
-    let mut session = vm.session(SessionData::builder())?;
-    let mut session_err = vm.session(SessionData::builder())?;
+    let mut session = vm.session(None, SessionData::builder())?;
+    let mut session_err = vm.session(None, SessionData::builder())?;
 
     let id = session.deploy(
+        None,
         contract_bytecode!("grower"),
-        ContractData::builder().owner(OWNER),
+        &(),
+        OWNER,
         LIMIT,
     )?;
     let _ = session_err.deploy(
+        None,
         contract_bytecode!("grower"),
-        ContractData::builder().owner(OWNER),
+        &(),
+        OWNER,
         LIMIT,
     )?;
 

@@ -905,7 +905,7 @@ impl<'tx> Statements<'tx> {
 
 #[cfg(test)]
 mod tests {
-    use crate::*;
+    use super::*;
 
     #[test]
     fn simple_open() {
