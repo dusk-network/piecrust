@@ -255,11 +255,18 @@ fn commit_from_dir<P: AsRef<Path>>(
     dir: P,
 ) -> io::Result<Commit> {
     let dir = dir.as_ref();
+    let mut commit_id: Option<String> = None;
     let main_dir = if dir
         .file_name()
         .expect("Filename or folder name should exist")
         != MAIN_DIR
     {
+        commit_id = Some(
+            dir.file_name()
+                .expect("Filename or folder name should exist")
+                .to_string_lossy()
+                .to_string(),
+        );
         // todo: this means we are in a commit dir, need to back up for bytecode
         // and memory paths to work correctly
         dir.parent().expect("Parent should exist")
@@ -300,15 +307,32 @@ fn commit_from_dir<P: AsRef<Path>>(
             fs::write(module_path, module.serialize())?;
         }
 
-        let memory_dir = memory_dir.join(&contract_hex);
+        let contract_memory_dir = memory_dir.join(&contract_hex);
+        let maybe_commit_contract_memory_dir = commit_id
+            .as_ref()
+            .map(|cid| memory_dir.join(&contract_hex).join(cid));
 
         for page_index in &contract_index.page_indices {
-            let page_path = page_path(&memory_dir, *page_index);
-            if !page_path.is_file() {
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    format!("Non-existing memory for contract: {contract_hex}"),
-                ));
+            let main_page_path = page_path(&contract_memory_dir, *page_index);
+            if !main_page_path.is_file() {
+                let mut found = false;
+                if let Some(ref commit_contract_memory_dir) =
+                    maybe_commit_contract_memory_dir
+                {
+                    let commit_page_path =
+                        page_path(&commit_contract_memory_dir, *page_index);
+                    if commit_page_path.is_file() {
+                        found = true;
+                    }
+                }
+                if !found {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        format!(
+                            "Non-existing memory for contract: {contract_hex}"
+                        ),
+                    ));
+                }
             }
         }
     }
@@ -703,14 +727,22 @@ fn delete_commit_dir<P: AsRef<Path>>(
     let root = hex::encode(root);
     println!("ACTUAL DELETION OF {}", root);
     let commit_dir = root_dir.as_ref().join(root.clone());
-    let r = fs::remove_dir_all(commit_dir);
+    let mut r = Ok(());
+    if commit_dir.exists() {
+        r = fs::remove_dir_all(commit_dir);
+    }
     let root_main_dir = root_dir
         .as_ref()
         .parent()
         .expect("Parent should exist")
         .join(MAIN_DIR);
     let commit_index_dir = root_main_dir.join(root);
-    let _r = fs::remove_dir_all(commit_index_dir); // todo: make sure r is returned eventually
+    let mut r2 = Ok(());
+    if commit_index_dir.exists() {
+        r2 = fs::remove_dir_all(commit_index_dir); // todo: make sure r2 is
+                                                   // returned eventually
+    }
+    print!("delete commit dir results={:?} {:?}", r, r2);
     r
 }
 
