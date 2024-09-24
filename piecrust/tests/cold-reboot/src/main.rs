@@ -22,16 +22,12 @@ fn initialize_counter<P: AsRef<Path>>(
     vm: &VM,
     commit_id_file_path: P,
 ) -> Result<(), piecrust::Error> {
-    let mut session = vm.session(SessionData::builder())?;
+    let mut session = vm.session(None, SessionData::builder())?;
 
     let counter_bytecode =
         include_bytes!("../../../../target/stripped/counter.wasm");
 
-    session.deploy(
-        counter_bytecode,
-        ContractData::builder().owner(OWNER).contract_id(COUNTER_ID),
-        u64::MAX,
-    )?;
+    session.deploy(Some(COUNTER_ID), counter_bytecode, &(), OWNER, u64::MAX)?;
     session.call::<_, ()>(COUNTER_ID, "increment", &(), u64::MAX)?;
 
     let commit_root = session.commit()?;
@@ -52,7 +48,7 @@ fn confirm_counter<P: AsRef<Path>>(
     commit_root.copy_from_slice(&commit_root_bytes);
 
     let mut session = vm
-        .session(SessionData::builder().base(commit_root))
+        .session(Some(commit_root), SessionData::builder())
         .expect("Instantiating session from given root should succeed");
 
     assert_eq!(

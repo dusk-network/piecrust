@@ -9,10 +9,11 @@ use std::collections::BTreeMap;
 use std::fmt::{Debug, Formatter};
 use std::io;
 use std::mem;
+use std::path::Path;
 use std::sync::{mpsc, Arc};
 
 use bytecheck::CheckBytes;
-use dusk_wasmtime::{Engine, LinearMemory, MemoryCreator, MemoryType};
+use dusk_wasmtime::{Config, Engine, LinearMemory, MemoryCreator, MemoryType};
 use piecrust_uplink::{
     ContractId, Event, ARGBUF_LEN, CONTRACT_ID_BYTES, SCRATCH_BUF_BYTES,
 };
@@ -29,7 +30,7 @@ use crate::call_tree::{CallTree, CallTreeElem};
 use crate::contract::{ContractData, ContractMetadata, WrappedContract};
 use crate::error::Error::{self, InitalizationError, PersistenceError};
 use crate::instance::WrappedInstance;
-use crate::store::{ContractDataEntry, ContractSession, PAGE_SIZE};
+use crate::store::{ContractDataEntry, ContractSession, StateStore, PAGE_SIZE};
 use crate::types::StandardBufSerializer;
 use crate::vm::{HostQueries, HostQuery};
 
@@ -52,7 +53,6 @@ unsafe impl Sync for Session {}
 /// [`call`]: Session::call
 /// [`commit`]: Session::commit
 pub struct Session {
-    engine: Engine,
     inner: &'static mut SessionInner,
     original: bool,
 }
@@ -84,12 +84,11 @@ impl Drop for Session {
     }
 }
 
-#[derive(Debug)]
 struct SessionInner {
     current: ContractId,
+    instances: BTreeMap<ContractId, *mut WrappedInstance>,
 
     call_tree: CallTree,
-    instances: BTreeMap<ContractId, *mut WrappedInstance>,
     debug: Vec<String>,
     data: SessionData,
 
@@ -99,6 +98,23 @@ struct SessionInner {
 
     feeder: Option<mpsc::Sender<Vec<u8>>>,
     events: Vec<Event>,
+}
+
+impl Debug for SessionInner {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SessionInner")
+            .field("current", &self.current)
+            .field("instances", &self.instances)
+            .field("call_tree", &self.call_tree)
+            .field("debug", &self.debug)
+            .field("data", &self.data)
+            .field("contract_session", &self.contract_session)
+            .field("host_queries", &self.host_queries)
+            .field("buffer", &self.buffer)
+            .field("feeder", &self.feeder)
+            .field("events", &self.events)
+            .finish()
+    }
 }
 
 unsafe impl MemoryCreator for Session {
@@ -135,18 +151,26 @@ unsafe impl MemoryCreator for Session {
 
 impl Session {
     pub(crate) fn new(
-        engine: Engine,
-        contract_session: ContractSession,
+        state_path: impl AsRef<Path>,
+        base_root: [u8; 32],
         host_queries: HostQueries,
         data: SessionData,
-    ) -> Self {
+        engine: Engine,
+    ) -> Result<Self, Error> {
+        let state_store =
+            StateStore::open(base_root, state_path).map_err(|err| {
+                Error::PersistenceError(Arc::new(io::Error::other(err)))
+            })?;
+
+        let mut config = engine.config().clone();
+
         let inner = SessionInner {
             current: ContractId::from_bytes([0; CONTRACT_ID_BYTES]),
             call_tree: CallTree::new(),
             instances: BTreeMap::new(),
             debug: vec![],
             data,
-            contract_session,
+            contract_session: ContractSession::new(engine, state_store),
             host_queries,
             buffer: vec![0; PAGE_SIZE],
             feeder: None,
@@ -154,21 +178,20 @@ impl Session {
         };
 
         // This implementation purposefully boxes and leaks the `SessionInner`.
-        let inner = Box::leak(Box::new(inner));
-
-        let mut session = Self {
-            engine: engine.clone(),
-            inner,
+        let session = Self {
+            inner: Box::leak(Box::new(inner)),
             original: true,
         };
 
-        let mut config = engine.config().clone();
         config.with_host_memory(Arc::new(session.clone()));
+        let engine = Engine::new(&config)?;
 
-        session.engine = Engine::new(&config)
-            .expect("Engine configuration is set at compile time");
+        session.inner.contract_session.set_engine(engine);
 
-        session
+        // session.inner.engine = Engine::new(&config)
+        //     .expect("Engine configuration is set at compile time");
+
+        Ok(session)
     }
 
     /// Clone the given session. We explicitly **do not** implement the
@@ -183,15 +206,9 @@ impl Session {
         // SAFETY: we explicitly allow aliasing of the session for internal
         // use.
         Self {
-            engine: self.engine.clone(),
             inner: unsafe { &mut *inner },
             original: false,
         }
-    }
-
-    /// Return a reference to the engine used in this session.
-    pub(crate) fn engine(&self) -> &Engine {
-        &self.engine
     }
 
     /// Deploy a contract, returning its [`ContractId`]. The ID is computed
@@ -562,14 +579,14 @@ impl Session {
             .map_err(|err| PersistenceError(Arc::new(err)))?
             .ok_or(Error::ContractDoesNotExist(contract))?;
 
+        self.inner.current = contract;
+
         let instance = WrappedInstance::new(
             contract,
             self.clone(),
             contract_data.module,
             contract_data.memory,
         )?;
-
-        self.inner.current = contract;
 
         Ok(instance)
     }

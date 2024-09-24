@@ -168,7 +168,7 @@ impl VM {
     pub fn ephemeral() -> Result<Self, Error> {
         let tmp_state_file = NamedTempFile::new()
             .map_err(|err| PersistenceError(Arc::new(err)))?;
-        let mut tmp_state_path = tmp_state_file.into_temp_path();
+        let tmp_state_path = tmp_state_file.into_temp_path();
 
         // we want to keep this temp file, since we can open it multiple times
         // in the same process
@@ -220,23 +220,13 @@ impl VM {
         base_root: Option<[u8; 32]>,
         data: impl Into<SessionData>,
     ) -> Result<Session, Error> {
-        let state_store = match base_root {
-            Some(root) => StateStore::open(root, &self.state_path),
-            None => StateStore::open(ZERO_HASH, &self.state_path),
-        }
-        .map_err(|err| {
-            Error::PersistenceError(Arc::new(io::Error::other(err)))
-        })?;
-
-        let contract_session =
-            ContractSession::new(self.engine.clone(), state_store);
-
-        Ok(Session::new(
-            self.engine.clone(),
-            contract_session,
+        Session::new(
+            &self.state_path,
+            base_root.unwrap_or(ZERO_HASH),
             self.host_queries.clone(),
             data.into(),
-        ))
+            self.engine.clone(),
+        )
     }
 
     /// Return all existing commits.

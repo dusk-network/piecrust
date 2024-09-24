@@ -89,7 +89,7 @@ impl WrappedInstance {
         memory: Memory,
     ) -> Result<Self, Error> {
         let mut memory = memory;
-        let engine = session.engine().clone();
+        let engine = module.engine().clone();
 
         let env = Env {
             self_id: contract,

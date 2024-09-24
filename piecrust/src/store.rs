@@ -619,7 +619,7 @@ impl StateStore {
             wasm     BLOB NOT NULL, \
             native   BLOB NOT NULL, \
             init_arg BLOB NOT NULL, \
-            owner    BLOB NOT NULL \
+            owner    BLOB NOT NULL, \
             n_pages  INTEGER NOT NULL \
         ) STRICT;";
 

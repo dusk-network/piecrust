@@ -60,19 +60,24 @@ impl Drop for ContractSession {
         if self.store_init {
             let mut store = mem::MaybeUninit::uninit();
             mem::swap(&mut store, &mut self.store);
-            let mut store = unsafe { store.assume_init() };
+            let _ = unsafe { store.assume_init() };
         }
     }
 }
 
 impl ContractSession {
-    pub(crate) fn new(engine: Engine, store: StateStore) -> Self {
+    pub fn new(engine: Engine, store: StateStore) -> Self {
         Self {
             contracts: BTreeMap::new(),
             engine,
             store: mem::MaybeUninit::new(store),
             store_init: true,
         }
+    }
+
+    /// Sets the engine used for compilation/decompilation.
+    pub fn set_engine(&mut self, engine: Engine) {
+        self.engine = engine;
     }
 
     /// Commits the given session to disk, consuming the session and adding it
