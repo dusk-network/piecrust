@@ -163,7 +163,8 @@ impl VM {
     /// If creating a temporary directory fails.
     pub fn ephemeral() -> Result<Self, Error> {
         let tmp = tempdir().map_err(|err| PersistenceError(Arc::new(err)))?;
-        let tmp = tmp.path().join("stump").to_path_buf(); // stump is needed for parent calls working correctly with temporary directories
+        let tmp = tmp.path().join("stump").to_path_buf(); // stump is needed for parent calls working correctly with temporary
+                                                          // directories
         println!("tmp={:?}", tmp);
 
         let config = config();
