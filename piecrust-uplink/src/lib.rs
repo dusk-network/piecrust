@@ -79,7 +79,7 @@ mod error;
 pub use error::*;
 
 /// How many bytes to use for scratch space when serializing
-pub const SCRATCH_BUF_BYTES: usize = 64;
+pub const SCRATCH_BUF_BYTES: usize = 1024;
 
 /// The size of the argument buffer in bytes
 pub const ARGBUF_LEN: usize = 64 * 1024;
