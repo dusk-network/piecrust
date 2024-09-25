@@ -187,10 +187,7 @@ fn read_all_commits<P: AsRef<Path>>(
     let root_dir = root_dir.as_ref();
     let mut commits = BTreeMap::new();
 
-    let root_dir = root_dir
-        .parent()
-        .expect("Parent should exist")
-        .join(MAIN_DIR);
+    let root_dir = root_dir.join(MAIN_DIR);
     fs::create_dir_all(root_dir.clone())?;
 
     if root_dir.join(INDEX_FILE).is_file() {
@@ -204,7 +201,7 @@ fn read_all_commits<P: AsRef<Path>>(
         println!("entry={:?}", entry.path());
         if entry.path().is_dir() {
             let filename = entry.file_name().to_string_lossy().to_string();
-            if filename == "memory" || filename == "bytecode" {
+            if filename == MEMORY_DIR || filename == BYTECODE_DIR {
                 continue;
             }
             let commit = read_commit(engine, entry.path())?;
@@ -554,19 +551,12 @@ fn write_commit<P: AsRef<Path>>(
         return Ok(commit.clone());
     }
 
-    match write_commit_inner(
-        root_dir,
-        index,
-        commit_contracts,
-        root_hex,
-    ) {
+    match write_commit_inner(root_dir, index, commit_contracts, root_hex) {
         Ok(commit) => {
             commits.insert(root, commit.clone());
             Ok(commit)
         }
-        Err(err) => {
-            Err(err)
-        }
+        Err(err) => Err(err),
     }
 }
 
@@ -578,8 +568,9 @@ fn write_commit_inner<P: AsRef<Path>, S: AsRef<str>>(
     commit_id: S,
 ) -> io::Result<Commit> {
     println!(
-        "WRITE_COMMIT_INNER: root_dir={:?}",
+        "WRITE_COMMIT_INNER: root_dir={:?} commit contracts={:?}",
         root_dir.as_ref(),
+        commit_contracts.keys()
     );
     let root_dir = root_dir.as_ref();
     let mut paths = Vec::new();
@@ -591,10 +582,7 @@ fn write_commit_inner<P: AsRef<Path>, S: AsRef<str>>(
     }
 
     let directories = {
-        let main_dir = root_dir
-            .parent()
-            .expect("root parent should exist")
-            .join(MAIN_DIR);
+        let main_dir = root_dir.join(MAIN_DIR);
         fs::create_dir_all(&main_dir)?;
         println!("created1 {:?}", main_dir);
 
@@ -613,8 +601,7 @@ fn write_commit_inner<P: AsRef<Path>, S: AsRef<str>>(
         }
     };
 
-    // Write the dirty pages contracts of contracts to disk. If the contract
-    // already existed in the base commit, we hard link
+    // Write the dirty pages contracts of contracts to disk.
     for (contract, contract_data) in &commit_contracts {
         let contract_hex = hex::encode(contract);
 
@@ -626,13 +613,13 @@ fn write_commit_inner<P: AsRef<Path>, S: AsRef<str>>(
 
         // Write dirty pages and keep track of the page indices.
         for (dirty_page, _, page_index) in contract_data.memory.dirty_pages() {
-            let page_path2: PathBuf = page_path_main(
+            let page_path: PathBuf = page_path_main(
                 &memory_main_dir,
                 *page_index,
                 commit_id.as_ref(),
             )?;
-            fs::write(page_path2.clone(), dirty_page)?;
-            paths.push(page_path2.clone());
+            fs::write(page_path.clone(), dirty_page)?;
+            paths.push(page_path.clone());
             pages.insert(*page_index);
         }
 
@@ -675,11 +662,7 @@ fn delete_commit_dir<P: AsRef<Path>>(
 ) -> io::Result<()> {
     let root = hex::encode(root);
     println!("ACTUAL DELETION OF {}", root);
-    let root_main_dir = root_dir
-        .as_ref()
-        .parent()
-        .expect("Parent should exist")
-        .join(MAIN_DIR);
+    let root_main_dir = root_dir.as_ref().join(MAIN_DIR);
     let commit_index_dir = root_main_dir.join(root);
     let mut r = Ok(());
     if commit_index_dir.exists() {
@@ -696,13 +679,9 @@ fn finalize_commit<P: AsRef<Path>>(
     root_dir: P,
     commit: &Commit,
 ) -> io::Result<()> {
-    let main_dir = root_dir
-        .as_ref()
-        .parent()
-        .expect("root parent should exist")
-        .join(MAIN_DIR);
+    let main_dir = root_dir.as_ref().join(MAIN_DIR);
     let root = hex::encode(root);
-    println!("FINALIZATION OF {}", root);
+    println!("FINALIZATION OF {} in main dir={:?}", root, main_dir);
     for src_path in commit.paths.iter() {
         let filename = src_path.file_name().expect("Filename should exist");
         let dst_dir = src_path
@@ -723,11 +702,12 @@ fn finalize_commit<P: AsRef<Path>>(
         }
     }
     for entry in main_dir.read_dir()? {
+        // todo: this is a temporary diagnostic code
         let entry = entry?;
         if entry.file_name().to_string_lossy().starts_with("fin_") {
             fs::remove_file(entry.path())?;
         }
     }
-    fs::write(main_dir.join(format!("fin_{}", root)), "f")?;
+    fs::write(main_dir.join(format!("fin_{}", root)), "f")?; // todo: this is a temporary diagnostic code
     Ok(())
 }

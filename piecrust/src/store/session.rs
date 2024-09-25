@@ -187,11 +187,7 @@ impl ContractSession {
                             true => {
                                 // let base_hex = hex::encode(*base);
                                 // let base_dir = self.root_dir.join(base_hex);
-                                let base_dir = self
-                                    .root_dir
-                                    .parent()
-                                    .expect("Parent should exist")
-                                    .join(MAIN_DIR);
+                                let base_dir = self.root_dir.join(MAIN_DIR);
 
                                 let contract_hex = hex::encode(contract);
 
