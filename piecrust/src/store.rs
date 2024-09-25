@@ -547,7 +547,6 @@ fn write_commit<P: AsRef<Path>>(
     let root = *index.root();
     let root_hex = hex::encode(root);
     println!("COMMIT ID = {}", root_hex);
-    let commit_dir = root_dir.join(root_hex.clone());
 
     // Don't write the commit if it already exists on disk. This may happen if
     // the same transactions on the same base commit for example.
@@ -557,7 +556,6 @@ fn write_commit<P: AsRef<Path>>(
 
     match write_commit_inner(
         root_dir,
-        &commit_dir,
         index,
         commit_contracts,
         root_hex,
@@ -567,7 +565,6 @@ fn write_commit<P: AsRef<Path>>(
             Ok(commit)
         }
         Err(err) => {
-            let _ = fs::remove_dir_all(commit_dir);
             Err(err)
         }
     }
@@ -576,18 +573,15 @@ fn write_commit<P: AsRef<Path>>(
 /// Writes a commit to disk.
 fn write_commit_inner<P: AsRef<Path>, S: AsRef<str>>(
     root_dir: P,
-    commit_dir: P,
     index: ContractIndex,
     commit_contracts: BTreeMap<ContractId, ContractDataEntry>,
     commit_id: S,
 ) -> io::Result<Commit> {
     println!(
-        "WRITE_COMMIT_INNER: root_dir={:?} commit_dir={:?}",
+        "WRITE_COMMIT_INNER: root_dir={:?}",
         root_dir.as_ref(),
-        commit_dir.as_ref()
     );
     let root_dir = root_dir.as_ref();
-    let commit_dir = commit_dir.as_ref();
     let mut paths = Vec::new();
 
     struct Directories {
@@ -597,23 +591,20 @@ fn write_commit_inner<P: AsRef<Path>, S: AsRef<str>>(
     }
 
     let directories = {
-        fs::create_dir_all(&commit_dir)?;
-        println!("created1 {:?}", commit_dir);
-
         let main_dir = root_dir
             .parent()
             .expect("root parent should exist")
             .join(MAIN_DIR);
         fs::create_dir_all(&main_dir)?;
-        println!("created3 {:?}", main_dir);
+        println!("created1 {:?}", main_dir);
 
         let bytecode_main_dir = main_dir.join(BYTECODE_DIR);
         fs::create_dir_all(&bytecode_main_dir)?;
-        println!("created4 {:?}", bytecode_main_dir);
+        println!("created2 {:?}", bytecode_main_dir);
 
         let memory_main_dir = main_dir.join(MEMORY_DIR);
         fs::create_dir_all(&memory_main_dir)?;
-        println!("created5 {:?}", memory_main_dir);
+        println!("created3 {:?}", memory_main_dir);
 
         Directories {
             main_dir,
