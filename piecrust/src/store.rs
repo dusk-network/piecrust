@@ -547,7 +547,8 @@ fn write_commit<P: AsRef<Path>>(
         return Ok(commit.clone());
     }
 
-    match write_commit_inner(root_dir, index, commit_contracts, root_hex) {
+    match write_commit_inner(root_dir, index, commit_contracts, root_hex, base)
+    {
         Ok(commit) => {
             commits.insert(root, commit.clone());
             Ok(commit)
@@ -562,6 +563,7 @@ fn write_commit_inner<P: AsRef<Path>, S: AsRef<str>>(
     mut index: ContractIndex,
     commit_contracts: BTreeMap<ContractId, ContractDataEntry>,
     commit_id: S,
+    maybe_base: Option<Commit>,
 ) -> io::Result<Commit> {
     println!(
         "WRITE_COMMIT_INNER: root_dir={:?} commit contracts={:?}",
@@ -570,6 +572,7 @@ fn write_commit_inner<P: AsRef<Path>, S: AsRef<str>>(
     );
     let root_dir = root_dir.as_ref();
     index.contract_hints.clear();
+    index.maybe_base = maybe_base.map(|base| *base.index.root());
 
     struct Directories {
         main_dir: PathBuf,
@@ -723,6 +726,24 @@ fn finalize_commit<P: AsRef<Path>>(
     }
     let dst_index_path = main_dir.join(INDEX_FILE);
     fs::rename(index_path.clone(), dst_index_path.clone())?;
+
+    // load index
+    let mut main_index = index_from_path(dst_index_path.clone())?;
+    // clear contract hints
+    main_index.contract_hints.clear();
+    // clear base
+    main_index.maybe_base = None;
+    // save index
+    let index_bytes = rkyv::to_bytes::<_, 128>(&main_index)
+        .map_err(|err| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("Failed serializing index file: {err}"),
+            )
+        })?
+        .to_vec();
+    fs::write(dst_index_path.clone(), index_bytes)?;
+
     // println!(
     //     "finalize2 index from={:?} to={:?}",
     //     index_path, dst_index_path

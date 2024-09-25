@@ -17,8 +17,9 @@ use piecrust_uplink::ContractId;
 use crate::contract::ContractMetadata;
 use crate::store::tree::{Hash, PageOpening};
 use crate::store::{
-    Bytecode, Call, Commit, Memory, Metadata, Module, BYTECODE_DIR, MAIN_DIR,
-    MEMORY_DIR, METADATA_EXTENSION, OBJECTCODE_EXTENSION, PAGE_SIZE,
+    index_from_path, Bytecode, Call, Commit, Memory, Metadata, Module,
+    BYTECODE_DIR, INDEX_FILE, MAIN_DIR, MEMORY_DIR, METADATA_EXTENSION,
+    OBJECTCODE_EXTENSION, PAGE_SIZE,
 };
 use crate::Error;
 
@@ -157,6 +158,37 @@ impl ContractSession {
             .map(|c| *c.index.root())
     }
 
+    fn do_find_page(
+        page_index: usize,
+        commit: Option<Hash>,
+        memory_path: impl AsRef<Path>,
+        main_path: impl AsRef<Path>,
+    ) -> Option<PathBuf> {
+        match commit {
+            None => None,
+            Some(hash) => {
+                let hash_hex = hex::encode(hash.as_bytes());
+                let path = memory_path
+                    .as_ref()
+                    .join(hash_hex.clone())
+                    .join(format!("{page_index}"));
+                if path.is_file() {
+                    Some(path)
+                } else {
+                    let index_path =
+                        main_path.as_ref().join(hash_hex).join(INDEX_FILE);
+                    let index = index_from_path(index_path).ok()?;
+                    Self::do_find_page(
+                        page_index,
+                        index.maybe_base,
+                        memory_path.as_ref(),
+                        main_path.as_ref(),
+                    )
+                }
+            }
+        }
+    }
+
     /// Return the bytecode and memory belonging to the given `contract`, if it
     /// exists.
     ///
@@ -171,10 +203,7 @@ impl ContractSession {
         &mut self,
         contract: ContractId,
     ) -> io::Result<Option<ContractDataEntry>> {
-        let commit_id = self.base.as_ref().map(|commit| {
-            let commit_id = commit.index.root();
-            hex::encode(commit_id.as_bytes())
-        });
+        let commit_id = self.base.as_ref().map(|commit| *commit.index.root());
         match self.contracts.entry(contract) {
             Vacant(entry) => {
                 match &self.base {
@@ -225,16 +254,21 @@ impl ContractSession {
                                                 match page_indices
                                                     .contains(&page_index)
                                                 {
-                                                    true => {
-                                                        // todo: refactor
-                                                        let page_path =
-                                                        if commit_id.is_some() && memory_path.join(commit_id.clone().unwrap()).join(format!("{page_index}")).is_file() {
-                                                            memory_path.join(commit_id.clone().unwrap()).join(format!("{page_index}"))
-                                                        } else {
-                                                            memory_path.join(format!("{page_index}"))
-                                                        };
-                                                        Some(page_path)
-                                                    }
+                                                    true => Some(
+                                                        Self::do_find_page(
+                                                            page_index,
+                                                            commit_id,
+                                                            memory_path.clone(),
+                                                            base_dir.clone(),
+                                                        )
+                                                        .unwrap_or(
+                                                            memory_path.join(
+                                                                format!(
+                                                                "{page_index}"
+                                                            ),
+                                                            ),
+                                                        ),
+                                                    ),
                                                     false => None,
                                                 }
                                             },

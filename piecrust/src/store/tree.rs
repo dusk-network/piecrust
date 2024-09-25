@@ -83,6 +83,7 @@ pub struct ContractIndex {
     pub tree: Tree,
     pub contracts: BTreeMap<ContractId, ContractIndexElement>,
     pub contract_hints: Vec<ContractId>,
+    pub maybe_base: Option<Hash>,
 }
 
 impl Default for ContractIndex {
@@ -91,6 +92,7 @@ impl Default for ContractIndex {
             tree: Tree::new(),
             contracts: BTreeMap::new(),
             contract_hints: Vec::new(),
+            maybe_base: None,
         }
     }
 }
