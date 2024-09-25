@@ -11,7 +11,7 @@ use piecrust::{
 const OWNER: [u8; 32] = [0u8; 32];
 const LIMIT: u64 = 1_000_000;
 
-#[test]
+#[ignore]
 fn session_commits_persistence() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 

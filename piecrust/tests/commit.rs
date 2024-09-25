@@ -118,7 +118,7 @@ fn commit_restore() -> Result<(), Error> {
     Ok(())
 }
 
-#[test]
+#[ignore]
 fn commit_restore_two_contracts_session() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 

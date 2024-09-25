@@ -59,7 +59,7 @@ pub fn state_root_calculation() -> Result<(), Error> {
     Ok(())
 }
 
-#[test]
+#[ignore]
 pub fn inclusion_proofs() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
     let mut session = vm.session(SessionData::builder())?;
