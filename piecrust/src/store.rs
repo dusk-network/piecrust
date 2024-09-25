@@ -305,23 +305,24 @@ fn commit_from_dir<P: AsRef<Path>>(
         }
 
         let contract_memory_dir = memory_dir.join(&contract_hex);
-        let maybe_commit_contract_memory_dir = commit_id
-            .as_ref()
-            .map(|cid| memory_dir.join(&contract_hex).join(cid));
 
         for page_index in &contract_index.page_indices {
             let main_page_path = page_path(&contract_memory_dir, *page_index);
             if !main_page_path.is_file() {
-                let mut found = false;
-                if let Some(ref commit_contract_memory_dir) =
-                    maybe_commit_contract_memory_dir
-                {
-                    let commit_page_path =
-                        page_path(&commit_contract_memory_dir, *page_index);
-                    if commit_page_path.is_file() {
-                        found = true;
-                    }
-                }
+                let maybe_hash = commit_id.as_ref().map(|s| {
+                    let hash: [u8; 32] = hex::decode(s)
+                        .expect("Hex decoding of commit id should succeed")
+                        .try_into()
+                        .unwrap();
+                    Hash::from(hash)
+                });
+                let path = ContractSession::do_find_page(
+                    *page_index,
+                    maybe_hash,
+                    contract_memory_dir.clone(),
+                    main_dir,
+                );
+                let found = path.map(|p| p.is_file()).unwrap_or(false);
                 if !found {
                     return Err(io::Error::new(
                         io::ErrorKind::InvalidData,

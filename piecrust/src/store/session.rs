@@ -158,7 +158,7 @@ impl ContractSession {
             .map(|c| *c.index.root())
     }
 
-    fn do_find_page(
+    pub fn do_find_page(
         page_index: usize,
         commit: Option<Hash>,
         memory_path: impl AsRef<Path>,
