@@ -675,23 +675,18 @@ fn delete_commit_dir<P: AsRef<Path>>(
 ) -> io::Result<()> {
     let root = hex::encode(root);
     println!("ACTUAL DELETION OF {}", root);
-    let commit_dir = root_dir.as_ref().join(root.clone());
-    let mut r = Ok(());
-    if commit_dir.exists() {
-        r = fs::remove_dir_all(commit_dir);
-    }
     let root_main_dir = root_dir
         .as_ref()
         .parent()
         .expect("Parent should exist")
         .join(MAIN_DIR);
     let commit_index_dir = root_main_dir.join(root);
-    let mut r2 = Ok(());
+    let mut r = Ok(());
     if commit_index_dir.exists() {
-        r2 = fs::remove_dir_all(commit_index_dir); // todo: make sure r2 is
-                                                   // returned eventually
+        r = fs::remove_dir_all(commit_index_dir);
     }
-    print!("delete commit dir results={:?} {:?}", r, r2);
+    // todo: also remove memories of root
+    print!("delete commit dir result={:?}", r);
     r
 }
 
