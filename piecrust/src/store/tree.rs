@@ -82,6 +82,7 @@ pub type Tree = dusk_merkle::Tree<Hash, C_HEIGHT, C_ARITY>;
 pub struct ContractIndex {
     pub tree: Tree,
     pub contracts: BTreeMap<ContractId, ContractIndexElement>,
+    pub contract_hints: Vec<ContractId>,
 }
 
 impl Default for ContractIndex {
@@ -89,6 +90,7 @@ impl Default for ContractIndex {
         Self {
             tree: Tree::new(),
             contracts: BTreeMap::new(),
+            contract_hints: Vec::new(),
         }
     }
 }

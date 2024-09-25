@@ -138,7 +138,6 @@ impl ContractSession {
         let mut contracts = BTreeMap::new();
         let mut base = self.base.as_ref().map(|c| Commit {
             index: c.index.clone(),
-            paths: Vec::new(),
         });
 
         mem::swap(&mut self.contracts, &mut contracts);

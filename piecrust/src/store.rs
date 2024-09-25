@@ -334,10 +334,7 @@ fn commit_from_dir<P: AsRef<Path>>(
         }
     }
 
-    Ok(Commit {
-        index,
-        paths: Vec::new(),
-    })
+    Ok(Commit { index })
 }
 
 fn index_from_path<P: AsRef<Path>>(path: P) -> io::Result<ContractIndex> {
@@ -357,7 +354,6 @@ fn index_from_path<P: AsRef<Path>>(path: P) -> io::Result<ContractIndex> {
 #[derive(Debug, Default, Clone)]
 pub(crate) struct Commit {
     index: ContractIndex,
-    paths: Vec<PathBuf>,
 }
 
 pub(crate) enum Call {
@@ -563,7 +559,7 @@ fn write_commit<P: AsRef<Path>>(
 /// Writes a commit to disk.
 fn write_commit_inner<P: AsRef<Path>, S: AsRef<str>>(
     root_dir: P,
-    index: ContractIndex,
+    mut index: ContractIndex,
     commit_contracts: BTreeMap<ContractId, ContractDataEntry>,
     commit_id: S,
 ) -> io::Result<Commit> {
@@ -573,7 +569,7 @@ fn write_commit_inner<P: AsRef<Path>, S: AsRef<str>>(
         commit_contracts.keys()
     );
     let root_dir = root_dir.as_ref();
-    let mut paths = Vec::new();
+    index.contract_hints.clear();
 
     struct Directories {
         main_dir: PathBuf,
@@ -611,6 +607,7 @@ fn write_commit_inner<P: AsRef<Path>, S: AsRef<str>>(
 
         let mut pages = BTreeSet::new();
 
+        let mut dirty = false;
         // Write dirty pages and keep track of the page indices.
         for (dirty_page, _, page_index) in contract_data.memory.dirty_pages() {
             let page_path: PathBuf = page_path_main(
@@ -619,8 +616,8 @@ fn write_commit_inner<P: AsRef<Path>, S: AsRef<str>>(
                 commit_id.as_ref(),
             )?;
             fs::write(page_path.clone(), dirty_page)?;
-            paths.push(page_path.clone());
             pages.insert(*page_index);
+            dirty = true;
         }
 
         let bytecode_main_path =
@@ -637,6 +634,10 @@ fn write_commit_inner<P: AsRef<Path>, S: AsRef<str>>(
             fs::write(bytecode_main_path, &contract_data.bytecode)?;
             fs::write(module_main_path, &contract_data.module.serialize())?;
             fs::write(metadata_main_path, &contract_data.metadata)?;
+            dirty = true;
+        }
+        if dirty {
+            index.contract_hints.push(contract.clone());
         }
     }
 
@@ -650,9 +651,8 @@ fn write_commit_inner<P: AsRef<Path>, S: AsRef<str>>(
         })?
         .to_vec();
     fs::write(index_main_path.clone(), index_bytes)?;
-    paths.push(index_main_path);
 
-    Ok(Commit { index, paths })
+    Ok(Commit { index })
 }
 
 /// Delete the given commit's directory.
@@ -677,37 +677,56 @@ fn delete_commit_dir<P: AsRef<Path>>(
 fn finalize_commit<P: AsRef<Path>>(
     root: Hash,
     root_dir: P,
-    commit: &Commit,
+    _commit: &Commit,
 ) -> io::Result<()> {
     let main_dir = root_dir.as_ref().join(MAIN_DIR);
     let root = hex::encode(root);
     println!("FINALIZATION OF {} in main dir={:?}", root, main_dir);
-    for src_path in commit.paths.iter() {
-        let filename = src_path.file_name().expect("Filename should exist");
-        let dst_dir = src_path
-            .parent()
-            .expect("Parent should exist")
-            .parent()
-            .expect("Parent should exist");
-        let dst_path = dst_dir.join(filename);
-        //println!("finalize from={:?} to={:?}", src_path, dst_path);
-        if src_path.is_file() {
-            fs::rename(src_path, dst_path)?;
+    let commit_path = main_dir.join(root.clone());
+    let index_path = commit_path.join(INDEX_FILE);
+    let index = index_from_path(index_path.clone())?;
+    // println!("index_path = {:?}", index_path);
+    for contract_hint in index.contract_hints {
+        let contract_hex = hex::encode(contract_hint);
+        let src_path = main_dir
+            .join(MEMORY_DIR)
+            .join(contract_hex.clone())
+            .join(root.clone());
+        let dst_path = main_dir.clone().join(MEMORY_DIR).join(contract_hex);
+        for entry in fs::read_dir(src_path.clone())? {
+            let entry = entry?;
+            let filename = entry.file_name().to_string_lossy().to_string();
+            let src_file_path = src_path.join(filename.clone());
+            let dst_file_path = dst_path.join(filename);
+            // println!(
+            //     "finalize2 from={:?} to={:?}",
+            //     src_file_path, dst_file_path
+            // );
+            if src_file_path.is_file() {
+                fs::rename(src_file_path, dst_file_path)?;
+            }
         }
-        let src_dir = src_path.parent().expect("Parent should exist");
-        let src_dir_empty = src_dir.read_dir()?.next().is_none(); // todo: make sure this performs well
-        if src_dir_empty {
-            let _ = fs::remove_dir(src_dir);
-            //println!("removed {:?}", src_dir);
-        }
+        fs::remove_dir(src_path.clone())?;
+        // println!("finalize2 from={:?} to={:?}", src_path, dst_path);
+        // println!("removed2 {:?}", src_path);
     }
+    let dst_index_path = main_dir.join(INDEX_FILE);
+    fs::rename(index_path.clone(), dst_index_path.clone())?;
+    // println!(
+    //     "finalize2 index from={:?} to={:?}",
+    //     index_path, dst_index_path
+    // );
+    fs::remove_dir(commit_path.clone())?;
+    // println!("finalize2 removed {:?}", commit_path);
+
+    // todo: this is a temporary diagnostic code
     for entry in main_dir.read_dir()? {
-        // todo: this is a temporary diagnostic code
         let entry = entry?;
         if entry.file_name().to_string_lossy().starts_with("fin_") {
             fs::remove_file(entry.path())?;
         }
     }
-    fs::write(main_dir.join(format!("fin_{}", root)), "f")?; // todo: this is a temporary diagnostic code
+    // todo: this is a temporary diagnostic code
+    fs::write(main_dir.join(format!("fin_{}", root)), "f")?;
     Ok(())
 }
