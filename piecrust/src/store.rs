@@ -558,7 +558,6 @@ fn write_commit<P: AsRef<Path>>(
     match write_commit_inner(
         root_dir,
         &commit_dir,
-        base,
         index,
         commit_contracts,
         root_hex,
@@ -578,7 +577,6 @@ fn write_commit<P: AsRef<Path>>(
 fn write_commit_inner<P: AsRef<Path>, S: AsRef<str>>(
     root_dir: P,
     commit_dir: P,
-    base: Option<Commit>,
     index: ContractIndex,
     commit_contracts: BTreeMap<ContractId, ContractDataEntry>,
     commit_id: S,
@@ -592,16 +590,9 @@ fn write_commit_inner<P: AsRef<Path>, S: AsRef<str>>(
     let commit_dir = commit_dir.as_ref();
     let mut paths = Vec::new();
 
-    struct Base {
-        bytecode_dir: PathBuf,
-        memory_dir: PathBuf,
-        inner: Commit,
-    }
-
     struct Directories {
         bytecode_dir: PathBuf,
         memory_dir: PathBuf,
-        base: Option<Base>,
         main_dir: PathBuf,
         bytecode_main_dir: PathBuf,
         memory_main_dir: PathBuf,
@@ -629,18 +620,6 @@ fn write_commit_inner<P: AsRef<Path>, S: AsRef<str>>(
         Directories {
             bytecode_dir,
             memory_dir,
-            base: base.map(|inner| {
-                let base_root = *inner.index.root();
-
-                let base_hex = hex::encode(base_root);
-                let base_dir = root_dir.join(base_hex);
-
-                Base {
-                    bytecode_dir: base_dir.join(BYTECODE_DIR),
-                    memory_dir: base_dir.join(MEMORY_DIR),
-                    inner,
-                }
-            }),
             main_dir,
             bytecode_main_dir,
             memory_main_dir,
