@@ -591,35 +591,31 @@ fn write_commit_inner<P: AsRef<Path>, S: AsRef<str>>(
     let mut paths = Vec::new();
 
     struct Directories {
-        bytecode_dir: PathBuf,
-        memory_dir: PathBuf,
         main_dir: PathBuf,
         bytecode_main_dir: PathBuf,
         memory_main_dir: PathBuf,
     }
 
     let directories = {
-        let bytecode_dir = commit_dir.join(BYTECODE_DIR);
-        fs::create_dir_all(&bytecode_dir)?;
-
-        let memory_dir = commit_dir.join(MEMORY_DIR);
-        fs::create_dir_all(&memory_dir)?;
+        fs::create_dir_all(&commit_dir)?;
+        println!("created1 {:?}", commit_dir);
 
         let main_dir = root_dir
             .parent()
             .expect("root parent should exist")
             .join(MAIN_DIR);
         fs::create_dir_all(&main_dir)?;
+        println!("created3 {:?}", main_dir);
 
         let bytecode_main_dir = main_dir.join(BYTECODE_DIR);
         fs::create_dir_all(&bytecode_main_dir)?;
+        println!("created4 {:?}", bytecode_main_dir);
 
         let memory_main_dir = main_dir.join(MEMORY_DIR);
         fs::create_dir_all(&memory_main_dir)?;
+        println!("created5 {:?}", memory_main_dir);
 
         Directories {
-            bytecode_dir,
-            memory_dir,
             main_dir,
             bytecode_main_dir,
             memory_main_dir,
@@ -631,34 +627,23 @@ fn write_commit_inner<P: AsRef<Path>, S: AsRef<str>>(
     for (contract, contract_data) in &commit_contracts {
         let contract_hex = hex::encode(contract);
 
-        let memory_dir = directories.memory_dir.join(&contract_hex);
-
         let memory_main_dir = directories.memory_main_dir.join(&contract_hex);
 
-        fs::create_dir_all(&memory_dir)?;
         fs::create_dir_all(&memory_main_dir)?;
 
         let mut pages = BTreeSet::new();
 
         // Write dirty pages and keep track of the page indices.
         for (dirty_page, _, page_index) in contract_data.memory.dirty_pages() {
-            let page_path1 = page_path(&memory_dir, *page_index);
             let page_path2: PathBuf = page_path_main(
                 &memory_main_dir,
                 *page_index,
                 commit_id.as_ref(),
             )?;
-            fs::write(page_path1.clone(), dirty_page)?;
             fs::write(page_path2.clone(), dirty_page)?;
             paths.push(page_path2.clone());
-            //println!("FILE WRITTEN {:?}", page_path1);
-            //println!("FILE WRITTEN MAIN {:?}", page_path2);
             pages.insert(*page_index);
         }
-
-        let bytecode_path = directories.bytecode_dir.join(&contract_hex);
-        let module_path = bytecode_path.with_extension(OBJECTCODE_EXTENSION);
-        let metadata_path = bytecode_path.with_extension(METADATA_EXTENSION);
 
         let bytecode_main_path =
             directories.bytecode_main_dir.join(&contract_hex);
@@ -670,9 +655,6 @@ fn write_commit_inner<P: AsRef<Path>, S: AsRef<str>>(
         // If the contract is new, we write the bytecode, module, and metadata
         // files to disk.
         if contract_data.is_new {
-            fs::write(bytecode_path, &contract_data.bytecode)?;
-            fs::write(module_path, &contract_data.module.serialize())?;
-            fs::write(metadata_path, &contract_data.metadata)?;
             // we write them to the main location
             fs::write(bytecode_main_path, &contract_data.bytecode)?;
             fs::write(module_main_path, &contract_data.module.serialize())?;
@@ -680,7 +662,6 @@ fn write_commit_inner<P: AsRef<Path>, S: AsRef<str>>(
         }
     }
 
-    let index_path = commit_dir.join(INDEX_FILE);
     let index_main_path = index_path_main(directories.main_dir, commit_id)?;
     let index_bytes = rkyv::to_bytes::<_, 128>(&index)
         .map_err(|err| {
@@ -690,8 +671,6 @@ fn write_commit_inner<P: AsRef<Path>, S: AsRef<str>>(
             )
         })?
         .to_vec();
-    fs::write(index_path, index_bytes.clone())?;
-    //println!("INDEX MAIN PATH={:?}", index_main_path);
     fs::write(index_main_path.clone(), index_bytes)?;
     paths.push(index_main_path);
 
