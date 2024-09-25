@@ -663,14 +663,25 @@ fn delete_commit_dir<P: AsRef<Path>>(
     let root = hex::encode(root);
     println!("ACTUAL DELETION OF {}", root);
     let root_main_dir = root_dir.as_ref().join(MAIN_DIR);
-    let commit_index_dir = root_main_dir.join(root);
-    let mut r = Ok(());
-    if commit_index_dir.exists() {
-        r = fs::remove_dir_all(commit_index_dir);
+    let commit_dir = root_main_dir.join(root.clone());
+    if commit_dir.exists() {
+        let index_path = commit_dir.join(INDEX_FILE);
+        let index = index_from_path(index_path.clone())?;
+        for contract_hint in index.contract_hints {
+            let contract_hex = hex::encode(contract_hint);
+            let commit_mem_path = root_main_dir
+                .join(MEMORY_DIR)
+                .join(contract_hex.clone())
+                .join(root.clone());
+            fs::remove_dir_all(commit_mem_path.clone())?;
+            println!("DELETE {:?}", commit_mem_path)
+        }
+        fs::remove_dir_all(commit_dir.clone())?;
+        println!("DELETE {:?}", commit_dir)
+    } else {
+        println!("DELETE did not exist: {:?} ", commit_dir)
     }
-    // todo: also remove memories of root
-    print!("delete commit dir result={:?}", r);
-    r
+    Ok(())
 }
 
 /// Finalize commit
