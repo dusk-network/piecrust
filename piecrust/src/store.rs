@@ -247,6 +247,14 @@ fn index_path_main<P: AsRef<Path>, S: AsRef<str>>(
     Ok(dir.join(INDEX_FILE))
 }
 
+fn commit_id_to_hash<S: AsRef<str>>(commit_id: S) -> Hash {
+    let hash: [u8; 32] = hex::decode(commit_id.as_ref())
+        .expect("Hex decoding of commit id string should succeed")
+        .try_into()
+        .expect("Commit id string conversion should succeed");
+    Hash::from(hash)
+}
+
 fn commit_from_dir<P: AsRef<Path>>(
     engine: &Engine,
     dir: P,
@@ -270,6 +278,7 @@ fn commit_from_dir<P: AsRef<Path>>(
     } else {
         dir
     };
+    let maybe_hash = commit_id.as_ref().map(commit_id_to_hash);
 
     let index_path = dir.join(INDEX_FILE);
     println!("index_path={:?}", index_path);
@@ -309,13 +318,6 @@ fn commit_from_dir<P: AsRef<Path>>(
         for page_index in &contract_index.page_indices {
             let main_page_path = page_path(&contract_memory_dir, *page_index);
             if !main_page_path.is_file() {
-                let maybe_hash = commit_id.as_ref().map(|s| {
-                    let hash: [u8; 32] = hex::decode(s)
-                        .expect("Hex decoding of commit id should succeed")
-                        .try_into()
-                        .unwrap();
-                    Hash::from(hash)
-                });
                 let path = ContractSession::do_find_page(
                     *page_index,
                     maybe_hash,
@@ -700,7 +702,6 @@ fn finalize_commit<P: AsRef<Path>>(
     let commit_path = main_dir.join(root.clone());
     let index_path = commit_path.join(INDEX_FILE);
     let index = index_from_path(index_path.clone())?;
-    // println!("index_path = {:?}", index_path);
     for contract_hint in index.contract_hints {
         let contract_hex = hex::encode(contract_hint);
         let src_path = main_dir
@@ -713,28 +714,18 @@ fn finalize_commit<P: AsRef<Path>>(
             let filename = entry.file_name().to_string_lossy().to_string();
             let src_file_path = src_path.join(filename.clone());
             let dst_file_path = dst_path.join(filename);
-            // println!(
-            //     "finalize2 from={:?} to={:?}",
-            //     src_file_path, dst_file_path
-            // );
             if src_file_path.is_file() {
                 fs::rename(src_file_path, dst_file_path)?;
             }
         }
         fs::remove_dir(src_path.clone())?;
-        // println!("finalize2 from={:?} to={:?}", src_path, dst_path);
-        // println!("removed2 {:?}", src_path);
     }
     let dst_index_path = main_dir.join(INDEX_FILE);
     fs::rename(index_path.clone(), dst_index_path.clone())?;
 
-    // load index
     let mut main_index = index_from_path(dst_index_path.clone())?;
-    // clear contract hints
     main_index.contract_hints.clear();
-    // clear base
     main_index.maybe_base = None;
-    // save index
     let index_bytes = rkyv::to_bytes::<_, 128>(&main_index)
         .map_err(|err| {
             io::Error::new(
@@ -745,21 +736,7 @@ fn finalize_commit<P: AsRef<Path>>(
         .to_vec();
     fs::write(dst_index_path.clone(), index_bytes)?;
 
-    // println!(
-    //     "finalize2 index from={:?} to={:?}",
-    //     index_path, dst_index_path
-    // );
     fs::remove_dir(commit_path.clone())?;
-    // println!("finalize2 removed {:?}", commit_path);
 
-    // todo: this is a temporary diagnostic code
-    for entry in main_dir.read_dir()? {
-        let entry = entry?;
-        if entry.file_name().to_string_lossy().starts_with("fin_") {
-            fs::remove_file(entry.path())?;
-        }
-    }
-    // todo: this is a temporary diagnostic code
-    fs::write(main_dir.join(format!("fin_{}", root)), "f")?;
     Ok(())
 }

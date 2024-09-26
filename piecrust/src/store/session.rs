@@ -158,6 +158,10 @@ impl ContractSession {
             .map(|c| *c.index.root())
     }
 
+    /// Returns path to a file representing a given commit and page.
+    ///
+    /// Requires a contract's memory path and a main state path.
+    /// Progresses recursively via bases of commits.
     pub fn do_find_page(
         page_index: usize,
         commit: Option<Hash>,
@@ -205,96 +209,82 @@ impl ContractSession {
     ) -> io::Result<Option<ContractDataEntry>> {
         let commit_id = self.base.as_ref().map(|commit| *commit.index.root());
         match self.contracts.entry(contract) {
-            Vacant(entry) => {
-                match &self.base {
-                    None => Ok(None),
-                    Some(base_commit) => {
-                        let _base = base_commit.index.root();
+            Vacant(entry) => match &self.base {
+                None => Ok(None),
+                Some(base_commit) => {
+                    match base_commit.index.contains_key(&contract) {
+                        true => {
+                            let base_dir = self.root_dir.join(MAIN_DIR);
 
-                        match base_commit.index.contains_key(&contract) {
-                            true => {
-                                // let base_hex = hex::encode(*base);
-                                // let base_dir = self.root_dir.join(base_hex);
-                                let base_dir = self.root_dir.join(MAIN_DIR);
+                            let contract_hex = hex::encode(contract);
 
-                                let contract_hex = hex::encode(contract);
+                            let bytecode_path =
+                                base_dir.join(BYTECODE_DIR).join(&contract_hex);
+                            let module_path = bytecode_path
+                                .with_extension(OBJECTCODE_EXTENSION);
+                            let metadata_path = bytecode_path
+                                .with_extension(METADATA_EXTENSION);
+                            let memory_path =
+                                base_dir.join(MEMORY_DIR).join(contract_hex);
 
-                                let bytecode_path = base_dir
-                                    .join(BYTECODE_DIR)
-                                    .join(&contract_hex);
-                                let module_path = bytecode_path
-                                    .with_extension(OBJECTCODE_EXTENSION);
-                                let metadata_path = bytecode_path
-                                    .with_extension(METADATA_EXTENSION);
-                                let memory_path = base_dir
-                                    .join(MEMORY_DIR)
-                                    .join(contract_hex);
+                            let bytecode = Bytecode::from_file(bytecode_path)?;
+                            let module =
+                                Module::from_file(&self.engine, module_path)?;
+                            let metadata = Metadata::from_file(metadata_path)?;
 
-                                let bytecode =
-                                    Bytecode::from_file(bytecode_path)?;
-                                let module = Module::from_file(
-                                    &self.engine,
-                                    module_path,
-                                )?;
-                                let metadata =
-                                    Metadata::from_file(metadata_path)?;
+                            let memory = match base_commit.index.get(&contract)
+                            {
+                                Some(elem) => {
+                                    let page_indices =
+                                        elem.page_indices.clone();
+                                    let memory_path = memory_path.clone();
 
-                                let memory = match base_commit
-                                    .index
-                                    .get(&contract)
-                                {
-                                    Some(elem) => {
-                                        let page_indices =
-                                            elem.page_indices.clone();
-                                        let memory_path = memory_path.clone();
-
-                                        Memory::from_files(
-                                            module.is_64(),
-                                            move |page_index: usize| {
-                                                match page_indices
-                                                    .contains(&page_index)
-                                                {
-                                                    true => Some(
-                                                        Self::do_find_page(
-                                                            page_index,
-                                                            commit_id,
-                                                            memory_path.clone(),
-                                                            base_dir.clone(),
-                                                        )
-                                                        .unwrap_or(
-                                                            memory_path.join(
-                                                                format!(
+                                    Memory::from_files(
+                                        module.is_64(),
+                                        move |page_index: usize| {
+                                            match page_indices
+                                                .contains(&page_index)
+                                            {
+                                                true => Some(
+                                                    Self::do_find_page(
+                                                        page_index,
+                                                        commit_id,
+                                                        memory_path.clone(),
+                                                        base_dir.clone(),
+                                                    )
+                                                    .unwrap_or(
+                                                        memory_path.join(
+                                                            format!(
                                                                 "{page_index}"
-                                                            ),
                                                             ),
                                                         ),
                                                     ),
-                                                    false => None,
-                                                }
-                                            },
-                                            elem.len,
-                                        )?
-                                    }
-                                    None => Memory::new(module.is_64())?,
-                                };
+                                                ),
+                                                false => None,
+                                            }
+                                        },
+                                        elem.len,
+                                    )?
+                                }
+                                None => Memory::new(module.is_64())?,
+                            };
 
-                                let contract = entry
-                                    .insert(ContractDataEntry {
-                                        bytecode,
-                                        module,
-                                        metadata,
-                                        memory,
-                                        is_new: false,
-                                    })
-                                    .clone();
+                            let contract = entry
+                                .insert(ContractDataEntry {
+                                    bytecode,
+                                    module,
+                                    metadata,
+                                    memory,
+                                    is_new: false,
+                                })
+                                .clone();
 
-                                Ok(Some(contract))
-                            }
-                            false => Ok(None),
+                            Ok(Some(contract))
                         }
+                        false => Ok(None),
                     }
                 }
-            }
+            },
             Occupied(entry) => Ok(Some(entry.get().clone())),
         }
     }
