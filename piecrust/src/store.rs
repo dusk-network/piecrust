@@ -198,7 +198,6 @@ fn read_all_commits<P: AsRef<Path>>(
 
     for entry in fs::read_dir(root_dir)? {
         let entry = entry?;
-        println!("entry={:?}", entry.path());
         if entry.path().is_dir() {
             let filename = entry.file_name().to_string_lossy().to_string();
             if filename == MEMORY_DIR || filename == BYTECODE_DIR {
@@ -272,7 +271,7 @@ fn commit_from_dir<P: AsRef<Path>>(
                 .to_string_lossy()
                 .to_string(),
         );
-        // todo: this means we are in a commit dir, need to back up for bytecode
+        // this means we are in a commit dir, need to back up for bytecode
         // and memory paths to work correctly
         dir.parent().expect("Parent should exist")
     } else {
@@ -281,7 +280,6 @@ fn commit_from_dir<P: AsRef<Path>>(
     let maybe_hash = commit_id.as_ref().map(commit_id_to_hash);
 
     let index_path = dir.join(INDEX_FILE);
-    println!("index_path={:?}", index_path);
     let index = index_from_path(index_path)?;
 
     let bytecode_dir = main_dir.join(BYTECODE_DIR);
@@ -404,7 +402,6 @@ fn sync_loop<P: AsRef<Path>>(
                 replier,
             } => {
                 let start = SystemTime::now();
-                println!("**WRITE COMMIT START");
                 let io_result = write_commit(root_dir, &mut commits, base, contracts);
                 let stop = SystemTime::now();
                 println!(
@@ -423,7 +420,6 @@ fn sync_loop<P: AsRef<Path>>(
             // in it is held by at least one session using `Call::SessionHold` -
             // queue it for deletion once no session is holding it.
             Call::CommitDelete { commit: root, replier } => {
-                println!("**COMMIT DELETE {}", hex::encode(root));
                 if sessions.contains_key(&root) {
                     match delete_bag.entry(root) {
                         Vacant(entry) => {
@@ -443,7 +439,6 @@ fn sync_loop<P: AsRef<Path>>(
             }
             // Finalize commit
             Call::CommitFinalize { commit: root, replier } => {
-                println!("**COMMIT FINALIZE {}", hex::encode(root));
                 if sessions.contains_key(&root) {
                     match delete_bag.entry(root) {
                         Vacant(entry) => {
@@ -462,7 +457,7 @@ fn sync_loop<P: AsRef<Path>>(
                     commits.remove(&root);
                     let _ = replier.send(io_result);
                 } else {
-                    let _ = replier.send(Ok(())); // todo: find better way
+                    let _ = replier.send(Ok(()));
                 }
             }
             // Increment the hold count of a commit to prevent it from deletion
@@ -471,7 +466,6 @@ fn sync_loop<P: AsRef<Path>>(
                 base,
                 replier,
             } => {
-                println!("**COMMIT HOLD {}", hex::encode(base));
                 let base_commit = commits.get(&base).cloned();
 
                 if base_commit.is_some() {
@@ -494,7 +488,6 @@ fn sync_loop<P: AsRef<Path>>(
             Call::SessionDrop(base) => match sessions.entry(base) {
                 Vacant(_) => unreachable!("If a session is dropped there must be a session hold entry"),
                 Occupied(mut entry) => {
-                    println!("**SESSION DROP {}", hex::encode(base));
                     *entry.get_mut() -= 1;
 
                     if *entry.get() == 0 {
@@ -525,7 +518,6 @@ fn write_commit<P: AsRef<Path>>(
     base: Option<Commit>,
     commit_contracts: BTreeMap<ContractId, ContractDataEntry>,
 ) -> io::Result<Commit> {
-    println!("ROOT DIR = {:?}", root_dir.as_ref());
     let root_dir = root_dir.as_ref();
 
     let mut index = base
@@ -542,7 +534,6 @@ fn write_commit<P: AsRef<Path>>(
 
     let root = *index.root();
     let root_hex = hex::encode(root);
-    println!("COMMIT ID = {}", root_hex);
 
     // Don't write the commit if it already exists on disk. This may happen if
     // the same transactions on the same base commit for example.
@@ -568,11 +559,6 @@ fn write_commit_inner<P: AsRef<Path>, S: AsRef<str>>(
     commit_id: S,
     maybe_base: Option<Commit>,
 ) -> io::Result<Commit> {
-    println!(
-        "WRITE_COMMIT_INNER: root_dir={:?} commit contracts={:?}",
-        root_dir.as_ref(),
-        commit_contracts.keys()
-    );
     let root_dir = root_dir.as_ref();
     index.contract_hints.clear();
     index.maybe_base = maybe_base.map(|base| *base.index.root());
@@ -586,15 +572,12 @@ fn write_commit_inner<P: AsRef<Path>, S: AsRef<str>>(
     let directories = {
         let main_dir = root_dir.join(MAIN_DIR);
         fs::create_dir_all(&main_dir)?;
-        println!("created1 {:?}", main_dir);
 
         let bytecode_main_dir = main_dir.join(BYTECODE_DIR);
         fs::create_dir_all(&bytecode_main_dir)?;
-        println!("created2 {:?}", bytecode_main_dir);
 
         let memory_main_dir = main_dir.join(MEMORY_DIR);
         fs::create_dir_all(&memory_main_dir)?;
-        println!("created3 {:?}", memory_main_dir);
 
         Directories {
             main_dir,
@@ -643,7 +626,7 @@ fn write_commit_inner<P: AsRef<Path>, S: AsRef<str>>(
             dirty = true;
         }
         if dirty {
-            index.contract_hints.push(contract.clone());
+            index.contract_hints.push(*contract);
         }
     }
 
@@ -667,7 +650,6 @@ fn delete_commit_dir<P: AsRef<Path>>(
     root: Hash,
 ) -> io::Result<()> {
     let root = hex::encode(root);
-    println!("ACTUAL DELETION OF {}", root);
     let root_main_dir = root_dir.as_ref().join(MAIN_DIR);
     let commit_dir = root_main_dir.join(root.clone());
     if commit_dir.exists() {
@@ -680,12 +662,8 @@ fn delete_commit_dir<P: AsRef<Path>>(
                 .join(contract_hex.clone())
                 .join(root.clone());
             fs::remove_dir_all(commit_mem_path.clone())?;
-            println!("DELETE {:?}", commit_mem_path)
         }
         fs::remove_dir_all(commit_dir.clone())?;
-        println!("DELETE {:?}", commit_dir)
-    } else {
-        println!("DELETE did not exist: {:?} ", commit_dir)
     }
     Ok(())
 }
@@ -698,7 +676,6 @@ fn finalize_commit<P: AsRef<Path>>(
 ) -> io::Result<()> {
     let main_dir = root_dir.as_ref().join(MAIN_DIR);
     let root = hex::encode(root);
-    println!("FINALIZATION OF {} in main dir={:?}", root, main_dir);
     let commit_path = main_dir.join(root.clone());
     let index_path = commit_path.join(INDEX_FILE);
     let index = index_from_path(index_path.clone())?;
