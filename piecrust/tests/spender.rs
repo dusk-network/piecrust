@@ -44,7 +44,7 @@ pub fn gas_get_used() -> Result<(), Error> {
     Ok(())
 }
 
-#[ignore]
+#[test]
 pub fn panic_msg_gets_through() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 
@@ -64,7 +64,7 @@ pub fn panic_msg_gets_through() -> Result<(), Error> {
     let receipt = session.call::<_, Result<(), ContractError>>(
         callcenter_id,
         "call_spend_with_limit",
-        &(spender_id, 4845u64),
+        &(spender_id, 5345u64),
         LIMIT,
     )?;
 
