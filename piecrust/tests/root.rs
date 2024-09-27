@@ -64,8 +64,8 @@ pub fn inclusion_proofs() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
     let mut session = vm.session(SessionData::builder())?;
 
-    let counter_id = session.deploy(
-        contract_bytecode!("counter"),
+    let box_id = session.deploy(
+        contract_bytecode!("box"),
         ContractData::builder().owner(OWNER),
         LIMIT,
     )?;
@@ -76,10 +76,10 @@ pub fn inclusion_proofs() -> Result<(), Error> {
         (page.to_vec(), opening)
     }
 
-    session.call::<_, ()>(counter_id, "increment", &(), LIMIT)?;
+    session.call::<i16, ()>(box_id, "set", &0x11, LIMIT)?;
 
     let pages = session
-        .memory_pages(counter_id)
+        .memory_pages(box_id)
         .expect("There must be memory pages for the contract");
 
     let (page_1, opening_1) = pages
@@ -92,10 +92,10 @@ pub fn inclusion_proofs() -> Result<(), Error> {
         "The page must be valid for the opening"
     );
 
-    session.call::<_, ()>(counter_id, "increment", &(), LIMIT)?;
+    session.call::<i16, ()>(box_id, "set", &0x11, LIMIT)?;
 
     let pages = session
-        .memory_pages(counter_id)
+        .memory_pages(box_id)
         .expect("There must be memory pages for the contract");
 
     let (page_2, opening_2) = pages

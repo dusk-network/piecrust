@@ -233,6 +233,13 @@ impl VM {
             .map_err(|err| PersistenceError(Arc::new(err)))
     }
 
+    /// Finalizes the given commit on disk.
+    pub fn finalize_commit(&self, root: [u8; 32]) -> Result<(), Error> {
+        self.store
+            .finalize_commit(root.into())
+            .map_err(|err| PersistenceError(Arc::new(err)))
+    }
+
     /// Return the root directory of the virtual machine.
     ///
     /// This is either the directory passed in by using [`new`], or the

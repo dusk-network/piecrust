@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Changed state representation to improve commit performance [#342]
+
 ## [0.24.0] - 2024-09-04
 
 ### Changed
@@ -469,6 +473,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [#347]: https://github.com/dusk-network/piecrust/issues/347
 [#344]: https://github.com/dusk-network/piecrust/issues/344
 [#343]: https://github.com/dusk-network/piecrust/issues/343
+[#342]: https://github.com/dusk-network/piecrust/issues/342
 [#336]: https://github.com/dusk-network/piecrust/issues/336
 [#325]: https://github.com/dusk-network/piecrust/issues/325
 [#324]: https://github.com/dusk-network/piecrust/issues/324
