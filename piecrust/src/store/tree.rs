@@ -80,8 +80,8 @@ pub type Tree = dusk_merkle::Tree<Hash, C_HEIGHT, C_ARITY>;
 #[derive(Debug, Clone, Archive, Deserialize, Serialize)]
 #[archive_attr(derive(CheckBytes))]
 pub struct ContractIndex {
-    pub tree: Tree,
-    pub contracts: BTreeMap<ContractId, ContractIndexElement>,
+    tree: Tree,
+    contracts: BTreeMap<ContractId, ContractIndexElement>,
     pub contract_hints: Vec<ContractId>,
     pub maybe_base: Option<Hash>,
 }
