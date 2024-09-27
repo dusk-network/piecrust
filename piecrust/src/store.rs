@@ -315,7 +315,7 @@ fn commit_from_dir<P: AsRef<Path>>(
         for page_index in &contract_index.page_indices {
             let main_page_path = page_path(&contract_memory_dir, *page_index);
             if !main_page_path.is_file() {
-                let path = ContractSession::do_find_page(
+                let path = ContractSession::find_page(
                     *page_index,
                     maybe_hash,
                     contract_memory_dir.clone(),

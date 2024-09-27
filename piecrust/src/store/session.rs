@@ -162,7 +162,7 @@ impl ContractSession {
     ///
     /// Requires a contract's memory path and a main state path.
     /// Progresses recursively via bases of commits.
-    pub fn do_find_page(
+    pub fn find_page(
         page_index: usize,
         commit: Option<Hash>,
         memory_path: impl AsRef<Path>,
@@ -182,7 +182,7 @@ impl ContractSession {
                     let index_path =
                         main_path.as_ref().join(hash_hex).join(INDEX_FILE);
                     let index = index_from_path(index_path).ok()?;
-                    Self::do_find_page(
+                    Self::find_page(
                         page_index,
                         index.maybe_base,
                         memory_path.as_ref(),
@@ -246,7 +246,7 @@ impl ContractSession {
                                                 .contains(&page_index)
                                             {
                                                 true => Some(
-                                                    Self::do_find_page(
+                                                    Self::find_page(
                                                         page_index,
                                                         commit_id,
                                                         memory_path.clone(),
