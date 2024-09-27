@@ -541,14 +541,12 @@ fn write_commit<P: AsRef<Path>>(
         return Ok(commit.clone());
     }
 
-    match write_commit_inner(root_dir, index, commit_contracts, root_hex, base)
-    {
-        Ok(commit) => {
+    write_commit_inner(root_dir, index, commit_contracts, root_hex, base).map(
+        |commit| {
             commits.insert(root, commit.clone());
-            Ok(commit)
-        }
-        Err(err) => Err(err),
-    }
+            commit
+        },
+    )
 }
 
 /// Writes a commit to disk.
