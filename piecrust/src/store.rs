@@ -220,10 +220,6 @@ fn read_commit<P: AsRef<Path>>(
     Ok(commit)
 }
 
-fn page_path<P: AsRef<Path>>(memory_dir: P, page_index: usize) -> PathBuf {
-    memory_dir.as_ref().join(format!("{page_index}"))
-}
-
 fn page_path_main<P: AsRef<Path>, S: AsRef<str>>(
     memory_dir: P,
     page_index: usize,
@@ -245,46 +241,29 @@ fn index_path_main<P: AsRef<Path>, S: AsRef<str>>(
     Ok(dir.join(INDEX_FILE))
 }
 
-fn commit_id_to_hash<S: AsRef<str>>(commit_id: S) -> Hash {
-    let hash: [u8; 32] = hex::decode(commit_id.as_ref())
-        .expect("Hex decoding of commit id string should succeed")
-        .try_into()
-        .expect("Commit id string conversion should succeed");
-    Hash::from(hash)
-}
-
 fn commit_from_dir<P: AsRef<Path>>(
     engine: &Engine,
     dir: P,
 ) -> io::Result<Commit> {
     let dir = dir.as_ref();
-    let mut commit_id: Option<String> = None;
     let main_dir = if dir
         .file_name()
         .expect("Filename or folder name should exist")
         != MAIN_DIR
     {
-        commit_id = Some(
-            dir.file_name()
-                .expect("Filename or folder name should exist")
-                .to_string_lossy()
-                .to_string(),
-        );
         // this means we are in a commit dir, need to back up for bytecode
         // and memory paths to work correctly
         dir.parent().expect("Parent should exist")
     } else {
         dir
     };
-    let maybe_hash = commit_id.as_ref().map(commit_id_to_hash);
 
     let index_path = dir.join(INDEX_FILE);
     let index = index_from_path(index_path)?;
 
     let bytecode_dir = main_dir.join(BYTECODE_DIR);
-    let memory_dir = main_dir.join(MEMORY_DIR);
 
-    for (contract, contract_index) in index.iter() {
+    for (contract, _contract_index) in index.iter() {
         let contract_hex = hex::encode(contract);
 
         // Check that all contracts in the index file have a corresponding
@@ -308,29 +287,6 @@ fn commit_from_dir<P: AsRef<Path>>(
                     io::Error::new(io::ErrorKind::InvalidData, err)
                 })?;
             fs::write(module_path, module.serialize())?;
-        }
-
-        let contract_memory_dir = memory_dir.join(&contract_hex);
-
-        for page_index in &contract_index.page_indices {
-            let main_page_path = page_path(&contract_memory_dir, *page_index);
-            if !main_page_path.is_file() {
-                let path = ContractSession::find_page(
-                    *page_index,
-                    maybe_hash,
-                    contract_memory_dir.clone(),
-                    main_dir,
-                );
-                let found = path.map(|p| p.is_file()).unwrap_or(false);
-                if !found {
-                    return Err(io::Error::new(
-                        io::ErrorKind::InvalidData,
-                        format!(
-                            "Non-existing memory for contract: {contract_hex}"
-                        ),
-                    ));
-                }
-            }
         }
     }
 
