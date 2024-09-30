@@ -155,7 +155,6 @@ impl ContractSession {
         receiver
             .recv()
             .expect("The receiver should always receive a reply")
-            .map(|c| *c.index.root())
     }
 
     /// Returns path to a file representing a given commit and page.

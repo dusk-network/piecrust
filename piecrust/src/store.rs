@@ -360,7 +360,7 @@ pub(crate) enum Call {
     Commit {
         contracts: BTreeMap<ContractId, ContractDataEntry>,
         base: Option<Commit>,
-        replier: mpsc::SyncSender<io::Result<Commit>>,
+        replier: mpsc::SyncSender<io::Result<Hash>>,
     },
     GetCommits {
         replier: mpsc::SyncSender<Vec<Hash>>,
@@ -510,7 +510,7 @@ fn write_commit<P: AsRef<Path>>(
     commits: &mut BTreeMap<Hash, Commit>,
     base: Option<Commit>,
     commit_contracts: BTreeMap<ContractId, ContractDataEntry>,
-) -> io::Result<Commit> {
+) -> io::Result<Hash> {
     let root_dir = root_dir.as_ref();
 
     let mut index = base
@@ -530,14 +530,14 @@ fn write_commit<P: AsRef<Path>>(
 
     // Don't write the commit if it already exists on disk. This may happen if
     // the same transactions on the same base commit for example.
-    if let Some(commit) = commits.get(&root) {
-        return Ok(commit.clone());
+    if commits.contains_key(&root) {
+        return Ok(root);
     }
 
     write_commit_inner(root_dir, index, commit_contracts, root_hex, base).map(
         |commit| {
-            commits.insert(root, commit.clone());
-            commit
+            commits.insert(root, commit);
+            root
         },
     )
 }
@@ -622,14 +622,12 @@ fn write_commit_inner<P: AsRef<Path>, S: AsRef<str>>(
     }
 
     let index_main_path = index_path_main(directories.main_dir, commit_id)?;
-    let index_bytes = rkyv::to_bytes::<_, 128>(&index)
-        .map_err(|err| {
-            io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!("Failed serializing index file: {err}"),
-            )
-        })?
-        .to_vec();
+    let index_bytes = rkyv::to_bytes::<_, 128>(&index).map_err(|err| {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("Failed serializing index file: {err}"),
+        )
+    })?;
     fs::write(index_main_path.clone(), index_bytes)?;
 
     Ok(Commit { index })
