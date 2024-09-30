@@ -322,14 +322,15 @@ fn commit_from_dir<P: AsRef<Path>>(
                     contract_memory_dir.clone(),
                     main_dir,
                 );
-                let found = path.map(|p| p.is_file()).unwrap_or(false);
+                let found = path.clone().map(|p| p.is_file()).unwrap_or(false);
                 if !found {
-                    return Err(io::Error::new(
-                        io::ErrorKind::InvalidData,
-                        format!(
-                            "Non-existing memory for contract: {contract_hex}"
-                        ),
-                    ));
+                    continue;
+                    // return Err(io::Error::new(
+                    //     io::ErrorKind::InvalidData,
+                    //     format!(
+                    //         "Non-existing memory for contract: {contract_hex} path returned={:?} maybe_hash={:?}", path, maybe_hash
+                    //     ),
+                    // ));
                 }
             }
         }
@@ -361,7 +362,7 @@ pub(crate) enum Call {
     Commit {
         contracts: BTreeMap<ContractId, ContractDataEntry>,
         base: Option<Commit>,
-        replier: mpsc::SyncSender<io::Result<Commit>>,
+        replier: mpsc::SyncSender<io::Result<Hash>>,
     },
     GetCommits {
         replier: mpsc::SyncSender<Vec<Hash>>,
@@ -517,19 +518,22 @@ fn write_commit<P: AsRef<Path>>(
     commits: &mut BTreeMap<Hash, Commit>,
     base: Option<Commit>,
     commit_contracts: BTreeMap<ContractId, ContractDataEntry>,
-) -> io::Result<Commit> {
+) -> io::Result<Hash> {
+    let start = SystemTime::now();
     let root_dir = root_dir.as_ref();
 
     let mut index = base
         .as_ref()
         .map_or(ContractIndex::default(), |base| base.index.clone());
 
+    let mut insert_count = 0;
     for (contract_id, contract_data) in &commit_contracts {
         if contract_data.is_new {
             index.remove_and_insert(*contract_id, &contract_data.memory);
         } else {
             index.insert(*contract_id, &contract_data.memory);
         }
+        insert_count +=1;
     }
 
     let root = *index.root();
@@ -537,16 +541,44 @@ fn write_commit<P: AsRef<Path>>(
 
     // Don't write the commit if it already exists on disk. This may happen if
     // the same transactions on the same base commit for example.
-    if let Some(commit) = commits.get(&root) {
-        return Ok(commit.clone());
+    if commits.contains_key(&root) {
+        return Ok(root);
     }
 
-    write_commit_inner(root_dir, index, commit_contracts, root_hex, base).map(
-        |commit| {
-            commits.insert(root, commit.clone());
-            commit
+    let stop = SystemTime::now();
+    println!(
+        "WRITE COMMIT BODY={:?} insert count={}",
+        stop.duration_since(start).expect("duration should work"), insert_count,
+    );
+
+    let inner_start = SystemTime::now();
+    let x = write_commit_inner(root_dir, &mut index, commit_contracts, root_hex, base).map(
+        |_| {
+            let commit = Commit{index};
+            let inside_map1_start = SystemTime::now();
+            let c = commit;
+            let inside_map1_stop = SystemTime::now();
+            println!(
+                "INSIDE MAP1={:?}",
+                inside_map1_stop.duration_since(inside_map1_start).expect("duration should work"),
+            );
+            let inside_map2_start = SystemTime::now();
+            commits.insert(root, c);
+            let inside_map2_stop = SystemTime::now();
+            println!(
+                "INSIDE MAP2={:?}",
+                inside_map2_stop.duration_since(inside_map2_start).expect("duration should work"),
+            );
+            root
         },
-    )
+    );
+    let inner_stop = SystemTime::now();
+    println!(
+        "INNER={:?}",
+        inner_stop.duration_since(inner_start).expect("duration should work"),
+    );
+
+    x
 }
 
 /// Writes a commit to disk.
@@ -557,10 +589,17 @@ fn write_commit_inner<P: AsRef<Path>, S: AsRef<str>>(
     commit_id: S,
     maybe_base: Option<Commit>,
 ) -> io::Result<Commit> {
+    let inner_beg_start = SystemTime::now();
     let root_dir = root_dir.as_ref();
     index.contract_hints.clear();
     index.maybe_base = maybe_base.map(|base| *base.index.root());
+    let inner_beg_stop = SystemTime::now();
+    println!(
+        "INNER BEG TIME={:?}",
+        inner_beg_stop.duration_since(inner_beg_start).expect("duration should work")
+    );
 
+    let dir_creation_start = SystemTime::now();
     struct Directories {
         main_dir: PathBuf,
         bytecode_main_dir: PathBuf,
@@ -583,7 +622,13 @@ fn write_commit_inner<P: AsRef<Path>, S: AsRef<str>>(
             memory_main_dir,
         }
     };
+    let dir_creation_stop = SystemTime::now();
+    println!(
+        "INNER DIR CREATION TIME={:?}",
+        dir_creation_stop.duration_since(dir_creation_start).expect("duration should work")
+    );
 
+    let pages_write_start = SystemTime::now();
     // Write the dirty pages contracts of contracts to disk.
     for (contract, contract_data) in &commit_contracts {
         let contract_hex = hex::encode(contract);
@@ -627,17 +672,27 @@ fn write_commit_inner<P: AsRef<Path>, S: AsRef<str>>(
             index.contract_hints.push(*contract);
         }
     }
+    let pages_write_stop = SystemTime::now();
+    println!(
+        "INNER PAGES WRITE TIME={:?}",
+        pages_write_stop.duration_since(pages_write_start).expect("duration should work")
+    );
 
     let index_main_path = index_path_main(directories.main_dir, commit_id)?;
-    let index_bytes = rkyv::to_bytes::<_, 128>(&index)
+    let index_write_start = SystemTime::now();
+    let index_bytes = rkyv::to_bytes::<_, 128>(index)
         .map_err(|err| {
             io::Error::new(
                 io::ErrorKind::InvalidData,
                 format!("Failed serializing index file: {err}"),
             )
-        })?
-        .to_vec();
+        })?;
     fs::write(index_main_path.clone(), index_bytes)?;
+    let index_write_stop = SystemTime::now();
+    println!(
+        "INNER INDEX WRITE TIME={:?}",
+        index_write_stop.duration_since(index_write_start).expect("duration should work")
+    );
 
     Ok(Commit { index })
 }
