@@ -552,22 +552,14 @@ fn write_commit<P: AsRef<Path>>(
     );
 
     let inner_start = SystemTime::now();
-    let x = write_commit_inner(root_dir, &mut index, commit_contracts, root_hex, base).map(
-        |_| {
-            let commit = Commit{index};
-            let inside_map1_start = SystemTime::now();
-            let c = commit;
-            let inside_map1_stop = SystemTime::now();
-            println!(
-                "INSIDE MAP1={:?}",
-                inside_map1_stop.duration_since(inside_map1_start).expect("duration should work"),
-            );
-            let inside_map2_start = SystemTime::now();
-            commits.insert(root, c);
-            let inside_map2_stop = SystemTime::now();
+    let x = write_commit_inner(root_dir, index, commit_contracts, root_hex, base).map(
+        |commit| {
+            let inside_map_start = SystemTime::now();
+            commits.insert(root, commit);
+            let inside_map_stop = SystemTime::now();
             println!(
                 "INSIDE MAP2={:?}",
-                inside_map2_stop.duration_since(inside_map2_start).expect("duration should work"),
+                inside_map_stop.duration_since(inside_map_start).expect("duration should work"),
             );
             root
         },
@@ -680,7 +672,7 @@ fn write_commit_inner<P: AsRef<Path>, S: AsRef<str>>(
 
     let index_main_path = index_path_main(directories.main_dir, commit_id)?;
     let index_write_start = SystemTime::now();
-    let index_bytes = rkyv::to_bytes::<_, 128>(index)
+    let index_bytes = rkyv::to_bytes::<_, 128>(&index)
         .map_err(|err| {
             io::Error::new(
                 io::ErrorKind::InvalidData,
