@@ -667,6 +667,9 @@ fn finalize_commit<P: AsRef<Path>>(
     let root = hex::encode(root);
     let commit_path = main_dir.join(root.clone());
     let index_path = commit_path.join(INDEX_FILE);
+    if !index_path.is_file() {
+        return Ok(()); // already finalized
+    }
     let index = index_from_path(index_path.clone())?;
     for contract_hint in index.contract_hints {
         let contract_hex = hex::encode(contract_hint);
