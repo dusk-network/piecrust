@@ -25,6 +25,7 @@ use piecrust_uplink::ContractId;
 use session::ContractDataEntry;
 use tree::{ContractIndex, Hash};
 
+use crate::store::tree::BaseInfo;
 pub use bytecode::Bytecode;
 pub use memory::{Memory, PAGE_SIZE};
 pub use metadata::Metadata;
@@ -35,6 +36,7 @@ pub use tree::PageOpening;
 const BYTECODE_DIR: &str = "bytecode";
 const MEMORY_DIR: &str = "memory";
 const INDEX_FILE: &str = "index";
+const BASE_FILE: &str = "base";
 const OBJECTCODE_EXTENSION: &str = "a";
 const METADATA_EXTENSION: &str = "m";
 const MAIN_DIR: &str = "main";
@@ -245,6 +247,16 @@ fn index_path_main<P: AsRef<Path>, S: AsRef<str>>(
     Ok(dir.join(INDEX_FILE))
 }
 
+fn base_path_main<P: AsRef<Path>, S: AsRef<str>>(
+    main_dir: P,
+    commit_id: S,
+) -> io::Result<PathBuf> {
+    let commit_id = commit_id.as_ref();
+    let dir = main_dir.as_ref().join(commit_id);
+    fs::create_dir_all(&dir)?;
+    Ok(dir.join(BASE_FILE))
+}
+
 fn commit_id_to_hash<S: AsRef<str>>(commit_id: S) -> Hash {
     let hash: [u8; 32] = hex::decode(commit_id.as_ref())
         .expect("Hex decoding of commit id string should succeed")
@@ -349,6 +361,20 @@ fn index_from_path<P: AsRef<Path>>(path: P) -> io::Result<ContractIndex> {
     })?;
 
     Ok(index)
+}
+
+fn base_from_path<P: AsRef<Path>>(path: P) -> io::Result<BaseInfo> {
+    let path = path.as_ref();
+
+    let base_info_bytes = fs::read(path)?;
+    let base_info = rkyv::from_bytes(&base_info_bytes).map_err(|err| {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("Invalid base info file \"{path:?}\": {err}"),
+        )
+    })?;
+
+    Ok(base_info)
 }
 
 #[derive(Debug, Default, Clone)]
@@ -545,14 +571,14 @@ fn write_commit<P: AsRef<Path>>(
 /// Writes a commit to disk.
 fn write_commit_inner<P: AsRef<Path>, S: AsRef<str>>(
     root_dir: P,
-    mut index: ContractIndex,
+    index: ContractIndex,
     commit_contracts: BTreeMap<ContractId, ContractDataEntry>,
     commit_id: S,
     maybe_base: Option<Commit>,
 ) -> io::Result<Commit> {
     let root_dir = root_dir.as_ref();
-    index.contract_hints.clear();
-    index.maybe_base = maybe_base.map(|base| *base.index.root());
+    let mut base_info = BaseInfo::default();
+    base_info.maybe_base = maybe_base.map(|base| *base.index.root());
 
     struct Directories {
         main_dir: PathBuf,
@@ -617,11 +643,12 @@ fn write_commit_inner<P: AsRef<Path>, S: AsRef<str>>(
             dirty = true;
         }
         if dirty {
-            index.contract_hints.push(*contract);
+            base_info.contract_hints.push(*contract);
         }
     }
 
-    let index_main_path = index_path_main(directories.main_dir, commit_id)?;
+    let index_main_path =
+        index_path_main(directories.main_dir.clone(), commit_id.as_ref())?;
     let index_bytes = rkyv::to_bytes::<_, 128>(&index).map_err(|err| {
         io::Error::new(
             io::ErrorKind::InvalidData,
@@ -629,6 +656,17 @@ fn write_commit_inner<P: AsRef<Path>, S: AsRef<str>>(
         )
     })?;
     fs::write(index_main_path.clone(), index_bytes)?;
+
+    let base_main_path =
+        base_path_main(directories.main_dir, commit_id.as_ref())?;
+    let base_info_bytes =
+        rkyv::to_bytes::<_, 128>(&base_info).map_err(|err| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("Failed serializing base info file: {err}"),
+            )
+        })?;
+    fs::write(base_main_path.clone(), base_info_bytes)?;
 
     Ok(Commit { index })
 }
@@ -642,9 +680,9 @@ fn delete_commit_dir<P: AsRef<Path>>(
     let root_main_dir = root_dir.as_ref().join(MAIN_DIR);
     let commit_dir = root_main_dir.join(root.clone());
     if commit_dir.exists() {
-        let index_path = commit_dir.join(INDEX_FILE);
-        let index = index_from_path(index_path.clone())?;
-        for contract_hint in index.contract_hints {
+        let base_info_path = commit_dir.join(BASE_FILE);
+        let base_info = base_from_path(base_info_path.clone())?;
+        for contract_hint in base_info.contract_hints {
             let contract_hex = hex::encode(contract_hint);
             let commit_mem_path = root_main_dir
                 .join(MEMORY_DIR)
@@ -666,9 +704,9 @@ fn finalize_commit<P: AsRef<Path>>(
     let main_dir = root_dir.as_ref().join(MAIN_DIR);
     let root = hex::encode(root);
     let commit_path = main_dir.join(root.clone());
-    let index_path = commit_path.join(INDEX_FILE);
-    let index = index_from_path(index_path.clone())?;
-    for contract_hint in index.contract_hints {
+    let base_info_path = commit_path.join(BASE_FILE);
+    let base_info = base_from_path(base_info_path.clone())?;
+    for contract_hint in base_info.contract_hints {
         let contract_hex = hex::encode(contract_hint);
         let src_path = main_dir
             .join(MEMORY_DIR)
@@ -686,22 +724,10 @@ fn finalize_commit<P: AsRef<Path>>(
         }
         fs::remove_dir(src_path.clone())?;
     }
+    let index_path = commit_path.join(INDEX_FILE);
     let dst_index_path = main_dir.join(INDEX_FILE);
     fs::rename(index_path.clone(), dst_index_path.clone())?;
-
-    let mut main_index = index_from_path(dst_index_path.clone())?;
-    main_index.contract_hints.clear();
-    main_index.maybe_base = None;
-    let index_bytes = rkyv::to_bytes::<_, 128>(&main_index)
-        .map_err(|err| {
-            io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!("Failed serializing index file: {err}"),
-            )
-        })?
-        .to_vec();
-    fs::write(dst_index_path.clone(), index_bytes)?;
-
+    fs::remove_file(base_info_path)?;
     fs::remove_dir(commit_path.clone())?;
 
     Ok(())

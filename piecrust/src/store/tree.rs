@@ -82,8 +82,22 @@ pub type Tree = dusk_merkle::Tree<Hash, C_HEIGHT, C_ARITY>;
 pub struct ContractIndex {
     tree: Tree,
     contracts: BTreeMap<ContractId, ContractIndexElement>,
+}
+
+#[derive(Debug, Clone, Archive, Deserialize, Serialize)]
+#[archive_attr(derive(CheckBytes))]
+pub struct BaseInfo {
     pub contract_hints: Vec<ContractId>,
     pub maybe_base: Option<Hash>,
+}
+
+impl Default for BaseInfo {
+    fn default() -> Self {
+        Self {
+            contract_hints: Vec::new(),
+            maybe_base: None,
+        }
+    }
 }
 
 impl Default for ContractIndex {
@@ -91,8 +105,6 @@ impl Default for ContractIndex {
         Self {
             tree: Tree::new(),
             contracts: BTreeMap::new(),
-            contract_hints: Vec::new(),
-            maybe_base: None,
         }
     }
 }
