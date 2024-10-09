@@ -79,28 +79,28 @@ pub type Tree = dusk_merkle::Tree<Hash, C_HEIGHT, C_ARITY>;
 
 #[derive(Debug, Clone, Archive, Deserialize, Serialize)]
 #[archive_attr(derive(CheckBytes))]
-pub struct ContractIndex {
-    tree: Tree,
-    contracts: BTreeMap<ContractId, ContractIndexElement>,
+pub struct NewContractIndex {
+    pub tree: Tree,
+    pub contracts: BTreeMap<ContractId, ContractIndexElement>,
 }
 
 #[derive(Debug, Clone, Archive, Deserialize, Serialize)]
+#[archive_attr(derive(CheckBytes))]
+pub struct ContractIndex {
+    pub tree: Tree,
+    pub contracts: BTreeMap<ContractId, ContractIndexElement>,
+    pub contract_hints: Vec<ContractId>,
+    pub maybe_base: Option<Hash>,
+}
+
+#[derive(Debug, Clone, Default, Archive, Deserialize, Serialize)]
 #[archive_attr(derive(CheckBytes))]
 pub struct BaseInfo {
     pub contract_hints: Vec<ContractId>,
     pub maybe_base: Option<Hash>,
 }
 
-impl Default for BaseInfo {
-    fn default() -> Self {
-        Self {
-            contract_hints: Vec::new(),
-            maybe_base: None,
-        }
-    }
-}
-
-impl Default for ContractIndex {
+impl Default for NewContractIndex {
     fn default() -> Self {
         Self {
             tree: Tree::new(),
@@ -109,7 +109,7 @@ impl Default for ContractIndex {
     }
 }
 
-impl ContractIndex {
+impl NewContractIndex {
     pub fn inclusion_proofs(
         mut self,
         contract_id: &ContractId,
@@ -148,7 +148,7 @@ pub struct ContractIndexElement {
     pub page_indices: BTreeSet<usize>,
 }
 
-impl ContractIndex {
+impl NewContractIndex {
     pub fn insert(&mut self, contract: ContractId, memory: &Memory) {
         if self.contracts.get(&contract).is_none() {
             self.contracts.insert(

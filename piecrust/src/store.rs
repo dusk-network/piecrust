@@ -23,9 +23,9 @@ use std::{fs, io, thread};
 use dusk_wasmtime::Engine;
 use piecrust_uplink::ContractId;
 use session::ContractDataEntry;
-use tree::{ContractIndex, Hash};
+use tree::{Hash, NewContractIndex};
 
-use crate::store::tree::BaseInfo;
+use crate::store::tree::{BaseInfo, ContractIndex};
 pub use bytecode::Bytecode;
 pub use memory::{Memory, PAGE_SIZE};
 pub use metadata::Metadata;
@@ -349,10 +349,57 @@ fn commit_from_dir<P: AsRef<Path>>(
     Ok(Commit { index })
 }
 
-fn index_from_path<P: AsRef<Path>>(path: P) -> io::Result<ContractIndex> {
+fn index_from_path<P: AsRef<Path>>(path: P) -> io::Result<NewContractIndex> {
     let path = path.as_ref();
 
     let index_bytes = fs::read(path)?;
+
+    let parent_name = path
+        .parent()
+        .expect("Index path must have parent")
+        .file_name()
+        .expect("filename should exist")
+        .to_string_lossy()
+        .to_string();
+    let base_file_path = path
+        .parent()
+        .expect("Index path must have parent")
+        .join(BASE_FILE);
+    if !base_file_path.is_file() && parent_name != MAIN_DIR {
+        let old_index: ContractIndex =
+            rkyv::from_bytes(&index_bytes).map_err(|err| {
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!("Invalid old index file \"{path:?}\": {err}"),
+                )
+            })?;
+        let base_info = BaseInfo {
+            maybe_base: old_index.maybe_base,
+            contract_hints: old_index.contract_hints,
+        };
+        let base_info_bytes =
+            rkyv::to_bytes::<_, 128>(&base_info).map_err(|err| {
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!("Failed serializing base info file: {err}"),
+                )
+            })?;
+        fs::write(base_file_path.clone(), base_info_bytes)?;
+        let new_contract_index = NewContractIndex {
+            contracts: old_index.contracts,
+            tree: old_index.tree,
+        };
+        let new_index_bytes = rkyv::to_bytes::<_, 128>(&new_contract_index)
+            .map_err(|err| {
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!("Failed serializing base info file: {err}"),
+                )
+            })?;
+        fs::write(path, new_index_bytes)?;
+        return Ok(new_contract_index);
+    }
+
     let index = rkyv::from_bytes(&index_bytes).map_err(|err| {
         io::Error::new(
             io::ErrorKind::InvalidData,
@@ -379,7 +426,7 @@ fn base_from_path<P: AsRef<Path>>(path: P) -> io::Result<BaseInfo> {
 
 #[derive(Debug, Default, Clone)]
 pub(crate) struct Commit {
-    index: ContractIndex,
+    index: NewContractIndex,
 }
 
 pub(crate) enum Call {
@@ -541,7 +588,7 @@ fn write_commit<P: AsRef<Path>>(
 
     let mut index = base
         .as_ref()
-        .map_or(ContractIndex::default(), |base| base.index.clone());
+        .map_or(NewContractIndex::default(), |base| base.index.clone());
 
     for (contract_id, contract_data) in &commit_contracts {
         if contract_data.is_new {
@@ -571,7 +618,7 @@ fn write_commit<P: AsRef<Path>>(
 /// Writes a commit to disk.
 fn write_commit_inner<P: AsRef<Path>, S: AsRef<str>>(
     root_dir: P,
-    index: ContractIndex,
+    index: NewContractIndex,
     commit_contracts: BTreeMap<ContractId, ContractDataEntry>,
     commit_id: S,
     maybe_base: Option<Commit>,
