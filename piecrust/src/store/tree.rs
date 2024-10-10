@@ -13,8 +13,6 @@ use bytecheck::CheckBytes;
 use piecrust_uplink::ContractId;
 use rkyv::{Archive, Deserialize, Serialize};
 
-use crate::store::memory::Memory;
-
 // There are max `2^16` pages in a 32-bit memory
 const P32_HEIGHT: usize = 8;
 const P32_ARITY: usize = 4;
@@ -77,11 +75,86 @@ impl PageTree {
 
 pub type Tree = dusk_merkle::Tree<Hash, C_HEIGHT, C_ARITY>;
 
+// struct ReverseInsert {
+//     pos: u64,
+//     value: Option<Hash> // if Some, insert, if None, remove
+// }
+//
+
+// struct Insert {
+//    pos: u64,
+//    value: Hash,
+// }
+
+// fn perform_inserts(maybe_commit_id: Option<Hash>, reverse_inserts: &mut
+// Vec<ReverseInsert>, &merkle_tree) {     match maybe_commit_id {
+//         Some(commit_id) => {
+//             let maybe_base = base_of_commit(commit_id)
+//             perform_inserts(maybe_base, reverse_inserts, merkle_tree);
+//             let inserts = read_inserts_for_commit_id(&commit_id);
+//             for every insert {
+//                 let reverse_insert = apply_insert(insert, &merkle_tree);
+//                 reverse_inserts.push(reverse_insert);
+//             }
+//         },
+//         None => {
+//            return;
+//         }
+//     }
+//
+
+// fn perform_reversals(reverse_inserts: &Vec<ReverseInsert>, &merkle_tree) {
+//     from end to the beginning of reverse_inserts, for every reverse_insert do
+// {         apply_reverse_insert(reverse_insert, merkle_tree) // meaning either
+// insert or removal     }
+// }
+
+// struct CommitInserts
+//
+// data members:
+//    inserts: Vec<Insert>
+//
+// methods:
+//    fn calc_root(&self, &mut central_merkle_tree, commit_id) -> root {
+//        let maybe_base = base_of_commit(commit_id);
+//        let mut reverse_inserts = Vec::<ReverseInsert>::new();
+//        perform_inserts(maybe_base, &mut reverse_inserts,
+// &central_merkle_tree);        let root =
+// calc_the_actual_root(&central_merkle_tree);        perform_reversals(&
+// reverse_inserts, &central_merkle_tree);        root
+//    }
+//    fn finalize(&self, &mut central_merkle_tree, commit_id) {
+//        let maybe_base = base_of_commit(commit_id);
+//        let mut reverse_inserts = Vec::<ReverseInsert>::new();
+//        perform_inserts(maybe_base, &mut reverse_inserts);
+//        save central_merkle_tree to disk
+//        remove yourself on Disk or make sure it is being done as part of a
+// greater           finalization of commit commit_id
+//    }
+//    fn read_from_file_repr() -> io::Result<Self> {
+//    }
+//    fn remove_file_repr(&self) -> io::Result<()>{
+//    }
+
+// this should only contain a collection of merkle tree inserts (CommitInserts)
+// this should really be a class which is able to calc root
+// and finalize
 #[derive(Debug, Clone, Archive, Deserialize, Serialize)]
 #[archive_attr(derive(CheckBytes))]
 pub struct NewContractIndex {
-    pub tree: Tree,
     pub contracts: BTreeMap<ContractId, ContractIndexElement>,
+}
+
+#[derive(Debug, Clone, Archive, Deserialize, Serialize)]
+#[archive_attr(derive(CheckBytes))]
+pub struct ContractsMerkle {
+    pub tree: Tree,
+}
+
+impl Default for ContractsMerkle {
+    fn default() -> Self {
+        Self { tree: Tree::new() }
+    }
 }
 
 #[derive(Debug, Clone, Archive, Deserialize, Serialize)]
@@ -103,40 +176,8 @@ pub struct BaseInfo {
 impl Default for NewContractIndex {
     fn default() -> Self {
         Self {
-            tree: Tree::new(),
             contracts: BTreeMap::new(),
         }
-    }
-}
-
-impl NewContractIndex {
-    pub fn inclusion_proofs(
-        mut self,
-        contract_id: &ContractId,
-    ) -> Option<impl Iterator<Item = (usize, PageOpening)>> {
-        let contract = self.contracts.remove(contract_id)?;
-
-        let pos = position_from_contract(contract_id);
-
-        Some(contract.page_indices.into_iter().map(move |page_index| {
-            let tree_opening = self
-                .tree
-                .opening(pos)
-                .expect("There must be a leaf for the contract");
-
-            let page_opening = contract
-                .tree
-                .opening(page_index as u64)
-                .expect("There must be a leaf for the page");
-
-            (
-                page_index,
-                PageOpening {
-                    tree: tree_opening,
-                    inner: page_opening,
-                },
-            )
-        }))
     }
 }
 
@@ -149,40 +190,6 @@ pub struct ContractIndexElement {
 }
 
 impl NewContractIndex {
-    pub fn insert(&mut self, contract: ContractId, memory: &Memory) {
-        if self.contracts.get(&contract).is_none() {
-            self.contracts.insert(
-                contract,
-                ContractIndexElement {
-                    tree: PageTree::new(memory.is_64()),
-                    len: 0,
-                    page_indices: BTreeSet::new(),
-                },
-            );
-        }
-        let element = self.contracts.get_mut(&contract).unwrap();
-
-        element.len = memory.current_len;
-
-        for (dirty_page, _, page_index) in memory.dirty_pages() {
-            element.page_indices.insert(*page_index);
-            let hash = Hash::new(dirty_page);
-            element.tree.insert(*page_index as u64, hash);
-        }
-
-        self.tree
-            .insert(position_from_contract(&contract), *element.tree.root());
-    }
-
-    pub fn remove_and_insert(&mut self, contract: ContractId, memory: &Memory) {
-        self.contracts.remove(&contract);
-        self.insert(contract, memory);
-    }
-
-    pub fn root(&self) -> Ref<Hash> {
-        self.tree.root()
-    }
-
     pub fn get(&self, contract: &ContractId) -> Option<&ContractIndexElement> {
         self.contracts.get(contract)
     }
@@ -233,8 +240,8 @@ type TreeOpening = dusk_merkle::Opening<Hash, C_HEIGHT, C_ARITY>;
 #[derive(Debug, Clone, Archive, Deserialize, Serialize)]
 #[archive_attr(derive(CheckBytes))]
 pub struct PageOpening {
-    tree: TreeOpening,
-    inner: InnerPageOpening,
+    pub tree: TreeOpening,
+    pub inner: InnerPageOpening,
 }
 
 impl PageOpening {

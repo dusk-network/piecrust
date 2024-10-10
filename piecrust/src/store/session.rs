@@ -89,9 +89,9 @@ impl ContractSession {
     pub fn root(&self) -> Hash {
         let mut commit = self.base.clone().unwrap_or_default();
         for (contract, entry) in &self.contracts {
-            commit.index.insert(*contract, &entry.memory);
+            commit.insert(*contract, &entry.memory);
         }
-        let root = commit.index.root();
+        let root = commit.root();
 
         *root
     }
@@ -104,11 +104,13 @@ impl ContractSession {
     ) -> Option<impl Iterator<Item = (usize, &[u8], PageOpening)>> {
         let mut commit = self.base.clone().unwrap_or_default();
         for (contract, entry) in &self.contracts {
-            commit.index.insert(*contract, &entry.memory);
+            commit.insert(*contract, &entry.memory);
         }
 
         let contract_data = self.contracts.get(&contract)?;
-        let inclusion_proofs = commit.index.inclusion_proofs(&contract)?;
+        let maybe_hash = commit.maybe_hash;
+        let inclusion_proofs =
+            commit.inclusion_proofs(&contract, maybe_hash)?;
 
         let inclusion_proofs =
             inclusion_proofs.map(move |(page_index, opening)| {
@@ -139,6 +141,8 @@ impl ContractSession {
         let mut contracts = BTreeMap::new();
         let mut base = self.base.as_ref().map(|c| Commit {
             index: c.index.clone(),
+            contracts_merkle: c.contracts_merkle.clone(),
+            maybe_hash: c.maybe_hash,
         });
 
         mem::swap(&mut self.contracts, &mut contracts);
@@ -206,7 +210,7 @@ impl ContractSession {
         &mut self,
         contract: ContractId,
     ) -> io::Result<Option<ContractDataEntry>> {
-        let commit_id = self.base.as_ref().map(|commit| *commit.index.root());
+        let commit_id = self.base.as_ref().map(|commit| *commit.root());
         match self.contracts.entry(contract) {
             Vacant(entry) => match &self.base {
                 None => Ok(None),
@@ -390,7 +394,7 @@ impl ContractSession {
 impl Drop for ContractSession {
     fn drop(&mut self) {
         if let Some(base) = self.base.take() {
-            let root = base.index.root();
+            let root = base.root();
             let _ = self.call.send(Call::SessionDrop(*root));
         }
     }
