@@ -130,6 +130,12 @@ pub type Tree = dusk_merkle::Tree<Hash, C_HEIGHT, C_ARITY>;
 //        let mut reverse_inserts = Vec::<ReverseInsert>::new();
 //        perform_inserts(maybe_base, &mut reverse_inserts);
 //        save central_merkle_tree to disk
+//        remove yourself on Disk or make sure it is being done as part of a greater
+//           finalization of commit commit_id
+//    }
+//    fn read_from_file_repr() -> io::Result<Self> {
+//    }
+//    fn remove_file_repr(&self) -> io::Result<()>{
 //    }
 
 // this should only contain a collection of merkle tree inserts (CommitInserts)
