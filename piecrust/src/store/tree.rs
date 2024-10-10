@@ -115,23 +115,24 @@ pub type Tree = dusk_merkle::Tree<Hash, C_HEIGHT, C_ARITY>;
 //
 // data members:
 //    inserts: Vec<Insert>
+//    commit_id: Hash
 //
 // methods:
-//    fn calc_root(&mut central_merkle_tree, commit_id: Hash) -> root {
-//        let maybe_base = base_of_commit(commit_id);
+//    fn calc_root(&self, &mut central_merkle_tree) -> root {
+//        let maybe_base = base_of_commit(self.commit_id);
 //        let mut reverse_inserts = Vec::<ReverseInsert>::new();
 //        perform_inserts(maybe_base, &mut reverse_inserts, &central_merkle_tree);
 //        let root = calc_the_actual_root(&central_merkle_tree);
 //        perform_reversals(&reverse_inserts, &central_merkle_tree);
 //        root
 //    }
-//    fn finalize(&mut central_merkle_tree, commit_id: Hash) {
-//        let maybe_base = base_of_commit(commit_id);
+//    fn finalize(&self, &mut central_merkle_tree) {
+//        let maybe_base = base_of_commit(self.commit_id);
 //        let mut reverse_inserts = Vec::<ReverseInsert>::new();
 //        perform_inserts(maybe_base, &mut reverse_inserts);
 //        save central_merkle_tree to disk
 //        remove yourself on Disk or make sure it is being done as part of a greater
-//           finalization of commit commit_id
+//           finalization of commit self.commit_id
 //    }
 //    fn read_from_file_repr() -> io::Result<Self> {
 //    }
