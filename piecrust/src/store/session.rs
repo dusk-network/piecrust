@@ -17,8 +17,8 @@ use piecrust_uplink::ContractId;
 use crate::contract::ContractMetadata;
 use crate::store::tree::{Hash, PageOpening};
 use crate::store::{
-    index_from_path, Bytecode, Call, Commit, Memory, Metadata, Module,
-    BYTECODE_DIR, INDEX_FILE, MAIN_DIR, MEMORY_DIR, METADATA_EXTENSION,
+    base_from_path, Bytecode, Call, Commit, Memory, Metadata, Module,
+    BASE_FILE, BYTECODE_DIR, MAIN_DIR, MEMORY_DIR, METADATA_EXTENSION,
     OBJECTCODE_EXTENSION, PAGE_SIZE,
 };
 use crate::Error;
@@ -178,9 +178,9 @@ impl ContractSession {
                 if path.is_file() {
                     Some(path)
                 } else {
-                    let index_path =
-                        main_path.as_ref().join(hash_hex).join(INDEX_FILE);
-                    let index = index_from_path(index_path).ok()?;
+                    let base_info_path =
+                        main_path.as_ref().join(hash_hex).join(BASE_FILE);
+                    let index = base_from_path(base_info_path).ok()?;
                     Self::find_page(
                         page_index,
                         index.maybe_base,
