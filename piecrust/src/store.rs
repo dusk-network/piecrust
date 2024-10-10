@@ -78,6 +78,11 @@ impl ContractStore {
         let (call, calls) = mpsc::channel();
         let commits = read_all_commits(&engine, root_dir)?;
 
+        // here is a place where central objects should be read from disk
+        // central objects are:
+        //     1) merkle tree
+        //     2) contracts map (ContractId, Option<CommitId>) -> ContractIndexElement
+
         let loop_root_dir = root_dir.to_path_buf();
 
         // The thread is given a name to allow for easily identifying it while

@@ -77,6 +77,30 @@ impl PageTree {
 
 pub type Tree = dusk_merkle::Tree<Hash, C_HEIGHT, C_ARITY>;
 
+
+// struct CommitInserts
+//
+// data members:
+//    inserts: Vec<(Hash, Position)>
+//
+// methods:
+//    fn calc_root(&mut central_merkle_tree) {
+//        for all base commits C0..CN (CN is this one) do {
+//          perform all inserts but gather what was there before into Bi
+//        }
+//        calc the actual root
+//        for all base commits CN..C0 (CN is this one) do {
+//          restore Bi
+//        }
+//    }
+//    fn finalize(&mut central_merkle_tree) {
+//        perform all inserts
+//        save central_merkle_tree to disk
+//    }
+
+// this should only contain a collection of merkle tree inserts (CommitInserts)
+// this should really be a class which is able to calc root
+// and finalize
 #[derive(Debug, Clone, Archive, Deserialize, Serialize)]
 #[archive_attr(derive(CheckBytes))]
 pub struct NewContractIndex {
