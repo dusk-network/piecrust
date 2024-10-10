@@ -77,24 +77,58 @@ impl PageTree {
 
 pub type Tree = dusk_merkle::Tree<Hash, C_HEIGHT, C_ARITY>;
 
+// struct ReverseInsert {
+//     pos: u64,
+//     value: Option<Hash> // if Some, insert, if None, remove
+// }
+//
+
+// struct Insert {
+//    pos: u64,
+//    value: Hash,
+// }
+
+// fn perform_inserts(maybe_commit_id: Option<Hash>, reverse_inserts: &mut Vec<ReverseInsert>, &merkle_tree) {
+//     match maybe_commit_id {
+//         Some(commit_id) => {
+//             let maybe_base = base_of_commit(commit_id)
+//             perform_inserts(maybe_base, reverse_inserts, merkle_tree);
+//             let inserts = read_inserts_for_commit_id(&commit_id);
+//             for every insert {
+//                 let reverse_insert = apply_insert(insert, &merkle_tree);
+//                 reverse_inserts.push(reverse_insert);
+//             }
+//         },
+//         None => {
+//            return;
+//         }
+//     }
+//
+
+// fn perform_reversals(reverse_inserts: &Vec<ReverseInsert>, &merkle_tree) {
+//     from end to the beginning of reverse_inserts, for every reverse_insert do {
+//         apply_reverse_insert(reverse_insert, merkle_tree) // meaning either insert or removal
+//     }
+// }
 
 // struct CommitInserts
 //
 // data members:
-//    inserts: Vec<(Hash, Position)>
+//    inserts: Vec<Insert>
 //
 // methods:
-//    fn calc_root(&mut central_merkle_tree) {
-//        for all base commits C0..CN (CN is this one) do {
-//          perform all inserts but gather what was there before into Bi
-//        }
-//        calc the actual root
-//        for all base commits CN..C0 (CN is this one) do {
-//          restore Bi
-//        }
+//    fn calc_root(&mut central_merkle_tree, commit_id: Hash) -> root {
+//        let maybe_base = base_of_commit(commit_id);
+//        let mut reverse_inserts = Vec::<ReverseInsert>::new();
+//        perform_inserts(maybe_base, &mut reverse_inserts, &central_merkle_tree);
+//        let root = calc_the_actual_root(&central_merkle_tree);
+//        perform_reversals(&reverse_inserts, &central_merkle_tree);
+//        root
 //    }
-//    fn finalize(&mut central_merkle_tree) {
-//        perform all inserts
+//    fn finalize(&mut central_merkle_tree, commit_id: Hash) {
+//        let maybe_base = base_of_commit(commit_id);
+//        let mut reverse_inserts = Vec::<ReverseInsert>::new();
+//        perform_inserts(maybe_base, &mut reverse_inserts);
 //        save central_merkle_tree to disk
 //    }
 
