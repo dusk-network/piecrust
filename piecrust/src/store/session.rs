@@ -87,7 +87,10 @@ impl ContractSession {
     ///
     /// [`contract`]: ContractSession::contract
     pub fn root(&self) -> Hash {
-        let mut commit = self.base.clone().unwrap_or_default();
+        let mut commit = self
+            .base
+            .clone()
+            .unwrap_or(Commit::new(self.root_dir.clone()));
         for (contract, entry) in &self.contracts {
             commit.insert(*contract, &entry.memory);
         }
@@ -102,7 +105,10 @@ impl ContractSession {
         &self,
         contract: ContractId,
     ) -> Option<impl Iterator<Item = (usize, &[u8], PageOpening)>> {
-        let mut commit = self.base.clone().unwrap_or_default();
+        let mut commit = self
+            .base
+            .clone()
+            .unwrap_or(Commit::new(self.root_dir.clone()));
         for (contract, entry) in &self.contracts {
             commit.insert(*contract, &entry.memory);
         }
@@ -235,7 +241,9 @@ impl ContractSession {
                                 Module::from_file(&self.engine, module_path)?;
                             let metadata = Metadata::from_file(metadata_path)?;
 
-                            let memory = match base_commit.index.get(&contract)
+                            let memory = match base_commit
+                                .index
+                                .get(&contract, base_commit.maybe_hash)
                             {
                                 Some(elem) => {
                                     let page_indices =

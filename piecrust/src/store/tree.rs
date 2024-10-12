@@ -4,6 +4,7 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
+use std::path::{Path, PathBuf};
 use std::{
     cell::Ref,
     collections::{BTreeMap, BTreeSet},
@@ -142,7 +143,8 @@ pub type Tree = dusk_merkle::Tree<Hash, C_HEIGHT, C_ARITY>;
 #[derive(Debug, Clone, Archive, Deserialize, Serialize)]
 #[archive_attr(derive(CheckBytes))]
 pub struct NewContractIndex {
-    pub contracts: BTreeMap<ContractId, ContractIndexElement>,
+    inner_contracts: BTreeMap<ContractId, ContractIndexElement>,
+    path: String,
 }
 
 #[derive(Debug, Clone, Archive, Deserialize, Serialize)]
@@ -173,14 +175,6 @@ pub struct BaseInfo {
     pub maybe_base: Option<Hash>,
 }
 
-impl Default for NewContractIndex {
-    fn default() -> Self {
-        Self {
-            contracts: BTreeMap::new(),
-        }
-    }
-}
-
 #[derive(Debug, Clone, Archive, Deserialize, Serialize)]
 #[archive_attr(derive(CheckBytes))]
 pub struct ContractIndexElement {
@@ -190,18 +184,62 @@ pub struct ContractIndexElement {
 }
 
 impl NewContractIndex {
-    pub fn get(&self, contract: &ContractId) -> Option<&ContractIndexElement> {
-        self.contracts.get(contract)
+    pub fn new<P: AsRef<Path>>(dir: P) -> Self {
+        Self {
+            inner_contracts: BTreeMap::new(),
+            // path: dir.as_ref().to_path_buf(),
+            path: dir.as_ref().to_string_lossy().to_string(), /* todo: after removal of Archive derivation to NewContractIndex, change the type to PathBuf */
+        }
+    }
+
+    pub fn path(&self) -> PathBuf {
+        // todo: after removal of Archive derivation to NewContractIndex, change
+        // the implementation
+        PathBuf::from(self.path.clone())
+    }
+
+    pub fn remove_contract_index(
+        &mut self,
+        contract_id: &ContractId,
+        _maybe_commit_id: Option<Hash>,
+        // _path: impl AsRef<Path>,
+    ) -> Option<ContractIndexElement> {
+        self.inner_contracts.remove(contract_id)
+    }
+
+    pub fn insert_contract_index(
+        &mut self,
+        contract_id: ContractId,
+        element: ContractIndexElement,
+        _maybe_commit_id: Option<Hash>,
+    ) {
+        self.inner_contracts.insert(contract_id, element);
+    }
+
+    pub fn get(
+        &self,
+        contract: &ContractId,
+        _maybe_commit_id: Option<Hash>,
+    ) -> Option<&ContractIndexElement> {
+        self.inner_contracts.get(contract)
+    }
+
+    pub fn get_mut(
+        &mut self,
+        contract: &ContractId,
+        _maybe_commit_id: Option<Hash>,
+    ) -> Option<&mut ContractIndexElement> {
+        self.inner_contracts.get_mut(contract)
     }
 
     pub fn contains_key(&self, contract: &ContractId) -> bool {
-        self.contracts.contains_key(contract)
+        self.inner_contracts.contains_key(contract)
     }
 
     pub fn iter(
         &self,
     ) -> impl Iterator<Item = (&ContractId, &ContractIndexElement)> {
-        self.contracts.iter()
+        self.inner_contracts.iter()
     }
 }
 
