@@ -87,10 +87,7 @@ impl ContractSession {
     ///
     /// [`contract`]: ContractSession::contract
     pub fn root(&self) -> Hash {
-        let mut commit = self
-            .base
-            .clone()
-            .unwrap_or(Commit::new(self.root_dir.clone()));
+        let mut commit = self.base.clone().unwrap_or(Commit::new());
         for (contract, entry) in &self.contracts {
             commit.insert(*contract, &entry.memory);
         }
@@ -105,10 +102,7 @@ impl ContractSession {
         &self,
         contract: ContractId,
     ) -> Option<impl Iterator<Item = (usize, &[u8], PageOpening)>> {
-        let mut commit = self
-            .base
-            .clone()
-            .unwrap_or(Commit::new(self.root_dir.clone()));
+        let mut commit = self.base.clone().unwrap_or(Commit::new());
         for (contract, entry) in &self.contracts {
             commit.insert(*contract, &entry.memory);
         }

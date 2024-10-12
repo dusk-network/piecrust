@@ -4,7 +4,6 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use std::path::{Path, PathBuf};
 use std::{
     cell::Ref,
     collections::{BTreeMap, BTreeSet},
@@ -144,7 +143,6 @@ pub type Tree = dusk_merkle::Tree<Hash, C_HEIGHT, C_ARITY>;
 #[archive_attr(derive(CheckBytes))]
 pub struct NewContractIndex {
     inner_contracts: BTreeMap<ContractId, ContractIndexElement>,
-    path: String,
 }
 
 #[derive(Debug, Clone, Archive, Deserialize, Serialize)]
@@ -184,18 +182,10 @@ pub struct ContractIndexElement {
 }
 
 impl NewContractIndex {
-    pub fn new<P: AsRef<Path>>(dir: P) -> Self {
+    pub fn new() -> Self {
         Self {
             inner_contracts: BTreeMap::new(),
-            // path: dir.as_ref().to_path_buf(),
-            path: dir.as_ref().to_string_lossy().to_string(), /* todo: after removal of Archive derivation to NewContractIndex, change the type to PathBuf */
         }
-    }
-
-    pub fn path(&self) -> PathBuf {
-        // todo: after removal of Archive derivation to NewContractIndex, change
-        // the implementation
-        PathBuf::from(self.path.clone())
     }
 
     pub fn remove_contract_index(
@@ -209,11 +199,10 @@ impl NewContractIndex {
 
     pub fn insert_contract_index(
         &mut self,
-        contract_id: ContractId,
+        contract_id: &ContractId,
         element: ContractIndexElement,
-        _maybe_commit_id: Option<Hash>,
     ) {
-        self.inner_contracts.insert(contract_id, element);
+        self.inner_contracts.insert(*contract_id, element);
     }
 
     pub fn get(

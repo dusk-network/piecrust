@@ -41,7 +41,7 @@ pub use tree::PageOpening;
 const BYTECODE_DIR: &str = "bytecode";
 const MEMORY_DIR: &str = "memory";
 const LEAF_DIR: &str = "leaf";
-const INDEX_FILE: &str = "index";
+// const INDEX_FILE: &str = "index";
 const MERKLE_FILE: &str = "merkle";
 const BASE_FILE: &str = "base";
 const ELEMENT_FILE: &str = "element";
@@ -205,11 +205,11 @@ fn read_all_commits<P: AsRef<Path>>(
     let root_dir = root_dir.join(MAIN_DIR);
     fs::create_dir_all(root_dir.clone())?;
 
-    if root_dir.join(INDEX_FILE).is_file() {
-        let commit = read_commit(engine, root_dir.clone())?;
-        let root = *commit.root();
-        commits.insert(root, commit);
-    }
+    // if root_dir.join(INDEX_FILE).is_file() {
+    //     let commit = read_commit(engine, root_dir.clone())?;
+    //     let root = *commit.root();
+    //     commits.insert(root, commit);
+    // }
 
     for entry in fs::read_dir(root_dir)? {
         let entry = entry?;
@@ -254,15 +254,15 @@ fn page_path_main<P: AsRef<Path>, S: AsRef<str>>(
     Ok(dir.join(format!("{page_index}")))
 }
 
-fn index_path_main<P: AsRef<Path>, S: AsRef<str>>(
-    main_dir: P,
-    commit_id: S,
-) -> io::Result<PathBuf> {
-    let commit_id = commit_id.as_ref();
-    let dir = main_dir.as_ref().join(commit_id);
-    fs::create_dir_all(&dir)?;
-    Ok(dir.join(INDEX_FILE))
-}
+// fn index_path_main<P: AsRef<Path>, S: AsRef<str>>(
+//     main_dir: P,
+//     commit_id: S,
+// ) -> io::Result<PathBuf> {
+//     let commit_id = commit_id.as_ref();
+//     let dir = main_dir.as_ref().join(commit_id);
+//     fs::create_dir_all(&dir)?;
+//     Ok(dir.join(INDEX_FILE))
+// }
 
 fn merkle_path_main<P: AsRef<Path>, S: AsRef<str>>(
     main_dir: P,
@@ -292,6 +292,14 @@ fn commit_id_to_hash<S: AsRef<str>>(commit_id: S) -> Hash {
     Hash::from(hash)
 }
 
+fn contract_id_from_hex<S: AsRef<str>>(contract_id: S) -> ContractId {
+    let bytes: [u8; 32] = hex::decode(contract_id.as_ref())
+        .expect("Hex decoding of commit id string should succeed")
+        .try_into()
+        .expect("Commit id string conversion should succeed");
+    ContractId::from_bytes(bytes)
+}
+
 fn commit_from_dir<P: AsRef<Path>>(
     engine: &Engine,
     dir: P,
@@ -317,10 +325,10 @@ fn commit_from_dir<P: AsRef<Path>>(
     };
     let maybe_hash = commit_id.as_ref().map(commit_id_to_hash);
 
-    let index_path = dir.join(INDEX_FILE);
     let contracts_merkle_path = dir.join(MERKLE_FILE);
+    let leaf_dir = main_dir.join(LEAF_DIR);
     let (index, contracts_merkle) =
-        index_merkle_from_path(index_path, contracts_merkle_path, &maybe_hash)?;
+        index_merkle_from_path(contracts_merkle_path, leaf_dir, &maybe_hash)?;
 
     let bytecode_dir = main_dir.join(BYTECODE_DIR);
     let memory_dir = main_dir.join(MEMORY_DIR);
@@ -383,49 +391,68 @@ fn commit_from_dir<P: AsRef<Path>>(
 }
 
 fn index_merkle_from_path<P1: AsRef<Path>, P2: AsRef<Path>>(
-    path: P1,
-    merkle_path: P2,
+    merkle_path: P1,
+    leaf_dir: P2,
     maybe_commit_id: &Option<Hash>,
 ) -> io::Result<(NewContractIndex, ContractsMerkle)> {
-    let path = path.as_ref();
+    // let path = path.as_ref();
     let merkle_path = merkle_path.as_ref();
+    let leaf_dir = leaf_dir.as_ref();
 
-    tracing::trace!("reading index file started");
-    let index_bytes = fs::read(path)?;
-    tracing::trace!("reading index file finished");
-    tracing::trace!("deserializing index file started");
-    let index: NewContractIndex =
-        rkyv::from_bytes(&index_bytes).map_err(|err| {
-            tracing::trace!("deserializing index file failed {}", err);
-            io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!("Invalid index file \"{path:?}\": {err}"),
-            )
-        })?;
-    tracing::trace!("deserializing index file finished");
+    // tracing::trace!("reading index file started");
+    // let index_bytes = fs::read(path)?;
+    // tracing::trace!("reading index file finished");
+    // tracing::trace!("deserializing index file started");
+    let mut index: NewContractIndex = NewContractIndex::new();
+    // rkyv::from_bytes(&index_bytes).map_err(|err| {
+    //     tracing::trace!("deserializing index file failed {}", err);
+    //     io::Error::new(
+    //         io::ErrorKind::InvalidData,
+    //         format!("Invalid index file \"{path:?}\": {err}"),
+    //     )
+    // })?;
+    // tracing::trace!("deserializing index file finished");
     // compare index with disk representation
-    for (contract_id, _element) in index.iter() {
-        let contract_id_hex = hex::encode(contract_id.as_bytes());
-        println!("comparing contract id = {}", contract_id_hex);
-        match maybe_commit_id {
-            Some(commit_id) => {
-                let commit_id_hex = hex::encode(commit_id.as_bytes());
-                println!("commit id = {}", commit_id_hex);
-                let leaf_path = path
-                    .parent()
-                    .expect("Index path parent should exist")
-                    .join(LEAF_DIR)
-                    .join(contract_id_hex)
-                    .join(commit_id_hex);
-                println!(
-                    "leaf_path={:?} exists={}",
-                    leaf_path,
-                    leaf_path.exists()
-                );
-            }
-            None => {
-                println!("commit id = None")
-            }
+    for entry in fs::read_dir(leaf_dir)? {
+        let entry = entry?;
+        if entry.path().is_dir() {
+            let contract_id_hex =
+                entry.file_name().to_string_lossy().to_string();
+            let contract_id = contract_id_from_hex(contract_id_hex.clone());
+            let element_path = match maybe_commit_id {
+                Some(commit_id) => {
+                    let contract_leaf_dir = leaf_dir.join(contract_id_hex);
+                    let leaf_file_path = contract_leaf_dir
+                        .join(hex::encode(commit_id.as_bytes()))
+                        .join(ELEMENT_FILE);
+                    if leaf_file_path.is_file() {
+                        leaf_file_path
+                    } else {
+                        contract_leaf_dir.join(ELEMENT_FILE)
+                    }
+                }
+                None => leaf_dir.join(contract_id_hex).join(ELEMENT_FILE),
+            };
+            println!(
+                "element_path={:?} is_file={}",
+                element_path,
+                element_path.is_file()
+            );
+            let element_bytes = fs::read(element_path.clone())?;
+            let element: ContractIndexElement =
+                rkyv::from_bytes(&element_bytes).map_err(|err| {
+                    tracing::trace!(
+                        "deserializing element file failed {}",
+                        err
+                    );
+                    io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        format!(
+                            "Invalid element file \"{element_path:?}\": {err}"
+                        ),
+                    )
+                })?;
+            index.insert_contract_index(&contract_id, element)
         }
     }
 
@@ -467,9 +494,9 @@ pub(crate) struct Commit {
 }
 
 impl Commit {
-    pub fn new<P: AsRef<Path>>(dir: P) -> Self {
+    pub fn new() -> Self {
         Self {
-            index: NewContractIndex::new(dir),
+            index: NewContractIndex::new(),
             contracts_merkle: ContractsMerkle::default(),
             maybe_hash: None,
         }
@@ -511,13 +538,12 @@ impl Commit {
     pub fn insert(&mut self, contract_id: ContractId, memory: &Memory) {
         if self.index.get(&contract_id, self.maybe_hash).is_none() {
             self.index.insert_contract_index(
-                contract_id,
+                &contract_id,
                 ContractIndexElement {
                     tree: PageTree::new(memory.is_64()),
                     len: 0,
                     page_indices: BTreeSet::new(),
                 },
-                self.maybe_hash,
             );
         }
         let element =
@@ -744,7 +770,7 @@ fn write_commit<P: AsRef<Path>>(
 
     let index = base
         .as_ref()
-        .map_or(NewContractIndex::new(root_dir), |base| base.index.clone());
+        .map_or(NewContractIndex::new(), |base| base.index.clone());
     let contracts_merkle =
         base.as_ref().map_or(ContractsMerkle::default(), |base| {
             base.contracts_merkle.clone()
@@ -870,23 +896,23 @@ fn write_commit_inner<P: AsRef<Path>, S: AsRef<str>>(
         }
     }
 
-    let index_main_path =
-        index_path_main(directories.main_dir.clone(), commit_id.as_ref())?;
+    // let index_main_path =
+    //     index_path_main(directories.main_dir.clone(), commit_id.as_ref())?;
     let merkle_main_path =
         merkle_path_main(directories.main_dir.clone(), commit_id.as_ref())?;
 
-    tracing::trace!("serializing index started");
-    let index_bytes =
-        rkyv::to_bytes::<_, 128>(&commit.index).map_err(|err| {
-            io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!("Failed serializing index file: {err}"),
-            )
-        })?;
-    tracing::trace!("serializing index finished");
-    tracing::trace!("writing index file started");
-    fs::write(index_main_path.clone(), index_bytes)?;
-    tracing::trace!("writing index file finished");
+    // tracing::trace!("serializing index started");
+    // let index_bytes =
+    //     rkyv::to_bytes::<_, 128>(&commit.index).map_err(|err| {
+    //         io::Error::new(
+    //             io::ErrorKind::InvalidData,
+    //             format!("Failed serializing index file: {err}"),
+    //         )
+    //     })?;
+    // tracing::trace!("serializing index finished");
+    // tracing::trace!("writing index file started");
+    // fs::write(index_main_path.clone(), index_bytes)?;
+    // tracing::trace!("writing index file finished");
     for (contract_id, element) in commit.index.iter() {
         if commit_contracts.contains_key(contract_id) {
             // todo: write element to disk at
@@ -1007,9 +1033,9 @@ fn finalize_commit<P: AsRef<Path>>(
         }
         fs::remove_dir(src_leaf_path.clone())?;
     }
-    let index_path = commit_path.join(INDEX_FILE);
-    let dst_index_path = main_dir.join(INDEX_FILE);
-    fs::rename(index_path.clone(), dst_index_path.clone())?;
+    // let index_path = commit_path.join(INDEX_FILE);
+    // let dst_index_path = main_dir.join(INDEX_FILE);
+    // fs::rename(index_path.clone(), dst_index_path.clone())?;
 
     let merkle_path = commit_path.join(MERKLE_FILE);
     let dst_merkle_path = main_dir.join(MERKLE_FILE);
