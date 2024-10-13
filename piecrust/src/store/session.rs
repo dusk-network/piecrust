@@ -18,8 +18,8 @@ use crate::contract::ContractMetadata;
 use crate::store::tree::{Hash, PageOpening};
 use crate::store::{
     base_from_path, Bytecode, Call, Commit, Memory, Metadata, Module,
-    BASE_FILE, BYTECODE_DIR, MAIN_DIR, MEMORY_DIR, METADATA_EXTENSION,
-    OBJECTCODE_EXTENSION, PAGE_SIZE,
+    BASE_FILE, BYTECODE_DIR, ELEMENT_FILE, MAIN_DIR, MEMORY_DIR,
+    METADATA_EXTENSION, OBJECTCODE_EXTENSION, PAGE_SIZE,
 };
 use crate::Error;
 
@@ -189,6 +189,39 @@ impl ContractSession {
                         page_index,
                         index.maybe_base,
                         memory_path.as_ref(),
+                        main_path.as_ref(),
+                    )
+                }
+            }
+        }
+    }
+
+    /// Returns path to a file representing a given commit and element.
+    ///
+    /// Requires a contract's leaf path and a main state path.
+    /// Progresses recursively via bases of commits.
+    pub fn find_element(
+        commit: Option<Hash>,
+        leaf_path: impl AsRef<Path>,
+        main_path: impl AsRef<Path>,
+    ) -> Option<PathBuf> {
+        match commit {
+            None => None,
+            Some(hash) => {
+                let hash_hex = hex::encode(hash.as_bytes());
+                let path = leaf_path
+                    .as_ref()
+                    .join(hash_hex.clone())
+                    .join(ELEMENT_FILE);
+                if path.is_file() {
+                    Some(path)
+                } else {
+                    let base_info_path =
+                        main_path.as_ref().join(hash_hex).join(BASE_FILE);
+                    let index = base_from_path(base_info_path).ok()?;
+                    Self::find_element(
+                        index.maybe_base,
+                        leaf_path.as_ref(),
                         main_path.as_ref(),
                     )
                 }
