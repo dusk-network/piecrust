@@ -478,7 +478,6 @@ impl Commit {
         Some(contract.page_indices.into_iter().map(move |page_index| {
             let tree_opening = self
                 .contracts_merkle
-                .tree
                 .opening(pos)
                 .expect("There must be a leaf for the contract");
 
@@ -520,7 +519,6 @@ impl Commit {
         }
 
         self.contracts_merkle
-            .tree
             .insert(position_from_contract(&contract_id), *element.tree.root());
     }
 
@@ -530,7 +528,7 @@ impl Commit {
     }
 
     pub fn root(&self) -> Ref<Hash> {
-        self.contracts_merkle.tree.root()
+        self.contracts_merkle.root()
     }
 }
 

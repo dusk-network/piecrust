@@ -148,12 +148,39 @@ pub struct NewContractIndex {
 #[derive(Debug, Clone, Archive, Deserialize, Serialize)]
 #[archive_attr(derive(CheckBytes))]
 pub struct ContractsMerkle {
-    pub tree: Tree,
+    inner_tree: Tree,
+    dict: BTreeMap<u64, u64>,
 }
 
 impl Default for ContractsMerkle {
     fn default() -> Self {
-        Self { tree: Tree::new() }
+        Self {
+            inner_tree: Tree::new(),
+            dict: BTreeMap::new(),
+        }
+    }
+}
+
+impl ContractsMerkle {
+    pub fn insert(&mut self, pos: u64, hash: Hash) {
+        let new_pos = match self.dict.get(&pos) {
+            None => {
+                let new_pos = (self.dict.len() + 1) as u64;
+                self.dict.insert(pos, new_pos);
+                new_pos
+            }
+            Some(p) => *p,
+        };
+        self.inner_tree.insert(new_pos, hash);
+    }
+
+    pub fn opening(&self, pos: u64) -> Option<TreeOpening> {
+        let new_pos = self.dict.get(&pos).expect("pos should exist in dict");
+        self.inner_tree.opening(*new_pos)
+    }
+
+    pub fn root(&self) -> Ref<Hash> {
+        self.inner_tree.root()
     }
 }
 
