@@ -108,9 +108,7 @@ impl ContractSession {
         }
 
         let contract_data = self.contracts.get(&contract)?;
-        let maybe_hash = commit.maybe_hash;
-        let inclusion_proofs =
-            commit.inclusion_proofs(&contract, maybe_hash)?;
+        let inclusion_proofs = commit.inclusion_proofs(&contract)?;
 
         let inclusion_proofs =
             inclusion_proofs.map(move |(page_index, opening)| {

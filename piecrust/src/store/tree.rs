@@ -75,70 +75,6 @@ impl PageTree {
 
 pub type Tree = dusk_merkle::Tree<Hash, C_HEIGHT, C_ARITY>;
 
-// struct ReverseInsert {
-//     pos: u64,
-//     value: Option<Hash> // if Some, insert, if None, remove
-// }
-//
-
-// struct Insert {
-//    pos: u64,
-//    value: Hash,
-// }
-
-// fn perform_inserts(maybe_commit_id: Option<Hash>, reverse_inserts: &mut
-// Vec<ReverseInsert>, &merkle_tree) {     match maybe_commit_id {
-//         Some(commit_id) => {
-//             let maybe_base = base_of_commit(commit_id)
-//             perform_inserts(maybe_base, reverse_inserts, merkle_tree);
-//             let inserts = read_inserts_for_commit_id(&commit_id);
-//             for every insert {
-//                 let reverse_insert = apply_insert(insert, &merkle_tree);
-//                 reverse_inserts.push(reverse_insert);
-//             }
-//         },
-//         None => {
-//            return;
-//         }
-//     }
-//
-
-// fn perform_reversals(reverse_inserts: &Vec<ReverseInsert>, &merkle_tree) {
-//     from end to the beginning of reverse_inserts, for every reverse_insert do
-// {         apply_reverse_insert(reverse_insert, merkle_tree) // meaning either
-// insert or removal     }
-// }
-
-// struct CommitInserts
-//
-// data members:
-//    inserts: Vec<Insert>
-//
-// methods:
-//    fn calc_root(&self, &mut central_merkle_tree, commit_id) -> root {
-//        let maybe_base = base_of_commit(commit_id);
-//        let mut reverse_inserts = Vec::<ReverseInsert>::new();
-//        perform_inserts(maybe_base, &mut reverse_inserts,
-// &central_merkle_tree);        let root =
-// calc_the_actual_root(&central_merkle_tree);        perform_reversals(&
-// reverse_inserts, &central_merkle_tree);        root
-//    }
-//    fn finalize(&self, &mut central_merkle_tree, commit_id) {
-//        let maybe_base = base_of_commit(commit_id);
-//        let mut reverse_inserts = Vec::<ReverseInsert>::new();
-//        perform_inserts(maybe_base, &mut reverse_inserts);
-//        save central_merkle_tree to disk
-//        remove yourself on Disk or make sure it is being done as part of a
-// greater           finalization of commit commit_id
-//    }
-//    fn read_from_file_repr() -> io::Result<Self> {
-//    }
-//    fn remove_file_repr(&self) -> io::Result<()>{
-//    }
-
-// this should only contain a collection of merkle tree inserts (CommitInserts)
-// this should really be a class which is able to calc root
-// and finalize
 #[derive(Debug, Clone, Archive, Deserialize, Serialize)]
 #[archive_attr(derive(CheckBytes))]
 pub struct NewContractIndex {
@@ -175,7 +111,7 @@ impl ContractsMerkle {
     }
 
     pub fn opening(&self, pos: u64) -> Option<TreeOpening> {
-        let new_pos = self.dict.get(&pos).expect("pos should exist in dict");
+        let new_pos = self.dict.get(&pos)?;
         self.inner_tree.opening(*new_pos)
     }
 
@@ -208,6 +144,12 @@ pub struct ContractIndexElement {
     pub page_indices: BTreeSet<usize>,
 }
 
+impl Default for NewContractIndex {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl NewContractIndex {
     pub fn new() -> Self {
         Self {
@@ -218,8 +160,6 @@ impl NewContractIndex {
     pub fn remove_contract_index(
         &mut self,
         contract_id: &ContractId,
-        _maybe_commit_id: Option<Hash>,
-        // _path: impl AsRef<Path>,
     ) -> Option<ContractIndexElement> {
         self.inner_contracts.remove(contract_id)
     }

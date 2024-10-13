@@ -85,12 +85,6 @@ impl ContractStore {
         let (call, calls) = mpsc::channel();
         let commits = read_all_commits(&engine, root_dir)?;
 
-        // here is a place where central objects should be read from disk
-        // central objects are:
-        //     1) merkle tree
-        //     2) contracts map (ContractId, Option<CommitId>) ->
-        //        ContractIndexElement
-
         let loop_root_dir = root_dir.to_path_buf();
 
         // The thread is given a name to allow for easily identifying it while
@@ -377,10 +371,10 @@ fn commit_from_dir<P: AsRef<Path>>(
     })
 }
 
-fn index_merkle_from_path<P1: AsRef<Path>, P2: AsRef<Path>, P3: AsRef<Path>>(
-    main_path: P1,
-    merkle_path: P2,
-    leaf_dir: P3,
+fn index_merkle_from_path(
+    main_path: impl AsRef<Path>,
+    merkle_path: impl AsRef<Path>,
+    leaf_dir: impl AsRef<Path>,
     maybe_commit_id: &Option<Hash>,
 ) -> io::Result<(NewContractIndex, ContractsMerkle)> {
     let merkle_path = merkle_path.as_ref();
@@ -400,21 +394,23 @@ fn index_merkle_from_path<P1: AsRef<Path>, P2: AsRef<Path>, P3: AsRef<Path>>(
                 main_path.as_ref(),
             )
             .unwrap_or(contract_leaf_path.join(ELEMENT_FILE));
-            let element_bytes = fs::read(element_path.clone())?;
-            let element: ContractIndexElement =
-                rkyv::from_bytes(&element_bytes).map_err(|err| {
-                    tracing::trace!(
-                        "deserializing element file failed {}",
-                        err
-                    );
-                    io::Error::new(
-                        io::ErrorKind::InvalidData,
-                        format!(
+            if element_path.is_file() {
+                let element_bytes = fs::read(element_path.clone())?;
+                let element: ContractIndexElement =
+                    rkyv::from_bytes(&element_bytes).map_err(|err| {
+                        tracing::trace!(
+                            "deserializing element file failed {}",
+                            err
+                        );
+                        io::Error::new(
+                            io::ErrorKind::InvalidData,
+                            format!(
                             "Invalid element file \"{element_path:?}\": {err}"
                         ),
-                    )
-                })?;
-            index.insert_contract_index(&contract_id, element)
+                        )
+                    })?;
+                index.insert_contract_index(&contract_id, element)
+            }
         }
     }
 
@@ -467,11 +463,8 @@ impl Commit {
     pub fn inclusion_proofs(
         mut self,
         contract_id: &ContractId,
-        maybe_commit_id: Option<Hash>,
     ) -> Option<impl Iterator<Item = (usize, PageOpening)>> {
-        let contract = self
-            .index
-            .remove_contract_index(contract_id, maybe_commit_id)?;
+        let contract = self.index.remove_contract_index(contract_id)?;
 
         let pos = position_from_contract(contract_id);
 
@@ -523,7 +516,7 @@ impl Commit {
     }
 
     pub fn remove_and_insert(&mut self, contract: ContractId, memory: &Memory) {
-        self.index.remove_contract_index(&contract, self.maybe_hash);
+        self.index.remove_contract_index(&contract);
         self.insert(contract, memory);
     }
 
@@ -738,7 +731,7 @@ fn write_commit<P: AsRef<Path>>(
     let mut commit = Commit {
         index,
         contracts_merkle,
-        maybe_hash: base.as_ref().map_or(None, |base| base.maybe_hash),
+        maybe_hash: base.as_ref().and_then(|base| base.maybe_hash),
     };
 
     for (contract_id, contract_data) in &commit_contracts {
