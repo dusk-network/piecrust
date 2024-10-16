@@ -87,11 +87,13 @@ impl ContractSession {
     ///
     /// [`contract`]: ContractSession::contract
     pub fn root(&self) -> Hash {
+        tracing::trace!("root called commit cloning");
         let mut commit = self.base.clone().unwrap_or(Commit::new());
         for (contract, entry) in &self.contracts {
             commit.insert(*contract, &entry.memory);
         }
         let root = commit.root();
+        tracing::trace!("root call finished");
 
         *root
     }
@@ -102,6 +104,7 @@ impl ContractSession {
         &self,
         contract: ContractId,
     ) -> Option<impl Iterator<Item = (usize, &[u8], PageOpening)>> {
+        tracing::trace!("memory_pages called commit cloning");
         let mut commit = self.base.clone().unwrap_or(Commit::new());
         for (contract, entry) in &self.contracts {
             commit.insert(*contract, &entry.memory);
@@ -134,6 +137,7 @@ impl ContractSession {
     ///
     /// [`contract`]: ContractSession::contract
     pub fn commit(&mut self) -> io::Result<Hash> {
+        tracing::trace!("commit started");
         let (replier, receiver) = mpsc::sync_channel(1);
 
         let mut contracts = BTreeMap::new();
@@ -153,6 +157,7 @@ impl ContractSession {
                 replier,
             })
             .expect("The receiver should never drop before sending");
+        tracing::trace!("commit sent");
 
         receiver
             .recv()
