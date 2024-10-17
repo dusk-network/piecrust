@@ -614,7 +614,7 @@ fn sync_loop<P: AsRef<Path>>(
                 tracing::trace!("writing commit started");
                 let io_result = write_commit(
                     root_dir,
-                    &mut commit_store.lock().unwrap(),
+                    commit_store.clone(),
                     base,
                     contracts,
                 );
@@ -763,7 +763,7 @@ fn sync_loop<P: AsRef<Path>>(
 
 fn write_commit<P: AsRef<Path>>(
     root_dir: P,
-    commit_store: &mut CommitStore,
+    commit_store: Arc<Mutex<CommitStore>>,
     base: Option<Commit>,
     commit_contracts: BTreeMap<ContractId, ContractDataEntry>,
 ) -> io::Result<Hash> {
@@ -805,13 +805,13 @@ fn write_commit<P: AsRef<Path>>(
 
     // Don't write the commit if it already exists on disk. This may happen if
     // the same transactions on the same base commit for example.
-    if commit_store.contains_key(&root) {
+    if commit_store.lock().unwrap().contains_key(&root) {
         return Ok(root);
     }
 
     write_commit_inner(root_dir, &commit, commit_contracts, root_hex, base_info)
         .map(|_| {
-            commit_store.insert_commit(root, commit);
+            commit_store.lock().unwrap().insert_commit(root, commit);
             root
         })
 }
