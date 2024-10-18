@@ -563,7 +563,10 @@ impl Commit {
     }
 
     pub fn root(&self) -> Ref<Hash> {
-        self.contracts_merkle.root()
+        tracing::trace!("calculating root started");
+        let ret = self.contracts_merkle.root();
+        tracing::trace!("calculating root finished");
+        ret
     }
 }
 
@@ -798,10 +801,8 @@ fn write_commit<P: AsRef<Path>>(
         }
     }
 
-    tracing::trace!("calculating root started");
     let root = *commit.root();
     let root_hex = hex::encode(root);
-    tracing::trace!("calculating root finished");
 
     // Don't write the commit if it already exists on disk. This may happen if
     // the same transactions on the same base commit for example.
