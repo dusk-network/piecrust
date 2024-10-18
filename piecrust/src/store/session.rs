@@ -88,7 +88,11 @@ impl ContractSession {
     /// [`contract`]: ContractSession::contract
     pub fn root(&self) -> Hash {
         tracing::trace!("root called commit cloning");
-        let mut commit = self.base.clone().unwrap_or(Commit::new());
+        let mut commit = self
+            .base
+            .as_ref()
+            .map(|c| c.fast_clone(&mut self.contracts.keys()))
+            .unwrap_or(Commit::new());
         for (contract, entry) in &self.contracts {
             commit.insert(*contract, &entry.memory);
         }
