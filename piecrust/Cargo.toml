@@ -7,7 +7,7 @@ categories = ["wasm", "no-std", "cryptography::cryptocurrencies"]
 keywords = ["virtual", "machine", "smart", "contract", "wasm"]
 
 repository = "https://github.com/dusk-network/piecrust"
-version = "0.25.0"
+version = "0.26.0-rc.3"
 
 edition = "2021"
 license = "MPL-2.0"
@@ -27,6 +27,7 @@ rand = "0.8"
 hex = "0.4"
 dusk-merkle = { version = "0.5", features = ["rkyv-impl"] }
 const-decoder = "0.3"
+tracing = "=0.1.40"
 
 [dev-dependencies]
 once_cell = "1.18"

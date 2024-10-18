@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Improved page finding performance [#393]
+
 ## [0.25.0] - 2024-09-30
 
 ### Changed
@@ -468,6 +472,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- ISSUES -->
 
+[#393]: https://github.com/dusk-network/piecrust/issues/393
 [#388]: https://github.com/dusk-network/piecrust/issues/388
 [#371]: https://github.com/dusk-network/piecrust/issues/371
 [#359]: https://github.com/dusk-network/piecrust/issues/359

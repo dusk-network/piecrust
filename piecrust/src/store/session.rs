@@ -17,9 +17,9 @@ use piecrust_uplink::ContractId;
 use crate::contract::ContractMetadata;
 use crate::store::tree::{Hash, PageOpening};
 use crate::store::{
-    index_from_path, Bytecode, Call, Commit, Memory, Metadata, Module,
-    BYTECODE_DIR, INDEX_FILE, MAIN_DIR, MEMORY_DIR, METADATA_EXTENSION,
-    OBJECTCODE_EXTENSION, PAGE_SIZE,
+    base_from_path, Bytecode, Call, Commit, Memory, Metadata, Module,
+    BASE_FILE, BYTECODE_DIR, ELEMENT_FILE, MAIN_DIR, MEMORY_DIR,
+    METADATA_EXTENSION, OBJECTCODE_EXTENSION, PAGE_SIZE,
 };
 use crate::Error;
 
@@ -87,11 +87,17 @@ impl ContractSession {
     ///
     /// [`contract`]: ContractSession::contract
     pub fn root(&self) -> Hash {
-        let mut commit = self.base.clone().unwrap_or_default();
+        tracing::trace!("root called commit cloning");
+        let mut commit = self
+            .base
+            .as_ref()
+            .map(|c| c.fast_clone(&mut self.contracts.keys()))
+            .unwrap_or(Commit::new());
         for (contract, entry) in &self.contracts {
-            commit.index.insert(*contract, &entry.memory);
+            commit.insert(*contract, &entry.memory);
         }
-        let root = commit.index.root();
+        let root = commit.root();
+        tracing::trace!("root call finished");
 
         *root
     }
@@ -102,13 +108,14 @@ impl ContractSession {
         &self,
         contract: ContractId,
     ) -> Option<impl Iterator<Item = (usize, &[u8], PageOpening)>> {
-        let mut commit = self.base.clone().unwrap_or_default();
+        tracing::trace!("memory_pages called commit cloning");
+        let mut commit = self.base.clone().unwrap_or(Commit::new());
         for (contract, entry) in &self.contracts {
-            commit.index.insert(*contract, &entry.memory);
+            commit.insert(*contract, &entry.memory);
         }
 
         let contract_data = self.contracts.get(&contract)?;
-        let inclusion_proofs = commit.index.inclusion_proofs(&contract)?;
+        let inclusion_proofs = commit.inclusion_proofs(&contract)?;
 
         let inclusion_proofs =
             inclusion_proofs.map(move |(page_index, opening)| {
@@ -134,11 +141,14 @@ impl ContractSession {
     ///
     /// [`contract`]: ContractSession::contract
     pub fn commit(&mut self) -> io::Result<Hash> {
+        tracing::trace!("commit started");
         let (replier, receiver) = mpsc::sync_channel(1);
 
         let mut contracts = BTreeMap::new();
         let mut base = self.base.as_ref().map(|c| Commit {
             index: c.index.clone(),
+            contracts_merkle: c.contracts_merkle.clone(),
+            maybe_hash: c.maybe_hash,
         });
 
         mem::swap(&mut self.contracts, &mut contracts);
@@ -151,6 +161,7 @@ impl ContractSession {
                 replier,
             })
             .expect("The receiver should never drop before sending");
+        tracing::trace!("commit sent");
 
         receiver
             .recv()
@@ -173,20 +184,47 @@ impl ContractSession {
                 let hash_hex = hex::encode(hash.as_bytes());
                 let path = memory_path
                     .as_ref()
-                    .join(hash_hex.clone())
+                    .join(&hash_hex)
                     .join(format!("{page_index}"));
                 if path.is_file() {
                     Some(path)
                 } else {
-                    let index_path =
-                        main_path.as_ref().join(hash_hex).join(INDEX_FILE);
-                    let index = index_from_path(index_path).ok()?;
+                    let base_info_path =
+                        main_path.as_ref().join(hash_hex).join(BASE_FILE);
+                    let index = base_from_path(base_info_path).ok()?;
                     Self::find_page(
                         page_index,
                         index.maybe_base,
-                        memory_path.as_ref(),
-                        main_path.as_ref(),
+                        memory_path,
+                        main_path,
                     )
+                }
+            }
+        }
+    }
+
+    /// Returns path to a file representing a given commit and element.
+    ///
+    /// Requires a contract's leaf path and a main state path.
+    /// Progresses recursively via bases of commits.
+    pub fn find_element(
+        commit: Option<Hash>,
+        leaf_path: impl AsRef<Path>,
+        main_path: impl AsRef<Path>,
+    ) -> Option<PathBuf> {
+        match commit {
+            None => None,
+            Some(hash) => {
+                let hash_hex = hex::encode(hash.as_bytes());
+                let path =
+                    leaf_path.as_ref().join(&hash_hex).join(ELEMENT_FILE);
+                if path.is_file() {
+                    Some(path)
+                } else {
+                    let base_info_path =
+                        main_path.as_ref().join(hash_hex).join(BASE_FILE);
+                    let index = base_from_path(base_info_path).ok()?;
+                    Self::find_element(index.maybe_base, leaf_path, main_path)
                 }
             }
         }
@@ -206,7 +244,7 @@ impl ContractSession {
         &mut self,
         contract: ContractId,
     ) -> io::Result<Option<ContractDataEntry>> {
-        let commit_id = self.base.as_ref().map(|commit| *commit.index.root());
+        let commit_id = self.base.as_ref().map(|commit| *commit.root());
         match self.contracts.entry(contract) {
             Vacant(entry) => match &self.base {
                 None => Ok(None),
@@ -231,13 +269,13 @@ impl ContractSession {
                                 Module::from_file(&self.engine, module_path)?;
                             let metadata = Metadata::from_file(metadata_path)?;
 
-                            let memory = match base_commit.index.get(&contract)
+                            let memory = match base_commit
+                                .index
+                                .get(&contract, base_commit.maybe_hash)
                             {
                                 Some(elem) => {
                                     let page_indices =
                                         elem.page_indices.clone();
-                                    let memory_path = memory_path.clone();
-
                                     Memory::from_files(
                                         module.is_64(),
                                         move |page_index: usize| {
@@ -248,8 +286,8 @@ impl ContractSession {
                                                     Self::find_page(
                                                         page_index,
                                                         commit_id,
-                                                        memory_path.clone(),
-                                                        base_dir.clone(),
+                                                        &memory_path,
+                                                        &base_dir,
                                                     )
                                                     .unwrap_or(
                                                         memory_path.join(
@@ -390,7 +428,7 @@ impl ContractSession {
 impl Drop for ContractSession {
     fn drop(&mut self) {
         if let Some(base) = self.base.take() {
-            let root = base.index.root();
+            let root = base.root();
             let _ = self.call.send(Call::SessionDrop(*root));
         }
     }
