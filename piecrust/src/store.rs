@@ -129,7 +129,7 @@ impl ContractStore {
         let (call, calls) = mpsc::channel();
         let commit_store = self.commit_store.clone();
 
-        read_all_commits(&self.engine, self.root_dir.clone(), commit_store)?;
+        read_all_commits(&self.engine, &self.root_dir, commit_store)?;
 
         let commit_store = self.commit_store.clone();
 
@@ -252,12 +252,12 @@ fn read_all_commits<P: AsRef<Path>>(
     let root_dir = root_dir.as_ref();
 
     let root_dir = root_dir.join(MAIN_DIR);
-    fs::create_dir_all(root_dir.clone())?;
+    fs::create_dir_all(&root_dir)?;
 
     for entry in fs::read_dir(root_dir)? {
         let entry = entry?;
         if entry.path().is_dir() {
-            let filename = entry.file_name().to_string_lossy().to_string();
+            let filename = entry.file_name();
             if filename == MEMORY_DIR
                 || filename == BYTECODE_DIR
                 || filename == LEAF_DIR
@@ -390,7 +390,7 @@ fn commit_from_dir<P: AsRef<Path>>(
                 let path = ContractSession::find_page(
                     *page_index,
                     maybe_hash,
-                    contract_memory_dir.clone(),
+                    &contract_memory_dir,
                     main_dir,
                 );
                 let found = path.map(|p| p.is_file()).unwrap_or(false);
@@ -426,18 +426,18 @@ fn index_merkle_from_path(
     for entry in fs::read_dir(leaf_dir)? {
         let entry = entry?;
         if entry.path().is_dir() {
-            let contract_id_hex =
-                entry.file_name().to_string_lossy().to_string();
-            let contract_id = contract_id_from_hex(contract_id_hex.clone());
+            let contract_id_hex = entry.file_name();
+            let contract_id =
+                contract_id_from_hex(contract_id_hex.to_string_lossy());
             let contract_leaf_path = leaf_dir.join(contract_id_hex);
             let element_path = ContractSession::find_element(
                 *maybe_commit_id,
-                contract_leaf_path.clone(),
-                main_path.as_ref(),
+                &contract_leaf_path,
+                &main_path,
             )
             .unwrap_or(contract_leaf_path.join(ELEMENT_FILE));
             if element_path.is_file() {
-                let element_bytes = fs::read(element_path.clone())?;
+                let element_bytes = fs::read(&element_path)?;
                 let element: ContractIndexElement =
                     rkyv::from_bytes(&element_bytes).map_err(|err| {
                         tracing::trace!(
@@ -869,12 +869,9 @@ fn write_commit_inner<P: AsRef<Path>, S: AsRef<str>>(
         let mut dirty = false;
         // Write dirty pages and keep track of the page indices.
         for (dirty_page, _, page_index) in contract_data.memory.dirty_pages() {
-            let page_path: PathBuf = page_path_main(
-                &memory_main_dir,
-                *page_index,
-                commit_id.as_ref(),
-            )?;
-            fs::write(page_path.clone(), dirty_page)?;
+            let page_path: PathBuf =
+                page_path_main(&memory_main_dir, *page_index, &commit_id)?;
+            fs::write(page_path, dirty_page)?;
             pages.insert(*page_index);
             dirty = true;
         }
@@ -910,7 +907,7 @@ fn write_commit_inner<P: AsRef<Path>, S: AsRef<str>>(
                 .join(hex::encode(contract_id.as_bytes()))
                 .join(commit_id.as_ref());
             let element_file_path = element_dir_path.join(ELEMENT_FILE);
-            create_dir_all(element_dir_path.clone())?;
+            create_dir_all(element_dir_path)?;
             let element_bytes =
                 rkyv::to_bytes::<_, 128>(element).map_err(|err| {
                     io::Error::new(
@@ -918,7 +915,7 @@ fn write_commit_inner<P: AsRef<Path>, S: AsRef<str>>(
                         format!("Failed serializing element file: {err}"),
                     )
                 })?;
-            fs::write(element_file_path.clone(), element_bytes)?;
+            fs::write(&element_file_path, element_bytes)?;
         }
     }
     tracing::trace!("persisting index finished");
@@ -932,7 +929,7 @@ fn write_commit_inner<P: AsRef<Path>, S: AsRef<str>>(
                 format!("Failed serializing base info file: {err}"),
             )
         })?;
-    fs::write(base_main_path.clone(), base_info_bytes)?;
+    fs::write(base_main_path, base_info_bytes)?;
 
     Ok(())
 }
@@ -944,24 +941,22 @@ fn delete_commit_dir<P: AsRef<Path>>(
 ) -> io::Result<()> {
     let root = hex::encode(root);
     let root_main_dir = root_dir.as_ref().join(MAIN_DIR);
-    let commit_dir = root_main_dir.join(root.clone());
+    let commit_dir = root_main_dir.join(&root);
     if commit_dir.exists() {
         let base_info_path = commit_dir.join(BASE_FILE);
-        let base_info = base_from_path(base_info_path.clone())?;
+        let base_info = base_from_path(base_info_path)?;
         for contract_hint in base_info.contract_hints {
             let contract_hex = hex::encode(contract_hint);
             let commit_mem_path = root_main_dir
                 .join(MEMORY_DIR)
-                .join(contract_hex.clone())
-                .join(root.clone());
-            fs::remove_dir_all(commit_mem_path.clone())?;
-            let commit_leaf_path = root_main_dir
-                .join(LEAF_DIR)
-                .join(contract_hex.clone())
-                .join(root.clone());
-            fs::remove_dir_all(commit_leaf_path.clone())?;
+                .join(&contract_hex)
+                .join(&root);
+            fs::remove_dir_all(&commit_mem_path)?;
+            let commit_leaf_path =
+                root_main_dir.join(LEAF_DIR).join(&contract_hex).join(&root);
+            fs::remove_dir_all(&commit_leaf_path)?;
         }
-        fs::remove_dir_all(commit_dir.clone())?;
+        fs::remove_dir_all(&commit_dir)?;
     }
     Ok(())
 }
@@ -974,44 +969,38 @@ fn finalize_commit<P: AsRef<Path>>(
 ) -> io::Result<()> {
     let main_dir = root_dir.as_ref().join(MAIN_DIR);
     let root = hex::encode(root);
-    let commit_path = main_dir.join(root.clone());
+    let commit_path = main_dir.join(&root);
     let base_info_path = commit_path.join(BASE_FILE);
-    let base_info = base_from_path(base_info_path.clone())?;
+    let base_info = base_from_path(&base_info_path)?;
     for contract_hint in base_info.contract_hints {
         let contract_hex = hex::encode(contract_hint);
         // MEMORY
-        let src_path = main_dir
-            .join(MEMORY_DIR)
-            .join(contract_hex.clone())
-            .join(root.clone());
-        let dst_path =
-            main_dir.clone().join(MEMORY_DIR).join(contract_hex.clone());
-        for entry in fs::read_dir(src_path.clone())? {
-            let entry = entry?;
-            let filename = entry.file_name().to_string_lossy().to_string();
-            let src_file_path = src_path.join(filename.clone());
-            let dst_file_path = dst_path.join(filename);
+        let src_path =
+            main_dir.join(MEMORY_DIR).join(&contract_hex).join(&root);
+        let dst_path = main_dir.join(MEMORY_DIR).join(&contract_hex);
+        for entry in fs::read_dir(&src_path)? {
+            let filename = entry?.file_name();
+            let src_file_path = src_path.join(&filename);
+            let dst_file_path = dst_path.join(&filename);
             if src_file_path.is_file() {
                 fs::rename(src_file_path, dst_file_path)?;
             }
         }
-        fs::remove_dir(src_path.clone())?;
+        fs::remove_dir(&src_path)?;
         // LEAF
-        let src_leaf_path = main_dir
-            .join(LEAF_DIR)
-            .join(contract_hex.clone())
-            .join(root.clone());
-        let dst_leaf_path = main_dir.clone().join(LEAF_DIR).join(contract_hex);
+        let src_leaf_path =
+            main_dir.join(LEAF_DIR).join(&contract_hex).join(&root);
+        let dst_leaf_path = main_dir.join(LEAF_DIR).join(contract_hex);
         let src_leaf_file_path = src_leaf_path.join(ELEMENT_FILE);
         let dst_leaf_file_path = dst_leaf_path.join(ELEMENT_FILE);
         if src_leaf_file_path.is_file() {
             fs::rename(src_leaf_file_path, dst_leaf_file_path)?;
         }
-        fs::remove_dir(src_leaf_path.clone())?;
+        fs::remove_dir(src_leaf_path)?;
     }
 
     fs::remove_file(base_info_path)?;
-    fs::remove_dir(commit_path.clone())?;
+    fs::remove_dir(commit_path)?;
 
     Ok(())
 }
