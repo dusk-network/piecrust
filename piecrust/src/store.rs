@@ -129,7 +129,9 @@ impl ContractStore {
         let (call, calls) = mpsc::channel();
         let commit_store = self.commit_store.clone();
 
+        tracing::trace!("before read_all_commit");
         read_all_commits(&self.engine, &self.root_dir, commit_store)?;
+        tracing::trace!("after read_all_commit");
 
         let commit_store = self.commit_store.clone();
 
@@ -264,7 +266,9 @@ fn read_all_commits<P: AsRef<Path>>(
             {
                 continue;
             }
+            tracing::trace!("before read_commit");
             let commit = read_commit(engine, entry.path())?;
+            tracing::trace!("before read_commit");
             let root = *commit.root();
             commit_store.lock().unwrap().insert_commit(root, commit);
         }
@@ -350,8 +354,10 @@ fn commit_from_dir<P: AsRef<Path>>(
 
     // let contracts_merkle_path = dir.join(MERKLE_FILE);
     let leaf_dir = main_dir.join(LEAF_DIR);
+    tracing::trace!("before index_merkle_from_path");
     let (index, contracts_merkle) =
         index_merkle_from_path(main_dir, leaf_dir, &maybe_hash)?;
+    tracing::trace!("after index_merkle_from_path");
 
     let bytecode_dir = main_dir.join(BYTECODE_DIR);
     let memory_dir = main_dir.join(MEMORY_DIR);
