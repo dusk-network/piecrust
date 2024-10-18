@@ -184,7 +184,7 @@ impl ContractSession {
                 let hash_hex = hex::encode(hash.as_bytes());
                 let path = memory_path
                     .as_ref()
-                    .join(hash_hex.clone())
+                    .join(&hash_hex)
                     .join(format!("{page_index}"));
                 if path.is_file() {
                     Some(path)
@@ -195,8 +195,8 @@ impl ContractSession {
                     Self::find_page(
                         page_index,
                         index.maybe_base,
-                        memory_path.as_ref(),
-                        main_path.as_ref(),
+                        memory_path,
+                        main_path,
                     )
                 }
             }
@@ -216,21 +216,15 @@ impl ContractSession {
             None => None,
             Some(hash) => {
                 let hash_hex = hex::encode(hash.as_bytes());
-                let path = leaf_path
-                    .as_ref()
-                    .join(hash_hex.clone())
-                    .join(ELEMENT_FILE);
+                let path =
+                    leaf_path.as_ref().join(&hash_hex).join(ELEMENT_FILE);
                 if path.is_file() {
                     Some(path)
                 } else {
                     let base_info_path =
                         main_path.as_ref().join(hash_hex).join(BASE_FILE);
                     let index = base_from_path(base_info_path).ok()?;
-                    Self::find_element(
-                        index.maybe_base,
-                        leaf_path.as_ref(),
-                        main_path.as_ref(),
-                    )
+                    Self::find_element(index.maybe_base, leaf_path, main_path)
                 }
             }
         }
@@ -282,8 +276,6 @@ impl ContractSession {
                                 Some(elem) => {
                                     let page_indices =
                                         elem.page_indices.clone();
-                                    let memory_path = memory_path.clone();
-
                                     Memory::from_files(
                                         module.is_64(),
                                         move |page_index: usize| {
@@ -294,8 +286,8 @@ impl ContractSession {
                                                     Self::find_page(
                                                         page_index,
                                                         commit_id,
-                                                        memory_path.clone(),
-                                                        base_dir.clone(),
+                                                        &memory_path,
+                                                        &base_dir,
                                                     )
                                                     .unwrap_or(
                                                         memory_path.join(
