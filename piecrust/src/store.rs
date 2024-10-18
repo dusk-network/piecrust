@@ -457,7 +457,6 @@ fn index_merkle_from_path(
                         element.int_pos.expect("int pos should be present"),
                         h,
                     );
-                    let _ = merkle.root();
                 }
                 index.insert_contract_index(&contract_id, element);
             }
