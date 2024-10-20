@@ -148,7 +148,7 @@ impl ContractSession {
 
         let mut contracts = BTreeMap::new();
         let start = SystemTime::now();
-        let base = self.base.as_ref().map(|c| c.to_commit());
+        let base = self.base.as_ref().map(|c| c.to_hulk_send());
         let stop = SystemTime::now();
         println!(
             "COMMIT PARTIAL CLONE, ELAPSED TIME={:?}",

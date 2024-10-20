@@ -30,7 +30,7 @@ use piecrust_uplink::ContractId;
 use session::ContractDataEntry;
 use tree::{Hash, NewContractIndex};
 
-use crate::store::commit::CommitHulk;
+use crate::store::commit::{CommitHulk, CommitHulkSend};
 use crate::store::tree::{
     position_from_contract, BaseInfo, ContractIndexElement, ContractsMerkle,
     PageTree,
@@ -501,6 +501,7 @@ pub(crate) struct Commit {
 }
 
 impl Commit {
+    #[allow(dead_code)]
     pub fn new() -> Self {
         Self {
             index: NewContractIndex::new(),
@@ -561,6 +562,7 @@ impl Commit {
         }))
     }
 
+    #[allow(dead_code)]
     pub fn insert(&mut self, contract_id: ContractId, memory: &Memory) {
         if self.index.get(&contract_id, self.maybe_hash).is_none() {
             self.index.insert_contract_index(
@@ -592,6 +594,7 @@ impl Commit {
         element.int_pos = Some(internal_pos);
     }
 
+    #[allow(dead_code)]
     pub fn remove_and_insert(&mut self, contract: ContractId, memory: &Memory) {
         self.index.remove_contract_index(&contract);
         self.insert(contract, memory);
@@ -608,7 +611,7 @@ impl Commit {
 pub(crate) enum Call {
     Commit {
         contracts: BTreeMap<ContractId, ContractDataEntry>,
-        base: Option<Commit>,
+        base: Option<CommitHulkSend>,
         replier: mpsc::SyncSender<io::Result<Hash>>,
     },
     GetCommits {
@@ -815,32 +818,19 @@ fn sync_loop<P: AsRef<Path>>(
 fn write_commit<P: AsRef<Path>>(
     root_dir: P,
     commit_store: Arc<Mutex<CommitStore>>,
-    base: Option<Commit>,
+    base: Option<CommitHulkSend>,
     commit_contracts: BTreeMap<ContractId, ContractDataEntry>,
 ) -> io::Result<Hash> {
     let root_dir = root_dir.as_ref();
+
+    let base: Option<CommitHulk> = base.map(|c| c.to_commit_hulk());
 
     let base_info = BaseInfo {
         maybe_base: base.as_ref().map(|base| *base.root()),
         ..Default::default()
     };
 
-    // base is already a copy, no point cloning it again
-
-    // let index = base
-    //     .as_ref()
-    //     .map_or(NewContractIndex::new(), |base| base.index.clone());
-    // let contracts_merkle =
-    //     base.as_ref().map_or(ContractsMerkle::default(), |base| {
-    //         base.contracts_merkle.clone()
-    //     });
-    // let mut commit = Commit {
-    //     index,
-    //     contracts_merkle,
-    //     maybe_hash: base.as_ref().and_then(|base| base.maybe_hash),
-    // };
-
-    let mut commit = base.unwrap_or(Commit::new());
+    let mut commit = base.unwrap_or(CommitHulk::new());
     for (contract_id, contract_data) in &commit_contracts {
         if contract_data.is_new {
             commit.remove_and_insert(*contract_id, &contract_data.memory);
@@ -858,6 +848,7 @@ fn write_commit<P: AsRef<Path>>(
         return Ok(root);
     }
 
+    let commit = commit.to_commit();
     write_commit_inner(root_dir, &commit, commit_contracts, root_hex, base_info)
         .map(|_| {
             commit_store.lock().unwrap().insert_commit(root, commit);

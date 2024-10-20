@@ -15,6 +15,24 @@ use std::cell::Ref;
 use std::collections::BTreeSet;
 
 #[derive(Debug, Clone)]
+pub(crate) struct CommitHulkSend {
+    index: NewContractIndex,
+    contracts_merkle: ContractsMerkle,
+    maybe_hash: Option<Hash>,
+}
+
+impl CommitHulkSend {
+    pub fn to_commit_hulk(&self) -> CommitHulk {
+        CommitHulk {
+            index: None,
+            index2: self.index.clone(),
+            contracts_merkle: self.contracts_merkle.clone(),
+            maybe_hash: self.maybe_hash,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
 pub(crate) struct CommitHulk {
     index: Option<*const NewContractIndex>,
     index2: NewContractIndex,
@@ -61,6 +79,14 @@ impl CommitHulk {
                 .insert_contract_index(&contract_id, element.clone())
         }
         commit
+    }
+
+    pub fn to_hulk_send(&self) -> CommitHulkSend {
+        CommitHulkSend {
+            index: self.index2.clone(),
+            contracts_merkle: self.contracts_merkle.clone(),
+            maybe_hash: self.maybe_hash,
+        }
     }
 
     pub fn fast_clone<'a>(
@@ -148,10 +174,10 @@ impl CommitHulk {
         (&mut self.index2, &mut self.contracts_merkle)
     }
 
-    // pub fn remove_and_insert(&mut self, contract: ContractId, memory:
-    // &Memory) {     self.remove_contract_index(&contract);
-    //     self.insert(contract, memory);
-    // }
+    pub fn remove_and_insert(&mut self, contract: ContractId, memory: &Memory) {
+        self.remove_contract_index(&contract);
+        self.insert(contract, memory);
+    }
 
     pub fn root(&self) -> Ref<Hash> {
         tracing::trace!("calculating root started");
