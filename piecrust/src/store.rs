@@ -22,6 +22,7 @@ use std::fmt::{Debug, Formatter};
 use std::fs::create_dir_all;
 use std::path::{Path, PathBuf};
 use std::sync::{mpsc, Arc, Mutex};
+use std::time::SystemTime;
 use std::{fs, io, thread};
 
 use dusk_wasmtime::Engine;
@@ -649,11 +650,17 @@ fn sync_loop<P: AsRef<Path>>(
                 replier,
             } => {
                 tracing::trace!("writing commit started");
+                let start = SystemTime::now();
                 let io_result = write_commit(
                     root_dir,
                     commit_store.clone(),
                     base,
                     contracts,
+                );
+                let stop = SystemTime::now();
+                println!(
+                    "WRITE COMMIT FINISHED, ELAPSED TIME={:?}",
+                    stop.duration_since(start).expect("duration should work")
                 );
                 match &io_result {
                     Ok(hash) => tracing::trace!(
@@ -723,7 +730,14 @@ fn sync_loop<P: AsRef<Path>>(
                         "finalizing commit proper started {}",
                         hex::encode(root.as_bytes())
                     );
+                    let start = SystemTime::now();
                     let io_result = finalize_commit(root, root_dir, commit);
+                    let stop = SystemTime::now();
+                    println!(
+                        "FINALIZE COMMIT FINISHED, ELAPSED TIME={:?}",
+                        stop.duration_since(start)
+                            .expect("duration should work")
+                    );
                     match &io_result {
                         Ok(_) => tracing::trace!(
                             "finalizing commit proper finished: {:?}",
