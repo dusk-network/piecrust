@@ -9,6 +9,7 @@ use std::collections::BTreeMap;
 use std::fmt::Debug;
 use std::path::{Path, PathBuf};
 use std::sync::{mpsc, Arc};
+use std::time::SystemTime;
 use std::{io, mem};
 
 use dusk_wasmtime::Engine;
@@ -146,7 +147,13 @@ impl ContractSession {
         let (replier, receiver) = mpsc::sync_channel(1);
 
         let mut contracts = BTreeMap::new();
-        let base = self.base.as_ref().map(|c| c.partial_clone());
+        let start = SystemTime::now();
+        let base = self.base.as_ref().map(|c| c.to_commit());
+        let stop = SystemTime::now();
+        println!(
+            "COMMIT PARTIAL CLONE, ELAPSED TIME={:?}",
+            stop.duration_since(start).expect("duration should work")
+        );
 
         mem::swap(&mut self.contracts, &mut contracts);
 

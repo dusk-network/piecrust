@@ -41,25 +41,14 @@ impl CommitHulk {
         }
     }
 
-    pub fn partial_clone<'a>(&self) -> Commit {
+    pub fn to_commit<'a>(&self) -> Commit {
         let index = self.index.map(|p| unsafe { p.as_ref().unwrap() });
         let mut commit = match index {
-            Some(p) => {
-                let mut new_index = NewContractIndex::new();
-                for (contract_id, element) in p.iter() {
-                    if self.index_contains_key(contract_id) {
-                        new_index.insert_contract_index(
-                            contract_id,
-                            element.clone(),
-                        );
-                    }
-                }
-                Commit {
-                    index: new_index,
-                    contracts_merkle: self.contracts_merkle.clone(),
-                    maybe_hash: self.maybe_hash,
-                }
-            }
+            Some(p) => Commit {
+                index: p.clone(),
+                contracts_merkle: self.contracts_merkle.clone(),
+                maybe_hash: self.maybe_hash,
+            },
             None => Commit {
                 index: NewContractIndex::new(),
                 contracts_merkle: self.contracts_merkle.clone(),
