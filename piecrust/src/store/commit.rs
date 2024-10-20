@@ -43,7 +43,7 @@ impl CommitHulk {
 
     pub fn to_commit(&self) -> Commit {
         let index = self.index.map(|p| unsafe { p.as_ref().unwrap() });
-        let mut commit = match index {
+        match index {
             Some(p) => Commit {
                 index: p.clone(),
                 contracts_merkle: self.contracts_merkle.clone(),
@@ -54,13 +54,12 @@ impl CommitHulk {
                 contracts_merkle: self.contracts_merkle.clone(),
                 maybe_hash: self.maybe_hash,
             },
-        };
-        for (contract_id, element) in self.index2.contracts().iter() {
-            commit
-                .index
-                .insert_contract_index(&contract_id, element.clone())
         }
-        commit
+        // for (contract_id, element) in self.index2.contracts().iter() {
+        //     commit
+        //         .index
+        //         .insert_contract_index(&contract_id, element.clone())
+        // }
     }
 
     pub fn fast_clone<'a>(
@@ -123,8 +122,8 @@ impl CommitHulk {
                 },
             );
         }
-        let (index2, contracts_merkle) = self.get_mutables();
-        let element = index2.get_mut(&contract_id, None).unwrap();
+        let (index, contracts_merkle) = self.get_mutables();
+        let element = index.get_mut(&contract_id, None).unwrap();
 
         element.len = memory.current_len;
 
@@ -161,14 +160,14 @@ impl CommitHulk {
     }
 
     /*
-    ==========================
+    index accessors
      */
 
     pub fn remove_contract_index(
         &mut self,
         contract_id: &ContractId,
     ) -> Option<ContractIndexElement> {
-        self.index2.contracts_mut().remove(&contract_id) // todo: may not work
+        self.index2.contracts_mut().remove(contract_id)
     }
 
     pub fn insert_contract_index(
@@ -187,9 +186,9 @@ impl CommitHulk {
         match index {
             Some(p) => self
                 .index2
-                .get(&contract_id, self.maybe_hash)
-                .or_else(move || p.get(&contract_id, self.maybe_hash)),
-            None => self.index2.get(&contract_id, self.maybe_hash),
+                .get(contract_id, self.maybe_hash)
+                .or_else(move || p.get(contract_id, self.maybe_hash)),
+            None => self.index2.get(contract_id, self.maybe_hash),
         }
     }
 
@@ -206,10 +205,10 @@ impl CommitHulk {
         let index = self.index.map(|p| unsafe { p.as_ref().unwrap() });
         match index {
             Some(p) => {
-                self.index2.contains_key(&contract_id)
-                    || p.contains_key(&contract_id)
+                self.index2.contains_key(contract_id)
+                    || p.contains_key(contract_id)
             }
-            None => self.index2.contains_key(&contract_id),
+            None => self.index2.contains_key(contract_id),
         }
     }
 
