@@ -146,16 +146,9 @@ impl ContractSession {
         let (replier, receiver) = mpsc::sync_channel(1);
 
         let mut contracts = BTreeMap::new();
-        let base = self.base.as_ref().map(|c| //Commit {
-            // index: c.index.clone(),
-            // contracts_merkle: c.contracts_merkle.clone(),
-            // maybe_hash: c.maybe_hash,
-            c.to_commit() /* } */);
-
-        let mut base_clone = base.as_ref().map(|b| b.to_hulk()); // todo: wasteful, think of a better way
+        let base = self.base.as_ref().map(|c| c.partial_clone());
 
         mem::swap(&mut self.contracts, &mut contracts);
-        mem::swap(&mut self.base, &mut base_clone);
 
         self.call
             .send(Call::Commit {

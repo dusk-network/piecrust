@@ -41,14 +41,25 @@ impl CommitHulk {
         }
     }
 
-    pub fn to_commit(&self) -> Commit {
+    pub fn partial_clone<'a>(&self) -> Commit {
         let index = self.index.map(|p| unsafe { p.as_ref().unwrap() });
         let mut commit = match index {
-            Some(p) => Commit {
-                index: p.clone(),
-                contracts_merkle: self.contracts_merkle.clone(),
-                maybe_hash: self.maybe_hash,
-            },
+            Some(p) => {
+                let mut new_index = NewContractIndex::new();
+                for (contract_id, element) in p.iter() {
+                    if self.index_contains_key(contract_id) {
+                        new_index.insert_contract_index(
+                            contract_id,
+                            element.clone(),
+                        );
+                    }
+                }
+                Commit {
+                    index: new_index,
+                    contracts_merkle: self.contracts_merkle.clone(),
+                    maybe_hash: self.maybe_hash,
+                }
+            }
             None => Commit {
                 index: NewContractIndex::new(),
                 contracts_merkle: self.contracts_merkle.clone(),
@@ -123,8 +134,8 @@ impl CommitHulk {
                 },
             );
         }
-        let (index2, contracts_merkle) = self.get_mutables();
-        let element = index2.get_mut(&contract_id, None).unwrap();
+        let (index, contracts_merkle) = self.get_mutables();
+        let element = index.get_mut(&contract_id, None).unwrap();
 
         element.len = memory.current_len;
 
@@ -161,14 +172,14 @@ impl CommitHulk {
     }
 
     /*
-    ==========================
+    index accessors
      */
 
     pub fn remove_contract_index(
         &mut self,
         contract_id: &ContractId,
     ) -> Option<ContractIndexElement> {
-        self.index2.contracts_mut().remove(&contract_id) // todo: may not work
+        self.index2.contracts_mut().remove(&contract_id)
     }
 
     pub fn insert_contract_index(
