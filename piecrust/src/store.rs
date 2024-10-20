@@ -7,6 +7,7 @@
 //! A library for dealing with memories in trees.
 
 mod bytecode;
+mod commit;
 mod memory;
 mod metadata;
 mod module;
@@ -28,6 +29,7 @@ use piecrust_uplink::ContractId;
 use session::ContractDataEntry;
 use tree::{Hash, NewContractIndex};
 
+use crate::store::commit::CommitClone;
 use crate::store::tree::{
     position_from_contract, BaseInfo, ContractIndexElement, ContractsMerkle,
     PageTree,
@@ -235,7 +237,11 @@ impl ContractStore {
 
     fn session_with_base(&self, base: Option<Hash>) -> ContractSession {
         let base_commit = base.and_then(|hash| {
-            self.commit_store.lock().unwrap().get_commit(&hash).cloned() // todo: clone here
+            self.commit_store
+                .lock()
+                .unwrap()
+                .get_commit(&hash)
+                .map(|commit| commit.to_clone()) // todo: clone here
         });
         ContractSession::new(
             &self.root_dir,
@@ -502,6 +508,7 @@ impl Commit {
         }
     }
 
+    #[allow(dead_code)]
     pub fn fast_clone<'a>(
         &self,
         contract_ids: impl Iterator<Item = &'a ContractId>,
@@ -519,6 +526,11 @@ impl Commit {
         }
     }
 
+    pub fn to_clone(&self) -> CommitClone {
+        CommitClone::from_commit(self)
+    }
+
+    #[allow(dead_code)]
     pub fn inclusion_proofs(
         mut self,
         contract_id: &ContractId,
