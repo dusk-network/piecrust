@@ -29,7 +29,7 @@ use piecrust_uplink::ContractId;
 use session::ContractDataEntry;
 use tree::{Hash, NewContractIndex};
 
-use crate::store::commit::CommitClone;
+use crate::store::commit::CommitHulk;
 use crate::store::tree::{
     position_from_contract, BaseInfo, ContractIndexElement, ContractsMerkle,
     PageTree,
@@ -241,7 +241,7 @@ impl ContractStore {
                 .lock()
                 .unwrap()
                 .get_commit(&hash)
-                .map(|commit| commit.to_clone()) // todo: clone here
+                .map(|commit| commit.to_hulk())
         });
         ContractSession::new(
             &self.root_dir,
@@ -526,8 +526,8 @@ impl Commit {
         }
     }
 
-    pub fn to_clone(&self) -> CommitClone {
-        CommitClone::from_commit(self)
+    pub fn to_hulk(&self) -> CommitHulk {
+        CommitHulk::from_commit(self)
     }
 
     #[allow(dead_code)]

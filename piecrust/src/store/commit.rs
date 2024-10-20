@@ -15,14 +15,14 @@ use std::cell::Ref;
 use std::collections::BTreeSet;
 
 #[derive(Debug, Clone)]
-pub(crate) struct CommitClone {
+pub(crate) struct CommitHulk {
     index: Option<*const NewContractIndex>,
     index2: NewContractIndex,
     contracts_merkle: ContractsMerkle,
     maybe_hash: Option<Hash>,
 }
 
-impl CommitClone {
+impl CommitHulk {
     pub fn from_commit(commit: &Commit) -> Self {
         Self {
             index: Some(&commit.index),

@@ -15,7 +15,7 @@ use dusk_wasmtime::Engine;
 use piecrust_uplink::ContractId;
 
 use crate::contract::ContractMetadata;
-use crate::store::commit::CommitClone;
+use crate::store::commit::CommitHulk;
 use crate::store::tree::{Hash, PageOpening};
 use crate::store::{
     base_from_path, Bytecode, Call, Memory, Metadata, Module, BASE_FILE,
@@ -46,7 +46,7 @@ pub struct ContractSession {
     contracts: BTreeMap<ContractId, ContractDataEntry>,
     engine: Engine,
 
-    base: Option<CommitClone>,
+    base: Option<CommitHulk>,
     root_dir: PathBuf,
 
     call: mpsc::Sender<Call>,
@@ -66,7 +66,7 @@ impl ContractSession {
     pub(crate) fn new<P: AsRef<Path>>(
         root_dir: P,
         engine: Engine,
-        base: Option<CommitClone>,
+        base: Option<CommitHulk>,
         call: mpsc::Sender<Call>,
     ) -> Self {
         Self {
@@ -93,7 +93,7 @@ impl ContractSession {
             .base
             .as_ref()
             .map(|c| c.fast_clone(&mut self.contracts.keys()))
-            .unwrap_or(CommitClone::new());
+            .unwrap_or(CommitHulk::new());
         for (contract, entry) in &self.contracts {
             commit.insert(*contract, &entry.memory);
         }
@@ -110,7 +110,7 @@ impl ContractSession {
         contract: ContractId,
     ) -> Option<impl Iterator<Item = (usize, &[u8], PageOpening)>> {
         tracing::trace!("memory_pages called commit cloning");
-        let mut commit = self.base.clone().unwrap_or(CommitClone::new());
+        let mut commit = self.base.clone().unwrap_or(CommitHulk::new());
         for (contract, entry) in &self.contracts {
             commit.insert(*contract, &entry.memory);
         }
@@ -152,7 +152,7 @@ impl ContractSession {
             // maybe_hash: c.maybe_hash,
             c.to_commit() /* } */);
 
-        let mut base_clone = base.as_ref().map(|b| b.to_clone()); // todo: wasteful, think of a better way
+        let mut base_clone = base.as_ref().map(|b| b.to_hulk()); // todo: wasteful, think of a better way
 
         mem::swap(&mut self.contracts, &mut contracts);
         mem::swap(&mut self.base, &mut base_clone);
