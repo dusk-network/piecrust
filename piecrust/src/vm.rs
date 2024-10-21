@@ -138,14 +138,21 @@ impl VM {
     /// # Errors
     /// If the directory contains unparseable or inconsistent data.
     pub fn new<P: AsRef<Path>>(root_dir: P) -> Result<Self, Error> {
+        tracing::trace!("vm::new");
         let config = config();
 
         let engine = Engine::new(&config).expect(
             "Configuration should be valid since its set at compile time",
         );
 
-        let store = ContractStore::new(engine.clone(), root_dir)
+        tracing::trace!("before ContractStore::new");
+        let mut store = ContractStore::new(engine.clone(), root_dir)
             .map_err(|err| PersistenceError(Arc::new(err)))?;
+        tracing::trace!("before ContractStore::finish_new");
+        store
+            .finish_new()
+            .map_err(|err| PersistenceError(Arc::new(err)))?;
+        tracing::trace!("after ContractStore::finish_new");
 
         Ok(Self {
             engine,
@@ -171,7 +178,10 @@ impl VM {
             "Configuration should be valid since its set at compile time",
         );
 
-        let store = ContractStore::new(engine.clone(), tmp)
+        let mut store = ContractStore::new(engine.clone(), tmp)
+            .map_err(|err| PersistenceError(Arc::new(err)))?;
+        store
+            .finish_new()
             .map_err(|err| PersistenceError(Arc::new(err)))?;
 
         Ok(Self {

@@ -13,8 +13,6 @@ use bytecheck::CheckBytes;
 use piecrust_uplink::ContractId;
 use rkyv::{Archive, Deserialize, Serialize};
 
-use crate::store::memory::Memory;
-
 // There are max `2^16` pages in a 32-bit memory
 const P32_HEIGHT: usize = 8;
 const P32_ARITY: usize = 4;
@@ -79,53 +77,69 @@ pub type Tree = dusk_merkle::Tree<Hash, C_HEIGHT, C_ARITY>;
 
 #[derive(Debug, Clone, Archive, Deserialize, Serialize)]
 #[archive_attr(derive(CheckBytes))]
-pub struct ContractIndex {
-    tree: Tree,
-    contracts: BTreeMap<ContractId, ContractIndexElement>,
-    pub contract_hints: Vec<ContractId>,
-    pub maybe_base: Option<Hash>,
+pub struct NewContractIndex {
+    inner_contracts: BTreeMap<ContractId, ContractIndexElement>,
 }
 
-impl Default for ContractIndex {
+#[derive(Debug, Clone, Archive, Deserialize, Serialize)]
+#[archive_attr(derive(CheckBytes))]
+pub struct ContractsMerkle {
+    inner_tree: Tree,
+    dict: BTreeMap<u64, u64>,
+}
+
+impl Default for ContractsMerkle {
     fn default() -> Self {
         Self {
-            tree: Tree::new(),
-            contracts: BTreeMap::new(),
-            contract_hints: Vec::new(),
-            maybe_base: None,
+            inner_tree: Tree::new(),
+            dict: BTreeMap::new(),
         }
     }
 }
 
-impl ContractIndex {
-    pub fn inclusion_proofs(
-        mut self,
-        contract_id: &ContractId,
-    ) -> Option<impl Iterator<Item = (usize, PageOpening)>> {
-        let contract = self.contracts.remove(contract_id)?;
-
-        let pos = position_from_contract(contract_id);
-
-        Some(contract.page_indices.into_iter().map(move |page_index| {
-            let tree_opening = self
-                .tree
-                .opening(pos)
-                .expect("There must be a leaf for the contract");
-
-            let page_opening = contract
-                .tree
-                .opening(page_index as u64)
-                .expect("There must be a leaf for the page");
-
-            (
-                page_index,
-                PageOpening {
-                    tree: tree_opening,
-                    inner: page_opening,
-                },
-            )
-        }))
+impl ContractsMerkle {
+    pub fn insert(&mut self, pos: u64, hash: Hash) -> u64 {
+        let new_pos = match self.dict.get(&pos) {
+            None => {
+                let new_pos = (self.dict.len() + 1) as u64;
+                self.dict.insert(pos, new_pos);
+                new_pos
+            }
+            Some(p) => *p,
+        };
+        self.inner_tree.insert(new_pos, hash);
+        new_pos
     }
+
+    pub fn insert_with_int_pos(&mut self, pos: u64, int_pos: u64, hash: Hash) {
+        self.dict.insert(pos, int_pos);
+        self.inner_tree.insert(int_pos, hash);
+    }
+
+    pub fn opening(&self, pos: u64) -> Option<TreeOpening> {
+        let new_pos = self.dict.get(&pos)?;
+        self.inner_tree.opening(*new_pos)
+    }
+
+    pub fn root(&self) -> Ref<Hash> {
+        self.inner_tree.root()
+    }
+}
+
+#[derive(Debug, Clone, Archive, Deserialize, Serialize)]
+#[archive_attr(derive(CheckBytes))]
+pub struct ContractIndex {
+    pub tree: Tree,
+    pub contracts: BTreeMap<ContractId, ContractIndexElement>,
+    pub contract_hints: Vec<ContractId>,
+    pub maybe_base: Option<Hash>,
+}
+
+#[derive(Debug, Clone, Default, Archive, Deserialize, Serialize)]
+#[archive_attr(derive(CheckBytes))]
+pub struct BaseInfo {
+    pub contract_hints: Vec<ContractId>,
+    pub maybe_base: Option<Hash>,
 }
 
 #[derive(Debug, Clone, Archive, Deserialize, Serialize)]
@@ -134,55 +148,62 @@ pub struct ContractIndexElement {
     pub tree: PageTree,
     pub len: usize,
     pub page_indices: BTreeSet<usize>,
+    pub hash: Option<Hash>,
+    pub int_pos: Option<u64>,
 }
 
-impl ContractIndex {
-    pub fn insert(&mut self, contract: ContractId, memory: &Memory) {
-        if self.contracts.get(&contract).is_none() {
-            self.contracts.insert(
-                contract,
-                ContractIndexElement {
-                    tree: PageTree::new(memory.is_64()),
-                    len: 0,
-                    page_indices: BTreeSet::new(),
-                },
-            );
+impl Default for NewContractIndex {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl NewContractIndex {
+    pub fn new() -> Self {
+        Self {
+            inner_contracts: BTreeMap::new(),
         }
-        let element = self.contracts.get_mut(&contract).unwrap();
-
-        element.len = memory.current_len;
-
-        for (dirty_page, _, page_index) in memory.dirty_pages() {
-            element.page_indices.insert(*page_index);
-            let hash = Hash::new(dirty_page);
-            element.tree.insert(*page_index as u64, hash);
-        }
-
-        self.tree
-            .insert(position_from_contract(&contract), *element.tree.root());
     }
 
-    pub fn remove_and_insert(&mut self, contract: ContractId, memory: &Memory) {
-        self.contracts.remove(&contract);
-        self.insert(contract, memory);
+    pub fn remove_contract_index(
+        &mut self,
+        contract_id: &ContractId,
+    ) -> Option<ContractIndexElement> {
+        self.inner_contracts.remove(contract_id)
     }
 
-    pub fn root(&self) -> Ref<Hash> {
-        self.tree.root()
+    pub fn insert_contract_index(
+        &mut self,
+        contract_id: &ContractId,
+        element: ContractIndexElement,
+    ) {
+        self.inner_contracts.insert(*contract_id, element);
     }
 
-    pub fn get(&self, contract: &ContractId) -> Option<&ContractIndexElement> {
-        self.contracts.get(contract)
+    pub fn get(
+        &self,
+        contract: &ContractId,
+        _maybe_commit_id: Option<Hash>,
+    ) -> Option<&ContractIndexElement> {
+        self.inner_contracts.get(contract)
+    }
+
+    pub fn get_mut(
+        &mut self,
+        contract: &ContractId,
+        _maybe_commit_id: Option<Hash>,
+    ) -> Option<&mut ContractIndexElement> {
+        self.inner_contracts.get_mut(contract)
     }
 
     pub fn contains_key(&self, contract: &ContractId) -> bool {
-        self.contracts.contains_key(contract)
+        self.inner_contracts.contains_key(contract)
     }
 
     pub fn iter(
         &self,
     ) -> impl Iterator<Item = (&ContractId, &ContractIndexElement)> {
-        self.contracts.iter()
+        self.inner_contracts.iter()
     }
 }
 
@@ -221,8 +242,8 @@ type TreeOpening = dusk_merkle::Opening<Hash, C_HEIGHT, C_ARITY>;
 #[derive(Debug, Clone, Archive, Deserialize, Serialize)]
 #[archive_attr(derive(CheckBytes))]
 pub struct PageOpening {
-    tree: TreeOpening,
-    inner: InnerPageOpening,
+    pub tree: TreeOpening,
+    pub inner: InnerPageOpening,
 }
 
 impl PageOpening {
