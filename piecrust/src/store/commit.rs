@@ -194,7 +194,7 @@ impl CommitHulk {
         &mut self,
         contract_id: &ContractId,
     ) -> Option<ContractIndexElement> {
-        self.index2.contracts_mut().remove(&contract_id)
+        self.index2.contracts_mut().remove(contract_id)
     }
 
     pub fn insert_contract_index(
@@ -213,9 +213,9 @@ impl CommitHulk {
         match index {
             Some(p) => self
                 .index2
-                .get(&contract_id, self.maybe_hash)
-                .or_else(move || p.get(&contract_id, self.maybe_hash)),
-            None => self.index2.get(&contract_id, self.maybe_hash),
+                .get(contract_id, self.maybe_hash)
+                .or_else(move || p.get(contract_id, self.maybe_hash)),
+            None => self.index2.get(contract_id, self.maybe_hash),
         }
     }
 
@@ -232,10 +232,10 @@ impl CommitHulk {
         let index = self.index.map(|p| unsafe { p.as_ref().unwrap() });
         match index {
             Some(p) => {
-                self.index2.contains_key(&contract_id)
-                    || p.contains_key(&contract_id)
+                self.index2.contains_key(contract_id)
+                    || p.contains_key(contract_id)
             }
-            None => self.index2.contains_key(&contract_id),
+            None => self.index2.contains_key(contract_id),
         }
     }
 
