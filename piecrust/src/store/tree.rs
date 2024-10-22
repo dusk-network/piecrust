@@ -81,6 +81,17 @@ pub struct NewContractIndex {
     inner_contracts: BTreeMap<ContractId, ContractIndexElement>,
 }
 
+impl NewContractIndex {
+    pub fn contracts(&self) -> &BTreeMap<ContractId, ContractIndexElement> {
+        &self.inner_contracts
+    }
+    pub fn contracts_mut(
+        &mut self,
+    ) -> &mut BTreeMap<ContractId, ContractIndexElement> {
+        &mut self.inner_contracts
+    }
+}
+
 #[derive(Debug, Clone, Archive, Deserialize, Serialize)]
 #[archive_attr(derive(CheckBytes))]
 pub struct ContractsMerkle {
