@@ -55,11 +55,6 @@ impl CommitHulk {
                 maybe_hash: self.maybe_hash,
             },
         }
-        // for (contract_id, element) in self.index2.contracts().iter() {
-        //     commit
-        //         .index
-        //         .insert_contract_index(&contract_id, element.clone())
-        // }
     }
 
     pub fn fast_clone<'a>(
@@ -147,11 +142,6 @@ impl CommitHulk {
         (&mut self.index2, &mut self.contracts_merkle)
     }
 
-    // pub fn remove_and_insert(&mut self, contract: ContractId, memory:
-    // &Memory) {     self.remove_contract_index(&contract);
-    //     self.insert(contract, memory);
-    // }
-
     pub fn root(&self) -> Ref<Hash> {
         tracing::trace!("calculating root started");
         let ret = self.contracts_merkle.root();
@@ -192,15 +182,6 @@ impl CommitHulk {
         }
     }
 
-    // note, does not allow changing the original
-    // pub fn index_get_mut(
-    //     &mut self,
-    //     contract_id: &ContractId,
-    // ) -> Option<&mut ContractIndexElement> {
-    //     self.index2
-    //         .get_mut(&contract_id, self.maybe_hash)
-    // }
-
     pub fn index_contains_key(&self, contract_id: &ContractId) -> bool {
         let index = self.index.map(|p| unsafe { p.as_ref().unwrap() });
         match index {
@@ -211,10 +192,4 @@ impl CommitHulk {
             None => self.index2.contains_key(contract_id),
         }
     }
-
-    // pub fn index_iter(
-    //     &self,
-    // ) -> impl Iterator<Item = (&(ContractId, u8), &ContractIndexElement)> {
-    //     self.index.contracts().iter()
-    // }
 }
