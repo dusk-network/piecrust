@@ -207,7 +207,8 @@ impl ContractSession {
         commit: Option<Hash>,
         leaf_path: impl AsRef<Path>,
         main_path: impl AsRef<Path>,
-    ) -> Option<PathBuf> {
+        depth: u32,
+    ) -> Option<(PathBuf, u32)> {
         match commit {
             None => None,
             Some(hash) => {
@@ -215,12 +216,17 @@ impl ContractSession {
                 let path =
                     leaf_path.as_ref().join(&hash_hex).join(ELEMENT_FILE);
                 if path.is_file() {
-                    Some(path)
+                    Some((path, depth + 1))
                 } else {
                     let base_info_path =
                         main_path.as_ref().join(hash_hex).join(BASE_FILE);
                     let index = base_from_path(base_info_path).ok()?;
-                    Self::find_element(index.maybe_base, leaf_path, main_path)
+                    Self::find_element(
+                        index.maybe_base,
+                        leaf_path,
+                        main_path,
+                        depth + 1,
+                    )
                 }
             }
         }

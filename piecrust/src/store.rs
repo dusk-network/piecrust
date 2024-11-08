@@ -454,12 +454,13 @@ fn index_merkle_from_path(
             let contract_id =
                 contract_id_from_hex(contract_id_hex.to_string_lossy());
             let contract_leaf_path = leaf_dir.join(contract_id_hex);
-            let element_path = ContractSession::find_element(
+            let (element_path, element_depth) = ContractSession::find_element(
                 *maybe_commit_id,
                 &contract_leaf_path,
                 &main_path,
+                0,
             )
-            .unwrap_or(contract_leaf_path.join(ELEMENT_FILE));
+            .unwrap_or((contract_leaf_path.join(ELEMENT_FILE), 0));
             if element_path.is_file() {
                 let element_bytes = fs::read(&element_path)?;
                 let element: ContractIndexElement =
@@ -482,7 +483,9 @@ fn index_merkle_from_path(
                         h,
                     );
                 }
-                index.insert_contract_index(&contract_id, element);
+                if element_depth <= 1 {
+                    index.insert_contract_index(&contract_id, element);
+                }
             }
         }
     }
