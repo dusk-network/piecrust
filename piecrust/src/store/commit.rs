@@ -6,13 +6,12 @@
 
 use crate::store::tree::{
     position_from_contract, ContractIndexElement, ContractsMerkle, Hash,
-    NewContractIndex, PageTree,
+    NewContractIndex,
 };
 use crate::store::{Commit, Memory};
 use crate::PageOpening;
 use piecrust_uplink::ContractId;
 use std::cell::Ref;
-use std::collections::BTreeSet;
 
 #[derive(Debug, Clone)]
 pub(crate) struct CommitHulk {
@@ -83,14 +82,14 @@ impl CommitHulk {
 
         let pos = position_from_contract(contract_id);
 
-        Some(contract.page_indices.into_iter().map(move |page_index| {
+        let (iter, tree) = contract.page_indices_and_tree();
+        Some(iter.map(move |page_index| {
             let tree_opening = self
                 .contracts_merkle
                 .opening(pos)
                 .expect("There must be a leaf for the contract");
 
-            let page_opening = contract
-                .tree
+            let page_opening = tree
                 .opening(page_index as u64)
                 .expect("There must be a leaf for the page");
 
@@ -108,31 +107,24 @@ impl CommitHulk {
         if self.index_get(&contract_id).is_none() {
             self.insert_contract_index(
                 &contract_id,
-                ContractIndexElement {
-                    tree: PageTree::new(memory.is_64()),
-                    len: 0,
-                    page_indices: BTreeSet::new(),
-                    hash: None,
-                    int_pos: None,
-                },
+                ContractIndexElement::new(memory.is_64()),
             );
         }
         let (index, contracts_merkle) = self.get_mutables();
         let element = index.get_mut(&contract_id, None).unwrap();
 
-        element.len = memory.current_len;
+        element.set_len(memory.current_len);
 
         for (dirty_page, _, page_index) in memory.dirty_pages() {
-            element.page_indices.insert(*page_index);
             let hash = Hash::new(dirty_page);
-            element.tree.insert(*page_index as u64, hash);
+            element.insert_page_index_hash(*page_index as u64, hash);
         }
 
-        let root = element.tree.root();
+        let root = *element.tree().root();
         let pos = position_from_contract(&contract_id);
-        let int_pos = contracts_merkle.insert(pos, *root);
-        element.hash = Some(*root);
-        element.int_pos = Some(int_pos);
+        let int_pos = contracts_merkle.insert(pos, root);
+        element.set_hash(Some(root));
+        element.set_int_pos(Some(int_pos));
     }
 
     // to satisfy borrow checker

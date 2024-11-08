@@ -32,7 +32,6 @@ use tree::{Hash, NewContractIndex};
 use crate::store::commit::CommitHulk;
 use crate::store::tree::{
     position_from_contract, BaseInfo, ContractIndexElement, ContractsMerkle,
-    PageTree,
 };
 pub use bytecode::Bytecode;
 pub use memory::{Memory, PAGE_SIZE};
@@ -396,7 +395,7 @@ fn commit_from_dir<P: AsRef<Path>>(
 
         let contract_memory_dir = memory_dir.join(&contract_hex);
 
-        for page_index in &contract_index.page_indices {
+        for page_index in contract_index.page_indices() {
             let main_page_path = page_path(&contract_memory_dir, *page_index);
             if !main_page_path.is_file() {
                 let path = ContractSession::find_page(
@@ -463,10 +462,10 @@ fn index_merkle_from_path(
                         ),
                         )
                     })?;
-                if let Some(h) = element.hash {
+                if let Some(h) = element.hash() {
                     merkle.insert_with_int_pos(
                         position_from_contract(&contract_id),
-                        element.int_pos.expect("int pos should be present"),
+                        element.int_pos().expect("int pos should be present"),
                         h,
                     );
                 }
@@ -539,14 +538,14 @@ impl Commit {
 
         let pos = position_from_contract(contract_id);
 
-        Some(contract.page_indices.into_iter().map(move |page_index| {
+        let (iter, tree) = contract.page_indices_and_tree();
+        Some(iter.map(move |page_index| {
             let tree_opening = self
                 .contracts_merkle
                 .opening(pos)
                 .expect("There must be a leaf for the contract");
 
-            let page_opening = contract
-                .tree
+            let page_opening = tree
                 .opening(page_index as u64)
                 .expect("There must be a leaf for the page");
 
@@ -564,31 +563,24 @@ impl Commit {
         if self.index.get(&contract_id, self.maybe_hash).is_none() {
             self.index.insert_contract_index(
                 &contract_id,
-                ContractIndexElement {
-                    tree: PageTree::new(memory.is_64()),
-                    len: 0,
-                    page_indices: BTreeSet::new(),
-                    hash: None,
-                    int_pos: None,
-                },
+                ContractIndexElement::new(memory.is_64()),
             );
         }
         let element =
             self.index.get_mut(&contract_id, self.maybe_hash).unwrap();
 
-        element.len = memory.current_len;
+        element.set_len(memory.current_len);
 
         for (dirty_page, _, page_index) in memory.dirty_pages() {
-            element.page_indices.insert(*page_index);
             let hash = Hash::new(dirty_page);
-            element.tree.insert(*page_index as u64, hash);
+            element.insert_page_index_hash(*page_index as u64, hash);
         }
 
-        let root = element.tree.root();
+        let root = *element.tree().root();
         let pos = position_from_contract(&contract_id);
-        let internal_pos = self.contracts_merkle.insert(pos, *root);
-        element.hash = Some(*root);
-        element.int_pos = Some(internal_pos);
+        let internal_pos = self.contracts_merkle.insert(pos, root);
+        element.set_hash(Some(root));
+        element.set_int_pos(Some(internal_pos));
     }
 
     pub fn remove_and_insert(&mut self, contract: ContractId, memory: &Memory) {

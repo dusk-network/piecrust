@@ -269,7 +269,7 @@ impl ContractSession {
                             {
                                 Some(elem) => {
                                     let page_indices =
-                                        elem.page_indices.clone();
+                                        elem.page_indices().clone();
                                     Memory::from_files(
                                         module.is_64(),
                                         move |page_index: usize| {
@@ -294,7 +294,7 @@ impl ContractSession {
                                                 false => None,
                                             }
                                         },
-                                        elem.len,
+                                        elem.len(),
                                     )?
                                 }
                                 None => Memory::new(module.is_64())?,
