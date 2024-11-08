@@ -69,6 +69,7 @@ impl Debug for ContractStore {
     }
 }
 
+#[derive(Debug)]
 pub struct CommitStore {
     commits: BTreeMap<Hash, Commit>,
 }
@@ -272,7 +273,8 @@ fn read_all_commits<P: AsRef<Path>>(
                 continue;
             }
             tracing::trace!("before read_commit");
-            let commit = read_commit(engine, entry.path())?;
+            let commit =
+                read_commit(engine, entry.path(), commit_store.clone())?;
             tracing::trace!("before read_commit");
             let root = *commit.root();
             commit_store.lock().unwrap().insert_commit(root, commit);
@@ -285,9 +287,10 @@ fn read_all_commits<P: AsRef<Path>>(
 fn read_commit<P: AsRef<Path>>(
     engine: &Engine,
     commit_dir: P,
+    commit_store: Arc<Mutex<CommitStore>>,
 ) -> io::Result<Commit> {
     let commit_dir = commit_dir.as_ref();
-    let commit = commit_from_dir(engine, commit_dir)?;
+    let commit = commit_from_dir(engine, commit_dir, commit_store)?;
     Ok(commit)
 }
 
@@ -335,6 +338,7 @@ fn contract_id_from_hex<S: AsRef<str>>(contract_id: S) -> ContractId {
 fn commit_from_dir<P: AsRef<Path>>(
     engine: &Engine,
     dir: P,
+    commit_store: Arc<Mutex<CommitStore>>,
 ) -> io::Result<Commit> {
     let dir = dir.as_ref();
     let mut commit_id: Option<String> = None;
@@ -417,10 +421,19 @@ fn commit_from_dir<P: AsRef<Path>>(
         }
     }
 
+    let base = if let Some(hash_hex) = commit_id {
+        let base_info_path = main_dir.join(hash_hex).join(BASE_FILE);
+        base_from_path(base_info_path)?.maybe_base
+    } else {
+        None
+    };
+
     Ok(Commit {
         index,
         contracts_merkle,
         maybe_hash,
+        commit_store: Some(commit_store),
+        base,
     })
 }
 
@@ -496,14 +509,21 @@ pub(crate) struct Commit {
     index: NewContractIndex,
     contracts_merkle: ContractsMerkle,
     maybe_hash: Option<Hash>,
+    commit_store: Option<Arc<Mutex<CommitStore>>>,
+    base: Option<Hash>,
 }
 
 impl Commit {
-    pub fn new() -> Self {
+    pub fn new(
+        commit_store: &Arc<Mutex<CommitStore>>,
+        maybe_base: Option<Hash>,
+    ) -> Self {
         Self {
             index: NewContractIndex::new(),
             contracts_merkle: ContractsMerkle::default(),
             maybe_hash: None,
+            commit_store: Some(commit_store.clone()),
+            base: maybe_base,
         }
     }
 
@@ -522,6 +542,8 @@ impl Commit {
             index,
             contracts_merkle: self.contracts_merkle.clone(),
             maybe_hash: self.maybe_hash,
+            commit_store: self.commit_store.clone(),
+            base: self.base,
         }
     }
 
@@ -818,7 +840,8 @@ fn write_commit<P: AsRef<Path>>(
     //     maybe_hash: base.as_ref().and_then(|base| base.maybe_hash),
     // };
 
-    let mut commit = base.unwrap_or(Commit::new());
+    let mut commit =
+        base.unwrap_or(Commit::new(&commit_store, base_info.maybe_base));
     for (contract_id, contract_data) in &commit_contracts {
         if contract_data.is_new {
             commit.remove_and_insert(*contract_id, &contract_data.memory);

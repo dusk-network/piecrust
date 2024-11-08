@@ -47,11 +47,15 @@ impl CommitHulk {
                 index: p.clone(),
                 contracts_merkle: self.contracts_merkle.clone(),
                 maybe_hash: self.maybe_hash,
+                commit_store: None,
+                base: None,
             },
             None => Commit {
                 index: NewContractIndex::new(),
                 contracts_merkle: self.contracts_merkle.clone(),
                 maybe_hash: self.maybe_hash,
+                commit_store: None,
+                base: None,
             },
         }
     }
