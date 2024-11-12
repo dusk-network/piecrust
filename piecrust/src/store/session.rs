@@ -146,7 +146,7 @@ impl ContractSession {
         let (replier, receiver) = mpsc::sync_channel(1);
 
         let mut contracts = BTreeMap::new();
-        let base = self.base.as_ref().map(|c| c.to_commit());
+        let base = self.base.as_ref().map(|c| c.to_commit(&self.contracts));
 
         mem::swap(&mut self.contracts, &mut contracts);
 

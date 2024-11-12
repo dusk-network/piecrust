@@ -4,14 +4,17 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
+use crate::store::session::ContractDataEntry;
 use crate::store::tree::{
     position_from_contract, ContractIndexElement, ContractsMerkle, Hash,
     NewContractIndex,
 };
-use crate::store::{Commit, Memory};
+use crate::store::{Commit, CommitStore, Memory};
 use crate::PageOpening;
 use piecrust_uplink::ContractId;
 use std::cell::Ref;
+use std::collections::BTreeMap;
+use std::sync::{Arc, Mutex};
 
 #[derive(Debug, Clone)]
 pub(crate) struct CommitHulk {
@@ -19,6 +22,8 @@ pub(crate) struct CommitHulk {
     index2: NewContractIndex,
     contracts_merkle: ContractsMerkle,
     maybe_hash: Option<Hash>,
+    commit_store: Option<Arc<Mutex<CommitStore>>>,
+    base: Option<Hash>,
 }
 
 impl CommitHulk {
@@ -28,6 +33,8 @@ impl CommitHulk {
             index2: NewContractIndex::new(),
             contracts_merkle: commit.contracts_merkle.clone(),
             maybe_hash: commit.maybe_hash,
+            commit_store: commit.commit_store.clone(),
+            base: commit.base,
         }
     }
 
@@ -37,25 +44,39 @@ impl CommitHulk {
             index2: NewContractIndex::new(),
             contracts_merkle: ContractsMerkle::default(),
             maybe_hash: None,
+            commit_store: None,
+            base: None,
         }
     }
 
-    pub fn to_commit(&self) -> Commit {
+    pub fn to_commit(
+        &self,
+        commit_contracts: &BTreeMap<ContractId, ContractDataEntry>,
+    ) -> Commit {
         let index = self.index.map(|p| unsafe { p.as_ref().unwrap() });
         match index {
-            Some(p) => Commit {
-                index: p.clone(),
-                contracts_merkle: self.contracts_merkle.clone(),
-                maybe_hash: self.maybe_hash,
-                commit_store: None,
-                base: None,
-            },
+            Some(p) => {
+                let mut partial_index_clone = NewContractIndex::new();
+                for contract_id in commit_contracts.keys() {
+                    if let Some(a) = p.get(contract_id, None) {
+                        partial_index_clone
+                            .insert_contract_index(contract_id, a.clone());
+                    }
+                }
+                Commit {
+                    index: partial_index_clone,
+                    contracts_merkle: self.contracts_merkle.clone(),
+                    maybe_hash: self.maybe_hash,
+                    commit_store: self.commit_store.clone(),
+                    base: self.base,
+                }
+            }
             None => Commit {
                 index: NewContractIndex::new(),
                 contracts_merkle: self.contracts_merkle.clone(),
                 maybe_hash: self.maybe_hash,
                 commit_store: None,
-                base: None,
+                base: self.base,
             },
         }
     }
@@ -75,6 +96,8 @@ impl CommitHulk {
             index2,
             contracts_merkle: self.contracts_merkle.clone(),
             maybe_hash: self.maybe_hash,
+            commit_store: self.commit_store.clone(),
+            base: self.base,
         }
     }
 
@@ -170,10 +193,16 @@ impl CommitHulk {
     ) -> Option<&ContractIndexElement> {
         let index = self.index.map(|p| unsafe { p.as_ref().unwrap() });
         match index {
-            Some(p) => self
-                .index2
-                .get(contract_id, self.maybe_hash)
-                .or_else(move || p.get(contract_id, self.maybe_hash)),
+            Some(p) => self.index2.get(contract_id, self.maybe_hash).or_else(
+                move || {
+                    Self::deep_index_get(
+                        p,
+                        *contract_id,
+                        self.commit_store.clone(),
+                        self.base,
+                    )
+                },
+            ),
             None => self.index2.get(contract_id, self.maybe_hash),
         }
     }
@@ -183,9 +212,72 @@ impl CommitHulk {
         match index {
             Some(p) => {
                 self.index2.contains_key(contract_id)
-                    || p.contains_key(contract_id)
+                    || Self::deep_index_contains_key(
+                        p,
+                        contract_id,
+                        self.commit_store.clone(),
+                        self.base,
+                    )
             }
             None => self.index2.contains_key(contract_id),
+        }
+    }
+
+    fn deep_index_contains_key_opt(
+        index: &NewContractIndex,
+        contract_id: &ContractId,
+        commit_store: Option<Arc<Mutex<CommitStore>>>,
+        base: Option<Hash>,
+    ) -> Option<()> {
+        if index.contains_key(contract_id) {
+            return Some(());
+        }
+
+        let mut base = base?;
+        let commit_store = commit_store.clone()?;
+        let commit_store = commit_store.lock().unwrap();
+        loop {
+            let commit = commit_store.get_commit(&base)?;
+            if commit.index.contains_key(contract_id) {
+                return Some(());
+            }
+            base = commit.base?;
+        }
+    }
+
+    pub fn deep_index_contains_key(
+        index: &NewContractIndex,
+        contract_id: &ContractId,
+        commit_store: Option<Arc<Mutex<CommitStore>>>,
+        base: Option<Hash>,
+    ) -> bool {
+        Self::deep_index_contains_key_opt(
+            index,
+            contract_id,
+            commit_store,
+            base,
+        )
+        .is_some()
+    }
+
+    pub fn deep_index_get(
+        index: &NewContractIndex,
+        contract_id: ContractId,
+        commit_store: Option<Arc<Mutex<CommitStore>>>,
+        base: Option<Hash>,
+    ) -> Option<&ContractIndexElement> {
+        if let Some(e) = index.get(&contract_id, None) {
+            return Some(e);
+        }
+        let mut base = base?;
+        let commit_store = commit_store.clone()?;
+        let commit_store = commit_store.lock().unwrap();
+        loop {
+            let commit = commit_store.get_commit(&base)?;
+            if let Some(e) = index.get(&contract_id, None) {
+                return Some(e);
+            }
+            base = commit.base?;
         }
     }
 }

@@ -585,7 +585,7 @@ impl Commit {
     }
 
     pub fn insert(&mut self, contract_id: ContractId, memory: &Memory) {
-        if self.index.get(&contract_id, self.maybe_hash).is_none() {
+        if self.index.get(&contract_id, None).is_none() {
             self.index.insert_contract_index(
                 &contract_id,
                 ContractIndexElement::new(memory.is_64()),
@@ -855,6 +855,8 @@ fn write_commit<P: AsRef<Path>>(
 
     let root = *commit.root();
     let root_hex = hex::encode(root);
+    commit.maybe_hash = Some(root);
+    commit.base = base_info.maybe_base;
 
     // Don't write the commit if it already exists on disk. This may happen if
     // the same transactions on the same base commit for example.
