@@ -58,7 +58,7 @@ impl CommitHulk {
             Some(p) => {
                 let mut partial_index_clone = NewContractIndex::new();
                 for contract_id in commit_contracts.keys() {
-                    if let Some(a) = p.get(contract_id, None) {
+                    if let Some(a) = p.get(contract_id) {
                         partial_index_clone
                             .insert_contract_index(contract_id, a.clone());
                     }
@@ -144,7 +144,11 @@ impl CommitHulk {
 
         for (dirty_page, _, page_index) in memory.dirty_pages() {
             let hash = Hash::new(dirty_page);
-            element.insert_page_index_hash(*page_index as u64, hash);
+            element.insert_page_index_hash(
+                *page_index,
+                *page_index as u64,
+                hash,
+            );
         }
 
         let root = *element.tree().root();
@@ -193,17 +197,16 @@ impl CommitHulk {
     ) -> Option<&ContractIndexElement> {
         let index = self.index.map(|p| unsafe { p.as_ref().unwrap() });
         match index {
-            Some(p) => self.index2.get(contract_id, self.maybe_hash).or_else(
-                move || {
-                    Self::deep_index_get(
-                        p,
-                        *contract_id,
-                        self.commit_store.clone(),
-                        self.base,
-                    )
-                },
-            ),
-            None => self.index2.get(contract_id, self.maybe_hash),
+            Some(p) => self.index2.get(contract_id).or_else(move || {
+                Self::deep_index_get(
+                    p,
+                    *contract_id,
+                    self.commit_store.clone(),
+                    self.base,
+                )
+                .map(|a| unsafe { &*a })
+            }),
+            None => self.index2.get(contract_id),
         }
     }
 
@@ -237,11 +240,12 @@ impl CommitHulk {
         let commit_store = commit_store.clone()?;
         let commit_store = commit_store.lock().unwrap();
         loop {
-            let commit = commit_store.get_commit(&base)?;
-            if commit.index.contains_key(contract_id) {
+            let (maybe_element, commit_base) =
+                commit_store.get_element_and_base(&base, contract_id);
+            if maybe_element.is_some() {
                 return Some(());
             }
-            base = commit.base?;
+            base = commit_base?;
         }
     }
 
@@ -265,19 +269,20 @@ impl CommitHulk {
         contract_id: ContractId,
         commit_store: Option<Arc<Mutex<CommitStore>>>,
         base: Option<Hash>,
-    ) -> Option<&ContractIndexElement> {
-        if let Some(e) = index.get(&contract_id, None) {
+    ) -> Option<*const ContractIndexElement> {
+        if let Some(e) = index.get(&contract_id) {
             return Some(e);
         }
         let mut base = base?;
         let commit_store = commit_store.clone()?;
         let commit_store = commit_store.lock().unwrap();
         loop {
-            let commit = commit_store.get_commit(&base)?;
-            if let Some(e) = index.get(&contract_id, None) {
+            let (maybe_element, commit_base) =
+                commit_store.get_element_and_base(&base, &contract_id);
+            if let Some(e) = maybe_element {
                 return Some(e);
             }
-            base = commit.base?;
+            base = commit_base?;
         }
     }
 }

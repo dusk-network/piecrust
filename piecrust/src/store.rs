@@ -72,12 +72,14 @@ impl Debug for ContractStore {
 #[derive(Debug)]
 pub struct CommitStore {
     commits: BTreeMap<Hash, Commit>,
+    main_index: NewContractIndex,
 }
 
 impl CommitStore {
     pub fn new() -> Self {
         Self {
             commits: BTreeMap::new(),
+            main_index: NewContractIndex::new(),
         }
     }
 
@@ -89,6 +91,23 @@ impl CommitStore {
         self.commits.get(hash)
     }
 
+    pub fn get_element_and_base(
+        &self,
+        hash: &Hash,
+        contract_id: &ContractId,
+    ) -> (Option<*const ContractIndexElement>, Option<Hash>) {
+        match self.commits.get(hash) {
+            Some(commit) => {
+                let e = commit.index.get(contract_id);
+                (e.map(|a| a as *const ContractIndexElement), commit.base)
+            }
+            None => {
+                let e = self.main_index.get(contract_id);
+                (e.map(|a| a as *const ContractIndexElement), None)
+            }
+        }
+    }
+
     pub fn contains_key(&self, hash: &Hash) -> bool {
         self.commits.contains_key(hash)
     }
@@ -98,7 +117,9 @@ impl CommitStore {
     }
 
     pub fn remove_commit(&mut self, hash: &Hash) {
-        self.commits.remove(hash);
+        if let Some(commit) = self.commits.remove(hash) {
+            commit.index.move_into(&mut self.main_index);
+        }
     }
 }
 
@@ -537,7 +558,7 @@ impl Commit {
     ) -> Self {
         let mut index = NewContractIndex::new();
         for contract_id in contract_ids {
-            if let Some(a) = self.index.get(contract_id, None) {
+            if let Some(a) = self.index.get(contract_id) {
                 index.insert_contract_index(contract_id, a.clone());
             }
         }
@@ -585,7 +606,7 @@ impl Commit {
     }
 
     pub fn insert(&mut self, contract_id: ContractId, memory: &Memory) {
-        if self.index.get(&contract_id, None).is_none() {
+        if self.index.get(&contract_id).is_none() {
             self.index.insert_contract_index(
                 &contract_id,
                 ContractIndexElement::new(memory.is_64()),
@@ -598,7 +619,11 @@ impl Commit {
 
         for (dirty_page, _, page_index) in memory.dirty_pages() {
             let hash = Hash::new(dirty_page);
-            element.insert_page_index_hash(*page_index as u64, hash);
+            element.insert_page_index_hash(
+                *page_index,
+                *page_index as u64,
+                hash,
+            );
         }
 
         let root = *element.tree().root();
@@ -855,8 +880,6 @@ fn write_commit<P: AsRef<Path>>(
 
     let root = *commit.root();
     let root_hex = hex::encode(root);
-    commit.maybe_hash = Some(root);
-    commit.base = base_info.maybe_base;
 
     // Don't write the commit if it already exists on disk. This may happen if
     // the same transactions on the same base commit for example.

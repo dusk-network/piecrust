@@ -214,11 +214,12 @@ impl ContractIndexElement {
 
     pub fn insert_page_index_hash(
         &mut self,
-        page_index: u64,
+        page_index: usize,
+        page_index_u64: u64,
         page_hash: impl Into<Hash>,
     ) {
-        self.page_indices.insert(page_index as usize);
-        self.tree.insert(page_index, page_hash);
+        self.page_indices.insert(page_index);
+        self.tree.insert(page_index_u64, page_hash);
     }
 }
 
@@ -250,11 +251,7 @@ impl NewContractIndex {
         self.inner_contracts.insert(*contract_id, element);
     }
 
-    pub fn get(
-        &self,
-        contract: &ContractId,
-        _maybe_commit_id: Option<Hash>,
-    ) -> Option<&ContractIndexElement> {
+    pub fn get(&self, contract: &ContractId) -> Option<&ContractIndexElement> {
         self.inner_contracts.get(contract)
     }
 
@@ -274,6 +271,12 @@ impl NewContractIndex {
         &self,
     ) -> impl Iterator<Item = (&ContractId, &ContractIndexElement)> {
         self.inner_contracts.iter()
+    }
+
+    pub fn move_into(self, target: &mut Self) {
+        for (contract_id, element) in self.inner_contracts.into_iter() {
+            target.insert_contract_index(&contract_id, element);
+        }
     }
 }
 
