@@ -880,6 +880,8 @@ fn write_commit<P: AsRef<Path>>(
 
     let root = *commit.root();
     let root_hex = hex::encode(root);
+    commit.maybe_hash = Some(root);
+    commit.base = base_info.maybe_base;
 
     // Don't write the commit if it already exists on disk. This may happen if
     // the same transactions on the same base commit for example.
