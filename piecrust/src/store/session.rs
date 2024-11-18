@@ -96,7 +96,7 @@ impl ContractSession {
             .base
             .as_ref()
             .map(|c| c.fast_clone(&mut self.contracts.keys()))
-            .unwrap_or(Commit::new(&self.commit_store, None)); // todo: what about None here
+            .unwrap_or(Commit::new(&self.commit_store, None));
         for (contract, entry) in &self.contracts {
             commit.insert(*contract, &entry.memory);
         }
@@ -116,7 +116,7 @@ impl ContractSession {
         let mut commit = self
             .base
             .clone()
-            .unwrap_or(Commit::new(&self.commit_store, None)); // todo: what about None here
+            .unwrap_or(Commit::new(&self.commit_store, None));
         for (contract, entry) in &self.contracts {
             commit.insert(*contract, &entry.memory);
         }
@@ -152,7 +152,7 @@ impl ContractSession {
         let (replier, receiver) = mpsc::sync_channel(1);
 
         let mut contracts = BTreeMap::new();
-        let base = self.base.clone(); // todo: clone
+        let base = self.base.clone();
 
         mem::swap(&mut self.contracts, &mut contracts);
 

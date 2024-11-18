@@ -32,6 +32,7 @@ use tree::{Hash, NewContractIndex};
 use crate::store::commit::Hulk;
 use crate::store::tree::{
     position_from_contract, BaseInfo, ContractIndexElement, ContractsMerkle,
+    TreePos,
 };
 pub use bytecode::Bytecode;
 pub use memory::{Memory, PAGE_SIZE};
@@ -44,6 +45,7 @@ const BYTECODE_DIR: &str = "bytecode";
 const MEMORY_DIR: &str = "memory";
 const LEAF_DIR: &str = "leaf";
 const BASE_FILE: &str = "base";
+const TREE_POS_FILE: &str = "tree_pos";
 const ELEMENT_FILE: &str = "element";
 const OBJECTCODE_EXTENSION: &str = "a";
 const METADATA_EXTENSION: &str = "m";
@@ -283,7 +285,7 @@ impl ContractStore {
 
     fn session_with_base(&self, base: Option<Hash>) -> ContractSession {
         let base_commit = base.and_then(|hash| {
-            self.commit_store.lock().unwrap().get_commit(&hash).cloned() //todo: clone
+            self.commit_store.lock().unwrap().get_commit(&hash).cloned()
         });
         ContractSession::new(
             &self.root_dir,
@@ -362,6 +364,16 @@ fn base_path_main<P: AsRef<Path>, S: AsRef<str>>(
     Ok(dir.join(BASE_FILE))
 }
 
+fn tree_pos_path_main<P: AsRef<Path>, S: AsRef<str>>(
+    main_dir: P,
+    commit_id: S,
+) -> io::Result<PathBuf> {
+    let commit_id = commit_id.as_ref();
+    let dir = main_dir.as_ref().join(commit_id);
+    fs::create_dir_all(&dir)?;
+    Ok(dir.join(TREE_POS_FILE))
+}
+
 fn commit_id_to_hash<S: AsRef<str>>(commit_id: S) -> Hash {
     let hash: [u8; 32] = hex::decode(commit_id.as_ref())
         .expect("Hex decoding of commit id string should succeed")
@@ -408,8 +420,20 @@ fn commit_from_dir<P: AsRef<Path>>(
     let leaf_dir = main_dir.join(LEAF_DIR);
     tracing::trace!("before index_merkle_from_path");
 
-    let index =
-        index_from_path(main_dir, leaf_dir, &maybe_hash, commit_store.clone())?;
+    let tree_pos = if let Some(ref hash_hex) = commit_id {
+        let tree_pos_path = main_dir.join(hash_hex).join(TREE_POS_FILE);
+        Some(tree_pos_from_path(tree_pos_path)?.tree_pos)
+    } else {
+        None
+    };
+
+    let (index, contracts_merkle) = index_merkle_from_path(
+        main_dir,
+        leaf_dir,
+        &maybe_hash,
+        commit_store.clone(),
+        tree_pos.as_ref(),
+    )?;
     tracing::trace!("after index_merkle_from_path");
 
     let bytecode_dir = main_dir.join(BYTECODE_DIR);
@@ -465,12 +489,11 @@ fn commit_from_dir<P: AsRef<Path>>(
         }
     }
 
-    let (base, contracts_merkle) = if let Some(hash_hex) = commit_id {
+    let base = if let Some(ref hash_hex) = commit_id {
         let base_info_path = main_dir.join(hash_hex).join(BASE_FILE);
-        let base_info = base_from_path(base_info_path)?;
-        (base_info.maybe_base, base_info.contracts_merkle)
+        base_from_path(base_info_path)?.maybe_base
     } else {
-        (None, ContractsMerkle::default())
+        None
     };
 
     Ok(Commit {
@@ -482,15 +505,17 @@ fn commit_from_dir<P: AsRef<Path>>(
     })
 }
 
-fn index_from_path(
+fn index_merkle_from_path(
     main_path: impl AsRef<Path>,
     leaf_dir: impl AsRef<Path>,
     maybe_commit_id: &Option<Hash>,
     commit_store: Arc<Mutex<CommitStore>>,
-) -> io::Result<NewContractIndex> {
+    maybe_tree_pos: Option<&BTreeMap<u32, (Hash, u64)>>,
+) -> io::Result<(NewContractIndex, ContractsMerkle)> {
     let leaf_dir = leaf_dir.as_ref();
 
     let mut index: NewContractIndex = NewContractIndex::new();
+    let mut merkle: ContractsMerkle = ContractsMerkle::default();
 
     for entry in fs::read_dir(leaf_dir)? {
         let entry = entry?;
@@ -533,7 +558,18 @@ fn index_from_path(
         }
     }
 
-    Ok(index)
+    match maybe_tree_pos {
+        Some(tree_pos) => {
+            for (int_pos, (hash, pos)) in tree_pos.iter() {
+                merkle.insert_with_int_pos(*pos, *int_pos as u64, *hash);
+            }
+        }
+        None => {
+            unreachable!()
+        }
+    }
+
+    Ok((index, merkle))
 }
 
 fn base_from_path<P: AsRef<Path>>(path: P) -> io::Result<BaseInfo> {
@@ -548,6 +584,20 @@ fn base_from_path<P: AsRef<Path>>(path: P) -> io::Result<BaseInfo> {
     })?;
 
     Ok(base_info)
+}
+
+fn tree_pos_from_path<P: AsRef<Path>>(path: P) -> io::Result<TreePos> {
+    let path = path.as_ref();
+
+    let tree_pos_bytes = fs::read(path)?;
+    let tree_pos = rkyv::from_bytes(&tree_pos_bytes).map_err(|err| {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("Invalid tree positions file \"{path:?}\": {err}"),
+        )
+    })?;
+
+    Ok(tree_pos)
 }
 
 #[derive(Debug, Clone)]
@@ -1028,8 +1078,6 @@ fn write_commit_inner<P: AsRef<Path>, S: AsRef<str>>(
     tracing::trace!("persisting index started");
     for (contract_id, element) in commit.index.iter() {
         if commit_contracts.contains_key(contract_id) {
-            // todo: write element to disk at
-            // main/leaf/{contract_id}/{commit_id}
             let element_dir_path = directories
                 .leaf_main_dir
                 .join(hex::encode(contract_id.as_bytes()))
@@ -1048,10 +1096,8 @@ fn write_commit_inner<P: AsRef<Path>, S: AsRef<str>>(
     }
     tracing::trace!("persisting index finished");
 
-    base_info.contracts_merkle = commit.contracts_merkle.clone(); //todo: clone
-
     let base_main_path =
-        base_path_main(directories.main_dir, commit_id.as_ref())?;
+        base_path_main(&directories.main_dir, commit_id.as_ref())?;
     let base_info_bytes =
         rkyv::to_bytes::<_, 128>(&base_info).map_err(|err| {
             io::Error::new(
@@ -1060,6 +1106,19 @@ fn write_commit_inner<P: AsRef<Path>, S: AsRef<str>>(
             )
         })?;
     fs::write(base_main_path, base_info_bytes)?;
+
+    let tree_pos_main_path =
+        tree_pos_path_main(&directories.main_dir, commit_id.as_ref())?;
+    let tree_pos_bytes = rkyv::to_bytes::<_, 128>(
+        commit.contracts_merkle.tree_pos(),
+    )
+    .map_err(|err| {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("Failed serializing tree positions file: {err}"),
+        )
+    })?;
+    fs::write(tree_pos_main_path, tree_pos_bytes)?;
 
     Ok(())
 }
@@ -1101,6 +1160,7 @@ fn finalize_commit<P: AsRef<Path>>(
     let root = hex::encode(root);
     let commit_path = main_dir.join(&root);
     let base_info_path = commit_path.join(BASE_FILE);
+    let tree_pos_path = commit_path.join(TREE_POS_FILE);
     let base_info = base_from_path(&base_info_path)?;
     for contract_hint in base_info.contract_hints {
         let contract_hex = hex::encode(contract_hint);
@@ -1130,6 +1190,7 @@ fn finalize_commit<P: AsRef<Path>>(
     }
 
     fs::remove_file(base_info_path)?;
+    fs::remove_file(tree_pos_path)?;
     fs::remove_dir(commit_path)?;
 
     Ok(())
