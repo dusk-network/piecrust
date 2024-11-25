@@ -392,10 +392,10 @@ fn callstack(env: Caller<Env>) -> i32 {
     let instance = env.self_instance();
 
     let mut i = 0usize;
-    for contract_id in env.callstack_iter() {
+    while let Some(element) = env.nth_from_top(i) {
         instance.with_arg_buf_mut(|buf| {
             buf[i * CONTRACT_ID_BYTES..(i + 1) * CONTRACT_ID_BYTES]
-                .copy_from_slice(contract_id.as_bytes());
+                .copy_from_slice(element.contract_id.as_bytes());
         });
         i += 1;
     }

@@ -643,10 +643,6 @@ impl Session {
         self.inner.call_tree.nth_parent(n)
     }
 
-    pub(crate) fn callstack_iter(&self) -> impl Iterator<Item = &ContractId> {
-        self.inner.call_tree.iter().map(|elem| &elem.contract_id)
-    }
-
     /// Creates a new instance of the given contract, returning its memory
     /// length.
     fn create_instance(

@@ -263,6 +263,15 @@ pub fn cc_callstack() -> Result<(), Error> {
         session.call(center_id, "return_self_id", &(), LIMIT)?.data;
     assert_eq!(callstack[0], self_id);
 
+    const N: u32 = 5;
+    let callstack: Vec<ContractId> = session
+        .call(center_id, "call_self_n_times", &N, LIMIT)?
+        .data;
+    assert_eq!(callstack.len(), N as usize + 1);
+    for i in 1..=N as usize {
+        assert_eq!(callstack[0], callstack[i]);
+    }
+
     Ok(())
 }
 

@@ -95,6 +95,16 @@ impl Callcenter {
         }
     }
 
+    /// Return a call stack after calling itself n times
+    pub fn call_self_n_times(&self, n: u32) -> Vec<ContractId> {
+        let self_id = uplink::self_id();
+        match n {
+            0 => uplink::callstack(),
+            _ => uplink::call(self_id, "call_self_n_times", &(n - 1))
+                .expect("calling self should succeed")
+        }
+    }
+
     /// Calls the `spend` function of the `contract` with no arguments, and the
     /// given `gas_limit`, assuming the called function returns `()`. It will
     /// then return the call's result itself.
@@ -136,6 +146,12 @@ unsafe fn calling_self(arg_len: u32) -> u32 {
 #[no_mangle]
 unsafe fn call_self(arg_len: u32) -> u32 {
     wrap_call(arg_len, |_: ()| STATE.call_self())
+}
+
+/// Expose `Callcenter::call_self_n_times()` to the host
+#[no_mangle]
+unsafe fn call_self_n_times(arg_len: u32) -> u32 {
+    wrap_call(arg_len, |n: u32| STATE.call_self_n_times(n))
 }
 
 /// Expose `Callcenter::call_spend_with_limit` to the host
