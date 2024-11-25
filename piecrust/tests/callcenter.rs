@@ -254,6 +254,12 @@ pub fn cc_callstack() -> Result<(), Error> {
         LIMIT,
     )?;
 
+    let callstack_id = session.deploy(
+        contract_bytecode!("callstack"),
+        ContractData::builder().owner(OWNER),
+        LIMIT,
+    )?;
+
     let callstack: Vec<ContractId> = session
         .call(center_id, "return_callstack", &(), LIMIT)?
         .data;
@@ -271,6 +277,27 @@ pub fn cc_callstack() -> Result<(), Error> {
     for i in 1..=N as usize {
         assert_eq!(callstack[0], callstack[i]);
     }
+
+    let res = session
+        .call::<_, Result<Vec<u8>, ContractError>>(
+            center_id,
+            "delegate_query",
+            &(
+                callstack_id,
+                String::from("return_callstack"),
+                Vec::<u8>::new(),
+            ),
+            LIMIT,
+        )?
+        .data
+        .expect("ICC should succeed");
+
+    let callstack: Vec<ContractId> =
+        rkyv::from_bytes(&res).expect("Deserialization to succeed");
+
+    assert_eq!(callstack.len(), 2);
+    assert_eq!(callstack[0], callstack_id);
+    assert_eq!(callstack[1], center_id);
 
     Ok(())
 }
