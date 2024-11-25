@@ -80,6 +80,11 @@ impl Callcenter {
         uplink::caller()
     }
 
+    /// Return the entire call stack of this contract
+    pub fn return_callstack(&self) -> Vec<ContractId> {
+        uplink::callstack()
+    }
+
     /// Make sure that the caller of this contract is the contract itself
     pub fn call_self(&self) -> Result<bool, ContractError> {
         let self_id = uplink::self_id();
@@ -151,6 +156,12 @@ unsafe fn return_self_id(arg_len: u32) -> u32 {
 #[no_mangle]
 unsafe fn return_caller(arg_len: u32) -> u32 {
     wrap_call(arg_len, |_: ()| STATE.return_caller())
+}
+
+/// Expose `Callcenter::return_callstack()` to the host
+#[no_mangle]
+unsafe fn return_callstack(arg_len: u32) -> u32 {
+    wrap_call(arg_len, |_: ()| STATE.return_callstack())
 }
 
 /// Expose `Callcenter::delegate_query()` to the host

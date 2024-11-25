@@ -243,6 +243,30 @@ pub fn cc_caller_uninit() -> Result<(), Error> {
 }
 
 #[test]
+pub fn cc_callstack() -> Result<(), Error> {
+    let vm = VM::ephemeral()?;
+
+    let mut session = vm.session(SessionData::builder())?;
+
+    let center_id = session.deploy(
+        contract_bytecode!("callcenter"),
+        ContractData::builder().owner(OWNER),
+        LIMIT,
+    )?;
+
+    let callstack: Vec<ContractId> = session
+        .call(center_id, "return_callstack", &(), LIMIT)?
+        .data;
+    assert_eq!(callstack.len(), 1);
+
+    let self_id: ContractId =
+        session.call(center_id, "return_self_id", &(), LIMIT)?.data;
+    assert_eq!(callstack[0], self_id);
+
+    Ok(())
+}
+
+#[test]
 pub fn cc_self_id() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 

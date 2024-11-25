@@ -55,6 +55,7 @@ impl Imports {
     fn import(store: &mut Store<Env>, name: &str, is_64: bool) -> Option<Func> {
         Some(match name {
             "caller" => Func::wrap(store, caller),
+            "callstack" => Func::wrap(store, callstack),
             "c" => match is_64 {
                 false => Func::wrap(store, wasm32::c),
                 true => Func::wrap(store, wasm64::c),
@@ -384,6 +385,21 @@ fn caller(env: Caller<Env>) -> i32 {
         }
         None => 0,
     }
+}
+
+fn callstack(env: Caller<Env>) -> i32 {
+    let env = env.data();
+    let instance = env.self_instance();
+
+    let mut i = 0usize;
+    for contract_id in env.callstack_iter() {
+        instance.with_arg_buf_mut(|buf| {
+            buf[i * CONTRACT_ID_BYTES..(i + 1) * CONTRACT_ID_BYTES]
+                .copy_from_slice(contract_id.as_bytes());
+        });
+        i += 1;
+    }
+    i as i32
 }
 
 fn feed(mut fenv: Caller<Env>, arg_len: u32) -> WasmtimeResult<()> {
