@@ -23,7 +23,6 @@ use std::fs::{create_dir_all, OpenOptions};
 use std::io::{BufReader, BufWriter};
 use std::path::{Path, PathBuf};
 use std::sync::{mpsc, Arc, Mutex};
-use std::time::SystemTime;
 use std::{fs, io, thread};
 
 use dusk_wasmtime::Engine;
@@ -370,11 +369,11 @@ fn base_path_main<P: AsRef<Path>, S: AsRef<str>>(
 fn tree_pos_path_main<P: AsRef<Path>, S: AsRef<str>>(
     main_dir: P,
     commit_id: S,
-) -> io::Result<(PathBuf, PathBuf)> {
+) -> io::Result<PathBuf> {
     let commit_id = commit_id.as_ref();
     let dir = main_dir.as_ref().join(commit_id);
     fs::create_dir_all(&dir)?;
-    Ok((dir.join(TREE_POS_FILE), dir.join(TREE_POS_OPT_FILE)))
+    Ok(dir.join(TREE_POS_OPT_FILE))
 }
 
 fn commit_id_to_hash<S: AsRef<str>>(commit_id: S) -> Hash {
@@ -1120,37 +1119,15 @@ fn write_commit_inner<P: AsRef<Path>, S: AsRef<str>>(
         })?;
     fs::write(base_main_path, base_info_bytes)?;
 
-    let (tree_pos_main_path, tree_pos_opt_path) =
+    let tree_pos_opt_path =
         tree_pos_path_main(&directories.main_dir, commit_id.as_ref())?;
-    let start = SystemTime::now();
-    let tree_pos_bytes = rkyv::to_bytes::<_, 128>(
-        commit.contracts_merkle.tree_pos(),
-    )
-    .map_err(|err| {
-        io::Error::new(
-            io::ErrorKind::InvalidData,
-            format!("Failed serializing tree positions file: {err}"),
-        )
-    })?;
-    fs::write(tree_pos_main_path.clone(), tree_pos_bytes)?;
-    let stop = SystemTime::now();
-    println!(
-        "WRITE TREE POS RKYV FINISHED, ELAPSED TIME={:?}",
-        stop.duration_since(start).expect("duration should work")
-    );
 
-    let start = SystemTime::now();
     let f = OpenOptions::new()
         .append(true)
         .create(true)
         .open(tree_pos_opt_path)?;
     let mut buf_f = BufWriter::new(f);
     commit.contracts_merkle.tree_pos().marshall(&mut buf_f)?;
-    let stop = SystemTime::now();
-    println!(
-        "WRITE TREE POS BINARY FINISHED, ELAPSED TIME={:?}",
-        stop.duration_since(start).expect("duration should work")
-    );
 
     Ok(())
 }
@@ -1223,8 +1200,8 @@ fn finalize_commit<P: AsRef<Path>>(
     }
 
     fs::remove_file(base_info_path)?;
-    fs::remove_file(tree_pos_path)?;
-    fs::remove_file(tree_pos_opt_path)?;
+    let _ = fs::remove_file(tree_pos_path);
+    let _ = fs::remove_file(tree_pos_opt_path);
     fs::remove_dir(commit_path)?;
 
     Ok(())

@@ -178,46 +178,62 @@ impl TreePos {
     }
 
     pub fn marshall<W: Write>(&self, w: &mut W) -> io::Result<()> {
+        const CHUNK_SIZE: usize = 8192;
+        const ELEM_SIZE: usize = 4 + 32 + 4;
+        let mut b = [0u8; ELEM_SIZE * CHUNK_SIZE];
+        let mut chk = 0;
         for (k, (h, p)) in self.tree_pos.iter() {
-            w.write_all(&(*k).to_le_bytes())?;
-            w.write_all(h.as_bytes())?;
-            w.write_all(&(*p as u32).to_le_bytes())?;
+            let offset = chk * ELEM_SIZE;
+            b[offset..(offset + 4)].copy_from_slice(&(*k).to_le_bytes());
+            b[(offset + 4)..(offset + 36)].copy_from_slice(h.as_bytes());
+            b[(offset + 36)..(offset + 40)]
+                .copy_from_slice(&(*p as u32).to_le_bytes());
+            chk = (chk + 1) % CHUNK_SIZE;
+            if chk == 0 {
+                w.write_all(b.as_slice())?;
+            }
+        }
+        if chk != 0 {
+            w.write_all(&b[..(chk * ELEM_SIZE)])?;
         }
         Ok(())
+    }
+
+    fn read_bytes<R: Read, const N: usize>(r: &mut R) -> io::Result<[u8; N]> {
+        let mut buffer = [0u8; N];
+        r.read_exact(&mut buffer)?;
+        Ok(buffer)
+    }
+
+    fn is_eof<T>(r: &io::Result<T>) -> bool {
+        if let Err(ref e) = r {
+            if e.kind() == ErrorKind::UnexpectedEof {
+                return true;
+            }
+        }
+        false
     }
 
     pub fn unmarshall<R: Read>(r: &mut R) -> io::Result<Self> {
         let mut slf = Self::default();
         loop {
-            let mut buf_k = [0u8; 4];
-            let e = r.read_exact(&mut buf_k);
-            if e.as_ref()
-                .is_err_and(|e| e.kind() == ErrorKind::UnexpectedEof)
-            {
+            let res = Self::read_bytes(r);
+            if Self::is_eof(&res) {
                 break;
             }
-            e?;
-            let k = u32::from_le_bytes(buf_k);
+            let k = u32::from_le_bytes(res?);
 
-            let mut buf_h = [0u8; 32];
-            let e = r.read_exact(&mut buf_h);
-            if e.as_ref()
-                .is_err_and(|e| e.kind() == ErrorKind::UnexpectedEof)
-            {
+            let res = Self::read_bytes(r);
+            if Self::is_eof(&res) {
                 break;
             }
-            e?;
-            let hash = Hash::from(buf_h);
+            let hash = Hash::from(res?);
 
-            let mut buf_p = [0u8; 4];
-            let e = r.read_exact(&mut buf_p);
-            if e.as_ref()
-                .is_err_and(|e| e.kind() == ErrorKind::UnexpectedEof)
-            {
+            let res = Self::read_bytes(r);
+            if Self::is_eof(&res) {
                 break;
             }
-            e?;
-            let p = u32::from_le_bytes(buf_p);
+            let p = u32::from_le_bytes(res?);
             slf.tree_pos.insert(k, (hash, p as u64));
         }
         Ok(slf)
@@ -543,18 +559,21 @@ mod tests {
 
     #[test]
     fn merkle_position_serialization() -> Result<(), io::Error> {
+        const TEST_SIZE: u32 = 262144;
+        const ELEM_SIZE: usize = 4 + 32 + 4;
         let mut marshalled = TreePos::default();
-        let h1 = Hash::from([1u8; 32]);
-        let h2 = Hash::from([2u8; 32]);
-        marshalled.insert(2, (h1, 3));
-        marshalled.insert(4, (h2, 5));
+        let h = Hash::from([1u8; 32]);
+        for i in 0..TEST_SIZE {
+            marshalled.insert(i, (h, i as u64));
+        }
         let v: Vec<u8> = Vec::new();
-        let mut w = BufWriter::new(v);
+        let mut w = BufWriter::with_capacity(TEST_SIZE as usize * ELEM_SIZE, v);
         marshalled.marshall(&mut w)?;
         let mut r = BufReader::new(w.buffer());
         let unmarshalled = TreePos::unmarshall(&mut r)?;
-        assert_eq!(unmarshalled.tree_pos.get(&2), Some(&(h1, 3)));
-        assert_eq!(unmarshalled.tree_pos.get(&4), Some(&(h2, 5)));
+        for i in 0..TEST_SIZE {
+            assert_eq!(unmarshalled.tree_pos.get(&i), Some(&(h, i as u64)));
+        }
         Ok(())
     }
 }
