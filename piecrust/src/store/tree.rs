@@ -12,6 +12,7 @@ use std::{
 use bytecheck::CheckBytes;
 use piecrust_uplink::ContractId;
 use rkyv::{Archive, Deserialize, Serialize};
+use std::io::{self, ErrorKind, Read, Write};
 
 // There are max `2^16` pages in a 32-bit memory
 const P32_HEIGHT: usize = 8;
@@ -97,7 +98,7 @@ impl NewContractIndex {
 pub struct ContractsMerkle {
     inner_tree: Tree,
     dict: BTreeMap<u64, u64>,
-    tree_pos: BTreeMap<u32, (Hash, u64)>,
+    tree_pos: TreePos,
 }
 
 impl Default for ContractsMerkle {
@@ -105,7 +106,7 @@ impl Default for ContractsMerkle {
         Self {
             inner_tree: Tree::new(),
             dict: BTreeMap::new(),
-            tree_pos: BTreeMap::new(),
+            tree_pos: TreePos::default(),
         }
     }
 }
@@ -140,7 +141,7 @@ impl ContractsMerkle {
         self.inner_tree.root()
     }
 
-    pub fn tree_pos(&self) -> &BTreeMap<u32, (Hash, u64)> {
+    pub fn tree_pos(&self) -> &TreePos {
         &self.tree_pos
     }
 
@@ -168,7 +169,63 @@ pub struct BaseInfo {
 #[derive(Debug, Clone, Default, Archive, Deserialize, Serialize)]
 #[archive_attr(derive(CheckBytes))]
 pub struct TreePos {
-    pub tree_pos: BTreeMap<u32, (Hash, u64)>,
+    tree_pos: BTreeMap<u32, (Hash, u64)>,
+}
+
+impl TreePos {
+    pub fn insert(&mut self, k: u32, v: (Hash, u64)) {
+        self.tree_pos.insert(k, v);
+    }
+
+    pub fn marshall<W: Write>(&self, w: &mut W) -> io::Result<()> {
+        for (k, (h, p)) in self.tree_pos.iter() {
+            w.write_all(&(*k).to_le_bytes())?;
+            w.write_all(h.as_bytes())?;
+            w.write_all(&(*p as u32).to_le_bytes())?;
+        }
+        Ok(())
+    }
+
+    pub fn unmarshall<R: Read>(r: &mut R) -> io::Result<Self> {
+        let mut slf = Self::default();
+        loop {
+            let mut buf_k = [0u8; 4];
+            let e = r.read_exact(&mut buf_k);
+            if e.as_ref()
+                .is_err_and(|e| e.kind() == ErrorKind::UnexpectedEof)
+            {
+                break;
+            }
+            e?;
+            let k = u32::from_le_bytes(buf_k);
+
+            let mut buf_h = [0u8; 32];
+            let e = r.read_exact(&mut buf_h);
+            if e.as_ref()
+                .is_err_and(|e| e.kind() == ErrorKind::UnexpectedEof)
+            {
+                break;
+            }
+            e?;
+            let hash = Hash::from(buf_h);
+
+            let mut buf_p = [0u8; 4];
+            let e = r.read_exact(&mut buf_p);
+            if e.as_ref()
+                .is_err_and(|e| e.kind() == ErrorKind::UnexpectedEof)
+            {
+                break;
+            }
+            e?;
+            let p = u32::from_le_bytes(buf_p);
+            slf.tree_pos.insert(k, (hash, p as u64));
+        }
+        Ok(slf)
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = (&u32, &(Hash, u64))> {
+        self.tree_pos.iter()
+    }
 }
 
 #[derive(Debug, Clone, Archive, Deserialize, Serialize)]
@@ -477,4 +534,27 @@ pub fn position_from_contract(contract: &ContractId) -> u64 {
         .fold(0, u32::wrapping_add);
 
     pos as u64
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::{BufReader, BufWriter};
+
+    #[test]
+    fn merkle_position_serialization() -> Result<(), io::Error> {
+        let mut marshalled = TreePos::default();
+        let h1 = Hash::from([1u8; 32]);
+        let h2 = Hash::from([2u8; 32]);
+        marshalled.insert(2, (h1, 3));
+        marshalled.insert(4, (h2, 5));
+        let v: Vec<u8> = Vec::new();
+        let mut w = BufWriter::new(v);
+        marshalled.marshall(&mut w)?;
+        let mut r = BufReader::new(w.buffer());
+        let unmarshalled = TreePos::unmarshall(&mut r)?;
+        assert_eq!(unmarshalled.tree_pos.get(&2), Some(&(h1, 3)));
+        assert_eq!(unmarshalled.tree_pos.get(&4), Some(&(h2, 5)));
+        Ok(())
+    }
 }

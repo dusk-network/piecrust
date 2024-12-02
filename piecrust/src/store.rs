@@ -19,9 +19,11 @@ use std::collections::btree_map::Entry::*;
 use std::collections::btree_map::Keys;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{Debug, Formatter};
-use std::fs::create_dir_all;
+use std::fs::{create_dir_all, OpenOptions};
+use std::io::{BufReader, BufWriter};
 use std::path::{Path, PathBuf};
 use std::sync::{mpsc, Arc, Mutex};
+use std::time::SystemTime;
 use std::{fs, io, thread};
 
 use dusk_wasmtime::Engine;
@@ -46,6 +48,7 @@ const MEMORY_DIR: &str = "memory";
 const LEAF_DIR: &str = "leaf";
 const BASE_FILE: &str = "base";
 const TREE_POS_FILE: &str = "tree_pos";
+const TREE_POS_OPT_FILE: &str = "tree_pos_opt";
 const ELEMENT_FILE: &str = "element";
 const OBJECTCODE_EXTENSION: &str = "a";
 const METADATA_EXTENSION: &str = "m";
@@ -367,11 +370,11 @@ fn base_path_main<P: AsRef<Path>, S: AsRef<str>>(
 fn tree_pos_path_main<P: AsRef<Path>, S: AsRef<str>>(
     main_dir: P,
     commit_id: S,
-) -> io::Result<PathBuf> {
+) -> io::Result<(PathBuf, PathBuf)> {
     let commit_id = commit_id.as_ref();
     let dir = main_dir.as_ref().join(commit_id);
     fs::create_dir_all(&dir)?;
-    Ok(dir.join(TREE_POS_FILE))
+    Ok((dir.join(TREE_POS_FILE), dir.join(TREE_POS_OPT_FILE)))
 }
 
 fn commit_id_to_hash<S: AsRef<str>>(commit_id: S) -> Hash {
@@ -422,7 +425,8 @@ fn commit_from_dir<P: AsRef<Path>>(
 
     let tree_pos = if let Some(ref hash_hex) = commit_id {
         let tree_pos_path = main_dir.join(hash_hex).join(TREE_POS_FILE);
-        Some(tree_pos_from_path(tree_pos_path)?.tree_pos)
+        let tree_pos_opt_path = main_dir.join(hash_hex).join(TREE_POS_OPT_FILE);
+        Some(tree_pos_from_path(tree_pos_path, tree_pos_opt_path)?)
     } else {
         None
     };
@@ -510,7 +514,7 @@ fn index_merkle_from_path(
     leaf_dir: impl AsRef<Path>,
     maybe_commit_id: &Option<Hash>,
     commit_store: Arc<Mutex<CommitStore>>,
-    maybe_tree_pos: Option<&BTreeMap<u32, (Hash, u64)>>,
+    maybe_tree_pos: Option<&TreePos>,
 ) -> io::Result<(NewContractIndex, ContractsMerkle)> {
     let leaf_dir = leaf_dir.as_ref();
 
@@ -586,18 +590,27 @@ fn base_from_path<P: AsRef<Path>>(path: P) -> io::Result<BaseInfo> {
     Ok(base_info)
 }
 
-fn tree_pos_from_path<P: AsRef<Path>>(path: P) -> io::Result<TreePos> {
+fn tree_pos_from_path(
+    path: impl AsRef<Path>,
+    opt_path: impl AsRef<Path>,
+) -> io::Result<TreePos> {
     let path = path.as_ref();
 
-    let tree_pos_bytes = fs::read(path)?;
-    let tree_pos = rkyv::from_bytes(&tree_pos_bytes).map_err(|err| {
-        io::Error::new(
-            io::ErrorKind::InvalidData,
-            format!("Invalid tree positions file \"{path:?}\": {err}"),
-        )
-    })?;
+    let tree_pos = if opt_path.as_ref().exists() {
+        let f = OpenOptions::new().read(true).open(opt_path.as_ref())?;
+        let mut buf_f = BufReader::new(f);
+        TreePos::unmarshall(&mut buf_f)
+    } else {
+        let tree_pos_bytes = fs::read(path)?;
+        rkyv::from_bytes(&tree_pos_bytes).map_err(|err| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("Invalid tree positions file \"{path:?}\": {err}"),
+            )
+        })
+    };
 
-    Ok(tree_pos)
+    tree_pos
 }
 
 #[derive(Debug, Clone)]
@@ -1107,8 +1120,9 @@ fn write_commit_inner<P: AsRef<Path>, S: AsRef<str>>(
         })?;
     fs::write(base_main_path, base_info_bytes)?;
 
-    let tree_pos_main_path =
+    let (tree_pos_main_path, tree_pos_opt_path) =
         tree_pos_path_main(&directories.main_dir, commit_id.as_ref())?;
+    let start = SystemTime::now();
     let tree_pos_bytes = rkyv::to_bytes::<_, 128>(
         commit.contracts_merkle.tree_pos(),
     )
@@ -1118,7 +1132,25 @@ fn write_commit_inner<P: AsRef<Path>, S: AsRef<str>>(
             format!("Failed serializing tree positions file: {err}"),
         )
     })?;
-    fs::write(tree_pos_main_path, tree_pos_bytes)?;
+    fs::write(tree_pos_main_path.clone(), tree_pos_bytes)?;
+    let stop = SystemTime::now();
+    println!(
+        "WRITE TREE POS RKYV FINISHED, ELAPSED TIME={:?}",
+        stop.duration_since(start).expect("duration should work")
+    );
+
+    let start = SystemTime::now();
+    let f = OpenOptions::new()
+        .append(true)
+        .create(true)
+        .open(tree_pos_opt_path)?;
+    let mut buf_f = BufWriter::new(f);
+    commit.contracts_merkle.tree_pos().marshall(&mut buf_f)?;
+    let stop = SystemTime::now();
+    println!(
+        "WRITE TREE POS BINARY FINISHED, ELAPSED TIME={:?}",
+        stop.duration_since(start).expect("duration should work")
+    );
 
     Ok(())
 }
@@ -1161,6 +1193,7 @@ fn finalize_commit<P: AsRef<Path>>(
     let commit_path = main_dir.join(&root);
     let base_info_path = commit_path.join(BASE_FILE);
     let tree_pos_path = commit_path.join(TREE_POS_FILE);
+    let tree_pos_opt_path = commit_path.join(TREE_POS_OPT_FILE);
     let base_info = base_from_path(&base_info_path)?;
     for contract_hint in base_info.contract_hints {
         let contract_hex = hex::encode(contract_hint);
@@ -1191,6 +1224,7 @@ fn finalize_commit<P: AsRef<Path>>(
 
     fs::remove_file(base_info_path)?;
     fs::remove_file(tree_pos_path)?;
+    fs::remove_file(tree_pos_opt_path)?;
     fs::remove_dir(commit_path)?;
 
     Ok(())
