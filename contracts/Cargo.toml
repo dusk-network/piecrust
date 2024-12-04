@@ -3,6 +3,7 @@ members = [
     "box",
     "c-example",
     "callcenter",
+    "callstack",
     "initializer",
     "counter",
     "counter_float",

@@ -80,6 +80,11 @@ impl Callcenter {
         uplink::caller()
     }
 
+    /// Return the entire call stack of this contract
+    pub fn return_callstack(&self) -> Vec<ContractId> {
+        uplink::callstack()
+    }
+
     /// Make sure that the caller of this contract is the contract itself
     pub fn call_self(&self) -> Result<bool, ContractError> {
         let self_id = uplink::self_id();
@@ -87,6 +92,16 @@ impl Callcenter {
             None => uplink::call(self_id, "call_self", &())
                 .expect("querying self should succeed"),
             Some(caller) => Ok(caller == self_id),
+        }
+    }
+
+    /// Return a call stack after calling itself n times
+    pub fn call_self_n_times(&self, n: u32) -> Vec<ContractId> {
+        let self_id = uplink::self_id();
+        match n {
+            0 => uplink::callstack(),
+            _ => uplink::call(self_id, "call_self_n_times", &(n - 1))
+                .expect("calling self should succeed")
         }
     }
 
@@ -133,6 +148,12 @@ unsafe fn call_self(arg_len: u32) -> u32 {
     wrap_call(arg_len, |_: ()| STATE.call_self())
 }
 
+/// Expose `Callcenter::call_self_n_times()` to the host
+#[no_mangle]
+unsafe fn call_self_n_times(arg_len: u32) -> u32 {
+    wrap_call(arg_len, |n: u32| STATE.call_self_n_times(n))
+}
+
 /// Expose `Callcenter::call_spend_with_limit` to the host
 #[no_mangle]
 unsafe fn call_spend_with_limit(arg_len: u32) -> u32 {
@@ -151,6 +172,12 @@ unsafe fn return_self_id(arg_len: u32) -> u32 {
 #[no_mangle]
 unsafe fn return_caller(arg_len: u32) -> u32 {
     wrap_call(arg_len, |_: ()| STATE.return_caller())
+}
+
+/// Expose `Callcenter::return_callstack()` to the host
+#[no_mangle]
+unsafe fn return_callstack(arg_len: u32) -> u32 {
+    wrap_call(arg_len, |_: ()| STATE.return_callstack())
 }
 
 /// Expose `Callcenter::delegate_query()` to the host

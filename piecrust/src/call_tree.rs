@@ -101,6 +101,20 @@ impl CallTree {
         current.map(|inner| unsafe { (*inner).elem })
     }
 
+    /// Returns all call ids.
+    pub(crate) fn call_ids(&self) -> Vec<&ContractId> {
+        let mut v = Vec::new();
+        let mut current = self.0;
+
+        while current.is_some() {
+            let p = *current.as_ref().unwrap();
+            v.push(unsafe { &(*p).elem.contract_id });
+            current = current.and_then(|inner| unsafe { (*inner).parent });
+        }
+
+        v
+    }
+
     /// Clears the call tree of all elements.
     pub(crate) fn clear(&mut self) {
         unsafe {
