@@ -19,7 +19,8 @@ use std::collections::btree_map::Entry::*;
 use std::collections::btree_map::Keys;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{Debug, Formatter};
-use std::fs::create_dir_all;
+use std::fs::{create_dir_all, OpenOptions};
+use std::io::{BufReader, BufWriter};
 use std::path::{Path, PathBuf};
 use std::sync::{mpsc, Arc, Mutex};
 use std::{fs, io, thread};
@@ -29,10 +30,10 @@ use piecrust_uplink::ContractId;
 use session::ContractDataEntry;
 use tree::{Hash, NewContractIndex};
 
-use crate::store::commit::CommitHulk;
+use crate::store::commit::Hulk;
 use crate::store::tree::{
     position_from_contract, BaseInfo, ContractIndexElement, ContractsMerkle,
-    PageTree,
+    TreePos,
 };
 pub use bytecode::Bytecode;
 pub use memory::{Memory, PAGE_SIZE};
@@ -45,6 +46,8 @@ const BYTECODE_DIR: &str = "bytecode";
 const MEMORY_DIR: &str = "memory";
 const LEAF_DIR: &str = "leaf";
 const BASE_FILE: &str = "base";
+const TREE_POS_FILE: &str = "tree_pos";
+const TREE_POS_OPT_FILE: &str = "tree_pos_opt";
 const ELEMENT_FILE: &str = "element";
 const OBJECTCODE_EXTENSION: &str = "a";
 const METADATA_EXTENSION: &str = "m";
@@ -70,14 +73,17 @@ impl Debug for ContractStore {
     }
 }
 
+#[derive(Debug)]
 pub struct CommitStore {
     commits: BTreeMap<Hash, Commit>,
+    main_index: NewContractIndex,
 }
 
 impl CommitStore {
     pub fn new() -> Self {
         Self {
             commits: BTreeMap::new(),
+            main_index: NewContractIndex::new(),
         }
     }
 
@@ -89,6 +95,40 @@ impl CommitStore {
         self.commits.get(hash)
     }
 
+    pub fn get_element_and_base(
+        &self,
+        hash: &Hash,
+        contract_id: &ContractId,
+    ) -> (Option<*const ContractIndexElement>, Option<Hash>) {
+        match self.commits.get(hash) {
+            Some(commit) => {
+                let e = commit.index.get(contract_id);
+                (e.map(|a| a as *const ContractIndexElement), commit.base)
+            }
+            None => {
+                let e = self.main_index.get(contract_id);
+                (e.map(|a| a as *const ContractIndexElement), None)
+            }
+        }
+    }
+
+    pub fn get_element_and_base_mut(
+        &mut self,
+        hash: &Hash,
+        contract_id: &ContractId,
+    ) -> (Option<*mut ContractIndexElement>, Option<Hash>) {
+        match self.commits.get_mut(hash) {
+            Some(commit) => {
+                let e = commit.index.get_mut(contract_id);
+                (e.map(|a| a as *mut ContractIndexElement), commit.base)
+            }
+            None => {
+                let e = self.main_index.get_mut(contract_id);
+                (e.map(|a| a as *mut ContractIndexElement), None)
+            }
+        }
+    }
+
     pub fn contains_key(&self, hash: &Hash) -> bool {
         self.commits.contains_key(hash)
     }
@@ -98,7 +138,17 @@ impl CommitStore {
     }
 
     pub fn remove_commit(&mut self, hash: &Hash) {
-        self.commits.remove(hash);
+        if let Some(commit) = self.commits.remove(hash) {
+            commit.index.move_into(&mut self.main_index);
+        }
+    }
+
+    pub fn insert_main_index(
+        &mut self,
+        contract_id: &ContractId,
+        element: ContractIndexElement,
+    ) {
+        self.main_index.insert_contract_index(contract_id, element);
     }
 }
 
@@ -237,17 +287,14 @@ impl ContractStore {
 
     fn session_with_base(&self, base: Option<Hash>) -> ContractSession {
         let base_commit = base.and_then(|hash| {
-            self.commit_store
-                .lock()
-                .unwrap()
-                .get_commit(&hash)
-                .map(|commit| commit.to_hulk())
+            self.commit_store.lock().unwrap().get_commit(&hash).cloned()
         });
         ContractSession::new(
             &self.root_dir,
             self.engine.clone(),
             base_commit,
             self.call.as_ref().expect("call should exist").clone(),
+            self.commit_store.clone(),
         )
     }
 }
@@ -273,7 +320,8 @@ fn read_all_commits<P: AsRef<Path>>(
                 continue;
             }
             tracing::trace!("before read_commit");
-            let commit = read_commit(engine, entry.path())?;
+            let commit =
+                read_commit(engine, entry.path(), commit_store.clone())?;
             tracing::trace!("before read_commit");
             let root = *commit.root();
             commit_store.lock().unwrap().insert_commit(root, commit);
@@ -286,9 +334,10 @@ fn read_all_commits<P: AsRef<Path>>(
 fn read_commit<P: AsRef<Path>>(
     engine: &Engine,
     commit_dir: P,
+    commit_store: Arc<Mutex<CommitStore>>,
 ) -> io::Result<Commit> {
     let commit_dir = commit_dir.as_ref();
-    let commit = commit_from_dir(engine, commit_dir)?;
+    let commit = commit_from_dir(engine, commit_dir, commit_store)?;
     Ok(commit)
 }
 
@@ -317,6 +366,16 @@ fn base_path_main<P: AsRef<Path>, S: AsRef<str>>(
     Ok(dir.join(BASE_FILE))
 }
 
+fn tree_pos_path_main<P: AsRef<Path>, S: AsRef<str>>(
+    main_dir: P,
+    commit_id: S,
+) -> io::Result<PathBuf> {
+    let commit_id = commit_id.as_ref();
+    let dir = main_dir.as_ref().join(commit_id);
+    fs::create_dir_all(&dir)?;
+    Ok(dir.join(TREE_POS_OPT_FILE))
+}
+
 fn commit_id_to_hash<S: AsRef<str>>(commit_id: S) -> Hash {
     let hash: [u8; 32] = hex::decode(commit_id.as_ref())
         .expect("Hex decoding of commit id string should succeed")
@@ -336,6 +395,7 @@ fn contract_id_from_hex<S: AsRef<str>>(contract_id: S) -> ContractId {
 fn commit_from_dir<P: AsRef<Path>>(
     engine: &Engine,
     dir: P,
+    commit_store: Arc<Mutex<CommitStore>>,
 ) -> io::Result<Commit> {
     let dir = dir.as_ref();
     let mut commit_id: Option<String> = None;
@@ -361,8 +421,22 @@ fn commit_from_dir<P: AsRef<Path>>(
     // let contracts_merkle_path = dir.join(MERKLE_FILE);
     let leaf_dir = main_dir.join(LEAF_DIR);
     tracing::trace!("before index_merkle_from_path");
-    let (index, contracts_merkle) =
-        index_merkle_from_path(main_dir, leaf_dir, &maybe_hash)?;
+
+    let tree_pos = if let Some(ref hash_hex) = commit_id {
+        let tree_pos_path = main_dir.join(hash_hex).join(TREE_POS_FILE);
+        let tree_pos_opt_path = main_dir.join(hash_hex).join(TREE_POS_OPT_FILE);
+        Some(tree_pos_from_path(tree_pos_path, tree_pos_opt_path)?)
+    } else {
+        None
+    };
+
+    let (index, contracts_merkle) = index_merkle_from_path(
+        main_dir,
+        leaf_dir,
+        &maybe_hash,
+        commit_store.clone(),
+        tree_pos.as_ref(),
+    )?;
     tracing::trace!("after index_merkle_from_path");
 
     let bytecode_dir = main_dir.join(BYTECODE_DIR);
@@ -396,7 +470,7 @@ fn commit_from_dir<P: AsRef<Path>>(
 
         let contract_memory_dir = memory_dir.join(&contract_hex);
 
-        for page_index in &contract_index.page_indices {
+        for page_index in contract_index.page_indices() {
             let main_page_path = page_path(&contract_memory_dir, *page_index);
             if !main_page_path.is_file() {
                 let path = ContractSession::find_page(
@@ -418,10 +492,19 @@ fn commit_from_dir<P: AsRef<Path>>(
         }
     }
 
+    let base = if let Some(ref hash_hex) = commit_id {
+        let base_info_path = main_dir.join(hash_hex).join(BASE_FILE);
+        base_from_path(base_info_path)?.maybe_base
+    } else {
+        None
+    };
+
     Ok(Commit {
         index,
         contracts_merkle,
         maybe_hash,
+        commit_store: Some(commit_store),
+        base,
     })
 }
 
@@ -429,6 +512,8 @@ fn index_merkle_from_path(
     main_path: impl AsRef<Path>,
     leaf_dir: impl AsRef<Path>,
     maybe_commit_id: &Option<Hash>,
+    commit_store: Arc<Mutex<CommitStore>>,
+    maybe_tree_pos: Option<&TreePos>,
 ) -> io::Result<(NewContractIndex, ContractsMerkle)> {
     let leaf_dir = leaf_dir.as_ref();
 
@@ -442,12 +527,13 @@ fn index_merkle_from_path(
             let contract_id =
                 contract_id_from_hex(contract_id_hex.to_string_lossy());
             let contract_leaf_path = leaf_dir.join(contract_id_hex);
-            let element_path = ContractSession::find_element(
+            let (element_path, element_depth) = ContractSession::find_element(
                 *maybe_commit_id,
                 &contract_leaf_path,
                 &main_path,
+                0,
             )
-            .unwrap_or(contract_leaf_path.join(ELEMENT_FILE));
+            .unwrap_or((contract_leaf_path.join(ELEMENT_FILE), 0));
             if element_path.is_file() {
                 let element_bytes = fs::read(&element_path)?;
                 let element: ContractIndexElement =
@@ -463,15 +549,26 @@ fn index_merkle_from_path(
                         ),
                         )
                     })?;
-                if let Some(h) = element.hash {
-                    merkle.insert_with_int_pos(
-                        position_from_contract(&contract_id),
-                        element.int_pos.expect("int pos should be present"),
-                        h,
-                    );
+                if element_depth != u32::MAX {
+                    index.insert_contract_index(&contract_id, element);
+                } else {
+                    commit_store
+                        .lock()
+                        .unwrap()
+                        .insert_main_index(&contract_id, element);
                 }
-                index.insert_contract_index(&contract_id, element);
             }
+        }
+    }
+
+    match maybe_tree_pos {
+        Some(tree_pos) => {
+            for (int_pos, (hash, pos)) in tree_pos.iter() {
+                merkle.insert_with_int_pos(*pos, *int_pos as u64, *hash);
+            }
+        }
+        None => {
+            unreachable!()
         }
     }
 
@@ -492,19 +589,49 @@ fn base_from_path<P: AsRef<Path>>(path: P) -> io::Result<BaseInfo> {
     Ok(base_info)
 }
 
+fn tree_pos_from_path(
+    path: impl AsRef<Path>,
+    opt_path: impl AsRef<Path>,
+) -> io::Result<TreePos> {
+    let path = path.as_ref();
+
+    let tree_pos = if opt_path.as_ref().exists() {
+        let f = OpenOptions::new().read(true).open(opt_path.as_ref())?;
+        let mut buf_f = BufReader::new(f);
+        TreePos::unmarshall(&mut buf_f)
+    } else {
+        let tree_pos_bytes = fs::read(path)?;
+        rkyv::from_bytes(&tree_pos_bytes).map_err(|err| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("Invalid tree positions file \"{path:?}\": {err}"),
+            )
+        })
+    };
+
+    tree_pos
+}
+
 #[derive(Debug, Clone)]
 pub(crate) struct Commit {
     index: NewContractIndex,
     contracts_merkle: ContractsMerkle,
     maybe_hash: Option<Hash>,
+    commit_store: Option<Arc<Mutex<CommitStore>>>,
+    base: Option<Hash>,
 }
 
 impl Commit {
-    pub fn new() -> Self {
+    pub fn new(
+        commit_store: &Arc<Mutex<CommitStore>>,
+        maybe_base: Option<Hash>,
+    ) -> Self {
         Self {
             index: NewContractIndex::new(),
             contracts_merkle: ContractsMerkle::default(),
             maybe_hash: None,
+            commit_store: Some(commit_store.clone()),
+            base: maybe_base,
         }
     }
 
@@ -515,7 +642,7 @@ impl Commit {
     ) -> Self {
         let mut index = NewContractIndex::new();
         for contract_id in contract_ids {
-            if let Some(a) = self.index.get(contract_id, None) {
+            if let Some(a) = self.index.get(contract_id) {
                 index.insert_contract_index(contract_id, a.clone());
             }
         }
@@ -523,11 +650,9 @@ impl Commit {
             index,
             contracts_merkle: self.contracts_merkle.clone(),
             maybe_hash: self.maybe_hash,
+            commit_store: self.commit_store.clone(),
+            base: self.base,
         }
-    }
-
-    pub fn to_hulk(&self) -> CommitHulk {
-        CommitHulk::from_commit(self)
     }
 
     #[allow(dead_code)]
@@ -539,14 +664,14 @@ impl Commit {
 
         let pos = position_from_contract(contract_id);
 
-        Some(contract.page_indices.into_iter().map(move |page_index| {
+        let (iter, tree) = contract.page_indices_and_tree();
+        Some(iter.map(move |page_index| {
             let tree_opening = self
                 .contracts_merkle
                 .opening(pos)
                 .expect("There must be a leaf for the contract");
 
-            let page_opening = contract
-                .tree
+            let page_opening = tree
                 .opening(page_index as u64)
                 .expect("There must be a leaf for the page");
 
@@ -561,34 +686,32 @@ impl Commit {
     }
 
     pub fn insert(&mut self, contract_id: ContractId, memory: &Memory) {
-        if self.index.get(&contract_id, self.maybe_hash).is_none() {
+        if self.index_get(&contract_id).is_none() {
             self.index.insert_contract_index(
                 &contract_id,
-                ContractIndexElement {
-                    tree: PageTree::new(memory.is_64()),
-                    len: 0,
-                    page_indices: BTreeSet::new(),
-                    hash: None,
-                    int_pos: None,
-                },
+                ContractIndexElement::new(memory.is_64()),
             );
         }
-        let element =
-            self.index.get_mut(&contract_id, self.maybe_hash).unwrap();
+        let (element, contracts_merkle) =
+            self.element_and_merkle_mut(&contract_id);
+        let element = element.unwrap();
 
-        element.len = memory.current_len;
+        element.set_len(memory.current_len);
 
         for (dirty_page, _, page_index) in memory.dirty_pages() {
-            element.page_indices.insert(*page_index);
             let hash = Hash::new(dirty_page);
-            element.tree.insert(*page_index as u64, hash);
+            element.insert_page_index_hash(
+                *page_index,
+                *page_index as u64,
+                hash,
+            );
         }
 
-        let root = element.tree.root();
+        let root = *element.tree().root();
         let pos = position_from_contract(&contract_id);
-        let internal_pos = self.contracts_merkle.insert(pos, *root);
-        element.hash = Some(*root);
-        element.int_pos = Some(internal_pos);
+        let internal_pos = contracts_merkle.insert(pos, root);
+        element.set_hash(Some(root));
+        element.set_int_pos(Some(internal_pos));
     }
 
     pub fn remove_and_insert(&mut self, contract: ContractId, memory: &Memory) {
@@ -601,6 +724,35 @@ impl Commit {
         let ret = self.contracts_merkle.root();
         tracing::trace!("calculating root finished");
         ret
+    }
+
+    pub fn index_get(
+        &self,
+        contract_id: &ContractId,
+    ) -> Option<&ContractIndexElement> {
+        Hulk::deep_index_get(
+            &self.index,
+            *contract_id,
+            self.commit_store.clone(),
+            self.base,
+        )
+        .map(|a| unsafe { &*a })
+    }
+
+    pub fn element_and_merkle_mut(
+        &mut self,
+        contract_id: &ContractId,
+    ) -> (Option<&mut ContractIndexElement>, &mut ContractsMerkle) {
+        (
+            Hulk::deep_index_get_mut(
+                &mut self.index,
+                *contract_id,
+                self.commit_store.clone(),
+                self.base,
+            )
+            .map(|a| unsafe { &mut *a }),
+            &mut self.contracts_merkle,
+        )
     }
 }
 
@@ -826,7 +978,8 @@ fn write_commit<P: AsRef<Path>>(
     //     maybe_hash: base.as_ref().and_then(|base| base.maybe_hash),
     // };
 
-    let mut commit = base.unwrap_or(Commit::new());
+    let mut commit =
+        base.unwrap_or(Commit::new(&commit_store, base_info.maybe_base));
     for (contract_id, contract_data) in &commit_contracts {
         if contract_data.is_new {
             commit.remove_and_insert(*contract_id, &contract_data.memory);
@@ -837,6 +990,8 @@ fn write_commit<P: AsRef<Path>>(
 
     let root = *commit.root();
     let root_hex = hex::encode(root);
+    commit.maybe_hash = Some(root);
+    commit.base = base_info.maybe_base;
 
     // Don't write the commit if it already exists on disk. This may happen if
     // the same transactions on the same base commit for example.
@@ -935,8 +1090,6 @@ fn write_commit_inner<P: AsRef<Path>, S: AsRef<str>>(
     tracing::trace!("persisting index started");
     for (contract_id, element) in commit.index.iter() {
         if commit_contracts.contains_key(contract_id) {
-            // todo: write element to disk at
-            // main/leaf/{contract_id}/{commit_id}
             let element_dir_path = directories
                 .leaf_main_dir
                 .join(hex::encode(contract_id.as_bytes()))
@@ -956,7 +1109,7 @@ fn write_commit_inner<P: AsRef<Path>, S: AsRef<str>>(
     tracing::trace!("persisting index finished");
 
     let base_main_path =
-        base_path_main(directories.main_dir, commit_id.as_ref())?;
+        base_path_main(&directories.main_dir, commit_id.as_ref())?;
     let base_info_bytes =
         rkyv::to_bytes::<_, 128>(&base_info).map_err(|err| {
             io::Error::new(
@@ -965,6 +1118,16 @@ fn write_commit_inner<P: AsRef<Path>, S: AsRef<str>>(
             )
         })?;
     fs::write(base_main_path, base_info_bytes)?;
+
+    let tree_pos_opt_path =
+        tree_pos_path_main(&directories.main_dir, commit_id.as_ref())?;
+
+    let f = OpenOptions::new()
+        .append(true)
+        .create(true)
+        .open(tree_pos_opt_path)?;
+    let mut buf_f = BufWriter::new(f);
+    commit.contracts_merkle.tree_pos().marshall(&mut buf_f)?;
 
     Ok(())
 }
@@ -1006,6 +1169,8 @@ fn finalize_commit<P: AsRef<Path>>(
     let root = hex::encode(root);
     let commit_path = main_dir.join(&root);
     let base_info_path = commit_path.join(BASE_FILE);
+    let tree_pos_path = commit_path.join(TREE_POS_FILE);
+    let tree_pos_opt_path = commit_path.join(TREE_POS_OPT_FILE);
     let base_info = base_from_path(&base_info_path)?;
     for contract_hint in base_info.contract_hints {
         let contract_hex = hex::encode(contract_hint);
@@ -1035,6 +1200,8 @@ fn finalize_commit<P: AsRef<Path>>(
     }
 
     fs::remove_file(base_info_path)?;
+    let _ = fs::remove_file(tree_pos_path);
+    let _ = fs::remove_file(tree_pos_opt_path);
     fs::remove_dir(commit_path)?;
 
     Ok(())

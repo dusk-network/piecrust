@@ -70,3 +70,42 @@ fn crossover() -> Result<(), Error> {
 
     Ok(())
 }
+
+#[test]
+fn iccs_dont_rollback() -> Result<(), Error> {
+    let vm = VM::ephemeral()?;
+
+    let mut session = vm.session(SessionData::builder())?;
+
+    session.deploy(
+        contract_bytecode!("crossover"),
+        ContractData::builder()
+            .owner(OWNER)
+            .contract_id(CROSSOVER_ONE),
+        LIMIT,
+    )?;
+    session.deploy(
+        contract_bytecode!("crossover"),
+        ContractData::builder()
+            .owner(OWNER)
+            .contract_id(CROSSOVER_TWO),
+        LIMIT,
+    )?;
+    // These value should not be set to `INITIAL_VALUE` in the contract.
+    const CROSSOVER_TO_SET: i32 = 42;
+
+    session.call::<_, ()>(
+        CROSSOVER_ONE,
+        "check_iccs_dont_rollback",
+        &(CROSSOVER_TWO, CROSSOVER_TO_SET),
+        LIMIT,
+    )?;
+
+    assert_eq!(
+        session.call::<_, i32>(CROSSOVER_ONE, "crossover", &(), LIMIT)?.data,
+        CROSSOVER_TO_SET,
+        "The crossover should still be set even though the other contract panicked"
+    );
+
+    Ok(())
+}

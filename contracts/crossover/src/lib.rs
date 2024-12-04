@@ -67,6 +67,27 @@ impl Crossover {
         self.set_crossover(value_to_set);
     }
 
+    // Chain of ICC is not being rolled back when a callee panics and its panic
+    // is not propagated up the call chain.
+    pub fn check_iccs_dont_rollback(
+        &mut self,
+        contract: ContractId,
+        value_to_set: i32,
+    ) {
+        self.set_crossover(value_to_set);
+
+        const ANY_VALUE_1: i32 = 5;
+        const ANY_VALUE_2: i32 = 6;
+
+        uplink::debug!("calling panicking contract {contract:?}");
+        uplink::call::<_, ()>(
+            contract,
+            "set_back_and_panic",
+            &(ANY_VALUE_1, ANY_VALUE_2),
+        )
+        .expect_err("should give an error on a panic");
+    }
+
     // Sets the contract's value and then calls its caller's [`set_crossover`]
     // call to set their value. The caller is assumed to be another crossover
     // contract.
@@ -122,6 +143,14 @@ unsafe fn set_crossover(arg_len: u32) -> u32 {
 unsafe fn check_consistent_state_on_errors(arg_len: u32) -> u32 {
     uplink::wrap_call(arg_len, |(contract, s, sf, sb)| {
         STATE.check_consistent_state_on_errors(contract, s, sf, sb)
+    })
+}
+
+/// Expose `Crossover::check_iccs_dont_rollback()` to the host
+#[no_mangle]
+unsafe fn check_iccs_dont_rollback(arg_len: u32) -> u32 {
+    uplink::wrap_call(arg_len, |(contract, s)| {
+        STATE.check_iccs_dont_rollback(contract, s)
     })
 }
 

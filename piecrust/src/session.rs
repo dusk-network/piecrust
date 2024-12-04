@@ -643,6 +643,10 @@ impl Session {
         self.inner.call_tree.nth_parent(n)
     }
 
+    pub(crate) fn call_ids(&self) -> Vec<&ContractId> {
+        self.inner.call_tree.call_ids()
+    }
+
     /// Creates a new instance of the given contract, returning its memory
     /// length.
     fn create_instance(

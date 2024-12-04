@@ -58,6 +58,7 @@ mod ext {
         pub fn feed(arg_len: u32);
 
         pub fn caller() -> i32;
+        pub fn callstack() -> i32;
         pub fn limit() -> u64;
         pub fn spent() -> u64;
         pub fn owner(contract_id: *const u8) -> i32;
@@ -287,6 +288,22 @@ pub fn caller() -> Option<ContractId> {
             Some(ContractId::from_bytes(bytes))
         }),
     }
+}
+
+/// Returns IDs of all calling contracts present in the calling stack
+pub fn callstack() -> Vec<ContractId> {
+    let n = unsafe { ext::callstack() };
+    with_arg_buf(|buf| {
+        let mut v = Vec::new();
+        for i in 0..n as usize {
+            let mut bytes = [0; CONTRACT_ID_BYTES];
+            bytes.copy_from_slice(
+                &buf[i * CONTRACT_ID_BYTES..(i + 1) * CONTRACT_ID_BYTES],
+            );
+            v.push(ContractId::from_bytes(bytes));
+        }
+        v
+    })
 }
 
 /// Returns the gas limit with which the contact was called.
