@@ -78,6 +78,9 @@ pub use types::*;
 mod error;
 pub use error::*;
 
+#[cfg(feature = "serde")]
+mod serde_support;
+
 /// How many bytes to use for scratch space when serializing
 pub const SCRATCH_BUF_BYTES: usize = 1024;
 
