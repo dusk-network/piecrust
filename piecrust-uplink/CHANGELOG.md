@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Add serde `Serialize` and `Deserialize` implementations for `ContractId` and `Event` [#414]
+- Add `serde`, `hex`, `base64` and `serde_json` optional dependencies [#414]
+- Add `serde` feature [#414]
+
 ## [0.17.1] - 2024-09-24
 
 ### Changed
@@ -216,6 +222,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - First `piecrust-uplink` release
 
 <!-- ISSUES -->
+[#414]: https://github.com/dusk-network/piecrust/issues/414
 [#375]: https://github.com/dusk-network/piecrust/issues/375
 [#365]: https://github.com/dusk-network/piecrust/issues/365
 [#357]: https://github.com/dusk-network/piecrust/issues/357
