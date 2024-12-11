@@ -1226,8 +1226,8 @@ fn finalize_commit<P: AsRef<Path>>(
                     let level_str = format!("{}", commit.level);
                     let level_dir = main_dir.join(MEMORY_DIR).join(level_str);
                     fs::create_dir_all(&level_dir)?;
-                    let copy_dst_dir =
-                        level_dir.join(&contract_hex).join(&root_str);
+                    let copy_dst_dir = level_dir.join(&contract_hex); // .join(&root_str); // this is a new "main", we don't want
+                                                                      // it to be commit specific
                     fs::create_dir_all(&copy_dst_dir)?;
                     let copy_dst = copy_dst_dir.join(&filename);
                     fs::copy(&dst_file_path, &copy_dst)?;
