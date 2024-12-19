@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.17.3] - 2024-12-19
+
+## [0.17.2] - 2024-12-17
+
+### Added
+
+- Add serde `Serialize` and `Deserialize` implementations for `ContractId` and `Event` [#414]
+- Add `serde`, `hex`, `base64` and `serde_json` optional dependencies [#414]
+- Add `serde` feature [#414]
+
 ## [0.17.1] - 2024-09-24
 
 ### Changed
@@ -216,6 +226,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - First `piecrust-uplink` release
 
 <!-- ISSUES -->
+[#414]: https://github.com/dusk-network/piecrust/issues/414
 [#375]: https://github.com/dusk-network/piecrust/issues/375
 [#365]: https://github.com/dusk-network/piecrust/issues/365
 [#357]: https://github.com/dusk-network/piecrust/issues/357
@@ -241,7 +252,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [#136]: https://github.com/dusk-network/piecrust/issues/136
 
 <!-- VERSIONS -->
-[Unreleased]: https://github.com/dusk-network/piecrust/compare/uplink-0.17.1...HEAD
+[Unreleased]: https://github.com/dusk-network/piecrust/compare/uplink-0.17.3...HEAD
+[0.17.3]: https://github.com/dusk-network/piecrust/compare/uplink-0.17.2...uplink-0.17.3
+[0.17.2]: https://github.com/dusk-network/piecrust/compare/uplink-0.17.1...uplink-0.17.2
 [0.17.1]: https://github.com/dusk-network/piecrust/compare/uplink-0.17.0...uplink-0.17.1
 [0.17.0]: https://github.com/dusk-network/piecrust/compare/uplink-0.16.0...uplink-0.17.0
 [0.16.0]: https://github.com/dusk-network/piecrust/compare/uplink-0.15.0...uplink-0.16.0

@@ -7,7 +7,7 @@ categories = ["wasm", "no-std", "cryptography::cryptocurrencies"]
 keywords = ["virtual", "machine", "smart", "contract", "wasm"]
 
 repository = "https://github.com/dusk-network/piecrust"
-version = "0.17.2-rc.0"
+version = "0.17.3"
 
 edition = "2021"
 license = "MPL-2.0"
@@ -16,10 +16,18 @@ license = "MPL-2.0"
 rkyv = { version = "0.7", default-features = false, features = ["size_32", "alloc", "validation"] }
 bytecheck = { version = "0.6", default-features = false }
 dlmalloc = { version = "0.2", optional = true, features = ["global"] }
+serde = { version = "1.0", optional = true }
+hex = { version = "0.4" , optional = true }
+base64 = { version = "0.22", optional = true }
+serde_json = { version = "1.0", optional = true }
+
+[dev-dependencies]
+rand = "0.8"
 
 [features]
 abi = []
 debug = []
+serde = ["dep:serde", "serde_json", "hex", "base64"]
 
 [package.metadata.docs.rs]
 all-features = true
