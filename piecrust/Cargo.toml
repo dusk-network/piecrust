@@ -7,14 +7,14 @@ categories = ["wasm", "no-std", "cryptography::cryptocurrencies"]
 keywords = ["virtual", "machine", "smart", "contract", "wasm"]
 
 repository = "https://github.com/dusk-network/piecrust"
-version = "0.26.0"
+version = "0.27.0"
 
 edition = "2021"
 license = "MPL-2.0"
 
 [dependencies]
 crumbles = { version = "0.3", path = "../crumbles" }
-piecrust-uplink = { version = "0.17", path = "../piecrust-uplink" }
+piecrust-uplink = { version = "0.17.3", path = "../piecrust-uplink" }
 
 dusk-wasmtime = { version = "21.0.0-alpha", default-features = false, features = ["cranelift", "runtime", "parallel-compilation"] }
 bytecheck = "0.6"

@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.27.0] - 2024-12-18
+
+### Added
+
+- Access to callstack via uplink API [#405]
+
+### Changed
+
+- Store merkle tree positions in a binary format [#410]
+
 ## [0.26.0] - 2024-10-21
 
 ### Changed
@@ -475,6 +485,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- ISSUES -->
 
+[#410]: https://github.com/dusk-network/piecrust/issues/410
+[#405]: https://github.com/dusk-network/piecrust/issues/405
 [#396]: https://github.com/dusk-network/piecrust/issues/396
 [#393]: https://github.com/dusk-network/piecrust/issues/393
 [#388]: https://github.com/dusk-network/piecrust/issues/388
@@ -524,7 +536,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- VERSIONS -->
 
-[Unreleased]: https://github.com/dusk-network/piecrust/compare/piecrust-0.26.0...HEAD
+[Unreleased]: https://github.com/dusk-network/piecrust/compare/piecrust-0.27.0...HEAD
+[0.27.0]: https://github.com/dusk-network/piecrust/compare/piecrust-0.26.0...piecrust-0.27.0
 [0.26.0]: https://github.com/dusk-network/piecrust/compare/piecrust-0.25.0...piecrust-0.26.0
 [0.25.0]: https://github.com/dusk-network/piecrust/compare/piecrust-0.24.0...piecrust-0.25.0
 [0.24.0]: https://github.com/dusk-network/piecrust/compare/piecrust-0.23.0...piecrust-0.24.0

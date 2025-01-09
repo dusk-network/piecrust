@@ -243,6 +243,66 @@ pub fn cc_caller_uninit() -> Result<(), Error> {
 }
 
 #[test]
+pub fn cc_callstack() -> Result<(), Error> {
+    let vm = VM::ephemeral()?;
+
+    let mut session = vm.session(SessionData::builder())?;
+
+    let center_id = session.deploy(
+        contract_bytecode!("callcenter"),
+        ContractData::builder().owner(OWNER),
+        LIMIT,
+    )?;
+
+    let callstack_id = session.deploy(
+        contract_bytecode!("callstack"),
+        ContractData::builder().owner(OWNER),
+        LIMIT,
+    )?;
+
+    let callstack: Vec<ContractId> = session
+        .call(center_id, "return_callstack", &(), LIMIT)?
+        .data;
+    assert_eq!(callstack.len(), 1);
+
+    let self_id: ContractId =
+        session.call(center_id, "return_self_id", &(), LIMIT)?.data;
+    assert_eq!(callstack[0], self_id);
+
+    const N: u32 = 5;
+    let callstack: Vec<ContractId> = session
+        .call(center_id, "call_self_n_times", &N, LIMIT)?
+        .data;
+    assert_eq!(callstack.len(), N as usize + 1);
+    for i in 1..=N as usize {
+        assert_eq!(callstack[0], callstack[i]);
+    }
+
+    let res = session
+        .call::<_, Result<Vec<u8>, ContractError>>(
+            center_id,
+            "delegate_query",
+            &(
+                callstack_id,
+                String::from("return_callstack"),
+                Vec::<u8>::new(),
+            ),
+            LIMIT,
+        )?
+        .data
+        .expect("ICC should succeed");
+
+    let callstack: Vec<ContractId> =
+        rkyv::from_bytes(&res).expect("Deserialization to succeed");
+
+    assert_eq!(callstack.len(), 2);
+    assert_eq!(callstack[0], callstack_id);
+    assert_eq!(callstack[1], center_id);
+
+    Ok(())
+}
+
+#[test]
 pub fn cc_self_id() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 
