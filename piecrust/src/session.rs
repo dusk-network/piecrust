@@ -748,6 +748,22 @@ impl Session {
         self.inner.data.get(name)
     }
 
+    /// Set the value of a metadata item.
+    ///
+    /// Returns the previous value of the metadata item.
+    pub fn set_meta<S, V>(
+        &mut self,
+        name: S,
+        value: V,
+    ) -> Result<Option<Vec<u8>>, Error>
+    where
+        S: Into<Cow<'static, str>>,
+        V: for<'a> Serialize<StandardBufSerializer<'a>>,
+    {
+        let data = Self::serialize_data(&value)?;
+        Ok(self.inner.data.set(name, data))
+    }
+
     pub fn serialize_data<V>(value: &V) -> Result<Vec<u8>, Error>
     where
         V: for<'a> Serialize<StandardBufSerializer<'a>>,
@@ -892,6 +908,13 @@ impl SessionData {
 
     fn get(&self, name: &str) -> Option<Vec<u8>> {
         self.data.get(name).cloned()
+    }
+
+    fn set<S>(&mut self, name: S, data: Vec<u8>) -> Option<Vec<u8>>
+    where
+        S: Into<Cow<'static, str>>,
+    {
+        self.data.insert(name.into(), data)
     }
 }
 

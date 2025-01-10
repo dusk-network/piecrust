@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Add `Session::set_meta` [#rusk_3341]
+
 ## [0.27.0] - 2024-12-18
 
 ### Added
@@ -485,6 +489,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- ISSUES -->
 
+[#rusk_3341]: https://github.com/dusk-network/rusk/issues/3341
 [#410]: https://github.com/dusk-network/piecrust/issues/410
 [#405]: https://github.com/dusk-network/piecrust/issues/405
 [#396]: https://github.com/dusk-network/piecrust/issues/396
