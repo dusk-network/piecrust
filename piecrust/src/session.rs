@@ -764,6 +764,16 @@ impl Session {
         Ok(self.inner.data.set(name, data))
     }
 
+    /// Remove a metadata item.
+    ///
+    /// Returns the value of the removed item (if any).
+    pub fn remove_meta<S>(&mut self, name: S) -> Option<Vec<u8>>
+    where
+        S: Into<Cow<'static, str>>,
+    {
+        self.inner.data.remove(name)
+    }
+
     pub fn serialize_data<V>(value: &V) -> Result<Vec<u8>, Error>
     where
         V: for<'a> Serialize<StandardBufSerializer<'a>>,
@@ -915,6 +925,13 @@ impl SessionData {
         S: Into<Cow<'static, str>>,
     {
         self.data.insert(name.into(), data)
+    }
+
+    fn remove<S>(&mut self, name: S) -> Option<Vec<u8>>
+    where
+        S: Into<Cow<'static, str>>,
+    {
+        self.data.remove(&name.into())
     }
 }
 
