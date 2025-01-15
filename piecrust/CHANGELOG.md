@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.27.1] - 2025-01-15
+
 ### Added
 
 - Add `Session::set_meta` [#rusk_3341]
@@ -542,7 +544,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- VERSIONS -->
 
-[Unreleased]: https://github.com/dusk-network/piecrust/compare/piecrust-0.27.0...HEAD
+[Unreleased]: https://github.com/dusk-network/piecrust/compare/piecrust-0.27.1...HEAD
+[0.27.1]: https://github.com/dusk-network/piecrust/compare/piecrust-0.27.0...piecrust-0.27.1
 [0.27.0]: https://github.com/dusk-network/piecrust/compare/piecrust-0.26.0...piecrust-0.27.0
 [0.26.0]: https://github.com/dusk-network/piecrust/compare/piecrust-0.25.0...piecrust-0.26.0
 [0.25.0]: https://github.com/dusk-network/piecrust/compare/piecrust-0.24.0...piecrust-0.25.0
