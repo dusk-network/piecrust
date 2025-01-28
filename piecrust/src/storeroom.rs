@@ -297,7 +297,13 @@ impl Storeroom {
         }
         println!("source_item_path={:?}", source_item_path);
         println!("shared_item_path={:?}", shared_item_path);
-        fs::copy(source_item_path, shared_item_path)?;
+        if source_item_path.is_file() {
+            fs::copy(source_item_path, shared_item_path)?;
+        } else if source_item_path.is_dir() {
+            // it is a blocking, we need to remove the shared path file as the
+            // finalized version had a blocking on it
+            fs::remove_file(shared_item_path)?;
+        }
         Ok(())
     }
 }
@@ -361,6 +367,34 @@ mod tests {
             storeroom.retrieve_bytes("ver4", "aacc", "element")?,
             Some(bytes2)
         );
+
+        Ok(())
+    }
+
+    #[test]
+    fn storeroom_update_blocking() -> Result<(), io::Error> {
+        const TEST_DIR: &str = "/Users/miloszm/storeroom"; // todo: use temp dir
+        fs::remove_dir_all(TEST_DIR)?;
+        fs::create_dir_all(TEST_DIR)?;
+
+        let bytes1 = vec![1, 2, 3];
+        let mut storeroom = Storeroom::new(TEST_DIR);
+        storeroom.store_bytes(&bytes1, "ver1", "aacc", "element")?;
+        storeroom.create_version("ver2")?;
+        storeroom.finalize_version("ver1")?;
+        storeroom.create_version("ver3")?;
+        assert_eq!(
+            storeroom.retrieve_bytes("ver3", "aacc", "element")?,
+            Some(bytes1.clone())
+        );
+        storeroom.finalize_version("ver2")?;
+        storeroom.create_version("ver4")?;
+        // ver3 should not be affected by the finalization of ver2
+        assert_eq!(
+            storeroom.retrieve_bytes("ver3", "aacc", "element")?,
+            Some(bytes1)
+        );
+        assert_eq!(storeroom.retrieve_bytes("ver4", "aacc", "element")?, None);
 
         Ok(())
     }
