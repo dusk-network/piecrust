@@ -133,16 +133,22 @@ impl Storeroom {
         Ok(())
     }
 
-    /// When finalizing, items are added or modified in shared version yet:
-    /// for items added to the shared version:
-    ///     for every existing version other than this one, a blocking item is
-    /// added     (blocking item is item that blocks shared item, makes it
-    /// as if didn't exist) for items modified in the shared version:
-    ///     before overwriting the existing item is copied to all existing
-    /// versions other than this one,     but only if it does not exist the
-    /// corresponding version already After the above is done, version can
-    /// be safely deleted, new versions created in the future will use the
-    /// shared version left by this function as their initial state
+    #[rustfmt::skip]
+    /*
+    When finalizing, items are added or modified in shared version yet:
+    for items added to the shared version:
+        for every existing version other than this one,
+            a blocking item is added
+            (blocking item is item that blocks shared item, makes it
+            as if didn't exist)
+    for items modified in the shared version:
+        before overwriting the existing item is copied to all existing
+        versions other than this one, but only if it does not exist the
+        corresponding version already
+    After the above is done, the version can be safely deleted (not done here),
+    new versions created in the future will use the
+    shared version left by this function as their initial state
+     */
     pub fn finalize_version(
         &mut self,
         version: impl AsRef<str>,
@@ -176,12 +182,17 @@ impl Storeroom {
     //        create a block file for this item
     fn create_blocks_for(
         &mut self,
+        finalized_version: impl AsRef<str>,
         contract_id: impl AsRef<str>,
         item: impl AsRef<str>,
     ) -> io::Result<()> {
         // for all versions
         for entry in fs::read_dir(&self.main_dir)? {
             let entry = entry?;
+            let version = entry.file_name().to_string_lossy().to_string();
+            if version == finalized_version {
+                continue;
+            }
             let version_dir = entry.path();
             let item_path =
                 version_dir.join(contract_id.as_ref()).join(item.as_ref());
@@ -200,6 +211,7 @@ impl Storeroom {
     // version
     fn create_copies_for(
         &mut self,
+        finalized_version: impl AsRef<str>,
         contract_id: impl AsRef<str>,
         item: impl AsRef<str>,
         source_item_path: impl AsRef<Path>,
@@ -207,6 +219,10 @@ impl Storeroom {
         // for all versions
         for entry in fs::read_dir(&self.main_dir)? {
             let entry = entry?;
+            let version = entry.file_name().to_string_lossy().to_string();
+            if version == finalized_version {
+                continue;
+            }
             let version_dir = entry.path();
             let item_path =
                 version_dir.join(contract_id.as_ref()).join(item.as_ref());
@@ -235,11 +251,16 @@ impl Storeroom {
         if shared_item_path.is_file() {
             // shared item exists already, we need to copy it to existing
             // versions before overwriting
-            self.create_copies_for(contract_id, item, &source_item_path)?;
+            self.create_copies_for(
+                version.as_ref(),
+                contract_id,
+                item,
+                &source_item_path,
+            )?;
         } else {
             // shared item does not exist yet, we need to block existing
             // versions from using it
-            self.create_blocks_for(contract_id, item)?;
+            self.create_blocks_for(version.as_ref(), contract_id, item)?;
         }
         fs::copy(source_item_path, shared_item_path)?;
         Ok(())
