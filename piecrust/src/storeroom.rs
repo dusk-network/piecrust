@@ -30,18 +30,29 @@ impl Storeroom {
         }
     }
 
-    fn get_target_path(
+    fn get_item_path(
         &self,
         version: impl AsRef<str>,
         contract_id: impl AsRef<str>,
-        postfix: impl AsRef<str>,
+        item: impl AsRef<str>,
     ) -> io::Result<PathBuf> {
         let dir = self
             .main_dir
             .join(version.as_ref())
             .join(contract_id.as_ref());
         fs::create_dir_all(&dir)?;
-        Ok(dir.join(postfix.as_ref()))
+        Ok(dir.join(item.as_ref()))
+    }
+
+    fn get_shared_item_path(
+        &self,
+        contract_id: impl AsRef<str>,
+        item: impl AsRef<str>,
+    ) -> PathBuf {
+        self.main_dir
+            .join(SHARED_DIR)
+            .join(contract_id.as_ref())
+            .join(item.as_ref())
     }
 
     pub fn store_bytes(
@@ -51,7 +62,7 @@ impl Storeroom {
         contract_id: impl AsRef<str>,
         postfix: impl AsRef<str>,
     ) -> io::Result<()> {
-        fs::write(self.get_target_path(version, contract_id, postfix)?, bytes)
+        fs::write(self.get_item_path(version, contract_id, postfix)?, bytes)
     }
 
     // For memory mapped files we also provide possibility to pass a file path
@@ -64,32 +75,57 @@ impl Storeroom {
     ) -> io::Result<()> {
         fs::copy(
             source_path.as_ref(),
-            self.get_target_path(contract_id, version, postfix)?,
+            self.get_item_path(contract_id, version, postfix)?,
         )
         .map(|_| ())
     }
 
     pub fn retrieve_bytes(
         &self,
-        _version: impl AsRef<str>,
-        _contract_id: impl AsRef<str>,
-        _postfix: impl AsRef<str>,
+        version: impl AsRef<str>,
+        contract_id: impl AsRef<str>,
+        item: impl AsRef<str>,
     ) -> io::Result<Option<Vec<u8>>> {
-        Ok(Some(vec![]))
+        let maybe_item_path = self.retrieve(
+            version.as_ref(),
+            contract_id.as_ref(),
+            item.as_ref(),
+        )?;
+        if let Some(item_path) = maybe_item_path {
+            Ok(Some(fs::read(item_path)?))
+        } else {
+            Ok(None)
+        }
     }
 
     /// If item in version exists and it is not a blocking item it is returned
     /// If item in version exists and it is blocking item, none is returned
     /// If item in version does not exist, but in exists in SHARED dir, item
     /// from the shared dir is returned
-    // For memory mapped files we also provide retrieval returning a file path
     pub fn retrieve(
         &self,
-        _version: impl AsRef<str>,
-        _contract_id: impl AsRef<str>,
-        _postfix: impl AsRef<str>,
+        version: impl AsRef<str>,
+        contract_id: impl AsRef<str>,
+        item: impl AsRef<str>,
     ) -> io::Result<Option<PathBuf>> {
-        Ok(Some(PathBuf::new()))
+        let item_path = self.get_item_path(
+            version.as_ref(),
+            contract_id.as_ref(),
+            item.as_ref(),
+        )?;
+        Ok(if item_path.is_file() {
+            Some(item_path)
+        } else if item_path.is_dir() {
+            None
+        } else {
+            let shared_item_path =
+                self.get_shared_item_path(contract_id.as_ref(), item.as_ref());
+            if shared_item_path.is_file() {
+                Some(shared_item_path)
+            } else {
+                None
+            }
+        })
     }
 
     /// Current shared version is the initial state
@@ -107,7 +143,10 @@ impl Storeroom {
     /// corresponding version already After the above is done, version can
     /// be safely deleted, new versions created in the future will use the
     /// shared version left by this function as their initial state
-    pub fn finalize_version(&mut self, version: impl AsRef<str>) -> io::Result<()> {
+    pub fn finalize_version(
+        &mut self,
+        version: impl AsRef<str>,
+    ) -> io::Result<()> {
         let version_dir = self.main_dir.join(version.as_ref());
         if version_dir.is_dir() {
             for entry in fs::read_dir(version_dir)? {
@@ -120,7 +159,11 @@ impl Storeroom {
                         let entry = entry?;
                         let item =
                             entry.file_name().to_string_lossy().to_string();
-                        self.finalize_version_file(version.as_ref(), &contract_id, item)?;
+                        self.finalize_version_file(
+                            version.as_ref(),
+                            &contract_id,
+                            item,
+                        )?;
                     }
                 }
             }
