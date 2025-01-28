@@ -12,8 +12,8 @@
 //! Confluent model is not supported, version deletion is used instead, as old
 //! versions are not needed after commits are finalized.
 
-use std::io;
 use std::path::{Path, PathBuf};
+use std::{fs, io};
 
 #[allow(dead_code)]
 pub struct Storeroom {
@@ -23,29 +23,52 @@ pub struct Storeroom {
 #[allow(dead_code)]
 impl Storeroom {
     pub fn new(main_dir: impl AsRef<Path>) -> Self {
-        Self { main_dir: main_dir.as_ref().to_path_buf() }
+        Self {
+            main_dir: main_dir.as_ref().to_path_buf(),
+        }
+    }
+
+    fn get_target_path(
+        &self,
+        contract_id: impl AsRef<str>,
+        version: impl AsRef<str>,
+        postfix: impl AsRef<str>,
+    ) -> io::Result<PathBuf> {
+        let dir = self
+            .main_dir
+            .join(version.as_ref())
+            .join(contract_id.as_ref());
+        fs::create_dir_all(&dir)?;
+        Ok(dir.join(postfix.as_ref()))
     }
 
     pub fn store_bytes(
-        _bytes: &[u8],
-        _contract_id: impl AsRef<str>,
-        _version: impl AsRef<str>,
-        _postfix: impl AsRef<str>,
+        &mut self,
+        bytes: &[u8],
+        contract_id: impl AsRef<str>,
+        version: impl AsRef<str>,
+        postfix: impl AsRef<str>,
     ) -> io::Result<()> {
-        Ok(())
+        fs::write(self.get_target_path(contract_id, version, postfix)?, bytes)
     }
 
     // For memory mapped files we also provide possibility to pass a file path
     pub fn store(
-        _file_path: impl AsRef<Path>,
-        _contract_id: impl AsRef<str>,
-        _version: impl AsRef<str>,
-        _postfix: impl AsRef<str>,
+        &mut self,
+        source_path: impl AsRef<Path>,
+        contract_id: impl AsRef<str>,
+        version: impl AsRef<str>,
+        postfix: impl AsRef<str>,
     ) -> io::Result<()> {
-        Ok(())
+        fs::copy(
+            source_path.as_ref(),
+            self.get_target_path(contract_id, version, postfix)?,
+        )
+        .map(|_| ())
     }
 
     pub fn retrieve_bytes(
+        &self,
         _contract_id: impl AsRef<str>,
         _version: impl AsRef<str>,
         _postfix: impl AsRef<str>,
@@ -55,6 +78,7 @@ impl Storeroom {
 
     // For memory mapped files we also provide retrieval returning a file path
     pub fn retrieve(
+        &self,
         _contract_id: impl AsRef<str>,
         _version: impl AsRef<str>,
         _postfix: impl AsRef<str>,
@@ -62,7 +86,11 @@ impl Storeroom {
         Ok(PathBuf::new())
     }
 
-    pub fn remove(_version: impl AsRef<str>) -> io::Result<()> {
+    pub fn create_version(_version: impl AsRef<str>) -> io::Result<()> {
+        Ok(())
+    }
+
+    pub fn finalize_version(_version: impl AsRef<str>) -> io::Result<()> {
         Ok(())
     }
 }
