@@ -15,7 +15,7 @@
 use std::path::{Path, PathBuf};
 use std::{fs, io};
 
-const SHARED_DIR: &str = "SHARED";
+const SHARED_DIR: &str = "shared";
 
 #[allow(dead_code)]
 pub struct Storeroom {
@@ -60,9 +60,9 @@ impl Storeroom {
         bytes: &[u8],
         version: impl AsRef<str>,
         contract_id: impl AsRef<str>,
-        postfix: impl AsRef<str>,
+        item: impl AsRef<str>,
     ) -> io::Result<()> {
-        fs::write(self.get_item_path(version, contract_id, postfix)?, bytes)
+        fs::write(self.get_item_path(version, contract_id, item)?, bytes)
     }
 
     // For memory mapped files we also provide possibility to pass a file path
@@ -129,8 +129,9 @@ impl Storeroom {
     }
 
     /// Current shared version is the initial state
-    pub fn create_version(&self, _version: impl AsRef<str>) -> io::Result<()> {
-        Ok(())
+    pub fn create_version(&self, version: impl AsRef<str>) -> io::Result<()> {
+        let version_path = self.main_dir.join(version.as_ref());
+        fs::create_dir_all(&version_path)
     }
 
     #[rustfmt::skip]
@@ -145,7 +146,7 @@ impl Storeroom {
         before overwriting the existing item is copied to all existing
         versions other than this one, but only if it does not exist the
         corresponding version already
-    After the above is done, the version can be safely deleted (not done here),
+    After the above is done, the version is safely deleted,
     new versions created in the future will use the
     shared version left by this function as their initial state
      */
@@ -155,7 +156,7 @@ impl Storeroom {
     ) -> io::Result<()> {
         let version_dir = self.main_dir.join(version.as_ref());
         if version_dir.is_dir() {
-            for entry in fs::read_dir(version_dir)? {
+            for entry in fs::read_dir(&version_dir)? {
                 let entry = entry?;
                 let contract_id =
                     entry.file_name().to_string_lossy().to_string();
@@ -165,6 +166,7 @@ impl Storeroom {
                         let entry = entry?;
                         let item =
                             entry.file_name().to_string_lossy().to_string();
+                        println!("finalize_version_file {:?} {:?} {:?}", version.as_ref(), contract_id, item);
                         self.finalize_version_file(
                             version.as_ref(),
                             &contract_id,
@@ -173,6 +175,7 @@ impl Storeroom {
                     }
                 }
             }
+            fs::remove_dir_all(&version_dir)?;
         }
         Ok(())
     }
@@ -180,24 +183,37 @@ impl Storeroom {
     // for all versions
     //    if version does not have corresponding item
     //        create a block file for this item
-    fn create_blocks_for(
+    fn create_blockings_for(
         &mut self,
         finalized_version: impl AsRef<str>,
         contract_id: impl AsRef<str>,
         item: impl AsRef<str>,
     ) -> io::Result<()> {
+        println!(
+            "create_blocks_for {} {}",
+            contract_id.as_ref(),
+            item.as_ref()
+        );
         // for all versions
         for entry in fs::read_dir(&self.main_dir)? {
             let entry = entry?;
             let version = entry.file_name().to_string_lossy().to_string();
-            if version == finalized_version {
+            if version == finalized_version.as_ref() {
                 continue;
             }
+            if version.starts_with(".") {
+                continue;
+            }
+            if version == SHARED_DIR {
+                continue;
+            }
+            println!("processing blocking for version {}", version);
             let version_dir = entry.path();
             let item_path =
                 version_dir.join(contract_id.as_ref()).join(item.as_ref());
             if !item_path.exists() {
                 // item being dir rather than file is treated as a blocker
+                println!("created dir as blocker at {:?}", item_path);
                 fs::create_dir_all(item_path)?;
             }
         }
@@ -220,7 +236,7 @@ impl Storeroom {
         for entry in fs::read_dir(&self.main_dir)? {
             let entry = entry?;
             let version = entry.file_name().to_string_lossy().to_string();
-            if version == finalized_version {
+            if version == finalized_version.as_ref() {
                 continue;
             }
             let version_dir = entry.path();
@@ -241,13 +257,16 @@ impl Storeroom {
         item: impl AsRef<str>,
     ) -> io::Result<()> {
         let shared_path = self.main_dir.join(SHARED_DIR);
-        let shared_item_path =
-            shared_path.join(contract_id.as_ref()).join(item.as_ref());
+        let shared_item_dir = shared_path.join(contract_id.as_ref());
+        fs::create_dir_all(&shared_item_dir)?;
+        let shared_item_path = shared_item_dir.join(item.as_ref());
         let source_item_path = self
             .main_dir
             .join(version.as_ref())
             .join(contract_id.as_ref())
             .join(item.as_ref());
+        println!("processing {} {}", contract_id.as_ref(), item.as_ref());
+        println!("shared_item_path={:?}", shared_item_path);
         if shared_item_path.is_file() {
             // shared item exists already, we need to copy it to existing
             // versions before overwriting
@@ -260,9 +279,43 @@ impl Storeroom {
         } else {
             // shared item does not exist yet, we need to block existing
             // versions from using it
-            self.create_blocks_for(version.as_ref(), contract_id, item)?;
+            self.create_blockings_for(version.as_ref(), contract_id, item)?;
         }
+        println!("source_item_path={:?}", source_item_path);
+        println!("shared_item_path={:?}", shared_item_path);
         fs::copy(source_item_path, shared_item_path)?;
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn storeroom_basic() -> Result<(), io::Error> {
+        const TEST_DIR: &str = "/Users/miloszm/storeroom";
+        fs::remove_dir_all(TEST_DIR)?;
+        fs::create_dir_all(TEST_DIR)?;
+
+        let bytes1 = vec![1, 2, 3];
+        let bytes2 = vec![4, 5, 6];
+        let mut storeroom = Storeroom::new(TEST_DIR);
+        storeroom.store_bytes(&bytes1, "ver1", "aacc", "element")?;
+        storeroom.store_bytes(&bytes2, "ver2", "aacc", "element")?;
+        storeroom.create_version("ver3")?;
+        storeroom.finalize_version("ver2")?;
+
+        // check if finalize did not overwrite existing commits
+        assert_eq!(storeroom.retrieve("ver3", "aacc", "element")?, None);
+        let bytes_ver1 = storeroom.retrieve_bytes("ver1", "aacc", "element")?;
+        assert_eq!(bytes_ver1, Some(bytes1));
+
+        // from now on finalized content should be the default
+        storeroom.create_version("ver4")?;
+        let bytes_ver4 = storeroom.retrieve_bytes("ver4", "aacc", "element")?;
+        assert_eq!(bytes_ver4, Some(bytes2));
+
         Ok(())
     }
 }
