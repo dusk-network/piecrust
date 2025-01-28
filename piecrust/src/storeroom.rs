@@ -248,10 +248,8 @@ impl Storeroom {
             let version_dir = entry.path();
             let item_path =
                 version_dir.join(contract_id.as_ref()).join(item.as_ref());
-            if !item_path.is_file() {
-                // important to use is_file() and not exists, as dir may exist
-                // meaning blockage copy item there as it will
-                // be overwritten soon
+            if !item_path.exists() {
+                // copy item there as it will be overwritten soon
                 println!(
                     "copy {:?} to {:?}",
                     source_item_path.as_ref(),
@@ -392,8 +390,13 @@ mod tests {
         // ver3 should not be affected by the finalization of ver2
         assert_eq!(
             storeroom.retrieve_bytes("ver3", "aacc", "element")?,
-            Some(bytes1)
+            Some(bytes1.clone())
         );
+        assert_eq!(storeroom.retrieve_bytes("ver4", "aacc", "element")?, None);
+        storeroom.store_bytes(&bytes1, "ver5", "aacc", "element")?;
+        storeroom.finalize_version("ver5")?;
+        assert_eq!(storeroom.retrieve_bytes("ver4", "aacc", "element")?, None);
+        storeroom.finalize_version("ver3")?;
         assert_eq!(storeroom.retrieve_bytes("ver4", "aacc", "element")?, None);
 
         Ok(())
