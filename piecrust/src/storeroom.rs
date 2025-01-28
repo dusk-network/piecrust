@@ -239,12 +239,25 @@ impl Storeroom {
             if version == finalized_version.as_ref() {
                 continue;
             }
+            if version.starts_with(".") {
+                continue;
+            }
+            if version == SHARED_DIR {
+                continue;
+            }
             let version_dir = entry.path();
             let item_path =
                 version_dir.join(contract_id.as_ref()).join(item.as_ref());
-            if !item_path.exists() {
-                // copy item there as it will be overwritten soon
-                fs::copy(&source_item_path, item_path)?;
+            if !item_path.is_file() {
+                // important to use is_file() and not exists, as dir may exist
+                // meaning blockage copy item there as it will
+                // be overwritten soon
+                println!(
+                    "copy {:?} to {:?}",
+                    source_item_path.as_ref(),
+                    item_path
+                );
+                fs::copy(source_item_path.as_ref(), item_path)?;
             }
         }
         Ok(())
@@ -270,11 +283,12 @@ impl Storeroom {
         if shared_item_path.is_file() {
             // shared item exists already, we need to copy it to existing
             // versions before overwriting
+            println!("shared exists already {:?}", shared_item_path);
             self.create_copies_for(
                 version.as_ref(),
                 contract_id,
                 item,
-                &source_item_path,
+                &shared_item_path,
             )?;
         } else {
             // shared item does not exist yet, we need to block existing
@@ -294,7 +308,7 @@ mod tests {
 
     #[test]
     fn storeroom_basic() -> Result<(), io::Error> {
-        const TEST_DIR: &str = "/Users/miloszm/storeroom";
+        const TEST_DIR: &str = "/Users/miloszm/storeroom"; // todo: use temp dir
         fs::remove_dir_all(TEST_DIR)?;
         fs::create_dir_all(TEST_DIR)?;
 
@@ -315,6 +329,38 @@ mod tests {
         storeroom.create_version("ver4")?;
         let bytes_ver4 = storeroom.retrieve_bytes("ver4", "aacc", "element")?;
         assert_eq!(bytes_ver4, Some(bytes2));
+
+        Ok(())
+    }
+
+    #[test]
+    fn storeroom_update_shared() -> Result<(), io::Error> {
+        const TEST_DIR: &str = "/Users/miloszm/storeroom"; // todo: use temp dir
+        fs::remove_dir_all(TEST_DIR)?;
+        fs::create_dir_all(TEST_DIR)?;
+
+        let bytes1 = vec![1, 2, 3];
+        let bytes2 = vec![4, 5, 6];
+        let mut storeroom = Storeroom::new(TEST_DIR);
+        storeroom.store_bytes(&bytes1, "ver1", "aacc", "element")?;
+        storeroom.store_bytes(&bytes2, "ver2", "aacc", "element")?;
+        storeroom.finalize_version("ver1")?;
+        storeroom.create_version("ver3")?;
+        assert_eq!(
+            storeroom.retrieve_bytes("ver3", "aacc", "element")?,
+            Some(bytes1.clone())
+        );
+        storeroom.finalize_version("ver2")?;
+        storeroom.create_version("ver4")?;
+        // ver3 should not be affected by the finalization of ver2
+        assert_eq!(
+            storeroom.retrieve_bytes("ver3", "aacc", "element")?,
+            Some(bytes1)
+        );
+        assert_eq!(
+            storeroom.retrieve_bytes("ver4", "aacc", "element")?,
+            Some(bytes2)
+        );
 
         Ok(())
     }
