@@ -16,7 +16,6 @@ use std::path::{Path, PathBuf};
 use std::{fs, io};
 
 const SHARED_DIR: &str = "SHARED";
-const BLOCKING_FILE_STEM: &str = "BLOCKING";
 
 #[allow(dead_code)]
 pub struct Storeroom {
@@ -33,8 +32,8 @@ impl Storeroom {
 
     fn get_target_path(
         &self,
-        contract_id: impl AsRef<str>,
         version: impl AsRef<str>,
+        contract_id: impl AsRef<str>,
         postfix: impl AsRef<str>,
     ) -> io::Result<PathBuf> {
         let dir = self
@@ -48,19 +47,19 @@ impl Storeroom {
     pub fn store_bytes(
         &mut self,
         bytes: &[u8],
-        contract_id: impl AsRef<str>,
         version: impl AsRef<str>,
+        contract_id: impl AsRef<str>,
         postfix: impl AsRef<str>,
     ) -> io::Result<()> {
-        fs::write(self.get_target_path(contract_id, version, postfix)?, bytes)
+        fs::write(self.get_target_path(version, contract_id, postfix)?, bytes)
     }
 
     // For memory mapped files we also provide possibility to pass a file path
     pub fn store(
         &mut self,
         source_path: impl AsRef<Path>,
-        contract_id: impl AsRef<str>,
         version: impl AsRef<str>,
+        contract_id: impl AsRef<str>,
         postfix: impl AsRef<str>,
     ) -> io::Result<()> {
         fs::copy(
@@ -72,8 +71,8 @@ impl Storeroom {
 
     pub fn retrieve_bytes(
         &self,
-        _contract_id: impl AsRef<str>,
         _version: impl AsRef<str>,
+        _contract_id: impl AsRef<str>,
         _postfix: impl AsRef<str>,
     ) -> io::Result<Option<Vec<u8>>> {
         Ok(Some(vec![]))
@@ -81,33 +80,125 @@ impl Storeroom {
 
     /// If item in version exists and it is not a blocking item it is returned
     /// If item in version exists and it is blocking item, none is returned
-    /// If item in version does not exist, but in exists in SHARED dir, item from the shared
-    /// dir is returned
+    /// If item in version does not exist, but in exists in SHARED dir, item
+    /// from the shared dir is returned
     // For memory mapped files we also provide retrieval returning a file path
     pub fn retrieve(
         &self,
-        _contract_id: impl AsRef<str>,
         _version: impl AsRef<str>,
+        _contract_id: impl AsRef<str>,
         _postfix: impl AsRef<str>,
     ) -> io::Result<Option<PathBuf>> {
         Ok(Some(PathBuf::new()))
     }
 
     /// Current shared version is the initial state
-    pub fn create_version(_version: impl AsRef<str>) -> io::Result<()> {
+    pub fn create_version(&self, _version: impl AsRef<str>) -> io::Result<()> {
         Ok(())
     }
 
     /// When finalizing, items are added or modified in shared version yet:
     /// for items added to the shared version:
-    ///     for every existing version other than this one, a blocking item is added
-    ///     (blocking item is item that blocks shared item, makes it as if didn't exist)
-    /// for items modified in the shared version:
-    ///     before overwriting the existing item is copied to all existing versions other than this one,
-    ///     but only if it does not exist the corresponding version already
-    /// After the above is done, version can be safely deleted, new versions created in the future
-    /// will use the shared version left by this function as their initial state
-    pub fn finalize_version(_version: impl AsRef<str>) -> io::Result<()> {
+    ///     for every existing version other than this one, a blocking item is
+    /// added     (blocking item is item that blocks shared item, makes it
+    /// as if didn't exist) for items modified in the shared version:
+    ///     before overwriting the existing item is copied to all existing
+    /// versions other than this one,     but only if it does not exist the
+    /// corresponding version already After the above is done, version can
+    /// be safely deleted, new versions created in the future will use the
+    /// shared version left by this function as their initial state
+    pub fn finalize_version(&mut self, version: impl AsRef<str>) -> io::Result<()> {
+        let version_dir = self.main_dir.join(version.as_ref());
+        if version_dir.is_dir() {
+            for entry in fs::read_dir(version_dir)? {
+                let entry = entry?;
+                let contract_id =
+                    entry.file_name().to_string_lossy().to_string();
+                let contract_dir = entry.path();
+                if contract_dir.is_dir() {
+                    for entry in fs::read_dir(contract_dir)? {
+                        let entry = entry?;
+                        let item =
+                            entry.file_name().to_string_lossy().to_string();
+                        self.finalize_version_file(version.as_ref(), &contract_id, item)?;
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    // for all versions
+    //    if version does not have corresponding item
+    //        create a block file for this item
+    fn create_blocks_for(
+        &mut self,
+        contract_id: impl AsRef<str>,
+        item: impl AsRef<str>,
+    ) -> io::Result<()> {
+        // for all versions
+        for entry in fs::read_dir(&self.main_dir)? {
+            let entry = entry?;
+            let version_dir = entry.path();
+            let item_path =
+                version_dir.join(contract_id.as_ref()).join(item.as_ref());
+            if !item_path.exists() {
+                // item being dir rather than file is treated as a blocker
+                fs::create_dir_all(item_path)?;
+            }
+        }
+        Ok(())
+    }
+
+    // for all versions
+    //    if version does not have corresponding item
+    //        copy item there as this is something that will be overwritten in
+    // shared        so we want no change from the point of view of a
+    // version
+    fn create_copies_for(
+        &mut self,
+        contract_id: impl AsRef<str>,
+        item: impl AsRef<str>,
+        source_item_path: impl AsRef<Path>,
+    ) -> io::Result<()> {
+        // for all versions
+        for entry in fs::read_dir(&self.main_dir)? {
+            let entry = entry?;
+            let version_dir = entry.path();
+            let item_path =
+                version_dir.join(contract_id.as_ref()).join(item.as_ref());
+            if !item_path.exists() {
+                // copy item there as it will be overwritten soon
+                fs::copy(&source_item_path, item_path)?;
+            }
+        }
+        Ok(())
+    }
+
+    fn finalize_version_file(
+        &mut self,
+        version: impl AsRef<str>,
+        contract_id: impl AsRef<str>,
+        item: impl AsRef<str>,
+    ) -> io::Result<()> {
+        let shared_path = self.main_dir.join(SHARED_DIR);
+        let shared_item_path =
+            shared_path.join(contract_id.as_ref()).join(item.as_ref());
+        let source_item_path = self
+            .main_dir
+            .join(version.as_ref())
+            .join(contract_id.as_ref())
+            .join(item.as_ref());
+        if shared_item_path.is_file() {
+            // shared item exists already, we need to copy it to existing
+            // versions before overwriting
+            self.create_copies_for(contract_id, item, &source_item_path)?;
+        } else {
+            // shared item does not exist yet, we need to block existing
+            // versions from using it
+            self.create_blocks_for(contract_id, item)?;
+        }
+        fs::copy(source_item_path, shared_item_path)?;
         Ok(())
     }
 }
