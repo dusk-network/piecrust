@@ -81,6 +81,9 @@ impl Storeroom {
         if target_path.is_dir() {
             fs::remove_dir(&target_path)?;
         }
+        if let Some(parent) = target_path.parent(){
+            fs::create_dir_all(parent)?;
+        }
         fs::copy(source_path.as_ref(), target_path).map(|_| ())
     }
 
@@ -168,6 +171,7 @@ impl Storeroom {
                     continue;
                 }
                 let contract_dir = entry.path();
+                println!("STOREROOM finalizing contract {:?}", contract_dir);
                 if contract_dir.is_dir() {
                     for entry in fs::read_dir(contract_dir)? {
                         let entry = entry?;
@@ -180,6 +184,7 @@ impl Storeroom {
                             version.as_ref(),
                             &contract_id,
                             item,
+                            entry.path(),
                         )?;
                     }
                 }
@@ -198,6 +203,7 @@ impl Storeroom {
         contract_id: impl AsRef<str>,
         item: impl AsRef<str>,
     ) -> io::Result<()> {
+        println!("STOREROOM create blockings for {} {} {}", finalized_version.as_ref(), contract_id.as_ref(), item.as_ref());
         // for all versions
         for entry in fs::read_dir(&self.main_dir)? {
             let entry = entry?;
@@ -234,6 +240,7 @@ impl Storeroom {
         item: impl AsRef<str>,
         source_item_path: impl AsRef<Path>,
     ) -> io::Result<()> {
+        println!("STOREROOM create copies for {:?}", source_item_path.as_ref());
         // for all versions
         for entry in fs::read_dir(&self.main_dir)? {
             let entry = entry?;
@@ -248,10 +255,15 @@ impl Storeroom {
                 continue;
             }
             let version_dir = entry.path();
+            println!("STOREROOM create copy for version {:?}", version_dir);
             let item_path =
                 version_dir.join(contract_id.as_ref()).join(item.as_ref());
             if !item_path.exists() {
+                println!("STOREROOM create copy to {:?}", item_path);
                 // copy item there as it will be overwritten soon
+                if let Some(parent) = item_path.parent(){
+                    fs::create_dir_all(parent)?;
+                }
                 fs::copy(source_item_path.as_ref(), item_path)?;
             }
         }
@@ -263,16 +275,13 @@ impl Storeroom {
         version: impl AsRef<str>,
         contract_id: impl AsRef<str>,
         item: impl AsRef<str>,
+        source_item_path: impl AsRef<Path>,
     ) -> io::Result<()> {
+        let source_item_path = source_item_path.as_ref();
         let shared_path = self.main_dir.join(SHARED_DIR);
         let shared_item_dir = shared_path.join(contract_id.as_ref());
         fs::create_dir_all(&shared_item_dir)?;
         let shared_item_path = shared_item_dir.join(item.as_ref());
-        let source_item_path = self
-            .main_dir
-            .join(version.as_ref())
-            .join(contract_id.as_ref())
-            .join(item.as_ref());
         if shared_item_path.is_file() {
             // shared item exists already, we need to copy it to existing
             // versions before overwriting
@@ -288,6 +297,9 @@ impl Storeroom {
             self.create_blockings_for(version.as_ref(), contract_id, item)?;
         }
         if source_item_path.is_file() {
+            if let Some(parent) = shared_item_path.parent(){
+                fs::create_dir_all(parent)?;
+            }
             fs::copy(source_item_path, shared_item_path)?;
         } else if source_item_path.is_dir() {
             // it is a blocking, we need to remove the shared path file as the
