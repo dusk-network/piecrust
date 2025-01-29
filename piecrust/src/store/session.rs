@@ -16,7 +16,11 @@ use piecrust_uplink::ContractId;
 
 use crate::contract::ContractMetadata;
 use crate::store::tree::{Hash, PageOpening};
-use crate::store::{base_from_path, Bytecode, Call, Commit, CommitStore, Memory, Metadata, Module, BASE_FILE, BYTECODE_DIR, ELEMENT_FILE, MAIN_DIR, MEMORY_DIR, METADATA_EXTENSION, OBJECTCODE_EXTENSION, PAGE_SIZE, DEFAULT_MASTER_VERSION};
+use crate::store::{
+    base_from_path, Bytecode, Call, Commit, CommitStore, Memory, Metadata,
+    Module, BASE_FILE, BYTECODE_DIR, DEFAULT_MASTER_VERSION, ELEMENT_FILE,
+    MAIN_DIR, MEMORY_DIR, METADATA_EXTENSION, OBJECTCODE_EXTENSION, PAGE_SIZE,
+};
 use crate::storeroom::Storeroom;
 use crate::Error;
 

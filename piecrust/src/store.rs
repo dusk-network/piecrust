@@ -423,6 +423,7 @@ fn commit_from_dir<P: AsRef<Path>>(
     commit_store: Arc<Mutex<CommitStore>>,
     storeroom: Storeroom,
 ) -> io::Result<Commit> {
+    println!("COMMIT_FROM_DIR {:?}", dir.as_ref());
     let dir = dir.as_ref();
     let mut commit_id: Option<String> = None;
     let main_dir = if dir
@@ -553,6 +554,8 @@ fn index_merkle_from_path(
         .map(|h| hex::encode(h.as_bytes()))
         .unwrap_or(DEFAULT_MASTER_VERSION.to_string());
 
+    println!("VERSION={}", version);
+
     let mut merkle_src1: BTreeMap<u32, (Hash, u64, ContractId)> =
         BTreeMap::new();
 
@@ -561,6 +564,7 @@ fn index_merkle_from_path(
         if entry.path().is_dir() {
             let contract_id_hex =
                 entry.file_name().to_string_lossy().to_string();
+            println!("CONTRACT_ID_HEX={}", contract_id_hex);
             let contract_id = contract_id_from_hex(&contract_id_hex);
             let contract_leaf_path = leaf_dir.join(&contract_id_hex);
             let (element_path, element_depth) = ContractSession::find_element(
@@ -593,6 +597,10 @@ fn index_merkle_from_path(
                     })?;
                 if element_depth != u32::MAX {
                     if let Some(h) = element.hash() {
+                        println!(
+                            "INSERT MERKLE_SRC1 pos={:?}",
+                            element.int_pos()
+                        );
                         merkle_src1.insert(
                             element.int_pos().expect("aa") as u32,
                             (
@@ -604,6 +612,7 @@ fn index_merkle_from_path(
                     }
                     index.insert_contract_index(&contract_id, element);
                 } else {
+                    println!("KABOOM");
                     commit_store
                         .lock()
                         .unwrap()
@@ -620,6 +629,8 @@ fn index_merkle_from_path(
                 if let Some((hh, pospos, cid)) = merkle_src1.get(int_pos) {
                     if *hash != *hh {
                         println!("DISCREPANCY hashes not equal at int pos={} contract={} {} != {}", int_pos, hex::encode(cid.as_bytes()), hex::encode((*hash).as_bytes()), hex::encode((*hh).as_bytes()));
+                    } else {
+                        println!("HASH OK for pos {}", int_pos);
                     }
                     if pos != pospos {
                         println!("DISCREPANCY pos not equal at int pos={} orig={} src1={}", int_pos, pos, pospos);
@@ -1252,7 +1263,10 @@ fn finalize_commit<P: AsRef<Path>>(
             let src_file_path = src_path.join(&filename);
             let dst_file_path = dst_path.join(&filename);
             if src_file_path.is_file() {
-                println!("storing {:?} {} {} {}", src_file_path, root, contract_hex, filename);
+                println!(
+                    "storing {:?} {} {} {}",
+                    src_file_path, root, contract_hex, filename
+                );
                 storeroom.store(
                     &src_file_path,
                     &root,
@@ -1270,7 +1284,10 @@ fn finalize_commit<P: AsRef<Path>>(
         let src_leaf_file_path = src_leaf_path.join(ELEMENT_FILE);
         let dst_leaf_file_path = dst_leaf_path.join(ELEMENT_FILE);
         if src_leaf_file_path.is_file() {
-            println!("storing {:?} {} {} {}", src_leaf_file_path, root, contract_hex, ELEMENT_FILE);
+            println!(
+                "storing {:?} {} {} {}",
+                src_leaf_file_path, root, contract_hex, ELEMENT_FILE
+            );
             storeroom.store(
                 &src_leaf_file_path,
                 &root,

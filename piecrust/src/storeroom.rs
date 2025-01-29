@@ -81,7 +81,7 @@ impl Storeroom {
         if target_path.is_dir() {
             fs::remove_dir(&target_path)?;
         }
-        if let Some(parent) = target_path.parent(){
+        if let Some(parent) = target_path.parent() {
             fs::create_dir_all(parent)?;
         }
         fs::copy(source_path.as_ref(), target_path).map(|_| ())
@@ -203,7 +203,12 @@ impl Storeroom {
         contract_id: impl AsRef<str>,
         item: impl AsRef<str>,
     ) -> io::Result<()> {
-        println!("STOREROOM create blockings for {} {} {}", finalized_version.as_ref(), contract_id.as_ref(), item.as_ref());
+        println!(
+            "STOREROOM create blockings for {} {} {}",
+            finalized_version.as_ref(),
+            contract_id.as_ref(),
+            item.as_ref()
+        );
         // for all versions
         for entry in fs::read_dir(&self.main_dir)? {
             let entry = entry?;
@@ -240,7 +245,10 @@ impl Storeroom {
         item: impl AsRef<str>,
         source_item_path: impl AsRef<Path>,
     ) -> io::Result<()> {
-        println!("STOREROOM create copies for {:?}", source_item_path.as_ref());
+        println!(
+            "STOREROOM create copies for {:?}",
+            source_item_path.as_ref()
+        );
         // for all versions
         for entry in fs::read_dir(&self.main_dir)? {
             let entry = entry?;
@@ -261,7 +269,7 @@ impl Storeroom {
             if !item_path.exists() {
                 println!("STOREROOM create copy to {:?}", item_path);
                 // copy item there as it will be overwritten soon
-                if let Some(parent) = item_path.parent(){
+                if let Some(parent) = item_path.parent() {
                     fs::create_dir_all(parent)?;
                 }
                 fs::copy(source_item_path.as_ref(), item_path)?;
@@ -297,14 +305,18 @@ impl Storeroom {
             self.create_blockings_for(version.as_ref(), contract_id, item)?;
         }
         if source_item_path.is_file() {
-            if let Some(parent) = shared_item_path.parent(){
+            println!("STOREROOM finalize_version_file 2");
+            if let Some(parent) = shared_item_path.parent() {
                 fs::create_dir_all(parent)?;
             }
             fs::copy(source_item_path, shared_item_path)?;
         } else if source_item_path.is_dir() {
+            println!("STOREROOM finalize_version_file 3");
             // it is a blocking, we need to remove the shared path file as the
             // finalized version had a blocking on it
-            fs::remove_file(shared_item_path)?;
+            if shared_item_path.is_file() {
+                fs::remove_file(shared_item_path)?;
+            }
         }
         Ok(())
     }
