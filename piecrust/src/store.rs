@@ -35,6 +35,7 @@ use crate::store::tree::{
     position_from_contract, BaseInfo, ContractIndexElement, ContractsMerkle,
     TreePos,
 };
+use crate::storeroom::Storeroom;
 pub use bytecode::Bytecode;
 pub use memory::{Memory, PAGE_SIZE};
 pub use metadata::Metadata;
@@ -45,6 +46,7 @@ pub use tree::PageOpening;
 const BYTECODE_DIR: &str = "bytecode";
 const MEMORY_DIR: &str = "memory";
 const LEAF_DIR: &str = "leaf";
+const MASTER_DIR: &str = "master";
 const BASE_FILE: &str = "base";
 const TREE_POS_FILE: &str = "tree_pos";
 const TREE_POS_OPT_FILE: &str = "tree_pos_opt";
@@ -61,6 +63,7 @@ pub struct ContractStore {
     call: Option<mpsc::Sender<Call>>,
     root_dir: PathBuf,
     pub commit_store: Arc<Mutex<CommitStore>>,
+    pub storeroom: Storeroom,
 }
 
 impl Debug for ContractStore {
@@ -166,6 +169,8 @@ impl ContractStore {
         let root_dir = dir.as_ref();
 
         fs::create_dir_all(root_dir)?;
+        let storeroom =
+            Storeroom::new(root_dir.join(MAIN_DIR).join(MASTER_DIR));
 
         Ok(Self {
             sync_loop: None,
@@ -173,6 +178,7 @@ impl ContractStore {
             call: None,
             root_dir: root_dir.into(),
             commit_store: Arc::new(Mutex::new(CommitStore::new())),
+            storeroom,
         })
     }
 
@@ -187,11 +193,15 @@ impl ContractStore {
 
         let commit_store = self.commit_store.clone();
 
+        let storeroom = self.storeroom.clone();
+
         // The thread is given a name to allow for easily identifying it while
         // debugging.
         let sync_loop = thread::Builder::new()
             .name(String::from("PiecrustSync"))
-            .spawn(|| sync_loop(loop_root_dir, commit_store, calls))?;
+            .spawn(move || {
+                sync_loop(loop_root_dir, commit_store, storeroom, calls)
+            })?;
 
         self.sync_loop = Some(sync_loop);
         self.call = Some(call);
@@ -316,6 +326,7 @@ fn read_all_commits<P: AsRef<Path>>(
             if filename == MEMORY_DIR
                 || filename == BYTECODE_DIR
                 || filename == LEAF_DIR
+                || filename == MASTER_DIR
             {
                 continue;
             }
@@ -783,6 +794,7 @@ pub(crate) enum Call {
 fn sync_loop<P: AsRef<Path>>(
     root_dir: P,
     commit_store: Arc<Mutex<CommitStore>>,
+    storeroom: Storeroom,
     calls: mpsc::Receiver<Call>,
 ) {
     let root_dir = root_dir.as_ref();
@@ -875,7 +887,12 @@ fn sync_loop<P: AsRef<Path>>(
                         "finalizing commit proper started {}",
                         hex::encode(root.as_bytes())
                     );
-                    let io_result = finalize_commit(root, root_dir, commit);
+                    let io_result = finalize_commit(
+                        root,
+                        root_dir,
+                        commit,
+                        storeroom.clone(),
+                    );
                     match &io_result {
                         Ok(_) => tracing::trace!(
                             "finalizing commit proper finished: {:?}",
@@ -1164,6 +1181,7 @@ fn finalize_commit<P: AsRef<Path>>(
     root: Hash,
     root_dir: P,
     _commit: &Commit,
+    storeroom: Storeroom,
 ) -> io::Result<()> {
     let main_dir = root_dir.as_ref().join(MAIN_DIR);
     let root = hex::encode(root);
@@ -1179,22 +1197,34 @@ fn finalize_commit<P: AsRef<Path>>(
             main_dir.join(MEMORY_DIR).join(&contract_hex).join(&root);
         let dst_path = main_dir.join(MEMORY_DIR).join(&contract_hex);
         for entry in fs::read_dir(&src_path)? {
-            let filename = entry?.file_name();
+            let filename = entry?.file_name().to_string_lossy().to_string();
             let src_file_path = src_path.join(&filename);
             let dst_file_path = dst_path.join(&filename);
             if src_file_path.is_file() {
-                fs::rename(src_file_path, dst_file_path)?;
+                storeroom.store(
+                    &src_file_path,
+                    &root,
+                    &contract_hex,
+                    filename,
+                )?;
+                fs::rename(&src_file_path, dst_file_path)?;
             }
         }
         fs::remove_dir(&src_path)?;
         // LEAF
         let src_leaf_path =
             main_dir.join(LEAF_DIR).join(&contract_hex).join(&root);
-        let dst_leaf_path = main_dir.join(LEAF_DIR).join(contract_hex);
+        let dst_leaf_path = main_dir.join(LEAF_DIR).join(&contract_hex);
         let src_leaf_file_path = src_leaf_path.join(ELEMENT_FILE);
         let dst_leaf_file_path = dst_leaf_path.join(ELEMENT_FILE);
         if src_leaf_file_path.is_file() {
-            fs::rename(src_leaf_file_path, dst_leaf_file_path)?;
+            storeroom.store(
+                &src_leaf_file_path,
+                &root,
+                &contract_hex,
+                ELEMENT_FILE,
+            )?;
+            fs::rename(&src_leaf_file_path, dst_leaf_file_path)?;
         }
         fs::remove_dir(src_leaf_path)?;
     }
@@ -1203,6 +1233,7 @@ fn finalize_commit<P: AsRef<Path>>(
     let _ = fs::remove_file(tree_pos_path);
     let _ = fs::remove_file(tree_pos_opt_path);
     fs::remove_dir(commit_path)?;
+    storeroom.finalize_version(&root)?;
 
     Ok(())
 }
