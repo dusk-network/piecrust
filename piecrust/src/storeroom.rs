@@ -74,11 +74,14 @@ impl Storeroom {
         contract_id: impl AsRef<str>,
         filename: impl AsRef<str>,
     ) -> io::Result<()> {
-        fs::copy(
-            source_path.as_ref(),
-            self.get_item_path(version, contract_id, filename)?,
-        )
-        .map(|_| ())
+        let target_path = self.get_item_path(version, contract_id, filename)?;
+        // if there is a blockade, remove it
+        // blockade is present if some version does not have an item which is in
+        // the shared storage
+        if target_path.is_dir() {
+            fs::remove_dir(&target_path)?;
+        }
+        fs::copy(source_path.as_ref(), target_path).map(|_| ())
     }
 
     pub fn retrieve_bytes(
