@@ -564,7 +564,6 @@ fn index_merkle_from_path(
         if entry.path().is_dir() {
             let contract_id_hex =
                 entry.file_name().to_string_lossy().to_string();
-            println!("CONTRACT_ID_HEX={}", contract_id_hex);
             let contract_id = contract_id_from_hex(&contract_id_hex);
             let contract_leaf_path = leaf_dir.join(&contract_id_hex);
             let (element_path, element_depth) = ContractSession::find_element(
@@ -597,10 +596,6 @@ fn index_merkle_from_path(
                     })?;
                 if element_depth != u32::MAX {
                     if let Some(h) = element.hash() {
-                        println!(
-                            "INSERT MERKLE_SRC1 pos={:?}",
-                            element.int_pos()
-                        );
                         merkle_src1.insert(
                             element.int_pos().expect("aa") as u32,
                             (
@@ -629,14 +624,10 @@ fn index_merkle_from_path(
                 if let Some((hh, pospos, cid)) = merkle_src1.get(int_pos) {
                     if *hash != *hh {
                         println!("DISCREPANCY hashes not equal at int pos={} contract={} {} != {}", int_pos, hex::encode(cid.as_bytes()), hex::encode((*hash).as_bytes()), hex::encode((*hh).as_bytes()));
-                    } else {
-                        println!("HASH OK for pos {}", int_pos);
                     }
                     if pos != pospos {
                         println!("DISCREPANCY pos not equal at int pos={} orig={} src1={}", int_pos, pos, pospos);
                     }
-                } else {
-                    println!("DISCREPANCY POS not found {}", int_pos);
                 }
             }
         }
