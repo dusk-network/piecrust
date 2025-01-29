@@ -21,6 +21,7 @@ use crate::store::{
     Module, BASE_FILE, BYTECODE_DIR, ELEMENT_FILE, MAIN_DIR, MEMORY_DIR,
     METADATA_EXTENSION, OBJECTCODE_EXTENSION, PAGE_SIZE,
 };
+use crate::storeroom::Storeroom;
 use crate::Error;
 
 #[derive(Debug, Clone)]
@@ -51,6 +52,9 @@ pub struct ContractSession {
     call: mpsc::Sender<Call>,
 
     commit_store: Arc<Mutex<CommitStore>>,
+
+    #[allow(dead_code)]
+    storeroom: Storeroom,
 }
 
 impl Debug for ContractSession {
@@ -70,6 +74,7 @@ impl ContractSession {
         base: Option<Commit>,
         call: mpsc::Sender<Call>,
         commit_store: Arc<Mutex<CommitStore>>,
+        storeroom: Storeroom,
     ) -> Self {
         Self {
             contracts: BTreeMap::new(),
@@ -78,6 +83,7 @@ impl ContractSession {
             root_dir: root_dir.as_ref().into(),
             call,
             commit_store,
+            storeroom,
         }
     }
 

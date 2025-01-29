@@ -187,13 +187,18 @@ impl ContractStore {
         let (call, calls) = mpsc::channel();
         let commit_store = self.commit_store.clone();
 
+        let storeroom = self.storeroom.clone();
+
         tracing::trace!("before read_all_commit");
-        read_all_commits(&self.engine, &self.root_dir, commit_store)?;
+        read_all_commits(
+            &self.engine,
+            &self.root_dir,
+            commit_store,
+            storeroom.clone(),
+        )?;
         tracing::trace!("after read_all_commit");
 
         let commit_store = self.commit_store.clone();
-
-        let storeroom = self.storeroom.clone();
 
         // The thread is given a name to allow for easily identifying it while
         // debugging.
@@ -305,6 +310,7 @@ impl ContractStore {
             base_commit,
             self.call.as_ref().expect("call should exist").clone(),
             self.commit_store.clone(),
+            self.storeroom.clone(),
         )
     }
 }
@@ -313,6 +319,7 @@ fn read_all_commits<P: AsRef<Path>>(
     engine: &Engine,
     root_dir: P,
     commit_store: Arc<Mutex<CommitStore>>,
+    storeroom: Storeroom,
 ) -> io::Result<()> {
     let root_dir = root_dir.as_ref();
 
@@ -331,8 +338,12 @@ fn read_all_commits<P: AsRef<Path>>(
                 continue;
             }
             tracing::trace!("before read_commit");
-            let commit =
-                read_commit(engine, entry.path(), commit_store.clone())?;
+            let commit = read_commit(
+                engine,
+                entry.path(),
+                commit_store.clone(),
+                storeroom.clone(),
+            )?;
             tracing::trace!("before read_commit");
             let root = *commit.root();
             commit_store.lock().unwrap().insert_commit(root, commit);
@@ -346,9 +357,10 @@ fn read_commit<P: AsRef<Path>>(
     engine: &Engine,
     commit_dir: P,
     commit_store: Arc<Mutex<CommitStore>>,
+    storeroom: Storeroom,
 ) -> io::Result<Commit> {
     let commit_dir = commit_dir.as_ref();
-    let commit = commit_from_dir(engine, commit_dir, commit_store)?;
+    let commit = commit_from_dir(engine, commit_dir, commit_store, storeroom)?;
     Ok(commit)
 }
 
@@ -407,6 +419,7 @@ fn commit_from_dir<P: AsRef<Path>>(
     engine: &Engine,
     dir: P,
     commit_store: Arc<Mutex<CommitStore>>,
+    storeroom: Storeroom,
 ) -> io::Result<Commit> {
     let dir = dir.as_ref();
     let mut commit_id: Option<String> = None;
@@ -447,6 +460,7 @@ fn commit_from_dir<P: AsRef<Path>>(
         &maybe_hash,
         commit_store.clone(),
         tree_pos.as_ref(),
+        storeroom,
     )?;
     tracing::trace!("after index_merkle_from_path");
 
@@ -525,26 +539,41 @@ fn index_merkle_from_path(
     maybe_commit_id: &Option<Hash>,
     commit_store: Arc<Mutex<CommitStore>>,
     maybe_tree_pos: Option<&TreePos>,
+    storeroom: Storeroom,
 ) -> io::Result<(NewContractIndex, ContractsMerkle)> {
     let leaf_dir = leaf_dir.as_ref();
 
     let mut index: NewContractIndex = NewContractIndex::new();
     let mut merkle: ContractsMerkle = ContractsMerkle::default();
 
+    let version = maybe_commit_id
+        .as_ref()
+        .map(|h| hex::encode(h.as_bytes()))
+        .unwrap_or("0".to_string());
+
+    let mut merkle_src1: BTreeMap<u32, (Hash, u64, ContractId)> =
+        BTreeMap::new();
+
     for entry in fs::read_dir(leaf_dir)? {
         let entry = entry?;
         if entry.path().is_dir() {
-            let contract_id_hex = entry.file_name();
-            let contract_id =
-                contract_id_from_hex(contract_id_hex.to_string_lossy());
-            let contract_leaf_path = leaf_dir.join(contract_id_hex);
+            let contract_id_hex =
+                entry.file_name().to_string_lossy().to_string();
+            let contract_id = contract_id_from_hex(&contract_id_hex);
+            let contract_leaf_path = leaf_dir.join(&contract_id_hex);
             let (element_path, element_depth) = ContractSession::find_element(
                 *maybe_commit_id,
                 &contract_leaf_path,
                 &main_path,
                 0,
             )
-            .unwrap_or((contract_leaf_path.join(ELEMENT_FILE), 0));
+            // .unwrap_or((contract_leaf_path.join(ELEMENT_FILE), 0));
+            .unwrap_or((
+                storeroom
+                    .retrieve(&version, &contract_id_hex, ELEMENT_FILE)?
+                    .unwrap_or(PathBuf::new()),
+                0,
+            ));
             if element_path.is_file() {
                 let element_bytes = fs::read(&element_path)?;
                 let element: ContractIndexElement =
@@ -561,6 +590,16 @@ fn index_merkle_from_path(
                         )
                     })?;
                 if element_depth != u32::MAX {
+                    if let Some(h) = element.hash() {
+                        merkle_src1.insert(
+                            element.int_pos().expect("aa") as u32,
+                            (
+                                h,
+                                position_from_contract(&contract_id),
+                                contract_id,
+                            ),
+                        );
+                    }
                     index.insert_contract_index(&contract_id, element);
                 } else {
                     commit_store
@@ -576,6 +615,16 @@ fn index_merkle_from_path(
         Some(tree_pos) => {
             for (int_pos, (hash, pos)) in tree_pos.iter() {
                 merkle.insert_with_int_pos(*pos, *int_pos as u64, *hash);
+                if let Some((hh, pospos, cid)) = merkle_src1.get(int_pos) {
+                    if *hash != *hh {
+                        println!("DISCREPANCY hashes not equal at int pos={} contract={} {} != {}", int_pos, hex::encode(cid.as_bytes()), hex::encode((*hash).as_bytes()), hex::encode((*hh).as_bytes()));
+                    }
+                    if pos != pospos {
+                        println!("DISCREPANCY pos not equal at int pos={} orig={} src1={}", int_pos, pos, pospos);
+                    }
+                } else {
+                    println!("DISCREPANCY POS not found {}", int_pos);
+                }
             }
         }
         None => {
