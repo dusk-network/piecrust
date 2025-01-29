@@ -18,6 +18,7 @@ use std::{fs, io};
 const SHARED_DIR: &str = "shared";
 
 #[allow(dead_code)]
+#[derive(Clone, Debug)]
 pub struct Storeroom {
     main_dir: PathBuf,
 }
@@ -56,7 +57,7 @@ impl Storeroom {
     }
 
     pub fn store_bytes(
-        &mut self,
+        &self,
         bytes: &[u8],
         version: impl AsRef<str>,
         contract_id: impl AsRef<str>,
@@ -67,15 +68,15 @@ impl Storeroom {
 
     // For memory mapped files we also provide possibility to pass a file path
     pub fn store(
-        &mut self,
+        &self,
         source_path: impl AsRef<Path>,
         version: impl AsRef<str>,
         contract_id: impl AsRef<str>,
-        postfix: impl AsRef<str>,
+        filename: impl AsRef<str>,
     ) -> io::Result<()> {
         fs::copy(
             source_path.as_ref(),
-            self.get_item_path(contract_id, version, postfix)?,
+            self.get_item_path(version, contract_id, filename)?,
         )
         .map(|_| ())
     }
@@ -131,7 +132,7 @@ impl Storeroom {
     /// Current shared version is the initial state
     pub fn create_version(&self, version: impl AsRef<str>) -> io::Result<()> {
         let version_path = self.main_dir.join(version.as_ref());
-        fs::create_dir_all(&version_path)
+        fs::create_dir_all(version_path)
     }
 
     #[rustfmt::skip]
@@ -151,7 +152,7 @@ impl Storeroom {
     shared version left by this function as their initial state
      */
     pub fn finalize_version(
-        &mut self,
+        &self,
         version: impl AsRef<str>,
     ) -> io::Result<()> {
         let version_dir = self.main_dir.join(version.as_ref());
@@ -160,7 +161,7 @@ impl Storeroom {
                 let entry = entry?;
                 let contract_id =
                     entry.file_name().to_string_lossy().to_string();
-                if contract_id.starts_with(".") {
+                if contract_id.starts_with('.') {
                     continue;
                 }
                 let contract_dir = entry.path();
@@ -169,7 +170,7 @@ impl Storeroom {
                         let entry = entry?;
                         let item =
                             entry.file_name().to_string_lossy().to_string();
-                        if item.starts_with(".") {
+                        if item.starts_with('.') {
                             continue;
                         }
                         self.finalize_version_file(
@@ -189,7 +190,7 @@ impl Storeroom {
     //    if version does not have corresponding item
     //        create a block file for this item
     fn create_blockings_for(
-        &mut self,
+        &self,
         finalized_version: impl AsRef<str>,
         contract_id: impl AsRef<str>,
         item: impl AsRef<str>,
@@ -201,7 +202,7 @@ impl Storeroom {
             if version == finalized_version.as_ref() {
                 continue;
             }
-            if version.starts_with(".") {
+            if version.starts_with('.') {
                 continue;
             }
             if version == SHARED_DIR {
@@ -224,7 +225,7 @@ impl Storeroom {
     // shared        so we want no change from the point of view of a
     // version
     fn create_copies_for(
-        &mut self,
+        &self,
         finalized_version: impl AsRef<str>,
         contract_id: impl AsRef<str>,
         item: impl AsRef<str>,
@@ -237,7 +238,7 @@ impl Storeroom {
             if version == finalized_version.as_ref() {
                 continue;
             }
-            if version.starts_with(".") {
+            if version.starts_with('.') {
                 continue;
             }
             if version == SHARED_DIR {
@@ -255,7 +256,7 @@ impl Storeroom {
     }
 
     fn finalize_version_file(
-        &mut self,
+        &self,
         version: impl AsRef<str>,
         contract_id: impl AsRef<str>,
         item: impl AsRef<str>,
@@ -309,7 +310,7 @@ mod tests {
 
         let bytes1 = vec![1, 2, 3];
         let bytes2 = vec![4, 5, 6];
-        let mut storeroom = Storeroom::new(tmp_dir);
+        let storeroom = Storeroom::new(tmp_dir);
         storeroom.store_bytes(&bytes1, "ver1", "aacc", "element")?;
         storeroom.store_bytes(&bytes2, "ver2", "aacc", "element")?;
         storeroom.create_version("ver3")?;
@@ -338,7 +339,7 @@ mod tests {
 
         let bytes1 = vec![1, 2, 3];
         let bytes2 = vec![4, 5, 6];
-        let mut storeroom = Storeroom::new(tmp_dir);
+        let storeroom = Storeroom::new(tmp_dir);
         storeroom.store_bytes(&bytes1, "ver1", "aacc", "element")?;
         storeroom.store_bytes(&bytes2, "ver2", "aacc", "element")?;
         storeroom.finalize_version("ver1")?;
@@ -371,7 +372,7 @@ mod tests {
             tempdir().expect("Should be able to create temporary directory");
 
         let bytes1 = vec![1, 2, 3];
-        let mut storeroom = Storeroom::new(tmp_dir);
+        let storeroom = Storeroom::new(tmp_dir);
         storeroom.store_bytes(&bytes1, "ver1", "aacc", "element")?;
         storeroom.create_version("ver2")?;
         storeroom.finalize_version("ver1")?;
@@ -409,7 +410,7 @@ mod tests {
         let bytes3 = vec![7, 8, 9];
         let bytes4 = vec![10, 11, 12];
         let bytes5 = vec![13, 14, 15];
-        let mut storeroom = Storeroom::new(tmp_dir);
+        let storeroom = Storeroom::new(tmp_dir);
         storeroom.store_bytes(&bytes1, "ver1", "contract1", "element")?;
         storeroom.store_bytes(&bytes1, "ver1", "contract5", "element")?;
         storeroom.store_bytes(&bytes2, "ver2", "contract2", "element")?;
