@@ -16,11 +16,7 @@ use piecrust_uplink::ContractId;
 
 use crate::contract::ContractMetadata;
 use crate::store::tree::{Hash, PageOpening};
-use crate::store::{
-    base_from_path, Bytecode, Call, Commit, CommitStore, Memory, Metadata,
-    Module, BASE_FILE, BYTECODE_DIR, ELEMENT_FILE, MAIN_DIR, MEMORY_DIR,
-    METADATA_EXTENSION, OBJECTCODE_EXTENSION, PAGE_SIZE,
-};
+use crate::store::{base_from_path, Bytecode, Call, Commit, CommitStore, Memory, Metadata, Module, BASE_FILE, BYTECODE_DIR, ELEMENT_FILE, MAIN_DIR, MEMORY_DIR, METADATA_EXTENSION, OBJECTCODE_EXTENSION, PAGE_SIZE, DEFAULT_MASTER_VERSION};
 use crate::storeroom::Storeroom;
 use crate::Error;
 
@@ -101,7 +97,9 @@ impl ContractSession {
         let mut commit = self
             .base
             .as_ref()
-            .map(|c| c.fast_clone(&mut self.contracts.keys()))
+            .cloned()
+            // .map(|c| c.fast_clone(&mut self.contracts.keys()))
+            // .map(|c| c.clone())
             .unwrap_or(Commit::new(&self.commit_store, None));
         for (contract, entry) in &self.contracts {
             commit.insert(*contract, &entry.memory);
@@ -266,6 +264,11 @@ impl ContractSession {
         contract: ContractId,
     ) -> io::Result<Option<ContractDataEntry>> {
         let commit_id = self.base.as_ref().map(|commit| *commit.root());
+        let storeroom = self.storeroom.clone();
+        let version = commit_id
+            .as_ref()
+            .map(|h| hex::encode(h.as_bytes()))
+            .unwrap_or(DEFAULT_MASTER_VERSION.to_string());
         match self.contracts.entry(contract) {
             Vacant(entry) => match &self.base {
                 None => Ok(None),
@@ -283,7 +286,7 @@ impl ContractSession {
                             let metadata_path = bytecode_path
                                 .with_extension(METADATA_EXTENSION);
                             let memory_path =
-                                base_dir.join(MEMORY_DIR).join(contract_hex);
+                                base_dir.join(MEMORY_DIR).join(&contract_hex);
 
                             let bytecode = Bytecode::from_file(bytecode_path)?;
                             let module =
@@ -309,11 +312,16 @@ impl ContractSession {
                                                         &base_dir,
                                                     )
                                                     .unwrap_or(
-                                                        memory_path.join(
-                                                            format!(
-                                                                "{page_index}"
-                                                            ),
-                                                        ),
+                                                        // memory_path.join(
+                                                        //     format!(
+                                                        //         "{page_index}"
+                                                        //     ),
+                                                        // ),
+                                                    storeroom.retrieve(
+                                                            &version,
+                                                            &contract_hex,
+                                                            format!("{page_index}")
+                                                        ).ok()?.unwrap_or(PathBuf::new()) // todo: errors are suppressed here
                                                     ),
                                                 ),
                                                 false => None,

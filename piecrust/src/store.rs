@@ -55,6 +55,8 @@ const OBJECTCODE_EXTENSION: &str = "a";
 const METADATA_EXTENSION: &str = "m";
 const MAIN_DIR: &str = "main";
 
+const DEFAULT_MASTER_VERSION: &str = "0";
+
 /// A store for all contract commits.
 pub struct ContractStore {
     sync_loop: Option<thread::JoinHandle<()>>,
@@ -409,9 +411,9 @@ fn commit_id_to_hash<S: AsRef<str>>(commit_id: S) -> Hash {
 
 fn contract_id_from_hex<S: AsRef<str>>(contract_id: S) -> ContractId {
     let bytes: [u8; 32] = hex::decode(contract_id.as_ref())
-        .expect("Hex decoding of commit id string should succeed")
+        .expect("Hex decoding of contract id string should succeed")
         .try_into()
-        .expect("Commit id string conversion should succeed");
+        .expect("Contract id string conversion should succeed");
     ContractId::from_bytes(bytes)
 }
 
@@ -549,7 +551,7 @@ fn index_merkle_from_path(
     let version = maybe_commit_id
         .as_ref()
         .map(|h| hex::encode(h.as_bytes()))
-        .unwrap_or("0".to_string());
+        .unwrap_or(DEFAULT_MASTER_VERSION.to_string());
 
     let mut merkle_src1: BTreeMap<u32, (Hash, u64, ContractId)> =
         BTreeMap::new();
@@ -571,7 +573,7 @@ fn index_merkle_from_path(
             .unwrap_or((
                 storeroom
                     .retrieve(&version, &contract_id_hex, ELEMENT_FILE)?
-                    .unwrap_or(PathBuf::new()),
+                    .unwrap_or(PathBuf::new()), // todo: errors are suppressed
                 0,
             ));
             if element_path.is_file() {
@@ -1250,6 +1252,7 @@ fn finalize_commit<P: AsRef<Path>>(
             let src_file_path = src_path.join(&filename);
             let dst_file_path = dst_path.join(&filename);
             if src_file_path.is_file() {
+                println!("storing {:?} {} {} {}", src_file_path, root, contract_hex, filename);
                 storeroom.store(
                     &src_file_path,
                     &root,
@@ -1267,6 +1270,7 @@ fn finalize_commit<P: AsRef<Path>>(
         let src_leaf_file_path = src_leaf_path.join(ELEMENT_FILE);
         let dst_leaf_file_path = dst_leaf_path.join(ELEMENT_FILE);
         if src_leaf_file_path.is_file() {
+            println!("storing {:?} {} {} {}", src_leaf_file_path, root, contract_hex, ELEMENT_FILE);
             storeroom.store(
                 &src_leaf_file_path,
                 &root,
@@ -1282,6 +1286,7 @@ fn finalize_commit<P: AsRef<Path>>(
     let _ = fs::remove_file(tree_pos_path);
     let _ = fs::remove_file(tree_pos_opt_path);
     fs::remove_dir(commit_path)?;
+    println!("STOREROOM finalizing version {}", &root);
     storeroom.finalize_version(&root)?;
 
     Ok(())
