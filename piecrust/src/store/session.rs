@@ -197,6 +197,7 @@ impl ContractSession {
                     .join(&hash_hex)
                     .join(format!("{page_index}"));
                 if path.is_file() {
+                    //println!("FIND PAGE RETURNED {:?}", path);
                     Some(path)
                 } else {
                     let base_info_path =
@@ -308,26 +309,29 @@ impl ContractSession {
                                             match page_indices
                                                 .contains(&page_index)
                                             {
-                                                true => Some(
-                                                    Self::find_page(
+                                                true => {
+                                                    let x = Self::find_page(
                                                         page_index,
                                                         commit_id,
                                                         &memory_path,
                                                         &base_dir,
-                                                    )
-                                                    .unwrap_or(
+                                                    );
+                                                    if x.is_some() {
+                                                        x
+                                                    } else {
                                                         // memory_path.join(
                                                         //     format!(
                                                         //         "{page_index}"
                                                         //     ),
                                                         // ),
-                                                    storeroom.retrieve(
+                                                        Some(storeroom.retrieve(
                                                             &version,
                                                             &contract_hex,
                                                             format!("{page_index}")
-                                                        ).ok()?.unwrap_or(PathBuf::new()) // todo: errors are suppressed here
-                                                    ),
-                                                ),
+                                                            // ).ok()?.unwrap_or(PathBuf::new()) // todo: errors are suppressed here
+                                                        ).ok()?.expect("mem page should exist"))
+                                                    }
+                                                }
                                                 false => None,
                                             }
                                         },

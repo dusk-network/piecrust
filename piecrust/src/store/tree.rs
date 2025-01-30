@@ -365,6 +365,10 @@ impl NewContractIndex {
 
     pub fn move_into(self, target: &mut Self) {
         for (contract_id, element) in self.inner_contracts.into_iter() {
+            println!(
+                "MOVE_INTO for CONTRACT {}",
+                hex::encode(contract_id.as_bytes())
+            );
             target.insert_contract_index(&contract_id, element);
         }
     }

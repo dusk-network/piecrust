@@ -112,6 +112,11 @@ impl CommitStore {
             }
             None => {
                 let e = self.main_index.get(contract_id);
+                println!(
+                    "MAIN_INDEX get_element_and_base ctr={} gotten={}",
+                    hex::encode(contract_id.as_bytes()),
+                    e.is_some()
+                );
                 (e.map(|a| a as *const ContractIndexElement), None)
             }
         }
@@ -128,6 +133,7 @@ impl CommitStore {
                 (e.map(|a| a as *mut ContractIndexElement), commit.base)
             }
             None => {
+                println!("MAIN_INDEX get_element_and_base_mut");
                 let e = self.main_index.get_mut(contract_id);
                 (e.map(|a| a as *mut ContractIndexElement), None)
             }
@@ -143,9 +149,11 @@ impl CommitStore {
     }
 
     pub fn remove_commit(&mut self, hash: &Hash) {
-        if let Some(commit) = self.commits.remove(hash) {
-            commit.index.move_into(&mut self.main_index);
-        }
+        println!("REMOVE_COMMIT {}", hex::encode(hash.as_bytes()));
+        self.commits.remove(hash);
+        // if let Some(commit) = self.commits.remove(hash) {
+        //     commit.index.move_into(&mut self.main_index);
+        // }
     }
 
     pub fn insert_main_index(
@@ -153,6 +161,7 @@ impl CommitStore {
         contract_id: &ContractId,
         element: ContractIndexElement,
     ) {
+        println!("MAIN_INDEX insert_main_index");
         self.main_index.insert_contract_index(contract_id, element);
     }
 }
@@ -566,19 +575,35 @@ fn index_merkle_from_path(
                 entry.file_name().to_string_lossy().to_string();
             let contract_id = contract_id_from_hex(&contract_id_hex);
             let contract_leaf_path = leaf_dir.join(&contract_id_hex);
-            let (element_path, element_depth) = ContractSession::find_element(
-                *maybe_commit_id,
-                &contract_leaf_path,
-                &main_path,
-                0,
-            )
-            // .unwrap_or((contract_leaf_path.join(ELEMENT_FILE), 0));
-            .unwrap_or((
-                storeroom
-                    .retrieve(&version, &contract_id_hex, ELEMENT_FILE)?
-                    .unwrap_or(PathBuf::new()), // todo: errors are suppressed
-                0,
-            ));
+            let (element_path, element_depth) = {
+                let res_found = ContractSession::find_element(
+                    *maybe_commit_id,
+                    &contract_leaf_path,
+                    &main_path,
+                    0,
+                );
+                if let Some((el_path, el_depth)) = res_found {
+                    (el_path, el_depth)
+                } else {
+                    let r = storeroom.retrieve(
+                        &version,
+                        &contract_id_hex,
+                        ELEMENT_FILE,
+                    )?;
+                    if let Some(el_path) = r {
+                        (el_path, 0)
+                    } else {
+                        (PathBuf::new(), 0)
+                    }
+                }
+                // .unwrap_or((contract_leaf_path.join(ELEMENT_FILE), 0));
+                // .unwrap_or((
+                //     storeroom
+                //         .retrieve(&version, &contract_id_hex, ELEMENT_FILE)?
+                //         .unwrap_or(PathBuf::new()), // todo: errors are
+                // suppressed     0,
+                // ))
+            };
             if element_path.is_file() {
                 let element_bytes = fs::read(&element_path)?;
                 let element: ContractIndexElement =
@@ -911,6 +936,7 @@ fn sync_loop<P: AsRef<Path>>(
                 }
 
                 let io_result = delete_commit_dir(root_dir, root);
+                println!("CALLING REMOVE_COMMIT from CommitDelete");
                 commit_store.lock().unwrap().remove_commit(&root);
                 tracing::trace!("delete commit finished");
                 let _ = replier.send(io_result);
@@ -956,6 +982,7 @@ fn sync_loop<P: AsRef<Path>>(
                             e
                         ),
                     }
+                    println!("CALLING REMOVE_COMMIT from CommitFinalize");
                     commit_store.remove_commit(&root);
                     tracing::trace!("finalizing commit finished");
                     let _ = replier.send(io_result);
@@ -1006,6 +1033,7 @@ fn sync_loop<P: AsRef<Path>>(
                                     for replier in entry.remove() {
                                         let io_result =
                                             delete_commit_dir(root_dir, base);
+                                        println!("CALLING REMOVE_COMMIT from SessionDrop");
                                         commit_store.lock().unwrap().remove_commit(&base);
                                         let _ = replier.send(io_result);
                                     }
@@ -1254,10 +1282,10 @@ fn finalize_commit<P: AsRef<Path>>(
             let src_file_path = src_path.join(&filename);
             let dst_file_path = dst_path.join(&filename);
             if src_file_path.is_file() {
-                println!(
-                    "storing {:?} {} {} {}",
-                    src_file_path, root, contract_hex, filename
-                );
+                // println!(
+                //     "storing {:?} {} {} {}",
+                //     src_file_path, root, contract_hex, filename
+                // );
                 storeroom.store(
                     &src_file_path,
                     &root,
@@ -1275,10 +1303,10 @@ fn finalize_commit<P: AsRef<Path>>(
         let src_leaf_file_path = src_leaf_path.join(ELEMENT_FILE);
         let dst_leaf_file_path = dst_leaf_path.join(ELEMENT_FILE);
         if src_leaf_file_path.is_file() {
-            println!(
-                "storing {:?} {} {} {}",
-                src_leaf_file_path, root, contract_hex, ELEMENT_FILE
-            );
+            // println!(
+            //     "storing {:?} {} {} {}",
+            //     src_leaf_file_path, root, contract_hex, ELEMENT_FILE
+            // );
             storeroom.store(
                 &src_leaf_file_path,
                 &root,

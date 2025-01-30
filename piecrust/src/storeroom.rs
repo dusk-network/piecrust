@@ -121,15 +121,29 @@ impl Storeroom {
             item.as_ref(),
         )?;
         Ok(if item_path.is_file() {
+            println!("XRETRIEVE NONSHARED {:?}", item_path);
             Some(item_path)
         } else if item_path.is_dir() {
+            println!(
+                "XRETRIEVE NONSH NONE {} {} {}",
+                version.as_ref(),
+                contract_id.as_ref(),
+                item.as_ref()
+            );
             None
         } else {
             let shared_item_path =
                 self.get_shared_item_path(contract_id.as_ref(), item.as_ref());
             if shared_item_path.is_file() {
+                println!("XRETRIEVE SH {:?}", shared_item_path);
                 Some(shared_item_path)
             } else {
+                println!(
+                    "XRETRIEVE SH NONE {} {} {}",
+                    version.as_ref(),
+                    contract_id.as_ref(),
+                    item.as_ref()
+                );
                 None
             }
         })
@@ -171,7 +185,6 @@ impl Storeroom {
                     continue;
                 }
                 let contract_dir = entry.path();
-                println!("STOREROOM finalizing contract {:?}", contract_dir);
                 if contract_dir.is_dir() {
                     for entry in fs::read_dir(contract_dir)? {
                         let entry = entry?;
@@ -203,12 +216,6 @@ impl Storeroom {
         contract_id: impl AsRef<str>,
         item: impl AsRef<str>,
     ) -> io::Result<()> {
-        println!(
-            "STOREROOM create blockings for {} {} {}",
-            finalized_version.as_ref(),
-            contract_id.as_ref(),
-            item.as_ref()
-        );
         // for all versions
         for entry in fs::read_dir(&self.main_dir)? {
             let entry = entry?;
@@ -245,10 +252,6 @@ impl Storeroom {
         item: impl AsRef<str>,
         source_item_path: impl AsRef<Path>,
     ) -> io::Result<()> {
-        println!(
-            "STOREROOM create copies for {:?}",
-            source_item_path.as_ref()
-        );
         // for all versions
         for entry in fs::read_dir(&self.main_dir)? {
             let entry = entry?;
@@ -263,11 +266,9 @@ impl Storeroom {
                 continue;
             }
             let version_dir = entry.path();
-            println!("STOREROOM create copy for version {:?}", version_dir);
             let item_path =
                 version_dir.join(contract_id.as_ref()).join(item.as_ref());
             if !item_path.exists() {
-                println!("STOREROOM create copy to {:?}", item_path);
                 // copy item there as it will be overwritten soon
                 if let Some(parent) = item_path.parent() {
                     fs::create_dir_all(parent)?;
@@ -305,13 +306,11 @@ impl Storeroom {
             self.create_blockings_for(version.as_ref(), contract_id, item)?;
         }
         if source_item_path.is_file() {
-            println!("STOREROOM finalize_version_file 2");
             if let Some(parent) = shared_item_path.parent() {
                 fs::create_dir_all(parent)?;
             }
             fs::copy(source_item_path, shared_item_path)?;
         } else if source_item_path.is_dir() {
-            println!("STOREROOM finalize_version_file 3");
             // it is a blocking, we need to remove the shared path file as the
             // finalized version had a blocking on it
             if shared_item_path.is_file() {
