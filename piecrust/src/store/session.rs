@@ -5,7 +5,7 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 use std::collections::btree_map::Entry::{Occupied, Vacant};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::fmt::Debug;
 use std::path::{Path, PathBuf};
 use std::sync::{mpsc, Arc, Mutex};
@@ -15,7 +15,9 @@ use dusk_wasmtime::Engine;
 use piecrust_uplink::ContractId;
 
 use crate::contract::ContractMetadata;
-use crate::store::tree::{Hash, PageOpening};
+use crate::store::tree::{
+    position_from_contract, ContractIndexElement, Hash, PageOpening, TreePos,
+};
 use crate::store::{
     base_from_path, Bytecode, Call, Commit, CommitStore, Memory, Metadata,
     Module, BASE_FILE, BYTECODE_DIR, DEFAULT_MASTER_VERSION, ELEMENT_FILE,
@@ -56,6 +58,8 @@ pub struct ContractSession {
     #[allow(dead_code)]
     storeroom: Storeroom,
 }
+
+pub type ContractMemTree = dusk_merkle::Tree<Hash, 32, 2>;
 
 impl Debug for ContractSession {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -189,7 +193,14 @@ impl ContractSession {
         main_path: impl AsRef<Path>,
     ) -> Option<PathBuf> {
         match commit {
-            None => None,
+            None => {
+                let path = memory_path.as_ref().join(format!("{page_index}"));
+                if path.is_file() {
+                    Some(path)
+                } else {
+                    None
+                }
+            }
             Some(hash) => {
                 let hash_hex = hex::encode(hash.as_bytes());
                 let path = memory_path
@@ -202,13 +213,21 @@ impl ContractSession {
                 } else {
                     let base_info_path =
                         main_path.as_ref().join(hash_hex).join(BASE_FILE);
-                    let index = base_from_path(base_info_path).ok()?;
-                    Self::find_page(
-                        page_index,
-                        index.maybe_base,
-                        memory_path,
-                        main_path,
-                    )
+                    if let Ok(index) = base_from_path(base_info_path) {
+                        Self::find_page(
+                            page_index,
+                            index.maybe_base,
+                            memory_path,
+                            main_path,
+                        )
+                    } else {
+                        Self::find_page(
+                            page_index,
+                            None,
+                            memory_path,
+                            main_path,
+                        )
+                    }
                 }
             }
         }
@@ -242,13 +261,21 @@ impl ContractSession {
                 } else {
                     let base_info_path =
                         main_path.as_ref().join(hash_hex).join(BASE_FILE);
-                    let index = base_from_path(base_info_path).ok()?;
-                    Self::find_element(
-                        index.maybe_base,
-                        leaf_path,
-                        main_path,
-                        depth + 1,
-                    )
+                    if let Ok(index) = base_from_path(base_info_path) {
+                        Self::find_element(
+                            index.maybe_base,
+                            leaf_path,
+                            main_path,
+                            depth + 1,
+                        )
+                    } else {
+                        Self::find_element(
+                            None,
+                            leaf_path,
+                            main_path,
+                            depth + 1,
+                        )
+                    }
                 }
             }
         }
@@ -457,6 +484,102 @@ impl ContractSession {
         self.contracts
             .get(contract_id)
             .map(|store_data| store_data.metadata.data())
+    }
+
+    pub fn calculate_root(
+        entries: impl Iterator<Item = ([u8; 32], u64)>,
+    ) -> [u8; 32] {
+        let mut tree = ContractMemTree::new();
+        for (hash, int_pos) in entries {
+            tree.insert(int_pos, hash);
+        }
+        let r = *(*tree.root()).as_bytes();
+        r
+    }
+
+    pub fn calculate_root_pos_32(
+        entries: impl Iterator<Item = ([u8; 32], u32)>,
+    ) -> [u8; 32] {
+        let mut tree = ContractMemTree::new();
+        for (hash, int_pos) in entries {
+            let int_pos = int_pos as u64;
+            tree.insert(int_pos, hash);
+        }
+        let r = *(*tree.root()).as_bytes();
+        r
+    }
+
+    pub fn contract_prefix(contract: &ContractId) -> String {
+        let mut a = [0u8; 8];
+        a.copy_from_slice(&contract.to_bytes()[..8]);
+        hex::encode(a)
+    }
+
+    pub fn print_root_infos(
+        elements: &BTreeMap<ContractId, ContractIndexElement>,
+        tree_pos: &TreePos,
+    ) -> Result<(), Error> {
+        println!();
+        println!("tree_pos");
+        let mut tree_pos_map: HashMap<u64, [u8; 32]> = HashMap::new();
+        for (k, (h, c)) in tree_pos.iter() {
+            println!(
+                "{} {} {}",
+                *k,
+                hex::encode(h),
+                hex::encode((*c).to_le_bytes())
+            );
+            tree_pos_map.insert(*k as u64, *h.as_bytes());
+        }
+
+        println!();
+        println!("elems:");
+        let mut sorted_elements: Vec<(ContractId, ContractIndexElement)> =
+            elements.iter().map(|(a, b)| (*a, b.clone())).collect();
+        sorted_elements.sort_by(|(_, el1), (_, el2)| {
+            el1.int_pos()
+                .expect("int_pos")
+                .cmp(&el2.int_pos().expect("int_pos"))
+        });
+        for (contract_id, element) in sorted_elements.iter() {
+            let contract_pos_hex =
+                hex::encode(position_from_contract(contract_id).to_le_bytes());
+            println!();
+            if Some(element.hash().expect("hash should exist").as_bytes())
+                != tree_pos_map
+                    .get(&element.int_pos().expect("int_pos should exist"))
+            {
+                print!("* ");
+            }
+            print!(
+                "{} {} ({}) int_pos={}",
+                hex::encode(element.hash().expect("hash should exist")),
+                Self::contract_prefix(contract_id),
+                contract_pos_hex,
+                element.int_pos().expect("int_pos should exist"),
+            );
+        }
+
+        let root_from_elements =
+            Self::calculate_root(elements.iter().map(|(_, el)| {
+                (
+                    *el.hash().expect("hash should exist").as_bytes(),
+                    el.int_pos().expect("int_pos should exist"),
+                )
+            }));
+        println!();
+        println!("root_from_elements={}", hex::encode(root_from_elements));
+        let root_from_tree_pos_file = Self::calculate_root_pos_32(
+            tree_pos.iter().map(|(k, (h, _c))| (*h.as_bytes(), *k)),
+        );
+        println!();
+        println!(
+            "root_from_tree_pos_file={}",
+            hex::encode(root_from_tree_pos_file)
+        );
+
+        println!();
+        Ok(())
     }
 }
 
