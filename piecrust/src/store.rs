@@ -1176,7 +1176,7 @@ fn write_commit<P: AsRef<Path>>(
         &new_elements,
         commit.contracts_merkle.tree_pos(),
     );
-    println!("WRITTEN COMMIT WITH ROOT={}  ============", root_hex);
+    println!("WRITTEN COMMIT {}  ======== (order matters)", root_hex);
 
     ret
 }
@@ -1413,7 +1413,10 @@ fn finalize_commit<P: AsRef<Path>>(
     let _ = fs::remove_file(tree_pos_opt_path);
     fs::remove_dir(commit_path)?;
 
-    println!("FINALIZED COMMIT {}", hex::encode(root.as_bytes()));
+    println!(
+        "FINALIZED COMMIT {} ======== (order matters)",
+        hex::encode(root.as_bytes())
+    );
 
     Ok(())
 }
