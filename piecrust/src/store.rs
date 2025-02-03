@@ -1171,7 +1171,7 @@ fn write_commit<P: AsRef<Path>>(
         if root_from_elements_ok {
             ""
         } else {
-            "order matters"
+            "(order matters)"
         }
     );
     println!(
