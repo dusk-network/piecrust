@@ -517,18 +517,19 @@ impl ContractSession {
 
     pub fn print_root_infos(
         elements: &BTreeMap<ContractId, ContractIndexElement>,
+        new_elements: &BTreeMap<ContractId, ContractIndexElement>,
         tree_pos: &TreePos,
     ) -> Result<(), Error> {
-        println!();
-        println!("tree_pos");
+        // println!();
+        // println!("tree_pos");
         let mut tree_pos_map: HashMap<u64, [u8; 32]> = HashMap::new();
-        for (k, (h, c)) in tree_pos.iter() {
-            println!(
-                "{} {} {}",
-                *k,
-                hex::encode(h),
-                hex::encode((*c).to_le_bytes())
-            );
+        for (k, (h, _c)) in tree_pos.iter() {
+            // println!(
+            //     "{} {} {}",
+            //     *k,
+            //     hex::encode(h),
+            //     hex::encode((*c).to_le_bytes())
+            // );
             tree_pos_map.insert(*k as u64, *h.as_bytes());
         }
 
@@ -542,22 +543,33 @@ impl ContractSession {
                 .cmp(&el2.int_pos().expect("int_pos"))
         });
         for (contract_id, element) in sorted_elements.iter() {
+            let is_new_element = new_elements.contains_key(contract_id);
             let contract_pos_hex =
                 hex::encode(position_from_contract(contract_id).to_le_bytes());
-            println!();
             if Some(element.hash().expect("hash should exist").as_bytes())
                 != tree_pos_map
                     .get(&element.int_pos().expect("int_pos should exist"))
             {
                 print!("* ");
+                print!(
+                    "{} {} ({}) int_pos={} from tree_pos={} is_new={}",
+                    hex::encode(element.hash().expect("hash should exist")),
+                    Self::contract_prefix(contract_id),
+                    contract_pos_hex,
+                    element.int_pos().expect("int_pos should exist"),
+                    hex::encode(
+                        tree_pos_map
+                            .get(
+                                &element
+                                    .int_pos()
+                                    .expect("int_pos should exist")
+                            )
+                            .expect("should be found")
+                    ),
+                    is_new_element,
+                );
+                println!();
             }
-            print!(
-                "{} {} ({}) int_pos={}",
-                hex::encode(element.hash().expect("hash should exist")),
-                Self::contract_prefix(contract_id),
-                contract_pos_hex,
-                element.int_pos().expect("int_pos should exist"),
-            );
         }
 
         let root_from_elements =

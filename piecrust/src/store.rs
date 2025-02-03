@@ -112,11 +112,11 @@ impl CommitStore {
             }
             None => {
                 let e = self.main_index.get(contract_id);
-                println!(
-                    "MAIN_INDEX get_element_and_base ctr={} gotten={}",
-                    hex::encode(contract_id.as_bytes()),
-                    e.is_some()
-                );
+                // println!(
+                //     "MAIN_INDEX get_element_and_base ctr={} gotten={}",
+                //     hex::encode(contract_id.as_bytes()),
+                //     e.is_some()
+                // );
                 (e.map(|a| a as *const ContractIndexElement), None)
             }
         }
@@ -613,20 +613,15 @@ fn index_merkle_from_path(
                         ),
                         )
                     })?;
+                if let Some(h) = element.hash() {
+                    merkle_src1.insert(
+                        element.int_pos().expect("aa") as u32,
+                        (h, position_from_contract(&contract_id), contract_id),
+                    );
+                }
                 if element_depth != u32::MAX {
-                    if let Some(h) = element.hash() {
-                        merkle_src1.insert(
-                            element.int_pos().expect("aa") as u32,
-                            (
-                                h,
-                                position_from_contract(&contract_id),
-                                contract_id,
-                            ),
-                        );
-                    }
                     index.insert_contract_index(&contract_id, element);
                 } else {
-                    println!("KABOOM");
                     commit_store
                         .lock()
                         .unwrap()
@@ -642,11 +637,13 @@ fn index_merkle_from_path(
                 merkle.insert_with_int_pos(*pos, *int_pos as u64, *hash);
                 if let Some((hh, pospos, cid)) = merkle_src1.get(int_pos) {
                     if *hash != *hh {
-                        println!("DISCREPANCY hashes not equal at int pos={} contract={} {} != {}", int_pos, hex::encode(cid.as_bytes()), hex::encode((*hash).as_bytes()), hex::encode((*hh).as_bytes()));
+                        println!("DISCREPANCY hashes not equal at int pos={} contract={} {} != {} version={}", int_pos, hex::encode(cid.as_bytes()), hex::encode((*hash).as_bytes()), hex::encode((*hh).as_bytes()), version);
                     }
                     if pos != pospos {
                         println!("DISCREPANCY pos not equal at int pos={} orig={} src1={}", int_pos, pos, pospos);
                     }
+                } else {
+                    println!("DISCREPANCY could not get int_pos={}", int_pos);
                 }
             }
         }
@@ -785,7 +782,9 @@ impl Commit {
 
         element.set_len(memory.current_len);
 
+        let mut dirty_indices = vec![];
         for (dirty_page, _, page_index) in memory.dirty_pages() {
+            dirty_indices.push(page_index);
             let hash = Hash::new(dirty_page);
             element.insert_page_index_hash(
                 *page_index,
@@ -795,6 +794,12 @@ impl Commit {
         }
 
         let root = *element.tree().root();
+        println!(
+            "dirty indices for {} = {:?} hash={}",
+            hex::encode(contract_id.as_bytes()),
+            dirty_indices,
+            hex::encode(root.as_bytes())
+        );
         let pos = position_from_contract(&contract_id);
         let internal_pos = contracts_merkle.insert(pos, root, &contract_id);
         element.set_hash(Some(root));
@@ -1126,12 +1131,12 @@ fn scan_elements_from_commit(
                         if !elements.contains_key(&contract_id) {
                             count += 1;
                         }
-                        println!(
-                            "{} SCAN FOUND {:?} contains={}",
-                            total_count,
-                            element_path,
-                            elements.contains_key(&contract_id)
-                        );
+                        // println!(
+                        // "{} SCAN FOUND {:?} contains={}",
+                        // total_count,
+                        // element_path,
+                        // elements.contains_key(&contract_id)
+                        // );
                         let element_bytes = fs::read(&element_path)?;
                         let element: ContractIndexElement =
                             rkyv::from_bytes(&element_bytes).map_err(|err| {
@@ -1167,6 +1172,14 @@ fn write_commit<P: AsRef<Path>>(
 ) -> io::Result<Hash> {
     let root_dir = root_dir.as_ref();
 
+    println!(
+        "WRITE COMMIT commit contracts={:?}",
+        commit_contracts
+            .keys()
+            .map(|c| hex::encode(c.as_bytes()))
+            .collect::<Vec<_>>()
+    );
+
     let base_info = BaseInfo {
         maybe_base: base.as_ref().map(|base| *base.root()),
         ..Default::default()
@@ -1197,6 +1210,7 @@ fn write_commit<P: AsRef<Path>>(
 
     let mut elements_to_verify =
         BTreeMap::<ContractId, ContractIndexElement>::new();
+    let mut new_elements = BTreeMap::<ContractId, ContractIndexElement>::new();
     for (contract_id, contract_data) in &commit_contracts {
         let element = if contract_data.is_new {
             commit.remove_and_insert(*contract_id, &contract_data.memory)
@@ -1204,6 +1218,13 @@ fn write_commit<P: AsRef<Path>>(
             commit.insert(*contract_id, &contract_data.memory)
         };
         elements_to_verify.insert(*contract_id, element.clone());
+        new_elements.insert(*contract_id, element.clone());
+        storeroom.store_bytes(
+            hex::encode(element.hash().expect("cc").as_bytes()).as_bytes(),
+            "milosz1",
+            hex::encode(contract_id.as_bytes()),
+            "hash",
+        )?;
     }
 
     let root = *commit.root();
@@ -1223,6 +1244,8 @@ fn write_commit<P: AsRef<Path>>(
         commit_contracts,
         &root_hex,
         base_info.clone(),
+        &new_elements,
+        storeroom.clone(),
     )
     .map(|_| {
         commit_store
@@ -1255,12 +1278,23 @@ fn write_commit<P: AsRef<Path>>(
     );
     let _ = ContractSession::print_root_infos(
         &elements_to_verify,
+        &new_elements,
         commit.contracts_merkle.tree_pos(),
     );
-    println!("ROOT={}  =================", root_hex);
+    println!(
+        "WRITTEN COMMIT WITH ROOT={}  ================= DEEPSEEK",
+        root_hex
+    );
 
     ret
 }
+
+// fn s_write(path: impl AsRef<Path>, content: impl AsRef<[u8]>) ->
+// io::Result<()>{     let mut f = File::create(path.as_ref())?;
+//     f.write_all(content.as_ref())?;
+//     f.flush()?;
+//     f.sync_all()
+// }
 
 /// Writes a commit to disk.
 fn write_commit_inner<P: AsRef<Path>, S: AsRef<str>>(
@@ -1269,6 +1303,8 @@ fn write_commit_inner<P: AsRef<Path>, S: AsRef<str>>(
     commit_contracts: BTreeMap<ContractId, ContractDataEntry>,
     commit_id: S,
     mut base_info: BaseInfo,
+    new_elements: &BTreeMap<ContractId, ContractIndexElement>,
+    storeroom: Storeroom,
 ) -> io::Result<()> {
     let root_dir = root_dir.as_ref();
 
@@ -1344,7 +1380,8 @@ fn write_commit_inner<P: AsRef<Path>, S: AsRef<str>>(
     }
 
     tracing::trace!("persisting index started");
-    for (contract_id, element) in commit.index.iter() {
+    // for (contract_id, element) in commit.index.iter() {
+    for (contract_id, element) in new_elements.iter() {
         if commit_contracts.contains_key(contract_id) {
             let element_dir_path = directories
                 .leaf_main_dir
@@ -1360,6 +1397,12 @@ fn write_commit_inner<P: AsRef<Path>, S: AsRef<str>>(
                     )
                 })?;
             fs::write(&element_file_path, element_bytes)?;
+            storeroom.store_bytes(
+                hex::encode(element.hash().expect("cc").as_bytes()).as_bytes(),
+                "milosz2",
+                hex::encode(contract_id.as_bytes()),
+                "hash",
+            )?;
         }
     }
     tracing::trace!("persisting index finished");
@@ -1505,7 +1548,7 @@ fn finalize_commit<P: AsRef<Path>>(
     let _ = fs::remove_file(tree_pos_path);
     let _ = fs::remove_file(tree_pos_opt_path);
     fs::remove_dir(commit_path)?;
-    println!("STOREROOM finalizing version {}", &root);
+    println!("STOREROOM finalizing version {} DEEPSEEK", &root);
     storeroom.finalize_version(&root)?;
 
     Ok(())
