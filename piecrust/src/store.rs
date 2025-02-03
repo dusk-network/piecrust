@@ -1413,10 +1413,7 @@ fn finalize_commit<P: AsRef<Path>>(
     let _ = fs::remove_file(tree_pos_opt_path);
     fs::remove_dir(commit_path)?;
 
-    println!(
-        "FINALIZED COMMIT {} ======== (order matters)",
-        hex::encode(root.as_bytes())
-    );
+    println!("FINALIZED COMMIT {} ======== (order matters)", root);
 
     Ok(())
 }
