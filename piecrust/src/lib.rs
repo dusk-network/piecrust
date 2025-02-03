@@ -125,7 +125,6 @@ mod imports;
 mod instance;
 mod session;
 mod store;
-mod storeroom;
 mod types;
 mod vm;
 

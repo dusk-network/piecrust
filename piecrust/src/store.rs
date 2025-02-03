@@ -35,7 +35,6 @@ use crate::store::tree::{
     position_from_contract, BaseInfo, ContractIndexElement, ContractsMerkle,
     TreePos,
 };
-use crate::storeroom::Storeroom;
 pub use bytecode::Bytecode;
 pub use memory::{Memory, PAGE_SIZE};
 pub use metadata::Metadata;
@@ -55,8 +54,6 @@ const OBJECTCODE_EXTENSION: &str = "a";
 const METADATA_EXTENSION: &str = "m";
 const MAIN_DIR: &str = "main";
 
-const DEFAULT_MASTER_VERSION: &str = "0";
-
 /// A store for all contract commits.
 pub struct ContractStore {
     sync_loop: Option<thread::JoinHandle<()>>,
@@ -65,7 +62,6 @@ pub struct ContractStore {
     call: Option<mpsc::Sender<Call>>,
     root_dir: PathBuf,
     pub commit_store: Arc<Mutex<CommitStore>>,
-    pub storeroom: Storeroom,
 }
 
 impl Debug for ContractStore {
@@ -180,8 +176,6 @@ impl ContractStore {
         let root_dir = dir.as_ref();
 
         fs::create_dir_all(root_dir)?;
-        let storeroom =
-            Storeroom::new(root_dir.join(MAIN_DIR).join(MASTER_DIR));
 
         Ok(Self {
             sync_loop: None,
@@ -189,7 +183,6 @@ impl ContractStore {
             call: None,
             root_dir: root_dir.into(),
             commit_store: Arc::new(Mutex::new(CommitStore::new())),
-            storeroom,
         })
     }
 
@@ -198,15 +191,8 @@ impl ContractStore {
         let (call, calls) = mpsc::channel();
         let commit_store = self.commit_store.clone();
 
-        let storeroom = self.storeroom.clone();
-
         tracing::trace!("before read_all_commit");
-        read_all_commits(
-            &self.engine,
-            &self.root_dir,
-            commit_store,
-            storeroom.clone(),
-        )?;
+        read_all_commits(&self.engine, &self.root_dir, commit_store)?;
         tracing::trace!("after read_all_commit");
 
         let commit_store = self.commit_store.clone();
@@ -215,9 +201,7 @@ impl ContractStore {
         // debugging.
         let sync_loop = thread::Builder::new()
             .name(String::from("PiecrustSync"))
-            .spawn(move || {
-                sync_loop(loop_root_dir, commit_store, storeroom, calls)
-            })?;
+            .spawn(move || sync_loop(loop_root_dir, commit_store, calls))?;
 
         self.sync_loop = Some(sync_loop);
         self.call = Some(call);
@@ -321,7 +305,6 @@ impl ContractStore {
             base_commit,
             self.call.as_ref().expect("call should exist").clone(),
             self.commit_store.clone(),
-            self.storeroom.clone(),
         )
     }
 }
@@ -330,7 +313,6 @@ fn read_all_commits<P: AsRef<Path>>(
     engine: &Engine,
     root_dir: P,
     commit_store: Arc<Mutex<CommitStore>>,
-    storeroom: Storeroom,
 ) -> io::Result<()> {
     let root_dir = root_dir.as_ref();
 
@@ -349,12 +331,8 @@ fn read_all_commits<P: AsRef<Path>>(
                 continue;
             }
             tracing::trace!("before read_commit");
-            let commit = read_commit(
-                engine,
-                entry.path(),
-                commit_store.clone(),
-                storeroom.clone(),
-            )?;
+            let commit =
+                read_commit(engine, entry.path(), commit_store.clone())?;
             tracing::trace!("before read_commit");
             let root = *commit.root();
             commit_store.lock().unwrap().insert_commit(root, commit);
@@ -368,10 +346,9 @@ fn read_commit<P: AsRef<Path>>(
     engine: &Engine,
     commit_dir: P,
     commit_store: Arc<Mutex<CommitStore>>,
-    storeroom: Storeroom,
 ) -> io::Result<Commit> {
     let commit_dir = commit_dir.as_ref();
-    let commit = commit_from_dir(engine, commit_dir, commit_store, storeroom)?;
+    let commit = commit_from_dir(engine, commit_dir, commit_store)?;
     Ok(commit)
 }
 
@@ -426,7 +403,6 @@ fn commit_from_dir<P: AsRef<Path>>(
     engine: &Engine,
     dir: P,
     commit_store: Arc<Mutex<CommitStore>>,
-    storeroom: Storeroom,
 ) -> io::Result<Commit> {
     println!("COMMIT_FROM_DIR {:?}", dir.as_ref());
     let dir = dir.as_ref();
@@ -468,7 +444,6 @@ fn commit_from_dir<P: AsRef<Path>>(
         &maybe_hash,
         commit_store.clone(),
         tree_pos.as_ref(),
-        storeroom,
     )?;
     tracing::trace!("after index_merkle_from_path");
 
@@ -542,19 +517,18 @@ fn index_merkle_from_path(
     maybe_commit_id: &Option<Hash>,
     commit_store: Arc<Mutex<CommitStore>>,
     maybe_tree_pos: Option<&TreePos>,
-    storeroom: Storeroom,
 ) -> io::Result<(NewContractIndex, ContractsMerkle)> {
     let leaf_dir = leaf_dir.as_ref();
 
     let mut index: NewContractIndex = NewContractIndex::new();
     let mut merkle: ContractsMerkle = ContractsMerkle::default();
 
-    let version = maybe_commit_id
+    let commit_id = maybe_commit_id
         .as_ref()
         .map(|h| hex::encode(h.as_bytes()))
-        .unwrap_or(DEFAULT_MASTER_VERSION.to_string());
+        .unwrap_or("NOT FOUND".to_string());
 
-    println!("VERSION={}", version);
+    println!("COMMIT_ID={}", commit_id);
 
     let mut merkle_src1: BTreeMap<u32, (Hash, u64, ContractId)> =
         BTreeMap::new();
@@ -573,30 +547,8 @@ fn index_merkle_from_path(
                     &main_path,
                     0,
                 );
-                if let Some((el_path, el_depth)) = res_found {
-                    (el_path, el_depth)
-                } else {
-                    // note: this should also include base's version
-                    // (recursively) or rather, all elements
-                    // of te base
-                    let r = storeroom.retrieve(
-                        &version,
-                        &contract_id_hex,
-                        ELEMENT_FILE,
-                    )?;
-                    if let Some(el_path) = r {
-                        (el_path, 0)
-                    } else {
-                        (PathBuf::new(), 0)
-                    }
-                }
-                // .unwrap_or((contract_leaf_path.join(ELEMENT_FILE), 0));
-                // .unwrap_or((
-                //     storeroom
-                //         .retrieve(&version, &contract_id_hex, ELEMENT_FILE)?
-                //         .unwrap_or(PathBuf::new()), // todo: errors are
-                // suppressed     0,
-                // ))
+                res_found.unwrap_or((PathBuf::new(), 0)) // todo: eliminate
+                                                         // PathBuf::new()
             };
             if element_path.is_file() {
                 let element_bytes = fs::read(&element_path)?;
@@ -637,7 +589,7 @@ fn index_merkle_from_path(
                 merkle.insert_with_int_pos(*pos, *int_pos as u64, *hash);
                 if let Some((hh, pospos, cid)) = merkle_src1.get(int_pos) {
                     if *hash != *hh {
-                        println!("DISCREPANCY hashes not equal at int pos={} contract={} {} != {} version={}", int_pos, hex::encode(cid.as_bytes()), hex::encode((*hash).as_bytes()), hex::encode((*hh).as_bytes()), version);
+                        println!("DISCREPANCY hashes not equal at int pos={} contract={} {} != {} commit_id={}", int_pos, hex::encode(cid.as_bytes()), hex::encode((*hash).as_bytes()), hex::encode((*hh).as_bytes()), commit_id);
                     }
                     if pos != pospos {
                         println!("DISCREPANCY pos not equal at int pos={} orig={} src1={}", int_pos, pos, pospos);
@@ -884,7 +836,6 @@ pub(crate) enum Call {
 fn sync_loop<P: AsRef<Path>>(
     root_dir: P,
     commit_store: Arc<Mutex<CommitStore>>,
-    storeroom: Storeroom,
     calls: mpsc::Receiver<Call>,
 ) {
     let root_dir = root_dir.as_ref();
@@ -908,7 +859,6 @@ fn sync_loop<P: AsRef<Path>>(
                     commit_store.clone(),
                     base,
                     contracts,
-                    storeroom.clone(),
                 );
                 match &io_result {
                     Ok(hash) => tracing::trace!(
@@ -979,12 +929,7 @@ fn sync_loop<P: AsRef<Path>>(
                         "finalizing commit proper started {}",
                         hex::encode(root.as_bytes())
                     );
-                    let io_result = finalize_commit(
-                        root,
-                        root_dir,
-                        commit,
-                        storeroom.clone(),
-                    );
+                    let io_result = finalize_commit(root, root_dir, commit);
                     match &io_result {
                         Ok(_) => tracing::trace!(
                             "finalizing commit proper finished: {:?}",
@@ -1061,34 +1006,7 @@ fn sync_loop<P: AsRef<Path>>(
     }
 }
 
-fn find_element_in_storeroom(
-    storeroom: Storeroom,
-    main_dir: impl AsRef<Path>,
-    base: Hash,
-    contract_id_hex: impl AsRef<str>,
-) -> io::Result<Option<PathBuf>> {
-    let hash_hex = hex::encode(base.as_bytes());
-    let el = storeroom.retrieve(&hash_hex, &contract_id_hex, ELEMENT_FILE)?;
-    if el.is_some() {
-        Ok(el)
-    } else {
-        let base_info_path = main_dir.as_ref().join(hash_hex).join(BASE_FILE);
-        let base_info = base_from_path(base_info_path)?;
-        if let Some(new_base) = base_info.maybe_base {
-            find_element_in_storeroom(
-                storeroom.clone(),
-                main_dir,
-                new_base,
-                contract_id_hex.as_ref(),
-            )
-        } else {
-            Ok(None)
-        }
-    }
-}
-
 fn scan_elements_from_commit(
-    storeroom: Storeroom,
     main_dir: impl AsRef<Path>,
     leaf_dir: impl AsRef<Path>,
     elements: &mut BTreeMap<ContractId, ContractIndexElement>,
@@ -1113,20 +1031,6 @@ fn scan_elements_from_commit(
                     main_dir,
                     0,
                 ) {
-                    let element_path = if !element_path.is_file() {
-                        let el = find_element_in_storeroom(
-                            storeroom.clone(),
-                            main_dir,
-                            hash,
-                            contract_id_hex,
-                        )?;
-                        if el.is_some() {
-                            println!("ELEMENT FOUND IN STOREROOM");
-                        }
-                        el.unwrap_or(PathBuf::new())
-                    } else {
-                        element_path
-                    };
                     if element_path.is_file() {
                         if !elements.contains_key(&contract_id) {
                             count += 1;
@@ -1168,7 +1072,6 @@ fn write_commit<P: AsRef<Path>>(
     commit_store: Arc<Mutex<CommitStore>>,
     base: Option<Commit>,
     commit_contracts: BTreeMap<ContractId, ContractDataEntry>,
-    storeroom: Storeroom,
 ) -> io::Result<Hash> {
     let root_dir = root_dir.as_ref();
 
@@ -1219,12 +1122,6 @@ fn write_commit<P: AsRef<Path>>(
         };
         elements_to_verify.insert(*contract_id, element.clone());
         new_elements.insert(*contract_id, element.clone());
-        storeroom.store_bytes(
-            hex::encode(element.hash().expect("cc").as_bytes()).as_bytes(),
-            "milosz1",
-            hex::encode(contract_id.as_bytes()),
-            "hash",
-        )?;
     }
 
     let root = *commit.root();
@@ -1245,7 +1142,6 @@ fn write_commit<P: AsRef<Path>>(
         &root_hex,
         base_info.clone(),
         &new_elements,
-        storeroom.clone(),
     )
     .map(|_| {
         commit_store
@@ -1256,7 +1152,6 @@ fn write_commit<P: AsRef<Path>>(
     });
 
     scan_elements_from_commit(
-        storeroom.clone(),
         root_dir.join(MAIN_DIR),
         root_dir.join(MAIN_DIR).join(LEAF_DIR),
         &mut elements_to_verify,
@@ -1282,7 +1177,7 @@ fn write_commit<P: AsRef<Path>>(
         commit.contracts_merkle.tree_pos(),
     );
     println!(
-        "WRITTEN COMMIT WITH ROOT={}  ================= DEEPSEEK",
+        "WRITTEN COMMIT WITH ROOT={}  ============",
         root_hex
     );
 
@@ -1304,7 +1199,6 @@ fn write_commit_inner<P: AsRef<Path>, S: AsRef<str>>(
     commit_id: S,
     mut base_info: BaseInfo,
     new_elements: &BTreeMap<ContractId, ContractIndexElement>,
-    storeroom: Storeroom,
 ) -> io::Result<()> {
     let root_dir = root_dir.as_ref();
 
@@ -1397,12 +1291,6 @@ fn write_commit_inner<P: AsRef<Path>, S: AsRef<str>>(
                     )
                 })?;
             fs::write(&element_file_path, element_bytes)?;
-            storeroom.store_bytes(
-                hex::encode(element.hash().expect("cc").as_bytes()).as_bytes(),
-                "milosz2",
-                hex::encode(contract_id.as_bytes()),
-                "hash",
-            )?;
         }
     }
     tracing::trace!("persisting index finished");
@@ -1488,7 +1376,6 @@ fn finalize_commit<P: AsRef<Path>>(
     root: Hash,
     root_dir: P,
     _commit: &Commit,
-    storeroom: Storeroom,
 ) -> io::Result<()> {
     let main_dir = root_dir.as_ref().join(MAIN_DIR);
     let root = hex::encode(root);
@@ -1508,16 +1395,6 @@ fn finalize_commit<P: AsRef<Path>>(
             let src_file_path = src_path.join(&filename);
             let dst_file_path = dst_path.join(&filename);
             if src_file_path.is_file() {
-                // println!(
-                //     "storing {:?} {} {} {}",
-                //     src_file_path, root, contract_hex, filename
-                // );
-                storeroom.store(
-                    &src_file_path,
-                    &root,
-                    &contract_hex,
-                    filename,
-                )?;
                 fs::rename(&src_file_path, dst_file_path)?;
             }
         }
@@ -1529,16 +1406,6 @@ fn finalize_commit<P: AsRef<Path>>(
         let src_leaf_file_path = src_leaf_path.join(ELEMENT_FILE);
         let dst_leaf_file_path = dst_leaf_path.join(ELEMENT_FILE);
         if src_leaf_file_path.is_file() {
-            // println!(
-            //     "storing {:?} {} {} {}",
-            //     src_leaf_file_path, root, contract_hex, ELEMENT_FILE
-            // );
-            storeroom.store(
-                &src_leaf_file_path,
-                &root,
-                &contract_hex,
-                ELEMENT_FILE,
-            )?;
             fs::rename(&src_leaf_file_path, dst_leaf_file_path)?;
         }
         fs::remove_dir(src_leaf_path)?;
@@ -1548,8 +1415,6 @@ fn finalize_commit<P: AsRef<Path>>(
     let _ = fs::remove_file(tree_pos_path);
     let _ = fs::remove_file(tree_pos_opt_path);
     fs::remove_dir(commit_path)?;
-    println!("STOREROOM finalizing version {} DEEPSEEK", &root);
-    storeroom.finalize_version(&root)?;
 
     Ok(())
 }

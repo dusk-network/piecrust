@@ -20,10 +20,9 @@ use crate::store::tree::{
 };
 use crate::store::{
     base_from_path, Bytecode, Call, Commit, CommitStore, Memory, Metadata,
-    Module, BASE_FILE, BYTECODE_DIR, DEFAULT_MASTER_VERSION, ELEMENT_FILE,
-    MAIN_DIR, MEMORY_DIR, METADATA_EXTENSION, OBJECTCODE_EXTENSION, PAGE_SIZE,
+    Module, BASE_FILE, BYTECODE_DIR, ELEMENT_FILE, MAIN_DIR, MEMORY_DIR,
+    METADATA_EXTENSION, OBJECTCODE_EXTENSION, PAGE_SIZE,
 };
-use crate::storeroom::Storeroom;
 use crate::Error;
 
 #[derive(Debug, Clone)]
@@ -54,9 +53,6 @@ pub struct ContractSession {
     call: mpsc::Sender<Call>,
 
     commit_store: Arc<Mutex<CommitStore>>,
-
-    #[allow(dead_code)]
-    storeroom: Storeroom,
 }
 
 pub type ContractMemTree = dusk_merkle::Tree<Hash, 32, 2>;
@@ -78,7 +74,6 @@ impl ContractSession {
         base: Option<Commit>,
         call: mpsc::Sender<Call>,
         commit_store: Arc<Mutex<CommitStore>>,
-        storeroom: Storeroom,
     ) -> Self {
         Self {
             contracts: BTreeMap::new(),
@@ -87,7 +82,6 @@ impl ContractSession {
             root_dir: root_dir.as_ref().into(),
             call,
             commit_store,
-            storeroom,
         }
     }
 
@@ -296,11 +290,6 @@ impl ContractSession {
         contract: ContractId,
     ) -> io::Result<Option<ContractDataEntry>> {
         let commit_id = self.base.as_ref().map(|commit| *commit.root());
-        let storeroom = self.storeroom.clone();
-        let version = commit_id
-            .as_ref()
-            .map(|h| hex::encode(h.as_bytes()))
-            .unwrap_or(DEFAULT_MASTER_VERSION.to_string());
         match self.contracts.entry(contract) {
             Vacant(entry) => match &self.base {
                 None => Ok(None),
@@ -336,29 +325,12 @@ impl ContractSession {
                                             match page_indices
                                                 .contains(&page_index)
                                             {
-                                                true => {
-                                                    let x = Self::find_page(
-                                                        page_index,
-                                                        commit_id,
-                                                        &memory_path,
-                                                        &base_dir,
-                                                    );
-                                                    if x.is_some() {
-                                                        x
-                                                    } else {
-                                                        // memory_path.join(
-                                                        //     format!(
-                                                        //         "{page_index}"
-                                                        //     ),
-                                                        // ),
-                                                        Some(storeroom.retrieve(
-                                                            &version,
-                                                            &contract_hex,
-                                                            format!("{page_index}")
-                                                            // ).ok()?.unwrap_or(PathBuf::new()) // todo: errors are suppressed here
-                                                        ).ok()?.expect("mem page should exist"))
-                                                    }
-                                                }
+                                                true => Self::find_page(
+                                                    page_index,
+                                                    commit_id,
+                                                    &memory_path,
+                                                    &base_dir,
+                                                ),
                                                 false => None,
                                             }
                                         },
