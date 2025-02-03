@@ -1163,9 +1163,16 @@ fn write_commit<P: AsRef<Path>>(
         commit.contracts_merkle_len()
     );
 
+    let root_from_elements_ok =
+        calc_root_from_elements(&elements_to_verify) == root;
     println!(
-        "ROOT_OK_WITH_ELEMENTS={}",
-        calc_root_from_elements(&elements_to_verify) == root
+        "ROOT_OK_WITH_ELEMENTS={} {}",
+        root_from_elements_ok,
+        if root_from_elements_ok {
+            ""
+        } else {
+            "order matters"
+        }
     );
     println!(
         "ROOT_OK_WITH_TREE_POS={}",
