@@ -45,7 +45,6 @@ pub use tree::PageOpening;
 const BYTECODE_DIR: &str = "bytecode";
 const MEMORY_DIR: &str = "memory";
 const LEAF_DIR: &str = "leaf";
-const MASTER_DIR: &str = "master";
 const BASE_FILE: &str = "base";
 const TREE_POS_FILE: &str = "tree_pos";
 const TREE_POS_OPT_FILE: &str = "tree_pos_opt";
@@ -108,11 +107,6 @@ impl CommitStore {
             }
             None => {
                 let e = self.main_index.get(contract_id);
-                // println!(
-                //     "MAIN_INDEX get_element_and_base ctr={} gotten={}",
-                //     hex::encode(contract_id.as_bytes()),
-                //     e.is_some()
-                // );
                 (e.map(|a| a as *const ContractIndexElement), None)
             }
         }
@@ -129,7 +123,6 @@ impl CommitStore {
                 (e.map(|a| a as *mut ContractIndexElement), commit.base)
             }
             None => {
-                println!("MAIN_INDEX get_element_and_base_mut");
                 let e = self.main_index.get_mut(contract_id);
                 (e.map(|a| a as *mut ContractIndexElement), None)
             }
@@ -145,11 +138,7 @@ impl CommitStore {
     }
 
     pub fn remove_commit(&mut self, hash: &Hash) {
-        println!("REMOVE_COMMIT {}", hex::encode(hash.as_bytes()));
         self.commits.remove(hash);
-        // if let Some(commit) = self.commits.remove(hash) {
-        //     commit.index.move_into(&mut self.main_index);
-        // }
     }
 
     pub fn insert_main_index(
@@ -157,7 +146,6 @@ impl CommitStore {
         contract_id: &ContractId,
         element: ContractIndexElement,
     ) {
-        println!("MAIN_INDEX insert_main_index");
         self.main_index.insert_contract_index(contract_id, element);
     }
 }
@@ -201,7 +189,7 @@ impl ContractStore {
         // debugging.
         let sync_loop = thread::Builder::new()
             .name(String::from("PiecrustSync"))
-            .spawn(move || sync_loop(loop_root_dir, commit_store, calls))?;
+            .spawn(|| sync_loop(loop_root_dir, commit_store, calls))?;
 
         self.sync_loop = Some(sync_loop);
         self.call = Some(call);
@@ -326,7 +314,6 @@ fn read_all_commits<P: AsRef<Path>>(
             if filename == MEMORY_DIR
                 || filename == BYTECODE_DIR
                 || filename == LEAF_DIR
-                || filename == MASTER_DIR
             {
                 continue;
             }
@@ -759,7 +746,7 @@ impl Commit {
             hex::encode(root.as_bytes())
         );
         let pos = position_from_contract(&contract_id);
-        let internal_pos = contracts_merkle.insert(pos, root, &contract_id);
+        let internal_pos = contracts_merkle.insert(pos, root);
         element.set_hash(Some(root));
         element.set_int_pos(Some(internal_pos));
         element.clone()
@@ -808,10 +795,6 @@ impl Commit {
             .map(|a| unsafe { &mut *a }),
             &mut self.contracts_merkle,
         )
-    }
-
-    pub fn contracts_merkle_len(&self) -> u64 {
-        self.contracts_merkle.len()
     }
 }
 
@@ -905,7 +888,6 @@ fn sync_loop<P: AsRef<Path>>(
                 }
 
                 let io_result = delete_commit_dir(root_dir, root);
-                println!("CALLING REMOVE_COMMIT from CommitDelete");
                 commit_store.lock().unwrap().remove_commit(&root);
                 tracing::trace!("delete commit finished");
                 let _ = replier.send(io_result);
@@ -946,7 +928,6 @@ fn sync_loop<P: AsRef<Path>>(
                             e
                         ),
                     }
-                    println!("CALLING REMOVE_COMMIT from CommitFinalize");
                     commit_store.remove_commit(&root);
                     tracing::trace!("finalizing commit finished");
                     let _ = replier.send(io_result);
@@ -997,7 +978,6 @@ fn sync_loop<P: AsRef<Path>>(
                                     for replier in entry.remove() {
                                         let io_result =
                                             delete_commit_dir(root_dir, base);
-                                        println!("CALLING REMOVE_COMMIT from SessionDrop");
                                         commit_store.lock().unwrap().remove_commit(&base);
                                         let _ = replier.send(io_result);
                                     }
@@ -1112,11 +1092,6 @@ fn write_commit<P: AsRef<Path>>(
     let mut commit =
         base.unwrap_or(Commit::new(&commit_store, base_info.maybe_base));
 
-    println!(
-        "CONTRACTS_MERKLE_LEN BEFORE={}",
-        commit.contracts_merkle_len()
-    );
-
     let mut elements_to_verify =
         BTreeMap::<ContractId, ContractIndexElement>::new();
     let mut new_elements = BTreeMap::<ContractId, ContractIndexElement>::new();
@@ -1163,11 +1138,6 @@ fn write_commit<P: AsRef<Path>>(
         base_info.maybe_base,
     )?;
 
-    println!(
-        "CONTRACTS_MERKLE_LEN AFTER={}",
-        commit.contracts_merkle_len()
-    );
-
     let root_from_elements_ok =
         calc_root_from_elements(&elements_to_verify) == root;
     println!(
@@ -1192,13 +1162,6 @@ fn write_commit<P: AsRef<Path>>(
 
     ret
 }
-
-// fn s_write(path: impl AsRef<Path>, content: impl AsRef<[u8]>) ->
-// io::Result<()>{     let mut f = File::create(path.as_ref())?;
-//     f.write_all(content.as_ref())?;
-//     f.flush()?;
-//     f.sync_all()
-// }
 
 /// Writes a commit to disk.
 fn write_commit_inner<P: AsRef<Path>, S: AsRef<str>>(
