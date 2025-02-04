@@ -370,9 +370,9 @@ fn commit_id_to_hash<S: AsRef<str>>(commit_id: S) -> Hash {
 
 fn contract_id_from_hex<S: AsRef<str>>(contract_id: S) -> ContractId {
     let bytes: [u8; 32] = hex::decode(contract_id.as_ref())
-        .expect("Hex decoding of commit id string should succeed")
+        .expect("Hex decoding of contract id string should succeed")
         .try_into()
-        .expect("Commit id string conversion should succeed");
+        .expect("Contract id string conversion should succeed");
     ContractId::from_bytes(bytes)
 }
 
@@ -957,12 +957,13 @@ fn write_commit<P: AsRef<Path>>(
 
     let mut commit =
         base.unwrap_or(Commit::new(&commit_store, base_info.maybe_base));
+
     for (contract_id, contract_data) in &commit_contracts {
         if contract_data.is_new {
-            commit.remove_and_insert(*contract_id, &contract_data.memory);
+            commit.remove_and_insert(*contract_id, &contract_data.memory)
         } else {
-            commit.insert(*contract_id, &contract_data.memory);
-        }
+            commit.insert(*contract_id, &contract_data.memory)
+        };
     }
 
     let root = *commit.root();
@@ -1146,22 +1147,22 @@ fn finalize_commit<P: AsRef<Path>>(
             main_dir.join(MEMORY_DIR).join(&contract_hex).join(&root);
         let dst_path = main_dir.join(MEMORY_DIR).join(&contract_hex);
         for entry in fs::read_dir(&src_path)? {
-            let filename = entry?.file_name();
+            let filename = entry?.file_name().to_string_lossy().to_string();
             let src_file_path = src_path.join(&filename);
             let dst_file_path = dst_path.join(&filename);
             if src_file_path.is_file() {
-                fs::rename(src_file_path, dst_file_path)?;
+                fs::rename(&src_file_path, dst_file_path)?;
             }
         }
         fs::remove_dir(&src_path)?;
         // LEAF
         let src_leaf_path =
             main_dir.join(LEAF_DIR).join(&contract_hex).join(&root);
-        let dst_leaf_path = main_dir.join(LEAF_DIR).join(contract_hex);
+        let dst_leaf_path = main_dir.join(LEAF_DIR).join(&contract_hex);
         let src_leaf_file_path = src_leaf_path.join(ELEMENT_FILE);
         let dst_leaf_file_path = dst_leaf_path.join(ELEMENT_FILE);
         if src_leaf_file_path.is_file() {
-            fs::rename(src_leaf_file_path, dst_leaf_file_path)?;
+            fs::rename(&src_leaf_file_path, dst_leaf_file_path)?;
         }
         fs::remove_dir(src_leaf_path)?;
     }
