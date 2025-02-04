@@ -181,7 +181,14 @@ impl ContractSession {
         main_path: impl AsRef<Path>,
     ) -> Option<PathBuf> {
         match commit {
-            None => None,
+            None => {
+                let path = memory_path.as_ref().join(format!("{page_index}"));
+                if path.is_file() {
+                    Some(path)
+                } else {
+                    None
+                }
+            }
             Some(hash) => {
                 let hash_hex = hex::encode(hash.as_bytes());
                 let path = memory_path
@@ -193,13 +200,21 @@ impl ContractSession {
                 } else {
                     let base_info_path =
                         main_path.as_ref().join(hash_hex).join(BASE_FILE);
-                    let index = base_from_path(base_info_path).ok()?;
-                    Self::find_page(
-                        page_index,
-                        index.maybe_base,
-                        memory_path,
-                        main_path,
-                    )
+                    if let Ok(index) = base_from_path(base_info_path) {
+                        Self::find_page(
+                            page_index,
+                            index.maybe_base,
+                            memory_path,
+                            main_path,
+                        )
+                    } else {
+                        Self::find_page(
+                            page_index,
+                            None,
+                            memory_path,
+                            main_path,
+                        )
+                    }
                 }
             }
         }
@@ -233,13 +248,21 @@ impl ContractSession {
                 } else {
                     let base_info_path =
                         main_path.as_ref().join(hash_hex).join(BASE_FILE);
-                    let index = base_from_path(base_info_path).ok()?;
-                    Self::find_element(
-                        index.maybe_base,
-                        leaf_path,
-                        main_path,
-                        depth + 1,
-                    )
+                    if let Ok(index) = base_from_path(base_info_path) {
+                        Self::find_element(
+                            index.maybe_base,
+                            leaf_path,
+                            main_path,
+                            depth + 1,
+                        )
+                    } else {
+                        Self::find_element(
+                            None,
+                            leaf_path,
+                            main_path,
+                            depth + 1,
+                        )
+                    }
                 }
             }
         }
@@ -277,7 +300,7 @@ impl ContractSession {
                             let metadata_path = bytecode_path
                                 .with_extension(METADATA_EXTENSION);
                             let memory_path =
-                                base_dir.join(MEMORY_DIR).join(contract_hex);
+                                base_dir.join(MEMORY_DIR).join(&contract_hex);
 
                             let bytecode = Bytecode::from_file(bytecode_path)?;
                             let module =
@@ -295,20 +318,11 @@ impl ContractSession {
                                             match page_indices
                                                 .contains(&page_index)
                                             {
-                                                true => Some(
-                                                    Self::find_page(
-                                                        page_index,
-                                                        commit_id,
-                                                        &memory_path,
-                                                        &base_dir,
-                                                    )
-                                                    .unwrap_or(
-                                                        memory_path.join(
-                                                            format!(
-                                                                "{page_index}"
-                                                            ),
-                                                        ),
-                                                    ),
+                                                true => Self::find_page(
+                                                    page_index,
+                                                    commit_id,
+                                                    &memory_path,
+                                                    &base_dir,
                                                 ),
                                                 false => None,
                                             }

@@ -341,10 +341,6 @@ fn read_commit<P: AsRef<Path>>(
     Ok(commit)
 }
 
-fn page_path<P: AsRef<Path>>(memory_dir: P, page_index: usize) -> PathBuf {
-    memory_dir.as_ref().join(format!("{page_index}"))
-}
-
 fn page_path_main<P: AsRef<Path>, S: AsRef<str>>(
     memory_dir: P,
     page_index: usize,
@@ -471,23 +467,18 @@ fn commit_from_dir<P: AsRef<Path>>(
         let contract_memory_dir = memory_dir.join(&contract_hex);
 
         for page_index in contract_index.page_indices() {
-            let main_page_path = page_path(&contract_memory_dir, *page_index);
-            if !main_page_path.is_file() {
-                let path = ContractSession::find_page(
-                    *page_index,
-                    maybe_hash,
-                    &contract_memory_dir,
-                    main_dir,
-                );
-                let found = path.map(|p| p.is_file()).unwrap_or(false);
-                if !found {
-                    return Err(io::Error::new(
-                        io::ErrorKind::InvalidData,
-                        format!(
-                            "Non-existing memory for contract: {contract_hex}"
-                        ),
-                    ));
-                }
+            let page_path = ContractSession::find_page(
+                *page_index,
+                maybe_hash,
+                &contract_memory_dir,
+                main_dir,
+            );
+            let found = page_path.map(|p| p.is_file()).unwrap_or(false);
+            if !found {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!("Non-existing memory for contract: {contract_hex}"),
+                ));
             }
         }
     }
