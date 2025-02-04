@@ -95,7 +95,7 @@ impl ContractSession {
         let mut commit = self
             .base
             .as_ref()
-            .map(|c| c.fast_clone(&mut self.contracts.keys()))
+            .cloned()
             .unwrap_or(Commit::new(&self.commit_store, None));
         for (contract, entry) in &self.contracts {
             commit.insert(*contract, &entry.memory);
