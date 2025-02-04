@@ -138,9 +138,7 @@ impl CommitStore {
     }
 
     pub fn remove_commit(&mut self, hash: &Hash) {
-        if let Some(commit) = self.commits.remove(hash) {
-            commit.index.move_into(&mut self.main_index);
-        }
+        self.commits.remove(hash);
     }
 
     pub fn insert_main_index(
@@ -518,21 +516,21 @@ fn index_merkle_from_path(
                 0,
             );
             if let Some((element_path, element_depth)) = path_depth_pair {
-            if element_path.is_file() {
-                let element_bytes = fs::read(&element_path)?;
-                let element: ContractIndexElement =
-                    rkyv::from_bytes(&element_bytes).map_err(|err| {
-                        tracing::trace!(
-                            "deserializing element file failed {}",
-                            err
-                        );
-                        io::Error::new(
-                            io::ErrorKind::InvalidData,
-                            format!(
+                if element_path.is_file() {
+                    let element_bytes = fs::read(&element_path)?;
+                    let element: ContractIndexElement =
+                        rkyv::from_bytes(&element_bytes).map_err(|err| {
+                            tracing::trace!(
+                                "deserializing element file failed {}",
+                                err
+                            );
+                            io::Error::new(
+                                io::ErrorKind::InvalidData,
+                                format!(
                             "Invalid element file \"{element_path:?}\": {err}"
                         ),
-                        )
-                    })?;
+                            )
+                        })?;
                     if let Some(h) = element.hash() {
                         merkle_from_elements.insert(
                             element.int_pos().expect("aa") as u32,
@@ -543,17 +541,17 @@ fn index_merkle_from_path(
                             ),
                         );
                     }
-                if element_depth != u32::MAX {
-                    index.insert_contract_index(&contract_id, element);
-                } else {
-                    commit_store
-                        .lock()
-                        .unwrap()
-                        .insert_main_index(&contract_id, element);
+                    if element_depth != u32::MAX {
+                        index.insert_contract_index(&contract_id, element);
+                    } else {
+                        commit_store
+                            .lock()
+                            .unwrap()
+                            .insert_main_index(&contract_id, element);
+                    }
                 }
             }
         }
-    }
     }
 
     match maybe_tree_pos {
@@ -608,7 +606,7 @@ fn tree_pos_from_path(
         })?)
     } else {
         None
-        })
+    })
 }
 
 #[derive(Debug, Clone)]
