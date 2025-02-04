@@ -1118,10 +1118,10 @@ fn write_commit<P: AsRef<Path>>(
 
     let ret = write_commit_inner(
         root_dir,
+	    &commit,
         commit_contracts,
         &root_hex,
         base_info.clone(),
-        &new_elements,
     )
     .map(|_| {
         commit_store
@@ -1166,10 +1166,10 @@ fn write_commit<P: AsRef<Path>>(
 /// Writes a commit to disk.
 fn write_commit_inner<P: AsRef<Path>, S: AsRef<str>>(
     root_dir: P,
+    commit: &Commit,
     commit_contracts: BTreeMap<ContractId, ContractDataEntry>,
     commit_id: S,
     mut base_info: BaseInfo,
-    new_elements: &BTreeMap<ContractId, ContractIndexElement>,
 ) -> io::Result<()> {
     let root_dir = root_dir.as_ref();
 
@@ -1245,8 +1245,7 @@ fn write_commit_inner<P: AsRef<Path>, S: AsRef<str>>(
     }
 
     tracing::trace!("persisting index started");
-    // for (contract_id, element) in commit.index.iter() {
-    for (contract_id, element) in new_elements.iter() {
+    for (contract_id, element) in commit.index.iter() {
         if commit_contracts.contains_key(contract_id) {
             let element_dir_path = directories
                 .leaf_main_dir
