@@ -100,8 +100,6 @@ impl ContractSession {
             .base
             .as_ref()
             .cloned()
-            // .map(|c| c.fast_clone(&mut self.contracts.keys()))
-            // .map(|c| c.clone())
             .unwrap_or(Commit::new(&self.commit_store, None));
         for (contract, entry) in &self.contracts {
             commit.insert(*contract, &entry.memory);
@@ -202,7 +200,6 @@ impl ContractSession {
                     .join(&hash_hex)
                     .join(format!("{page_index}"));
                 if path.is_file() {
-                    //println!("FIND PAGE RETURNED {:?}", path);
                     Some(path)
                 } else {
                     let base_info_path =

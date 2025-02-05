@@ -99,7 +99,6 @@ pub struct ContractsMerkle {
     inner_tree: Tree,
     dict: BTreeMap<u64, u64>,
     tree_pos: TreePos,
-    contracts: BTreeMap<ContractId, u64>,
 }
 
 impl Default for ContractsMerkle {
@@ -108,18 +107,12 @@ impl Default for ContractsMerkle {
             inner_tree: Tree::new(),
             dict: BTreeMap::new(),
             tree_pos: TreePos::default(),
-            contracts: BTreeMap::new(),
         }
     }
 }
 
 impl ContractsMerkle {
-    pub fn insert(
-        &mut self,
-        pos: u64,
-        hash: Hash,
-        contract_id: &ContractId,
-    ) -> u64 {
+    pub fn insert(&mut self, pos: u64, hash: Hash) -> u64 {
         let new_pos = match self.dict.get(&pos) {
             None => {
                 let new_pos = (self.dict.len() + 1) as u64;
@@ -130,7 +123,6 @@ impl ContractsMerkle {
         };
         self.inner_tree.insert(new_pos, hash);
         self.tree_pos.insert(new_pos as u32, (hash, pos));
-        self.contracts.insert(*contract_id, new_pos);
         new_pos
     }
 
@@ -155,10 +147,6 @@ impl ContractsMerkle {
 
     pub fn len(&self) -> u64 {
         self.inner_tree.len()
-    }
-
-    pub fn get_contracts(&self) -> &BTreeMap<ContractId, u64> {
-        &self.contracts
     }
 }
 
@@ -373,16 +361,6 @@ impl NewContractIndex {
         &self,
     ) -> impl Iterator<Item = (&ContractId, &ContractIndexElement)> {
         self.inner_contracts.iter()
-    }
-
-    pub fn move_into(self, target: &mut Self) {
-        for (contract_id, element) in self.inner_contracts.into_iter() {
-            println!(
-                "MOVE_INTO for CONTRACT {}",
-                hex::encode(contract_id.as_bytes())
-            );
-            target.insert_contract_index(&contract_id, element);
-        }
     }
 }
 

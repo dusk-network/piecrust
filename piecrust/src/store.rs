@@ -45,7 +45,6 @@ pub use tree::PageOpening;
 const BYTECODE_DIR: &str = "bytecode";
 const MEMORY_DIR: &str = "memory";
 const LEAF_DIR: &str = "leaf";
-const MASTER_DIR: &str = "master";
 const BASE_FILE: &str = "base";
 const TREE_POS_FILE: &str = "tree_pos";
 const TREE_POS_OPT_FILE: &str = "tree_pos_opt";
@@ -201,7 +200,7 @@ impl ContractStore {
         // debugging.
         let sync_loop = thread::Builder::new()
             .name(String::from("PiecrustSync"))
-            .spawn(move || sync_loop(loop_root_dir, commit_store, calls))?;
+            .spawn(|| sync_loop(loop_root_dir, commit_store, calls))?;
 
         self.sync_loop = Some(sync_loop);
         self.call = Some(call);
@@ -326,7 +325,6 @@ fn read_all_commits<P: AsRef<Path>>(
             if filename == MEMORY_DIR
                 || filename == BYTECODE_DIR
                 || filename == LEAF_DIR
-                || filename == MASTER_DIR
             {
                 continue;
             }
@@ -433,7 +431,7 @@ fn commit_from_dir<P: AsRef<Path>>(
     let tree_pos = if let Some(ref hash_hex) = commit_id {
         let tree_pos_path = main_dir.join(hash_hex).join(TREE_POS_FILE);
         let tree_pos_opt_path = main_dir.join(hash_hex).join(TREE_POS_OPT_FILE);
-        Some(tree_pos_from_path(tree_pos_path, tree_pos_opt_path)?)
+        tree_pos_from_path(tree_pos_path, tree_pos_opt_path)?
     } else {
         None
     };
@@ -530,7 +528,7 @@ fn index_merkle_from_path(
 
     println!("COMMIT_ID={}", commit_id);
 
-    let mut merkle_src1: BTreeMap<u32, (Hash, u64, ContractId)> =
+    let mut merkle_from_elements: BTreeMap<u32, (Hash, u64, ContractId)> =
         BTreeMap::new();
 
     for entry in fs::read_dir(leaf_dir)? {
@@ -540,54 +538,59 @@ fn index_merkle_from_path(
                 entry.file_name().to_string_lossy().to_string();
             let contract_id = contract_id_from_hex(&contract_id_hex);
             let contract_leaf_path = leaf_dir.join(&contract_id_hex);
-            let (element_path, element_depth) = {
-                let res_found = ContractSession::find_element(
-                    *maybe_commit_id,
-                    &contract_leaf_path,
-                    &main_path,
-                    0,
-                );
-                res_found.unwrap_or((PathBuf::new(), 0)) // todo: eliminate
-                                                         // PathBuf::new()
-            };
-            if element_path.is_file() {
-                let element_bytes = fs::read(&element_path)?;
-                let element: ContractIndexElement =
-                    rkyv::from_bytes(&element_bytes).map_err(|err| {
-                        tracing::trace!(
-                            "deserializing element file failed {}",
-                            err
-                        );
-                        io::Error::new(
-                            io::ErrorKind::InvalidData,
-                            format!(
+            let path_depth_pair = ContractSession::find_element(
+                *maybe_commit_id,
+                &contract_leaf_path,
+                &main_path,
+                0,
+            );
+            if let Some((element_path, element_depth)) = path_depth_pair {
+                if element_path.is_file() {
+                    let element_bytes = fs::read(&element_path)?;
+                    let element: ContractIndexElement =
+                        rkyv::from_bytes(&element_bytes).map_err(|err| {
+                            tracing::trace!(
+                                "deserializing element file failed {}",
+                                err
+                            );
+                            io::Error::new(
+                                io::ErrorKind::InvalidData,
+                                format!(
                             "Invalid element file \"{element_path:?}\": {err}"
                         ),
-                        )
-                    })?;
-                if let Some(h) = element.hash() {
-                    merkle_src1.insert(
-                        element.int_pos().expect("aa") as u32,
-                        (h, position_from_contract(&contract_id), contract_id),
-                    );
-                }
-                if element_depth != u32::MAX {
-                    index.insert_contract_index(&contract_id, element);
-                } else {
-                    commit_store
-                        .lock()
-                        .unwrap()
-                        .insert_main_index(&contract_id, element);
+                            )
+                        })?;
+                    if let Some(h) = element.hash() {
+                        merkle_from_elements.insert(
+                            element.int_pos().expect("aa") as u32,
+                            (
+                                h,
+                                position_from_contract(&contract_id),
+                                contract_id,
+                            ),
+                        );
+                    }
+                    if element_depth != u32::MAX {
+                        index.insert_contract_index(&contract_id, element);
+                    } else {
+                        commit_store
+                            .lock()
+                            .unwrap()
+                            .insert_main_index(&contract_id, element);
+                    }
                 }
             }
         }
     }
 
     match maybe_tree_pos {
+        // for backwards compatibility we use TreePos if it exists
         Some(tree_pos) => {
             for (int_pos, (hash, pos)) in tree_pos.iter() {
                 merkle.insert_with_int_pos(*pos, *int_pos as u64, *hash);
-                if let Some((hh, pospos, cid)) = merkle_src1.get(int_pos) {
+                if let Some((hh, pospos, cid)) =
+                    merkle_from_elements.get(int_pos)
+                {
                     if *hash != *hh {
                         println!("DISCREPANCY hashes not equal at int pos={} contract={} {} != {} commit_id={}", int_pos, hex::encode(cid.as_bytes()), hex::encode((*hash).as_bytes()), hex::encode((*hh).as_bytes()), commit_id);
                     }
@@ -600,7 +603,10 @@ fn index_merkle_from_path(
             }
         }
         None => {
-            unreachable!()
+            // reading Merkle from elements
+            for (int_pos, (hash, pos, _)) in merkle_from_elements.iter() {
+                merkle.insert_with_int_pos(*pos, *int_pos as u64, *hash);
+            }
         }
     }
 
@@ -624,24 +630,24 @@ fn base_from_path<P: AsRef<Path>>(path: P) -> io::Result<BaseInfo> {
 fn tree_pos_from_path(
     path: impl AsRef<Path>,
     opt_path: impl AsRef<Path>,
-) -> io::Result<TreePos> {
+) -> io::Result<Option<TreePos>> {
     let path = path.as_ref();
 
-    let tree_pos = if opt_path.as_ref().exists() {
+    Ok(if opt_path.as_ref().exists() {
         let f = OpenOptions::new().read(true).open(opt_path.as_ref())?;
         let mut buf_f = BufReader::new(f);
-        TreePos::unmarshall(&mut buf_f)
-    } else {
+        Some(TreePos::unmarshall(&mut buf_f)?)
+    } else if path.exists() {
         let tree_pos_bytes = fs::read(path)?;
-        rkyv::from_bytes(&tree_pos_bytes).map_err(|err| {
+        Some(rkyv::from_bytes(&tree_pos_bytes).map_err(|err| {
             io::Error::new(
                 io::ErrorKind::InvalidData,
                 format!("Invalid tree positions file \"{path:?}\": {err}"),
             )
-        })
-    };
-
-    tree_pos
+        })?)
+    } else {
+        None
+    })
 }
 
 #[derive(Debug, Clone)]
@@ -664,26 +670,6 @@ impl Commit {
             maybe_hash: None,
             commit_store: Some(commit_store.clone()),
             base: maybe_base,
-        }
-    }
-
-    #[allow(dead_code)]
-    pub fn fast_clone<'a>(
-        &self,
-        contract_ids: impl Iterator<Item = &'a ContractId>,
-    ) -> Self {
-        let mut index = NewContractIndex::new();
-        for contract_id in contract_ids {
-            if let Some(a) = self.index.get(contract_id) {
-                index.insert_contract_index(contract_id, a.clone());
-            }
-        }
-        Self {
-            index,
-            contracts_merkle: self.contracts_merkle.clone(),
-            maybe_hash: self.maybe_hash,
-            commit_store: self.commit_store.clone(),
-            base: self.base,
         }
     }
 
@@ -753,7 +739,7 @@ impl Commit {
             hex::encode(root.as_bytes())
         );
         let pos = position_from_contract(&contract_id);
-        let internal_pos = contracts_merkle.insert(pos, root, &contract_id);
+        let internal_pos = contracts_merkle.insert(pos, root);
         element.set_hash(Some(root));
         element.set_int_pos(Some(internal_pos));
         element.clone()
@@ -1187,13 +1173,6 @@ fn write_commit<P: AsRef<Path>>(
 
     ret
 }
-
-// fn s_write(path: impl AsRef<Path>, content: impl AsRef<[u8]>) ->
-// io::Result<()>{     let mut f = File::create(path.as_ref())?;
-//     f.write_all(content.as_ref())?;
-//     f.flush()?;
-//     f.sync_all()
-// }
 
 /// Writes a commit to disk.
 fn write_commit_inner<P: AsRef<Path>, S: AsRef<str>>(
