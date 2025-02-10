@@ -247,11 +247,11 @@ impl TreePos {
 #[derive(Debug, Clone, Archive, Deserialize, Serialize)]
 #[archive_attr(derive(CheckBytes))]
 pub struct ContractIndexElement {
-    tree: PageTree,
-    len: usize,
-    page_indices: BTreeSet<usize>,
-    hash: Option<Hash>,
-    int_pos: Option<u64>,
+    pub tree: PageTree,
+    pub len: usize,
+    pub page_indices: BTreeSet<usize>,
+    pub hash: Option<Hash>,
+    pub int_pos: Option<u64>,
 }
 
 impl ContractIndexElement {

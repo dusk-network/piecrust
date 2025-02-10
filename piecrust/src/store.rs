@@ -30,7 +30,7 @@ use piecrust_uplink::ContractId;
 use session::ContractDataEntry;
 use tree::{Hash, NewContractIndex};
 
-use crate::store::commit::Hulk;
+use crate::store::commit::CommitHulk;
 use crate::store::tree::{
     position_from_contract, BaseInfo, ContractIndexElement, ContractsMerkle,
     TreePos,
@@ -93,40 +93,6 @@ impl CommitStore {
 
     pub fn get_commit(&self, hash: &Hash) -> Option<&Commit> {
         self.commits.get(hash)
-    }
-
-    pub fn get_element_and_base(
-        &self,
-        hash: &Hash,
-        contract_id: &ContractId,
-    ) -> (Option<*const ContractIndexElement>, Option<Hash>) {
-        match self.commits.get(hash) {
-            Some(commit) => {
-                let e = commit.index.get(contract_id);
-                (e.map(|a| a as *const ContractIndexElement), commit.base)
-            }
-            None => {
-                let e = self.main_index.get(contract_id);
-                (e.map(|a| a as *const ContractIndexElement), None)
-            }
-        }
-    }
-
-    pub fn get_element_and_base_mut(
-        &mut self,
-        hash: &Hash,
-        contract_id: &ContractId,
-    ) -> (Option<*mut ContractIndexElement>, Option<Hash>) {
-        match self.commits.get_mut(hash) {
-            Some(commit) => {
-                let e = commit.index.get_mut(contract_id);
-                (e.map(|a| a as *mut ContractIndexElement), commit.base)
-            }
-            None => {
-                let e = self.main_index.get_mut(contract_id);
-                (e.map(|a| a as *mut ContractIndexElement), None)
-            }
-        }
     }
 
     pub fn contains_key(&self, hash: &Hash) -> bool {
@@ -285,7 +251,11 @@ impl ContractStore {
 
     fn session_with_base(&self, base: Option<Hash>) -> ContractSession {
         let base_commit = base.and_then(|hash| {
-            self.commit_store.lock().unwrap().get_commit(&hash).cloned()
+            self.commit_store
+                .lock()
+                .unwrap()
+                .get_commit(&hash)
+                .map(|commit| commit.to_hulk())
         });
         ContractSession::new(
             &self.root_dir,
@@ -632,6 +602,7 @@ impl Commit {
         }
     }
 
+    #[allow(dead_code)]
     pub fn fast_clone<'a>(
         &self,
         contract_ids: impl Iterator<Item = &'a ContractId>,
@@ -649,6 +620,10 @@ impl Commit {
             commit_store: self.commit_store.clone(),
             base: self.base,
         }
+    }
+
+    pub fn to_hulk(&self) -> CommitHulk {
+        CommitHulk::from_commit(self)
     }
 
     #[allow(dead_code)]
@@ -726,29 +701,14 @@ impl Commit {
         &self,
         contract_id: &ContractId,
     ) -> Option<&ContractIndexElement> {
-        Hulk::deep_index_get(
-            &self.index,
-            *contract_id,
-            self.commit_store.clone(),
-            self.base,
-        )
-        .map(|a| unsafe { &*a })
+        self.index.get(contract_id)
     }
 
     pub fn element_and_merkle_mut(
         &mut self,
         contract_id: &ContractId,
     ) -> (Option<&mut ContractIndexElement>, &mut ContractsMerkle) {
-        (
-            Hulk::deep_index_get_mut(
-                &mut self.index,
-                *contract_id,
-                self.commit_store.clone(),
-                self.base,
-            )
-            .map(|a| unsafe { &mut *a }),
-            &mut self.contracts_merkle,
-        )
+        (self.index.get_mut(contract_id), &mut self.contracts_merkle)
     }
 }
 

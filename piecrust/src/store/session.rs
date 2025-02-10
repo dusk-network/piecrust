@@ -15,10 +15,11 @@ use dusk_wasmtime::Engine;
 use piecrust_uplink::ContractId;
 
 use crate::contract::ContractMetadata;
+use crate::store::commit::CommitHulk;
 use crate::store::tree::{Hash, PageOpening};
 use crate::store::{
-    base_from_path, Bytecode, Call, Commit, CommitStore, Memory, Metadata,
-    Module, BASE_FILE, BYTECODE_DIR, ELEMENT_FILE, MAIN_DIR, MEMORY_DIR,
+    base_from_path, Bytecode, Call, CommitStore, Memory, Metadata, Module,
+    BASE_FILE, BYTECODE_DIR, ELEMENT_FILE, MAIN_DIR, MEMORY_DIR,
     METADATA_EXTENSION, OBJECTCODE_EXTENSION, PAGE_SIZE,
 };
 use crate::Error;
@@ -45,11 +46,12 @@ pub struct ContractSession {
     contracts: BTreeMap<ContractId, ContractDataEntry>,
     engine: Engine,
 
-    base: Option<Commit>,
+    base: Option<CommitHulk>,
     root_dir: PathBuf,
 
     call: mpsc::Sender<Call>,
 
+    #[allow(dead_code)]
     commit_store: Arc<Mutex<CommitStore>>,
 }
 
@@ -67,7 +69,7 @@ impl ContractSession {
     pub(crate) fn new<P: AsRef<Path>>(
         root_dir: P,
         engine: Engine,
-        base: Option<Commit>,
+        base: Option<CommitHulk>,
         call: mpsc::Sender<Call>,
         commit_store: Arc<Mutex<CommitStore>>,
     ) -> Self {
@@ -96,7 +98,7 @@ impl ContractSession {
             .base
             .as_ref()
             .map(|c| c.fast_clone(&mut self.contracts.keys()))
-            .unwrap_or(Commit::new(&self.commit_store, None));
+            .unwrap_or(CommitHulk::new());
         for (contract, entry) in &self.contracts {
             commit.insert(*contract, &entry.memory);
         }
@@ -113,10 +115,7 @@ impl ContractSession {
         contract: ContractId,
     ) -> Option<impl Iterator<Item = (usize, &[u8], PageOpening)>> {
         tracing::trace!("memory_pages called commit cloning");
-        let mut commit = self
-            .base
-            .clone()
-            .unwrap_or(Commit::new(&self.commit_store, None));
+        let mut commit = self.base.clone().unwrap_or(CommitHulk::new());
         for (contract, entry) in &self.contracts {
             commit.insert(*contract, &entry.memory);
         }
@@ -152,7 +151,7 @@ impl ContractSession {
         let (replier, receiver) = mpsc::sync_channel(1);
 
         let mut contracts = BTreeMap::new();
-        let base = self.base.clone();
+        let base = self.base.as_ref().map(|c| c.to_commit());
 
         mem::swap(&mut self.contracts, &mut contracts);
 
@@ -287,7 +286,7 @@ impl ContractSession {
             Vacant(entry) => match &self.base {
                 None => Ok(None),
                 Some(base_commit) => {
-                    match base_commit.index_get(&contract).is_some() {
+                    match base_commit.index_contains_key(&contract) {
                         true => {
                             let base_dir = self.root_dir.join(MAIN_DIR);
 
@@ -363,7 +362,7 @@ impl ContractSession {
         if self.contracts.contains_key(&contract_id) {
             true
         } else if let Some(base_commit) = &self.base {
-            base_commit.index_get(&contract_id).is_some()
+            base_commit.index_contains_key(&contract_id)
         } else {
             false
         }
@@ -390,7 +389,7 @@ impl ContractSession {
         // If the position is already filled in the tree, the contract cannot be
         // inserted.
         if let Some(base) = self.base.as_ref() {
-            if base.index_get(&contract_id).is_some() {
+            if base.index_contains_key(&contract_id) {
                 return Err(io::Error::new(
                     io::ErrorKind::Other,
                     format!("Existing contract '{contract_id}'"),
