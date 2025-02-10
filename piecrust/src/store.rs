@@ -262,7 +262,6 @@ impl ContractStore {
             self.engine.clone(),
             base_commit,
             self.call.as_ref().expect("call should exist").clone(),
-            self.commit_store.clone(),
         )
     }
 }

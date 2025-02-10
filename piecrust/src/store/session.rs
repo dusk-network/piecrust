@@ -8,7 +8,7 @@ use std::collections::btree_map::Entry::{Occupied, Vacant};
 use std::collections::BTreeMap;
 use std::fmt::Debug;
 use std::path::{Path, PathBuf};
-use std::sync::{mpsc, Arc, Mutex};
+use std::sync::{mpsc, Arc};
 use std::{io, mem};
 
 use dusk_wasmtime::Engine;
@@ -18,9 +18,9 @@ use crate::contract::ContractMetadata;
 use crate::store::commit::CommitHulk;
 use crate::store::tree::{Hash, PageOpening};
 use crate::store::{
-    base_from_path, Bytecode, Call, CommitStore, Memory, Metadata, Module,
-    BASE_FILE, BYTECODE_DIR, ELEMENT_FILE, MAIN_DIR, MEMORY_DIR,
-    METADATA_EXTENSION, OBJECTCODE_EXTENSION, PAGE_SIZE,
+    base_from_path, Bytecode, Call, Memory, Metadata, Module, BASE_FILE,
+    BYTECODE_DIR, ELEMENT_FILE, MAIN_DIR, MEMORY_DIR, METADATA_EXTENSION,
+    OBJECTCODE_EXTENSION, PAGE_SIZE,
 };
 use crate::Error;
 
@@ -50,9 +50,6 @@ pub struct ContractSession {
     root_dir: PathBuf,
 
     call: mpsc::Sender<Call>,
-
-    #[allow(dead_code)]
-    commit_store: Arc<Mutex<CommitStore>>,
 }
 
 impl Debug for ContractSession {
@@ -71,7 +68,6 @@ impl ContractSession {
         engine: Engine,
         base: Option<CommitHulk>,
         call: mpsc::Sender<Call>,
-        commit_store: Arc<Mutex<CommitStore>>,
     ) -> Self {
         Self {
             contracts: BTreeMap::new(),
@@ -79,7 +75,6 @@ impl ContractSession {
             base,
             root_dir: root_dir.as_ref().into(),
             call,
-            commit_store,
         }
     }
 
