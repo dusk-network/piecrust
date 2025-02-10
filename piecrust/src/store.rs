@@ -76,14 +76,12 @@ impl Debug for ContractStore {
 #[derive(Debug)]
 pub struct CommitStore {
     commits: BTreeMap<Hash, Commit>,
-    main_index: NewContractIndex,
 }
 
 impl CommitStore {
     pub fn new() -> Self {
         Self {
             commits: BTreeMap::new(),
-            main_index: NewContractIndex::new(),
         }
     }
 
@@ -104,15 +102,28 @@ impl CommitStore {
     }
 
     pub fn remove_commit(&mut self, hash: &Hash) {
+        let mut elements_to_remove = BTreeMap::new();
+        if let Some(removed_commit) = self.commits.get(hash) {
+            for (contract_id, element) in
+                removed_commit.index.contracts().iter()
+            {
+                elements_to_remove.insert(*contract_id, element.hash());
+            }
+        }
+        // other commits should not keep finalized elements
+        for (h, commit) in self.commits.iter_mut() {
+            if h == hash {
+                continue;
+            }
+            for (c, hh) in elements_to_remove.iter() {
+                if let Some(el) = commit.index.get(c) {
+                    if el.hash() == *hh {
+                        commit.index.remove_contract_index(c);
+                    }
+                }
+            }
+        }
         self.commits.remove(hash);
-    }
-
-    pub fn insert_main_index(
-        &mut self,
-        contract_id: &ContractId,
-        element: ContractIndexElement,
-    ) {
-        self.main_index.insert_contract_index(contract_id, element);
     }
 }
 
@@ -387,7 +398,6 @@ fn commit_from_dir<P: AsRef<Path>>(
         main_dir,
         leaf_dir,
         &maybe_hash,
-        commit_store.clone(),
         tree_pos.as_ref(),
     )?;
     tracing::trace!("after index_merkle_from_path");
@@ -460,7 +470,6 @@ fn index_merkle_from_path(
     main_path: impl AsRef<Path>,
     leaf_dir: impl AsRef<Path>,
     maybe_commit_id: &Option<Hash>,
-    commit_store: Arc<Mutex<CommitStore>>,
     maybe_tree_pos: Option<&TreePos>,
 ) -> io::Result<(NewContractIndex, ContractsMerkle)> {
     let leaf_dir = leaf_dir.as_ref();
@@ -512,11 +521,6 @@ fn index_merkle_from_path(
                     }
                     if element_depth != u32::MAX {
                         index.insert_contract_index(&contract_id, element);
-                    } else {
-                        commit_store
-                            .lock()
-                            .unwrap()
-                            .insert_main_index(&contract_id, element);
                     }
                 }
             }
@@ -825,12 +829,12 @@ fn sync_loop<P: AsRef<Path>>(
                 }
 
                 let mut commit_store = commit_store.lock().unwrap();
-                if let Some(commit) = commit_store.get_commit(&root) {
+                if let Some(_commit) = commit_store.get_commit(&root) {
                     tracing::trace!(
                         "finalizing commit proper started {}",
                         hex::encode(root.as_bytes())
                     );
-                    let io_result = finalize_commit(root, root_dir, commit);
+                    let io_result = finalize_commit(root, root_dir);
                     match &io_result {
                         Ok(_) => tracing::trace!(
                             "finalizing commit proper finished: {:?}",
@@ -1106,11 +1110,7 @@ fn delete_commit_dir<P: AsRef<Path>>(
 }
 
 /// Finalize commit
-fn finalize_commit<P: AsRef<Path>>(
-    root: Hash,
-    root_dir: P,
-    _commit: &Commit,
-) -> io::Result<()> {
+fn finalize_commit<P: AsRef<Path>>(root: Hash, root_dir: P) -> io::Result<()> {
     let main_dir = root_dir.as_ref().join(MAIN_DIR);
     let root = hex::encode(root);
     let commit_path = main_dir.join(&root);
