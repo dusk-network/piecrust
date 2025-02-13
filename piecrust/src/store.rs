@@ -107,7 +107,9 @@ impl CommitStore {
             for (contract_id, element) in
                 removed_commit.index.contracts().iter()
             {
-                elements_to_remove.insert(*contract_id, element.hash());
+                if let Some(h) = element.hash() {
+                    elements_to_remove.insert(*contract_id, h);
+                }
             }
         }
         // other commits should not keep finalized elements
@@ -117,8 +119,10 @@ impl CommitStore {
             }
             for (c, hh) in elements_to_remove.iter() {
                 if let Some(el) = commit.index.get(c) {
-                    if el.hash() == *hh {
-                        commit.index.remove_contract_index(c);
+                    if let Some(el_hash) = el.hash() {
+                        if el_hash == *hh {
+                            commit.index.remove_contract_index(c);
+                        }
                     }
                 }
             }
