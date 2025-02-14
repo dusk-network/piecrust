@@ -18,6 +18,7 @@ mod metadata;
 mod module;
 mod session;
 mod tree;
+mod treepos;
 
 use std::collections::btree_map::Entry::*;
 use std::collections::BTreeMap;

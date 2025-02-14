@@ -8,8 +8,9 @@ use crate::store::commit::Commit;
 use crate::store::commit_store::CommitStore;
 use crate::store::tree::{
     position_from_contract, ContractIndexElement, ContractsMerkle, Hash,
-    NewContractIndex, TreePos,
+    NewContractIndex,
 };
+use crate::store::treepos::TreePos;
 use crate::store::{
     base_from_path, Bytecode, ContractSession, Module, BASE_FILE, BYTECODE_DIR,
     LEAF_DIR, MAIN_DIR, MEMORY_DIR, OBJECTCODE_EXTENSION, TREE_POS_FILE,
