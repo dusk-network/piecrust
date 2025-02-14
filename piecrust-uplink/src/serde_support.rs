@@ -20,8 +20,7 @@ impl Serialize for ContractId {
         &self,
         serializer: S,
     ) -> Result<S::Ok, S::Error> {
-        let s = hex::encode(self.to_bytes());
-        serializer.serialize_str(&s)
+        hex::serde::serialize(&self.to_bytes(), serializer)
     }
 }
 
@@ -29,17 +28,7 @@ impl<'de> Deserialize<'de> for ContractId {
     fn deserialize<D: Deserializer<'de>>(
         deserializer: D,
     ) -> Result<Self, D::Error> {
-        let s = String::deserialize(deserializer)?;
-        let decoded = hex::decode(&s).map_err(SerdeError::custom)?;
-        let decoded_len = decoded.len();
-        let byte_length_str = format!("{CONTRACT_ID_BYTES}");
-        let bytes: [u8; CONTRACT_ID_BYTES] =
-            decoded.try_into().map_err(|_| {
-                SerdeError::invalid_length(
-                    decoded_len,
-                    &byte_length_str.as_str(),
-                )
-            })?;
+        let bytes: [u8; CONTRACT_ID_BYTES] = hex::serde::deserialize(deserializer)?;
         Ok(bytes.into())
     }
 }

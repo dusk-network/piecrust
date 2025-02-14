@@ -27,7 +27,7 @@ rand = "0.8"
 [features]
 abi = []
 debug = []
-serde = ["dep:serde", "serde_json", "base64"]
+serde = ["dep:serde", "serde_json", "base64", "hex/serde"]
 
 [package.metadata.docs.rs]
 all-features = true
