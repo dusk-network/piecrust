@@ -88,3 +88,30 @@ impl TreePos {
         self.tree_pos.iter()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io;
+    use std::io::{BufReader, BufWriter};
+
+    #[test]
+    fn merkle_position_serialization() -> Result<(), io::Error> {
+        const TEST_SIZE: u32 = 262144;
+        const ELEM_SIZE: usize = 4 + 32 + 4;
+        let mut marshalled = TreePos::default();
+        let h = Hash::from([1u8; 32]);
+        for i in 0..TEST_SIZE {
+            marshalled.insert(i, (h, i as u64));
+        }
+        let v: Vec<u8> = Vec::new();
+        let mut w = BufWriter::with_capacity(TEST_SIZE as usize * ELEM_SIZE, v);
+        marshalled.marshall(&mut w)?;
+        let mut r = BufReader::new(w.buffer());
+        let unmarshalled = TreePos::unmarshall(&mut r)?;
+        for i in 0..TEST_SIZE {
+            assert_eq!(unmarshalled.tree_pos.get(&i), Some(&(h, i as u64)));
+        }
+        Ok(())
+    }
+}

@@ -10,10 +10,8 @@ use std::sync::{Arc, Mutex};
 use crate::store::commit_hulk::CommitHulk;
 use crate::store::commit_store::CommitStore;
 use crate::store::hasher::Hash;
-use crate::store::tree::{
-    position_from_contract, ContractIndexElement, ContractsMerkle,
-    NewContractIndex,
-};
+use crate::store::index::{ContractIndexElement, NewContractIndex};
+use crate::store::tree::{position_from_contract, ContractsMerkle};
 use crate::store::Memory;
 use crate::PageOpening;
 use piecrust_uplink::ContractId;

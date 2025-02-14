@@ -16,6 +16,7 @@ mod commit_remover;
 mod commit_store;
 mod commit_writer;
 mod hasher;
+mod index;
 mod memory;
 mod metadata;
 mod module;
