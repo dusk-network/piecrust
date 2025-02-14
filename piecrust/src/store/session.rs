@@ -15,7 +15,7 @@ use dusk_wasmtime::Engine;
 use piecrust_uplink::ContractId;
 
 use crate::contract::ContractMetadata;
-use crate::store::commit::CommitHulk;
+use crate::store::commit_hulk::CommitHulk;
 use crate::store::tree::{Hash, PageOpening};
 use crate::store::{
     base_from_path, Bytecode, Call, Memory, Metadata, Module, BASE_FILE,

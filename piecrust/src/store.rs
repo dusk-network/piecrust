@@ -8,18 +8,19 @@
 
 mod bytecode;
 mod commit;
+mod commit_hulk;
+mod commit_writer;
 mod memory;
 mod metadata;
 mod module;
 mod session;
 mod tree;
 
-use std::cell::Ref;
 use std::collections::btree_map::Entry::*;
 use std::collections::btree_map::Keys;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use std::fmt::{Debug, Formatter};
-use std::fs::{create_dir_all, OpenOptions};
+use std::fs::OpenOptions;
 use std::io::BufReader;
 use std::path::{Path, PathBuf};
 use std::sync::{mpsc, Arc, Mutex};
@@ -30,7 +31,8 @@ use piecrust_uplink::ContractId;
 use session::ContractDataEntry;
 use tree::{Hash, NewContractIndex};
 
-use crate::store::commit::CommitHulk;
+use crate::store::commit::Commit;
+use crate::store::commit_writer::CommitWriter;
 use crate::store::tree::{
     position_from_contract, BaseInfo, ContractIndexElement, ContractsMerkle,
     TreePos,
@@ -323,27 +325,6 @@ fn read_commit<P: AsRef<Path>>(
     Ok(commit)
 }
 
-fn page_path_main<P: AsRef<Path>, S: AsRef<str>>(
-    memory_dir: P,
-    page_index: usize,
-    commit_id: S,
-) -> io::Result<PathBuf> {
-    let commit_id = commit_id.as_ref();
-    let dir = memory_dir.as_ref().join(commit_id);
-    fs::create_dir_all(&dir)?;
-    Ok(dir.join(format!("{page_index}")))
-}
-
-fn base_path_main<P: AsRef<Path>, S: AsRef<str>>(
-    main_dir: P,
-    commit_id: S,
-) -> io::Result<PathBuf> {
-    let commit_id = commit_id.as_ref();
-    let dir = main_dir.as_ref().join(commit_id);
-    fs::create_dir_all(&dir)?;
-    Ok(dir.join(BASE_FILE))
-}
-
 fn commit_id_to_hash<S: AsRef<str>>(commit_id: S) -> Hash {
     let hash: [u8; 32] = hex::decode(commit_id.as_ref())
         .expect("Hex decoding of commit id string should succeed")
@@ -586,139 +567,6 @@ fn tree_pos_from_path(
     })
 }
 
-#[derive(Debug, Clone)]
-pub(crate) struct Commit {
-    index: NewContractIndex,
-    contracts_merkle: ContractsMerkle,
-    maybe_hash: Option<Hash>,
-    commit_store: Option<Arc<Mutex<CommitStore>>>,
-    base: Option<Hash>,
-}
-
-impl Commit {
-    pub fn new(
-        commit_store: &Arc<Mutex<CommitStore>>,
-        maybe_base: Option<Hash>,
-    ) -> Self {
-        Self {
-            index: NewContractIndex::new(),
-            contracts_merkle: ContractsMerkle::default(),
-            maybe_hash: None,
-            commit_store: Some(commit_store.clone()),
-            base: maybe_base,
-        }
-    }
-
-    #[allow(dead_code)]
-    pub fn fast_clone<'a>(
-        &self,
-        contract_ids: impl Iterator<Item = &'a ContractId>,
-    ) -> Self {
-        let mut index = NewContractIndex::new();
-        for contract_id in contract_ids {
-            if let Some(a) = self.index.get(contract_id) {
-                index.insert_contract_index(contract_id, a.clone());
-            }
-        }
-        Self {
-            index,
-            contracts_merkle: self.contracts_merkle.clone(),
-            maybe_hash: self.maybe_hash,
-            commit_store: self.commit_store.clone(),
-            base: self.base,
-        }
-    }
-
-    pub fn to_hulk(&self) -> CommitHulk {
-        CommitHulk::from_commit(self)
-    }
-
-    #[allow(dead_code)]
-    pub fn inclusion_proofs(
-        mut self,
-        contract_id: &ContractId,
-    ) -> Option<impl Iterator<Item = (usize, PageOpening)>> {
-        let contract = self.index.remove_contract_index(contract_id)?;
-
-        let pos = position_from_contract(contract_id);
-
-        let (iter, tree) = contract.page_indices_and_tree();
-        Some(iter.map(move |page_index| {
-            let tree_opening = self
-                .contracts_merkle
-                .opening(pos)
-                .expect("There must be a leaf for the contract");
-
-            let page_opening = tree
-                .opening(page_index as u64)
-                .expect("There must be a leaf for the page");
-
-            (
-                page_index,
-                PageOpening {
-                    tree: tree_opening,
-                    inner: page_opening,
-                },
-            )
-        }))
-    }
-
-    pub fn insert(&mut self, contract_id: ContractId, memory: &Memory) {
-        if self.index_get(&contract_id).is_none() {
-            self.index.insert_contract_index(
-                &contract_id,
-                ContractIndexElement::new(memory.is_64()),
-            );
-        }
-        let (element, contracts_merkle) =
-            self.element_and_merkle_mut(&contract_id);
-        let element = element.unwrap();
-
-        element.set_len(memory.current_len);
-
-        for (dirty_page, _, page_index) in memory.dirty_pages() {
-            let hash = Hash::new(dirty_page);
-            element.insert_page_index_hash(
-                *page_index,
-                *page_index as u64,
-                hash,
-            );
-        }
-
-        let root = *element.tree().root();
-        let pos = position_from_contract(&contract_id);
-        let internal_pos = contracts_merkle.insert(pos, root);
-        element.set_hash(Some(root));
-        element.set_int_pos(Some(internal_pos));
-    }
-
-    pub fn remove_and_insert(&mut self, contract: ContractId, memory: &Memory) {
-        self.index.remove_contract_index(&contract);
-        self.insert(contract, memory);
-    }
-
-    pub fn root(&self) -> Ref<Hash> {
-        tracing::trace!("calculating root started");
-        let ret = self.contracts_merkle.root();
-        tracing::trace!("calculating root finished");
-        ret
-    }
-
-    pub fn index_get(
-        &self,
-        contract_id: &ContractId,
-    ) -> Option<&ContractIndexElement> {
-        self.index.get(contract_id)
-    }
-
-    pub fn element_and_merkle_mut(
-        &mut self,
-        contract_id: &ContractId,
-    ) -> (Option<&mut ContractIndexElement>, &mut ContractsMerkle) {
-        (self.index.get_mut(contract_id), &mut self.contracts_merkle)
-    }
-}
-
 pub(crate) enum Call {
     Commit {
         contracts: BTreeMap<ContractId, ContractDataEntry>,
@@ -764,7 +612,7 @@ fn sync_loop<P: AsRef<Path>>(
                 replier,
             } => {
                 tracing::trace!("writing commit started");
-                let io_result = write_commit(
+                let io_result = CommitWriter::write(
                     root_dir,
                     commit_store.clone(),
                     base,
@@ -911,179 +759,6 @@ fn sync_loop<P: AsRef<Path>>(
             }
         }
     }
-}
-
-fn write_commit<P: AsRef<Path>>(
-    root_dir: P,
-    commit_store: Arc<Mutex<CommitStore>>,
-    base: Option<Commit>,
-    commit_contracts: BTreeMap<ContractId, ContractDataEntry>,
-) -> io::Result<Hash> {
-    let root_dir = root_dir.as_ref();
-
-    let base_info = BaseInfo {
-        maybe_base: base.as_ref().map(|base| *base.root()),
-        ..Default::default()
-    };
-
-    // base is already a copy, no point cloning it again
-
-    // let index = base
-    //     .as_ref()
-    //     .map_or(NewContractIndex::new(), |base| base.index.clone());
-    // let contracts_merkle =
-    //     base.as_ref().map_or(ContractsMerkle::default(), |base| {
-    //         base.contracts_merkle.clone()
-    //     });
-    // let mut commit = Commit {
-    //     index,
-    //     contracts_merkle,
-    //     maybe_hash: base.as_ref().and_then(|base| base.maybe_hash),
-    // };
-
-    let mut commit =
-        base.unwrap_or(Commit::new(&commit_store, base_info.maybe_base));
-
-    for (contract_id, contract_data) in &commit_contracts {
-        if contract_data.is_new {
-            commit.remove_and_insert(*contract_id, &contract_data.memory)
-        } else {
-            commit.insert(*contract_id, &contract_data.memory)
-        };
-    }
-
-    let root = *commit.root();
-    let root_hex = hex::encode(root);
-    commit.maybe_hash = Some(root);
-    commit.base = base_info.maybe_base;
-
-    // Don't write the commit if it already exists on disk. This may happen if
-    // the same transactions on the same base commit for example.
-    if commit_store.lock().unwrap().contains_key(&root) {
-        return Ok(root);
-    }
-
-    write_commit_inner(root_dir, &commit, commit_contracts, root_hex, base_info)
-        .map(|_| {
-            commit_store.lock().unwrap().insert_commit(root, commit);
-            root
-        })
-}
-
-/// Writes a commit to disk.
-fn write_commit_inner<P: AsRef<Path>, S: AsRef<str>>(
-    root_dir: P,
-    commit: &Commit,
-    commit_contracts: BTreeMap<ContractId, ContractDataEntry>,
-    commit_id: S,
-    mut base_info: BaseInfo,
-) -> io::Result<()> {
-    let root_dir = root_dir.as_ref();
-
-    struct Directories {
-        main_dir: PathBuf,
-        bytecode_main_dir: PathBuf,
-        memory_main_dir: PathBuf,
-        leaf_main_dir: PathBuf,
-    }
-
-    let directories = {
-        let main_dir = root_dir.join(MAIN_DIR);
-        fs::create_dir_all(&main_dir)?;
-
-        let bytecode_main_dir = main_dir.join(BYTECODE_DIR);
-        fs::create_dir_all(&bytecode_main_dir)?;
-
-        let memory_main_dir = main_dir.join(MEMORY_DIR);
-        fs::create_dir_all(&memory_main_dir)?;
-
-        let leaf_main_dir = main_dir.join(LEAF_DIR);
-        fs::create_dir_all(&leaf_main_dir)?;
-
-        Directories {
-            main_dir,
-            bytecode_main_dir,
-            memory_main_dir,
-            leaf_main_dir,
-        }
-    };
-
-    // Write the dirty pages contracts of contracts to disk.
-    for (contract, contract_data) in &commit_contracts {
-        let contract_hex = hex::encode(contract);
-
-        let memory_main_dir = directories.memory_main_dir.join(&contract_hex);
-        fs::create_dir_all(&memory_main_dir)?;
-
-        let leaf_main_dir = directories.leaf_main_dir.join(&contract_hex);
-        fs::create_dir_all(&leaf_main_dir)?;
-
-        let mut pages = BTreeSet::new();
-
-        let mut dirty = false;
-        // Write dirty pages and keep track of the page indices.
-        for (dirty_page, _, page_index) in contract_data.memory.dirty_pages() {
-            let page_path: PathBuf =
-                page_path_main(&memory_main_dir, *page_index, &commit_id)?;
-            fs::write(page_path, dirty_page)?;
-            pages.insert(*page_index);
-            dirty = true;
-        }
-
-        let bytecode_main_path =
-            directories.bytecode_main_dir.join(&contract_hex);
-        let module_main_path =
-            bytecode_main_path.with_extension(OBJECTCODE_EXTENSION);
-        let metadata_main_path =
-            bytecode_main_path.with_extension(METADATA_EXTENSION);
-
-        // If the contract is new, we write the bytecode, module, and metadata
-        // files to disk.
-        if contract_data.is_new {
-            // we write them to the main location
-            fs::write(bytecode_main_path, &contract_data.bytecode)?;
-            fs::write(module_main_path, &contract_data.module.serialize())?;
-            fs::write(metadata_main_path, &contract_data.metadata)?;
-            dirty = true;
-        }
-        if dirty {
-            base_info.contract_hints.push(*contract);
-        }
-    }
-
-    tracing::trace!("persisting index started");
-    for (contract_id, element) in commit.index.iter() {
-        if commit_contracts.contains_key(contract_id) {
-            let element_dir_path = directories
-                .leaf_main_dir
-                .join(hex::encode(contract_id.as_bytes()))
-                .join(commit_id.as_ref());
-            let element_file_path = element_dir_path.join(ELEMENT_FILE);
-            create_dir_all(element_dir_path)?;
-            let element_bytes =
-                rkyv::to_bytes::<_, 128>(element).map_err(|err| {
-                    io::Error::new(
-                        io::ErrorKind::InvalidData,
-                        format!("Failed serializing element file: {err}"),
-                    )
-                })?;
-            fs::write(&element_file_path, element_bytes)?;
-        }
-    }
-    tracing::trace!("persisting index finished");
-
-    let base_main_path =
-        base_path_main(&directories.main_dir, commit_id.as_ref())?;
-    let base_info_bytes =
-        rkyv::to_bytes::<_, 128>(&base_info).map_err(|err| {
-            io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!("Failed serializing base info file: {err}"),
-            )
-        })?;
-    fs::write(base_main_path, base_info_bytes)?;
-
-    Ok(())
 }
 
 /// Delete the given commit's directory.
