@@ -8,6 +8,7 @@
 
 mod bytecode;
 mod commit;
+mod commit_finalizer;
 mod commit_hulk;
 mod commit_reader;
 mod commit_store;
@@ -31,6 +32,7 @@ use session::ContractDataEntry;
 use tree::Hash;
 
 use crate::store::commit::Commit;
+use crate::store::commit_finalizer::CommitFinalizer;
 use crate::store::commit_reader::CommitReader;
 use crate::store::commit_store::CommitStore;
 use crate::store::commit_writer::CommitWriter;
@@ -360,7 +362,7 @@ fn sync_loop<P: AsRef<Path>>(
                         "finalizing commit proper started {}",
                         hex::encode(root.as_bytes())
                     );
-                    let io_result = finalize_commit(root, root_dir);
+                    let io_result = CommitFinalizer::finalize(root, root_dir);
                     match &io_result {
                         Ok(_) => tracing::trace!(
                             "finalizing commit proper finished: {:?}",
@@ -459,49 +461,5 @@ fn delete_commit_dir<P: AsRef<Path>>(
         }
         fs::remove_dir_all(&commit_dir)?;
     }
-    Ok(())
-}
-
-/// Finalize commit
-fn finalize_commit<P: AsRef<Path>>(root: Hash, root_dir: P) -> io::Result<()> {
-    let main_dir = root_dir.as_ref().join(MAIN_DIR);
-    let root = hex::encode(root);
-    let commit_path = main_dir.join(&root);
-    let base_info_path = commit_path.join(BASE_FILE);
-    let tree_pos_path = commit_path.join(TREE_POS_FILE);
-    let tree_pos_opt_path = commit_path.join(TREE_POS_OPT_FILE);
-    let base_info = base_from_path(&base_info_path)?;
-    for contract_hint in base_info.contract_hints {
-        let contract_hex = hex::encode(contract_hint);
-        // MEMORY
-        let src_path =
-            main_dir.join(MEMORY_DIR).join(&contract_hex).join(&root);
-        let dst_path = main_dir.join(MEMORY_DIR).join(&contract_hex);
-        for entry in fs::read_dir(&src_path)? {
-            let filename = entry?.file_name().to_string_lossy().to_string();
-            let src_file_path = src_path.join(&filename);
-            let dst_file_path = dst_path.join(&filename);
-            if src_file_path.is_file() {
-                fs::rename(&src_file_path, dst_file_path)?;
-            }
-        }
-        fs::remove_dir(&src_path)?;
-        // LEAF
-        let src_leaf_path =
-            main_dir.join(LEAF_DIR).join(&contract_hex).join(&root);
-        let dst_leaf_path = main_dir.join(LEAF_DIR).join(&contract_hex);
-        let src_leaf_file_path = src_leaf_path.join(ELEMENT_FILE);
-        let dst_leaf_file_path = dst_leaf_path.join(ELEMENT_FILE);
-        if src_leaf_file_path.is_file() {
-            fs::rename(&src_leaf_file_path, dst_leaf_file_path)?;
-        }
-        fs::remove_dir(src_leaf_path)?;
-    }
-
-    fs::remove_file(base_info_path)?;
-    let _ = fs::remove_file(tree_pos_path);
-    let _ = fs::remove_file(tree_pos_opt_path);
-    fs::remove_dir(commit_path)?;
-
     Ok(())
 }
