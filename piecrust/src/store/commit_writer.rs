@@ -5,11 +5,12 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 use crate::store::commit::Commit;
+use crate::store::commit_store::CommitStore;
 use crate::store::session::ContractDataEntry;
 use crate::store::tree::{BaseInfo, Hash};
 use crate::store::{
-    CommitStore, BASE_FILE, BYTECODE_DIR, ELEMENT_FILE, LEAF_DIR, MAIN_DIR,
-    MEMORY_DIR, METADATA_EXTENSION, OBJECTCODE_EXTENSION,
+    BASE_FILE, BYTECODE_DIR, ELEMENT_FILE, LEAF_DIR, MAIN_DIR, MEMORY_DIR,
+    METADATA_EXTENSION, OBJECTCODE_EXTENSION,
 };
 use piecrust_uplink::ContractId;
 use std::collections::{BTreeMap, BTreeSet};

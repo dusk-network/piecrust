@@ -8,11 +8,12 @@ use std::cell::Ref;
 use std::sync::{Arc, Mutex};
 
 use crate::store::commit_hulk::CommitHulk;
+use crate::store::commit_store::CommitStore;
 use crate::store::tree::{
     position_from_contract, ContractIndexElement, ContractsMerkle, Hash,
     NewContractIndex,
 };
-use crate::store::{CommitStore, Memory};
+use crate::store::Memory;
 use crate::PageOpening;
 use piecrust_uplink::ContractId;
 

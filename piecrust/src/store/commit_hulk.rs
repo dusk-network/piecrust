@@ -9,11 +9,12 @@ use std::collections::BTreeSet;
 use std::sync::{Arc, Mutex};
 
 use crate::store::commit::Commit;
+use crate::store::commit_store::CommitStore;
 use crate::store::tree::{
     position_from_contract, ContractIndexElement, ContractsMerkle, Hash,
     NewContractIndex, PageTree,
 };
-use crate::store::{CommitStore, Memory};
+use crate::store::Memory;
 use crate::PageOpening;
 use piecrust_uplink::ContractId;
 
