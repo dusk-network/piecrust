@@ -4,10 +4,11 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
+use crate::store::baseinfo::BaseInfo;
 use crate::store::tree::Hash;
 use crate::store::{
-    base_from_path, BASE_FILE, ELEMENT_FILE, LEAF_DIR, MAIN_DIR, MEMORY_DIR,
-    TREE_POS_FILE, TREE_POS_OPT_FILE,
+    BASE_FILE, ELEMENT_FILE, LEAF_DIR, MAIN_DIR, MEMORY_DIR, TREE_POS_FILE,
+    TREE_POS_OPT_FILE,
 };
 use std::path::Path;
 use std::{fs, io};
@@ -22,7 +23,7 @@ impl CommitFinalizer {
         let base_info_path = commit_path.join(BASE_FILE);
         let tree_pos_path = commit_path.join(TREE_POS_FILE);
         let tree_pos_opt_path = commit_path.join(TREE_POS_OPT_FILE);
-        let base_info = base_from_path(&base_info_path)?;
+        let base_info = BaseInfo::from_path(&base_info_path)?;
         for contract_hint in base_info.contract_hints {
             let contract_hex = hex::encode(contract_hint);
             // MEMORY

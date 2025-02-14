@@ -4,10 +4,11 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
+use crate::store::baseinfo::BaseInfo;
 use crate::store::commit::Commit;
 use crate::store::commit_store::CommitStore;
 use crate::store::session::ContractDataEntry;
-use crate::store::tree::{BaseInfo, Hash};
+use crate::store::tree::Hash;
 use crate::store::{
     BASE_FILE, BYTECODE_DIR, ELEMENT_FILE, LEAF_DIR, MAIN_DIR, MEMORY_DIR,
     METADATA_EXTENSION, OBJECTCODE_EXTENSION,

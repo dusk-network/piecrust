@@ -159,13 +159,6 @@ pub struct ContractIndex {
     pub maybe_base: Option<Hash>,
 }
 
-#[derive(Debug, Clone, Default, Archive, Deserialize, Serialize)]
-#[archive_attr(derive(CheckBytes))]
-pub struct BaseInfo {
-    pub contract_hints: Vec<ContractId>,
-    pub maybe_base: Option<Hash>,
-}
-
 #[derive(Debug, Clone, Archive, Deserialize, Serialize)]
 #[archive_attr(derive(CheckBytes))]
 pub struct ContractIndexElement {

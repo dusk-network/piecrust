@@ -4,6 +4,7 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
+use crate::store::baseinfo::BaseInfo;
 use crate::store::commit::Commit;
 use crate::store::commit_store::CommitStore;
 use crate::store::tree::{
@@ -12,8 +13,8 @@ use crate::store::tree::{
 };
 use crate::store::treepos::TreePos;
 use crate::store::{
-    base_from_path, Bytecode, ContractSession, Module, BASE_FILE, BYTECODE_DIR,
-    LEAF_DIR, MAIN_DIR, MEMORY_DIR, OBJECTCODE_EXTENSION, TREE_POS_FILE,
+    Bytecode, ContractSession, Module, BASE_FILE, BYTECODE_DIR, LEAF_DIR,
+    MAIN_DIR, MEMORY_DIR, OBJECTCODE_EXTENSION, TREE_POS_FILE,
     TREE_POS_OPT_FILE,
 };
 use dusk_wasmtime::Engine;
@@ -215,7 +216,7 @@ impl CommitReader {
 
         let base = if let Some(ref hash_hex) = commit_id {
             let base_info_path = main_dir.join(hash_hex).join(BASE_FILE);
-            base_from_path(base_info_path)?.maybe_base
+            BaseInfo::from_path(base_info_path)?.maybe_base
         } else {
             None
         };

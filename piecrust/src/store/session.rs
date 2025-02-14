@@ -15,11 +15,12 @@ use dusk_wasmtime::Engine;
 use piecrust_uplink::ContractId;
 
 use crate::contract::ContractMetadata;
+use crate::store::baseinfo::BaseInfo;
 use crate::store::commit_hulk::CommitHulk;
 use crate::store::tree::{Hash, PageOpening};
 use crate::store::{
-    base_from_path, Bytecode, Call, Memory, Metadata, Module, BASE_FILE,
-    BYTECODE_DIR, ELEMENT_FILE, MAIN_DIR, MEMORY_DIR, METADATA_EXTENSION,
+    Bytecode, Call, Memory, Metadata, Module, BASE_FILE, BYTECODE_DIR,
+    ELEMENT_FILE, MAIN_DIR, MEMORY_DIR, METADATA_EXTENSION,
     OBJECTCODE_EXTENSION, PAGE_SIZE,
 };
 use crate::Error;
@@ -194,7 +195,7 @@ impl ContractSession {
                 } else {
                     let base_info_path =
                         main_path.as_ref().join(hash_hex).join(BASE_FILE);
-                    if let Ok(index) = base_from_path(base_info_path) {
+                    if let Ok(index) = BaseInfo::from_path(base_info_path) {
                         Self::find_page(
                             page_index,
                             index.maybe_base,
@@ -242,7 +243,7 @@ impl ContractSession {
                 } else {
                     let base_info_path =
                         main_path.as_ref().join(hash_hex).join(BASE_FILE);
-                    if let Ok(index) = base_from_path(base_info_path) {
+                    if let Ok(index) = BaseInfo::from_path(base_info_path) {
                         Self::find_element(
                             index.maybe_base,
                             leaf_path,

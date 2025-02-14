@@ -6,6 +6,7 @@
 
 //! A library for dealing with memories in trees.
 
+mod baseinfo;
 mod bytecode;
 mod commit;
 mod commit_finalizer;
@@ -32,12 +33,12 @@ use piecrust_uplink::ContractId;
 use session::ContractDataEntry;
 use tree::Hash;
 
+use crate::store::baseinfo::BaseInfo;
 use crate::store::commit::Commit;
 use crate::store::commit_finalizer::CommitFinalizer;
 use crate::store::commit_reader::CommitReader;
 use crate::store::commit_store::CommitStore;
 use crate::store::commit_writer::CommitWriter;
-use crate::store::tree::BaseInfo;
 pub use bytecode::Bytecode;
 pub use memory::{Memory, PAGE_SIZE};
 pub use metadata::Metadata;
@@ -228,20 +229,6 @@ impl ContractStore {
             self.call.as_ref().expect("call should exist").clone(),
         )
     }
-}
-
-fn base_from_path<P: AsRef<Path>>(path: P) -> io::Result<BaseInfo> {
-    let path = path.as_ref();
-
-    let base_info_bytes = fs::read(path)?;
-    let base_info = rkyv::from_bytes(&base_info_bytes).map_err(|err| {
-        io::Error::new(
-            io::ErrorKind::InvalidData,
-            format!("Invalid base info file \"{path:?}\": {err}"),
-        )
-    })?;
-
-    Ok(base_info)
 }
 
 pub(crate) enum Call {
@@ -448,7 +435,7 @@ fn delete_commit_dir<P: AsRef<Path>>(
     let commit_dir = root_main_dir.join(&root);
     if commit_dir.exists() {
         let base_info_path = commit_dir.join(BASE_FILE);
-        let base_info = base_from_path(base_info_path)?;
+        let base_info = BaseInfo::from_path(base_info_path)?;
         for contract_hint in base_info.contract_hints {
             let contract_hex = hex::encode(contract_hint);
             let commit_mem_path = root_main_dir
