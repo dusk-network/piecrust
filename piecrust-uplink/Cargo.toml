@@ -18,7 +18,6 @@ bytecheck = { version = "0.6", default-features = false }
 dlmalloc = { version = "0.2", optional = true, features = ["global"] }
 serde = { version = "1.0", optional = true }
 hex = { version = "0.4", default-features = false, features = ["alloc"]}
-base64 = { version = "0.22", optional = true }
 serde_json = { version = "1.0", optional = true }
 
 [dev-dependencies]
@@ -27,7 +26,7 @@ rand = "0.8"
 [features]
 abi = []
 debug = []
-serde = ["dep:serde", "serde_json", "base64", "hex/serde"]
+serde = ["dep:serde", "serde_json", "hex/serde"]
 
 [package.metadata.docs.rs]
 all-features = true

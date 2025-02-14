@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Add `TryFrom<String>` trait impl for `ContractId` [#420]
 
+### Changed
+
+- Change serialization of event data field from base64 to hex [#425]
+
 ## [0.17.3] - 2024-12-19
 
 ## [0.17.2] - 2024-12-17
@@ -230,6 +234,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - First `piecrust-uplink` release
 
 <!-- ISSUES -->
+[#425]: https://github.com/dusk-network/piecrust/issues/425
 [#420]: https://github.com/dusk-network/piecrust/issues/420
 [#414]: https://github.com/dusk-network/piecrust/issues/414
 [#375]: https://github.com/dusk-network/piecrust/issues/375
