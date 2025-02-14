@@ -12,6 +12,7 @@ mod commit;
 mod commit_finalizer;
 mod commit_hulk;
 mod commit_reader;
+mod commit_remover;
 mod commit_store;
 mod commit_writer;
 mod memory;
@@ -33,10 +34,10 @@ use piecrust_uplink::ContractId;
 use session::ContractDataEntry;
 use tree::Hash;
 
-use crate::store::baseinfo::BaseInfo;
 use crate::store::commit::Commit;
 use crate::store::commit_finalizer::CommitFinalizer;
 use crate::store::commit_reader::CommitReader;
+use crate::store::commit_remover::CommitRemover;
 use crate::store::commit_store::CommitStore;
 use crate::store::commit_writer::CommitWriter;
 pub use bytecode::Bytecode;
@@ -320,7 +321,7 @@ fn sync_loop<P: AsRef<Path>>(
                     continue;
                 }
 
-                let io_result = delete_commit_dir(root_dir, root);
+                let io_result = CommitRemover::remove(root_dir, root);
                 commit_store.lock().unwrap().remove_commit(&root);
                 tracing::trace!("delete commit finished");
                 let _ = replier.send(io_result);
@@ -410,7 +411,7 @@ fn sync_loop<P: AsRef<Path>>(
                                 Occupied(entry) => {
                                     for replier in entry.remove() {
                                         let io_result =
-                                            delete_commit_dir(root_dir, base);
+                                            CommitRemover::remove(root_dir, base);
                                         commit_store.lock().unwrap().remove_commit(&base);
                                         let _ = replier.send(io_result);
                                     }
@@ -423,31 +424,4 @@ fn sync_loop<P: AsRef<Path>>(
             }
         }
     }
-}
-
-/// Delete the given commit's directory.
-fn delete_commit_dir<P: AsRef<Path>>(
-    root_dir: P,
-    root: Hash,
-) -> io::Result<()> {
-    let root = hex::encode(root);
-    let root_main_dir = root_dir.as_ref().join(MAIN_DIR);
-    let commit_dir = root_main_dir.join(&root);
-    if commit_dir.exists() {
-        let base_info_path = commit_dir.join(BASE_FILE);
-        let base_info = BaseInfo::from_path(base_info_path)?;
-        for contract_hint in base_info.contract_hints {
-            let contract_hex = hex::encode(contract_hint);
-            let commit_mem_path = root_main_dir
-                .join(MEMORY_DIR)
-                .join(&contract_hex)
-                .join(&root);
-            fs::remove_dir_all(&commit_mem_path)?;
-            let commit_leaf_path =
-                root_main_dir.join(LEAF_DIR).join(&contract_hex).join(&root);
-            fs::remove_dir_all(&commit_leaf_path)?;
-        }
-        fs::remove_dir_all(&commit_dir)?;
-    }
-    Ok(())
 }
