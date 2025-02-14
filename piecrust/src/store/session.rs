@@ -17,7 +17,8 @@ use piecrust_uplink::ContractId;
 use crate::contract::ContractMetadata;
 use crate::store::baseinfo::BaseInfo;
 use crate::store::commit_hulk::CommitHulk;
-use crate::store::tree::{Hash, PageOpening};
+use crate::store::hasher::Hash;
+use crate::store::tree::PageOpening;
 use crate::store::{
     Bytecode, Call, Memory, Metadata, Module, BASE_FILE, BYTECODE_DIR,
     ELEMENT_FILE, MAIN_DIR, MEMORY_DIR, METADATA_EXTENSION,

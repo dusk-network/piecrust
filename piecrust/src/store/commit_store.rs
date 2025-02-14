@@ -5,7 +5,7 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 use crate::store::commit::Commit;
-use crate::store::tree::Hash;
+use crate::store::hasher::Hash;
 use std::collections::btree_map::Keys;
 use std::collections::BTreeMap;
 

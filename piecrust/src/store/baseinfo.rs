@@ -4,7 +4,7 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use crate::store::tree::Hash;
+use crate::store::hasher::Hash;
 use bytecheck::CheckBytes;
 use piecrust_uplink::ContractId;
 use rkyv::{Archive, Deserialize, Serialize};

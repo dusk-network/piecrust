@@ -10,8 +10,9 @@ use std::sync::{Arc, Mutex};
 
 use crate::store::commit::Commit;
 use crate::store::commit_store::CommitStore;
+use crate::store::hasher::Hash;
 use crate::store::tree::{
-    position_from_contract, ContractIndexElement, ContractsMerkle, Hash,
+    position_from_contract, ContractIndexElement, ContractsMerkle,
     NewContractIndex, PageTree,
 };
 use crate::store::Memory;
