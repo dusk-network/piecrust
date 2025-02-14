@@ -17,7 +17,7 @@ rkyv = { version = "0.7", default-features = false, features = ["size_32", "allo
 bytecheck = { version = "0.6", default-features = false }
 dlmalloc = { version = "0.2", optional = true, features = ["global"] }
 serde = { version = "1.0", optional = true }
-hex = { version = "0.4" , optional = true }
+hex = { version = "0.4", default-features = false, features = ["alloc"]}
 base64 = { version = "0.22", optional = true }
 serde_json = { version = "1.0", optional = true }
 
@@ -27,7 +27,7 @@ rand = "0.8"
 [features]
 abi = []
 debug = []
-serde = ["dep:serde", "serde_json", "hex", "base64"]
+serde = ["dep:serde", "serde_json", "base64"]
 
 [package.metadata.docs.rs]
 all-features = true
