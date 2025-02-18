@@ -4,6 +4,11 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
+pub mod finalizer;
+pub mod reader;
+pub mod remover;
+pub mod writer;
+
 use std::cell::Ref;
 use std::sync::{Arc, Mutex};
 

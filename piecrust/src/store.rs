@@ -9,12 +9,8 @@
 mod baseinfo;
 mod bytecode;
 mod commit;
-mod commit_finalizer;
 mod commit_hulk;
-mod commit_reader;
-mod commit_remover;
 mod commit_store;
-mod commit_writer;
 mod hasher;
 mod index;
 mod memory;
@@ -35,12 +31,11 @@ use dusk_wasmtime::Engine;
 use piecrust_uplink::ContractId;
 use session::ContractDataEntry;
 
-use crate::store::commit::Commit;
-use crate::store::commit_finalizer::CommitFinalizer;
-use crate::store::commit_reader::CommitReader;
-use crate::store::commit_remover::CommitRemover;
+use crate::store::commit::{
+    finalizer::CommitFinalizer, reader::CommitReader, remover::CommitRemover,
+    writer::CommitWriter, Commit,
+};
 use crate::store::commit_store::CommitStore;
-use crate::store::commit_writer::CommitWriter;
 use crate::store::hasher::Hash;
 pub use bytecode::Bytecode;
 pub use memory::{Memory, PAGE_SIZE};
