@@ -29,8 +29,10 @@ use std::{fs, io, thread};
 
 use dusk_wasmtime::Engine;
 use piecrust_uplink::ContractId;
+use rusqlite::Connection;
 use session::ContractDataEntry;
 
+use crate::error::StorageError;
 use crate::store::commit::{
     finalizer::CommitFinalizer, reader::CommitReader, remover::CommitRemover,
     writer::CommitWriter, Commit,
@@ -54,6 +56,7 @@ const ELEMENT_FILE: &str = "element";
 const OBJECTCODE_EXTENSION: &str = "a";
 const METADATA_EXTENSION: &str = "m";
 const MAIN_DIR: &str = "main";
+const DB_DIR: &str = "db";
 
 /// A store for all contract commits.
 pub struct ContractStore {
@@ -63,6 +66,7 @@ pub struct ContractStore {
     call: Option<mpsc::Sender<Call>>,
     root_dir: PathBuf,
     pub commit_store: Arc<Mutex<CommitStore>>,
+    connection: Option<Connection>,
 }
 
 impl Debug for ContractStore {
@@ -96,10 +100,11 @@ impl ContractStore {
             call: None,
             root_dir: root_dir.into(),
             commit_store: Arc::new(Mutex::new(CommitStore::new())),
+            connection: None,
         })
     }
 
-    pub fn finish_new(&mut self) -> io::Result<()> {
+    pub fn finish_new(&mut self) -> Result<(), StorageError> {
         let loop_root_dir = self.root_dir.to_path_buf();
         let (call, calls) = mpsc::channel();
         let commit_store = self.commit_store.clone();
@@ -109,7 +114,8 @@ impl ContractStore {
             &self.engine,
             &self.root_dir,
             commit_store,
-        )?;
+        )
+        .map_err(|e| StorageError::Io(Arc::new(e)))?;
         tracing::trace!("after read_all_commit");
 
         let commit_store = self.commit_store.clone();
@@ -118,10 +124,16 @@ impl ContractStore {
         // debugging.
         let sync_loop = thread::Builder::new()
             .name(String::from("PiecrustSync"))
-            .spawn(|| sync_loop(loop_root_dir, commit_store, calls))?;
+            .spawn(|| sync_loop(loop_root_dir, commit_store, calls))
+            .map_err(|e| StorageError::Io(Arc::new(e)))?;
 
         self.sync_loop = Some(sync_loop);
         self.call = Some(call);
+        let db_path = self.root_dir.join(DB_DIR);
+        self.connection = Some(
+            Connection::open(db_path)
+                .map_err(|e| StorageError::Db(Arc::new(e)))?,
+        );
         Ok(())
     }
 

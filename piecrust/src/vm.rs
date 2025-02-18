@@ -19,9 +19,10 @@ use dusk_wasmtime::{
 use tempfile::tempdir;
 
 use crate::config::BYTE_STORE_COST;
+use crate::error::StorageError;
 use crate::session::{Session, SessionData};
 use crate::store::ContractStore;
-use crate::Error::{self, PersistenceError};
+use crate::Error;
 
 fn config() -> Config {
     let mut config = Config::new();
@@ -147,11 +148,9 @@ impl VM {
 
         tracing::trace!("before ContractStore::new");
         let mut store = ContractStore::new(engine.clone(), root_dir)
-            .map_err(|err| PersistenceError(Arc::new(err)))?;
+            .map_err(|err| StorageError::Io(Arc::new(err)))?;
         tracing::trace!("before ContractStore::finish_new");
-        store
-            .finish_new()
-            .map_err(|err| PersistenceError(Arc::new(err)))?;
+        store.finish_new()?;
         tracing::trace!("after ContractStore::finish_new");
 
         Ok(Self {
@@ -169,7 +168,7 @@ impl VM {
     /// # Errors
     /// If creating a temporary directory fails.
     pub fn ephemeral() -> Result<Self, Error> {
-        let tmp = tempdir().map_err(|err| PersistenceError(Arc::new(err)))?;
+        let tmp = tempdir().map_err(|err| StorageError::Io(Arc::new(err)))?;
         let tmp = tmp.path().to_path_buf();
 
         let config = config();
@@ -179,10 +178,8 @@ impl VM {
         );
 
         let mut store = ContractStore::new(engine.clone(), tmp)
-            .map_err(|err| PersistenceError(Arc::new(err)))?;
-        store
-            .finish_new()
-            .map_err(|err| PersistenceError(Arc::new(err)))?;
+            .map_err(|err| StorageError::Io(Arc::new(err)))?;
+        store.finish_new()?;
 
         Ok(Self {
             engine,
@@ -220,7 +217,7 @@ impl VM {
             Some(base) => self
                 .store
                 .session(base.into())
-                .map_err(|err| PersistenceError(Arc::new(err)))?,
+                .map_err(|err| StorageError::Io(Arc::new(err)))?,
             _ => self.store.genesis_session(),
         };
         Ok(Session::new(
@@ -240,14 +237,14 @@ impl VM {
     pub fn delete_commit(&self, root: [u8; 32]) -> Result<(), Error> {
         self.store
             .delete_commit(root.into())
-            .map_err(|err| PersistenceError(Arc::new(err)))
+            .map_err(|err| StorageError::Io(Arc::new(err)).into())
     }
 
     /// Finalizes the given commit on disk.
     pub fn finalize_commit(&self, root: [u8; 32]) -> Result<(), Error> {
         self.store
             .finalize_commit(root.into())
-            .map_err(|err| PersistenceError(Arc::new(err)))
+            .map_err(|err| StorageError::Io(Arc::new(err)).into())
     }
 
     /// Return the root directory of the virtual machine.

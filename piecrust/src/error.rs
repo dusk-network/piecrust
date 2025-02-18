@@ -19,6 +19,14 @@ pub type Compo = CompositeSerializerError<
     std::convert::Infallible,
 >;
 
+#[derive(Error, Debug)]
+pub enum StorageError {
+    #[error(transparent)]
+    Io(Arc<std::io::Error>),
+    #[error(transparent)]
+    Db(Arc<rusqlite::Error>),
+}
+
 /// The error type returned by the piecrust VM.
 #[derive(Error, Debug)]
 pub enum Error {
@@ -66,7 +74,7 @@ pub enum Error {
     #[error("Panic: {0}")]
     Panic(String),
     #[error(transparent)]
-    PersistenceError(Arc<std::io::Error>),
+    PersistenceError(StorageError),
     #[error(transparent)]
     RestoreError(Arc<std::io::Error>),
     #[error(transparent)]
@@ -131,5 +139,11 @@ impl From<Error> for ContractError {
             Error::ContractDoesNotExist(_) => Self::DoesNotExist,
             _ => Self::Unknown,
         }
+    }
+}
+
+impl From<StorageError> for Error {
+    fn from(err: StorageError) -> Self {
+        Self::PersistenceError(err)
     }
 }

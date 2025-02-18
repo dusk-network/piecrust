@@ -15,6 +15,7 @@ use dusk_wasmtime::Engine;
 use piecrust_uplink::ContractId;
 
 use crate::contract::ContractMetadata;
+use crate::error::StorageError;
 use crate::store::baseinfo::BaseInfo;
 use crate::store::commit_hulk::CommitHulk;
 use crate::store::hasher::Hash;
@@ -418,7 +419,7 @@ impl ContractSession {
     ) -> Result<(), Error> {
         let mut new_contract_data =
             self.contracts.remove(&new_contract).ok_or_else(|| {
-                Error::PersistenceError(Arc::new(io::Error::new(
+                StorageError::Io(Arc::new(io::Error::new(
                     io::ErrorKind::Other,
                     format!("Contract '{new_contract}' not found"),
                 )))

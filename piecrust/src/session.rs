@@ -26,7 +26,8 @@ use rkyv::{
 
 use crate::call_tree::{CallTree, CallTreeElem};
 use crate::contract::{ContractData, ContractMetadata, WrappedContract};
-use crate::error::Error::{self, InitalizationError, PersistenceError};
+use crate::error::Error::{self, InitalizationError};
+use crate::error::StorageError;
 use crate::instance::WrappedInstance;
 use crate::store::{ContractSession, PageOpening, PAGE_SIZE};
 use crate::types::StandardBufSerializer;
@@ -314,7 +315,7 @@ impl Session {
                 contract_metadata,
                 metadata_bytes.as_slice(),
             )
-            .map_err(|err| PersistenceError(Arc::new(err)))?;
+            .map_err(|err| StorageError::Io(Arc::new(err)))?;
 
         let instantiate = || {
             self.create_instance(contract_id)?;
@@ -465,7 +466,7 @@ impl Session {
             .inner
             .contract_session
             .contract(contract)
-            .map_err(|err| PersistenceError(Arc::new(err)))?
+            .map_err(|err| StorageError::Io(Arc::new(err)))?
         {
             if new_contract_data.owner.is_none() {
                 new_contract_data.owner =
@@ -545,7 +546,7 @@ impl Session {
             .inner
             .contract_session
             .contract(contract_id)
-            .map_err(|err| PersistenceError(Arc::new(err)))?
+            .map_err(|err| StorageError::Io(Arc::new(err)))?
             .map(|data| data.memory.current_len))
     }
 
@@ -614,7 +615,7 @@ impl Session {
             .inner
             .contract_session
             .contract(contract_id)
-            .map_err(|err| PersistenceError(Arc::new(err)))?
+            .map_err(|err| StorageError::Io(Arc::new(err)))?
             .ok_or(Error::ContractDoesNotExist(contract_id))?;
 
         let contract = WrappedContract::new(
@@ -728,7 +729,7 @@ impl Session {
             .contract_session
             .commit()
             .map(Into::into)
-            .map_err(|err| PersistenceError(Arc::new(err)))
+            .map_err(|err| StorageError::Io(Arc::new(err)).into())
     }
 
     #[cfg(feature = "debug")]

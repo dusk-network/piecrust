@@ -12,6 +12,7 @@ use std::{io, mem};
 use memmap2::{Mmap, MmapOptions};
 
 use crate::contract::ContractMetadata;
+use crate::error::StorageError;
 use crate::{Error, Session};
 
 /// Contract metadata pertaining to a given contract but maintained by the host.
@@ -66,7 +67,7 @@ impl Metadata {
         let bytes = Session::serialize_data(&data)?;
 
         let mut new = Self::new(bytes, data)
-            .map_err(|err| Error::PersistenceError(Arc::new(err)))?;
+            .map_err(|err| StorageError::Io(Arc::new(err)))?;
         mem::swap(self, &mut new);
 
         Ok(())
