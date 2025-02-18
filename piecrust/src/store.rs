@@ -274,7 +274,7 @@ fn sync_loop<P: AsRef<Path>>(
                 replier,
             } => {
                 tracing::trace!("writing commit started");
-                let io_result = CommitWriter::write(
+                let io_result = CommitWriter::create_and_write(
                     root_dir,
                     commit_store.clone(),
                     base,

@@ -22,28 +22,12 @@ use std::{fs, io};
 pub struct CommitWriter;
 
 impl CommitWriter {
-    fn page_path_main<P: AsRef<Path>, S: AsRef<str>>(
-        memory_dir: P,
-        page_index: usize,
-        commit_id: S,
-    ) -> io::Result<PathBuf> {
-        let commit_id = commit_id.as_ref();
-        let dir = memory_dir.as_ref().join(commit_id);
-        fs::create_dir_all(&dir)?;
-        Ok(dir.join(format!("{page_index}")))
-    }
-
-    fn base_path_main<P: AsRef<Path>, S: AsRef<str>>(
-        main_dir: P,
-        commit_id: S,
-    ) -> io::Result<PathBuf> {
-        let commit_id = commit_id.as_ref();
-        let dir = main_dir.as_ref().join(commit_id);
-        fs::create_dir_all(&dir)?;
-        Ok(dir.join(BASE_FILE))
-    }
-
-    pub fn write<P: AsRef<Path>>(
+    ///
+    /// Creates and writes commit, adds the created commit to commit store.
+    /// The created commit is immutable and its hash (root) is calculated and returned
+    /// by this method.
+    ///
+    pub fn create_and_write<P: AsRef<Path>>(
         root_dir: P,
         commit_store: Arc<Mutex<CommitStore>>,
         base: Option<Commit>,
@@ -226,5 +210,26 @@ impl CommitWriter {
         fs::write(base_main_path, base_info_bytes)?;
 
         Ok(())
+    }
+
+    fn page_path_main<P: AsRef<Path>, S: AsRef<str>>(
+        memory_dir: P,
+        page_index: usize,
+        commit_id: S,
+    ) -> io::Result<PathBuf> {
+        let commit_id = commit_id.as_ref();
+        let dir = memory_dir.as_ref().join(commit_id);
+        fs::create_dir_all(&dir)?;
+        Ok(dir.join(format!("{page_index}")))
+    }
+
+    fn base_path_main<P: AsRef<Path>, S: AsRef<str>>(
+        main_dir: P,
+        commit_id: S,
+    ) -> io::Result<PathBuf> {
+        let commit_id = commit_id.as_ref();
+        let dir = main_dir.as_ref().join(commit_id);
+        fs::create_dir_all(&dir)?;
+        Ok(dir.join(BASE_FILE))
     }
 }

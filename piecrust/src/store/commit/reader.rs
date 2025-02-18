@@ -28,45 +28,9 @@ use std::{fs, io};
 pub struct CommitReader;
 
 impl CommitReader {
-    fn contract_id_from_hex<S: AsRef<str>>(contract_id: S) -> ContractId {
-        let bytes: [u8; 32] = hex::decode(contract_id.as_ref())
-            .expect("Hex decoding of contract id string should succeed")
-            .try_into()
-            .expect("Contract id string conversion should succeed");
-        ContractId::from_bytes(bytes)
-    }
-
-    fn commit_id_to_hash<S: AsRef<str>>(commit_id: S) -> Hash {
-        let hash: [u8; 32] = hex::decode(commit_id.as_ref())
-            .expect("Hex decoding of commit id string should succeed")
-            .try_into()
-            .expect("Commit id string conversion should succeed");
-        Hash::from(hash)
-    }
-
-    fn tree_pos_from_path(
-        path: impl AsRef<Path>,
-        opt_path: impl AsRef<Path>,
-    ) -> io::Result<Option<TreePos>> {
-        let path = path.as_ref();
-
-        Ok(if opt_path.as_ref().exists() {
-            let f = OpenOptions::new().read(true).open(opt_path.as_ref())?;
-            let mut buf_f = BufReader::new(f);
-            Some(TreePos::unmarshall(&mut buf_f)?)
-        } else if path.exists() {
-            let tree_pos_bytes = fs::read(path)?;
-            Some(rkyv::from_bytes(&tree_pos_bytes).map_err(|err| {
-                io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    format!("Invalid tree positions file \"{path:?}\": {err}"),
-                )
-            })?)
-        } else {
-            None
-        })
-    }
-
+    ///
+    /// Reads all commits into a given commit store
+    ///
     pub fn read_all_commits<P: AsRef<Path>>(
         engine: &Engine,
         root_dir: P,
@@ -88,7 +52,7 @@ impl CommitReader {
                     continue;
                 }
                 tracing::trace!("before read_commit");
-                let commit = Self::read_commit(
+                let commit = Self::commit_from_dir(
                     engine,
                     entry.path(),
                     commit_store.clone(),
@@ -100,16 +64,6 @@ impl CommitReader {
         }
 
         Ok(())
-    }
-
-    fn read_commit<P: AsRef<Path>>(
-        engine: &Engine,
-        commit_dir: P,
-        commit_store: Arc<Mutex<CommitStore>>,
-    ) -> io::Result<Commit> {
-        let commit_dir = commit_dir.as_ref();
-        let commit = Self::commit_from_dir(engine, commit_dir, commit_store)?;
-        Ok(commit)
     }
 
     fn commit_from_dir<P: AsRef<Path>>(
@@ -306,5 +260,44 @@ impl CommitReader {
         }
 
         Ok((index, merkle))
+    }
+
+    fn contract_id_from_hex<S: AsRef<str>>(contract_id: S) -> ContractId {
+        let bytes: [u8; 32] = hex::decode(contract_id.as_ref())
+            .expect("Hex decoding of contract id string should succeed")
+            .try_into()
+            .expect("Contract id string conversion should succeed");
+        ContractId::from_bytes(bytes)
+    }
+
+    fn commit_id_to_hash<S: AsRef<str>>(commit_id: S) -> Hash {
+        let hash: [u8; 32] = hex::decode(commit_id.as_ref())
+            .expect("Hex decoding of commit id string should succeed")
+            .try_into()
+            .expect("Commit id string conversion should succeed");
+        Hash::from(hash)
+    }
+
+    fn tree_pos_from_path(
+        path: impl AsRef<Path>,
+        opt_path: impl AsRef<Path>,
+    ) -> io::Result<Option<TreePos>> {
+        let path = path.as_ref();
+
+        Ok(if opt_path.as_ref().exists() {
+            let f = OpenOptions::new().read(true).open(opt_path.as_ref())?;
+            let mut buf_f = BufReader::new(f);
+            Some(TreePos::unmarshall(&mut buf_f)?)
+        } else if path.exists() {
+            let tree_pos_bytes = fs::read(path)?;
+            Some(rkyv::from_bytes(&tree_pos_bytes).map_err(|err| {
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!("Invalid tree positions file \"{path:?}\": {err}"),
+                )
+            })?)
+        } else {
+            None
+        })
     }
 }
