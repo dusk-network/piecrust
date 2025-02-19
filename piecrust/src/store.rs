@@ -29,7 +29,9 @@ use std::{fs, io, thread};
 
 use dusk_wasmtime::Engine;
 use piecrust_uplink::ContractId;
-use rusqlite::Connection;
+// use rusqlite::Connection;
+use sqlx::sqlite::{SqliteConnectOptions, SqlitePool};
+
 use session::ContractDataEntry;
 
 use crate::error::StorageError;
@@ -57,6 +59,7 @@ const OBJECTCODE_EXTENSION: &str = "a";
 const METADATA_EXTENSION: &str = "m";
 const MAIN_DIR: &str = "main";
 const DB_DIR: &str = "db";
+const DB_NAME: &str = "vm.sqlite3";
 
 /// A store for all contract commits.
 pub struct ContractStore {
@@ -66,7 +69,7 @@ pub struct ContractStore {
     call: Option<mpsc::Sender<Call>>,
     root_dir: PathBuf,
     pub commit_store: Arc<Mutex<CommitStore>>,
-    connection: Option<Connection>,
+    connection: Option<SqlitePool>,
 }
 
 impl Debug for ContractStore {
@@ -130,10 +133,13 @@ impl ContractStore {
         self.sync_loop = Some(sync_loop);
         self.call = Some(call);
         let db_path = self.root_dir.join(DB_DIR);
-        self.connection = Some(
-            Connection::open(db_path)
-                .map_err(|e| StorageError::Db(Arc::new(e)))?,
-        );
+        self.connection = Some({
+            tracing::info!("Opening SQLite VM DB in {db_path:?}");
+            let db_options = SqliteConnectOptions::new()
+                .filename(db_path.join(DB_NAME))
+                .create_if_missing(true);
+            SqlitePool::connect_lazy_with(db_options)
+        });
         Ok(())
     }
 

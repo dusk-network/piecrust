@@ -24,7 +24,7 @@ pub enum StorageError {
     #[error(transparent)]
     Io(Arc<std::io::Error>),
     #[error(transparent)]
-    Db(Arc<rusqlite::Error>),
+    Db(Arc<sqlx::Error>),
 }
 
 /// The error type returned by the piecrust VM.
