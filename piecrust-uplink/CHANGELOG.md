@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Add `TryFrom<String>` trait impl for `ContractId` [#420]
+
 ## [0.17.3] - 2024-12-19
 
 ## [0.17.2] - 2024-12-17
@@ -226,6 +230,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - First `piecrust-uplink` release
 
 <!-- ISSUES -->
+[#420]: https://github.com/dusk-network/piecrust/issues/420
 [#414]: https://github.com/dusk-network/piecrust/issues/414
 [#375]: https://github.com/dusk-network/piecrust/issues/375
 [#365]: https://github.com/dusk-network/piecrust/issues/365

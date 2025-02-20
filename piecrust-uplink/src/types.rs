@@ -110,12 +110,20 @@ impl PartialEq<[u8; CONTRACT_ID_BYTES]> for ContractId {
     }
 }
 
+/// Debug implementation for [`ContractId`]
+///
+/// This implementation uses the normal display implementation.
 impl core::fmt::Debug for ContractId {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         core::fmt::Display::fmt(self, f)
     }
 }
 
+/// Display implementation for [`ContractId`]
+///
+/// This implementation will display the hexadecimal representation of the bytes
+/// of the [`ContractId`]. If the alternate flag is set, it will also display
+/// the `0x` prefix.
 impl core::fmt::Display for ContractId {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         if f.alternate() {
@@ -125,5 +133,77 @@ impl core::fmt::Display for ContractId {
             write!(f, "{:02x}", &byte)?
         }
         Ok(())
+    }
+}
+
+impl TryFrom<String> for ContractId {
+    type Error = core::fmt::Error;
+
+    /// Tries to convert a hexadecimal string into a [`ContractId`]
+    ///
+    /// The string can be prefixed with `0x` or not.
+    fn try_from(value: String) -> core::result::Result<Self, Self::Error> {
+        let value = value.trim_start_matches("0x");
+        let decoded = hex::decode(value).map_err(|_| core::fmt::Error)?;
+        let bytes: [u8; CONTRACT_ID_BYTES] =
+            decoded.try_into().map_err(|_| core::fmt::Error)?;
+
+        Ok(ContractId::from_bytes(bytes))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use alloc::{format, string::ToString};
+
+    use rand::rngs::StdRng;
+    use rand::{Rng, SeedableRng};
+
+    use super::*;
+
+    const CONTRACT_ID_STR: &str =
+        "0000000000000000000000000000000000000000000000000000000000000000";
+    const CONTRACT_ID_STR_PRETTY: &str =
+        "0x0000000000000000000000000000000000000000000000000000000000000000";
+
+    #[test]
+    fn contract_id_display() {
+        let contract_id = ContractId::from_bytes([0u8; CONTRACT_ID_BYTES]);
+        assert_eq!(format!("{}", contract_id), CONTRACT_ID_STR);
+
+        let contract_id = ContractId::from_bytes([0u8; CONTRACT_ID_BYTES]);
+        assert_eq!(format!("{:#?}", contract_id), CONTRACT_ID_STR_PRETTY);
+    }
+
+    #[test]
+    fn contract_id_debug() {
+        let contract_id = ContractId::from_bytes([0u8; CONTRACT_ID_BYTES]);
+        assert_eq!(format!("{}", contract_id), CONTRACT_ID_STR);
+    }
+
+    #[test]
+    fn contract_id_to_from_string() {
+        let mut rng = StdRng::seed_from_u64(1618);
+        let contract_id = ContractId::from_bytes(rng.gen());
+
+        let string = contract_id.to_string();
+
+        assert_eq!(string.starts_with("0x"), false);
+        assert_eq!(string.len(), CONTRACT_ID_BYTES * 2);
+
+        let contract_id_from_string = ContractId::try_from(string).unwrap();
+
+        assert_eq!(contract_id, contract_id_from_string);
+    }
+
+    #[test]
+    fn contract_id_try_from_invalid_string() {
+        let too_short = ContractId::try_from("0x".to_string()).is_err();
+
+        let too_long =
+            ContractId::try_from(format!("{}0", CONTRACT_ID_STR)).is_err();
+
+        assert!(too_short);
+        assert!(too_long);
     }
 }
