@@ -263,19 +263,18 @@ pub fn cc_callstack() -> Result<(), Error> {
     let callstack: Vec<ContractId> = session
         .call(center_id, "return_callstack", &(), LIMIT)?
         .data;
-    assert_eq!(callstack.len(), 1);
+    assert_eq!(callstack.len(), 0);
 
     let self_id: ContractId =
         session.call(center_id, "return_self_id", &(), LIMIT)?.data;
-    assert_eq!(callstack[0], self_id);
 
     const N: u32 = 5;
     let callstack: Vec<ContractId> = session
         .call(center_id, "call_self_n_times", &N, LIMIT)?
         .data;
-    assert_eq!(callstack.len(), N as usize + 1);
-    for i in 1..=N as usize {
-        assert_eq!(callstack[0], callstack[i]);
+    assert_eq!(callstack.len(), N as usize);
+    for i in 0..N as usize {
+        assert_eq!(self_id, callstack[i]);
     }
 
     let res = session
@@ -295,9 +294,8 @@ pub fn cc_callstack() -> Result<(), Error> {
     let callstack: Vec<ContractId> =
         rkyv::from_bytes(&res).expect("Deserialization to succeed");
 
-    assert_eq!(callstack.len(), 2);
-    assert_eq!(callstack[0], callstack_id);
-    assert_eq!(callstack[1], center_id);
+    assert_eq!(callstack.len(), 1);
+    assert_eq!(callstack[0], center_id);
 
     Ok(())
 }
