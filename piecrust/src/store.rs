@@ -9,6 +9,7 @@
 mod baseinfo;
 mod bytecode;
 mod commit;
+mod commit_db;
 mod commit_hulk;
 mod commit_store;
 mod hasher;
@@ -69,7 +70,7 @@ pub struct ContractStore {
     call: Option<mpsc::Sender<Call>>,
     root_dir: PathBuf,
     pub commit_store: Arc<Mutex<CommitStore>>,
-    connection: Option<SqlitePool>,
+    connection_pool: SqlitePool,
 }
 
 impl Debug for ContractStore {
@@ -97,13 +98,21 @@ impl ContractStore {
 
         fs::create_dir_all(root_dir)?;
 
+        let connection_pool = {
+            tracing::info!("Opening SQLite VM DB in {db_path:?}");
+            let db_options = SqliteConnectOptions::new()
+                .filename(db_path.join(DB_NAME))
+                .create_if_missing(true);
+            SqlitePool::connect_lazy_with(db_options)
+        };
+
         Ok(Self {
             sync_loop: None,
             engine,
             call: None,
             root_dir: root_dir.into(),
             commit_store: Arc::new(Mutex::new(CommitStore::new())),
-            connection: None,
+            connection_pool,
         })
     }
 
@@ -122,24 +131,18 @@ impl ContractStore {
         tracing::trace!("after read_all_commit");
 
         let commit_store = self.commit_store.clone();
+        let connection_pool = self.connection_pool.clone();
 
         // The thread is given a name to allow for easily identifying it while
         // debugging.
         let sync_loop = thread::Builder::new()
             .name(String::from("PiecrustSync"))
-            .spawn(|| sync_loop(loop_root_dir, commit_store, calls))
+            .spawn(|| sync_loop(loop_root_dir, connection_pool, commit_store, calls))
             .map_err(|e| StorageError::Io(Arc::new(e)))?;
 
         self.sync_loop = Some(sync_loop);
         self.call = Some(call);
         let db_path = self.root_dir.join(DB_DIR);
-        self.connection = Some({
-            tracing::info!("Opening SQLite VM DB in {db_path:?}");
-            let db_options = SqliteConnectOptions::new()
-                .filename(db_path.join(DB_NAME))
-                .create_if_missing(true);
-            SqlitePool::connect_lazy_with(db_options)
-        });
         Ok(())
     }
 
@@ -273,6 +276,7 @@ pub(crate) enum Call {
 
 fn sync_loop<P: AsRef<Path>>(
     root_dir: P,
+    connection_pool: SqlitePool,
     commit_store: Arc<Mutex<CommitStore>>,
     calls: mpsc::Receiver<Call>,
 ) {
@@ -294,6 +298,7 @@ fn sync_loop<P: AsRef<Path>>(
                 tracing::trace!("writing commit started");
                 let io_result = CommitWriter::create_and_write(
                     root_dir,
+                    connection_pool.clone(),
                     commit_store.clone(),
                     base,
                     contracts,

@@ -18,16 +18,20 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::{fs, io};
+use sqlx::SqlitePool;
+use crate::error::StorageError;
+use crate::store::index::ContractIndexElement;
 
-pub struct CommitWriter;
+pub struct CommitWriterDb;
 
-impl CommitWriter {
+impl CommitWriterDb {
     ///
     /// Creates and writes commit, adds the created commit to commit store.
     /// The created commit is immutable and its hash (root) is calculated and
     /// returned by this method.
     pub fn create_and_write<P: AsRef<Path>>(
         root_dir: P,
+        connection_pool: SqlitePool,
         commit_store: Arc<Mutex<CommitStore>>,
         base: Option<Commit>,
         commit_contracts: BTreeMap<ContractId, ContractDataEntry>,
@@ -38,21 +42,6 @@ impl CommitWriter {
             maybe_base: base.as_ref().map(|base| *base.root()),
             ..Default::default()
         };
-
-        // base is already a copy, no point cloning it again
-
-        // let index = base
-        //     .as_ref()
-        //     .map_or(NewContractIndex::new(), |base| base.index.clone());
-        // let contracts_merkle =
-        //     base.as_ref().map_or(ContractsMerkle::default(), |base| {
-        //         base.contracts_merkle.clone()
-        //     });
-        // let mut commit = Commit {
-        //     index,
-        //     contracts_merkle,
-        //     maybe_hash: base.as_ref().and_then(|base| base.maybe_hash),
-        // };
 
         let mut commit =
             base.unwrap_or(Commit::new(&commit_store, base_info.maybe_base));
@@ -78,15 +67,16 @@ impl CommitWriter {
 
         Self::write_commit_inner(
             root_dir,
+            connection_pool.clone(),
             &commit,
             commit_contracts,
             root_hex,
             base_info,
         )
-        .map(|_| {
-            commit_store.lock().unwrap().insert_commit(root, commit);
-            root
-        })
+            .map(|_| {
+                commit_store.lock().unwrap().insert_commit(root, commit);
+                root
+            })
     }
 
     /// Writes a commit to disk.
@@ -109,16 +99,16 @@ impl CommitWriter {
 
         let directories = {
             let main_dir = root_dir.join(MAIN_DIR);
-            fs::create_dir_all(&main_dir)?;
+            // fs::create_dir_all(&main_dir)?;
 
             let bytecode_main_dir = main_dir.join(BYTECODE_DIR);
-            fs::create_dir_all(&bytecode_main_dir)?;
+            // fs::create_dir_all(&bytecode_main_dir)?;
 
             let memory_main_dir = main_dir.join(MEMORY_DIR);
-            fs::create_dir_all(&memory_main_dir)?;
+            // fs::create_dir_all(&memory_main_dir)?;
 
             let leaf_main_dir = main_dir.join(LEAF_DIR);
-            fs::create_dir_all(&leaf_main_dir)?;
+            // fs::create_dir_all(&leaf_main_dir)?;
 
             Directories {
                 main_dir,
@@ -134,24 +124,24 @@ impl CommitWriter {
 
             let memory_main_dir =
                 directories.memory_main_dir.join(&contract_hex);
-            fs::create_dir_all(&memory_main_dir)?;
+            // fs::create_dir_all(&memory_main_dir)?;
 
             let leaf_main_dir = directories.leaf_main_dir.join(&contract_hex);
-            fs::create_dir_all(&leaf_main_dir)?;
+            // fs::create_dir_all(&leaf_main_dir)?;
 
             let mut pages = BTreeSet::new();
 
             let mut dirty = false;
             // Write dirty pages and keep track of the page indices.
             for (dirty_page, _, page_index) in
-                contract_data.memory.dirty_pages()
+            contract_data.memory.dirty_pages()
             {
-                let page_path: PathBuf = Self::page_path_main(
-                    &memory_main_dir,
-                    *page_index,
-                    &commit_id,
-                )?;
-                fs::write(page_path, dirty_page)?;
+                // let page_path: PathBuf = Self::page_path_main(
+                //     &memory_main_dir,
+                //     *page_index,
+                //     &commit_id,
+                // )?;
+                // fs::write(page_path, dirty_page)?;
                 pages.insert(*page_index);
                 dirty = true;
             }
@@ -167,9 +157,9 @@ impl CommitWriter {
             // metadata files to disk.
             if contract_data.is_new {
                 // we write them to the main location
-                fs::write(bytecode_main_path, &contract_data.bytecode)?;
-                fs::write(module_main_path, &contract_data.module.serialize())?;
-                fs::write(metadata_main_path, &contract_data.metadata)?;
+                // fs::write(bytecode_main_path, &contract_data.bytecode)?;
+                // fs::write(module_main_path, &contract_data.module.serialize())?;
+                // fs::write(metadata_main_path, &contract_data.metadata)?;
                 dirty = true;
             }
             if dirty {
@@ -185,7 +175,7 @@ impl CommitWriter {
                     .join(hex::encode(contract_id.as_bytes()))
                     .join(commit_id.as_ref());
                 let element_file_path = element_dir_path.join(ELEMENT_FILE);
-                fs::create_dir_all(element_dir_path)?;
+                // fs::create_dir_all(element_dir_path)?;
                 let element_bytes =
                     rkyv::to_bytes::<_, 128>(element).map_err(|err| {
                         io::Error::new(
@@ -193,13 +183,14 @@ impl CommitWriter {
                             format!("Failed serializing element file: {err}"),
                         )
                     })?;
-                fs::write(&element_file_path, element_bytes)?;
+                // fs::write(&element_file_path, element_bytes)?;
+                Self::write_element_to_db(connection_pool.clone(), contract_id, commit_id.as_ref(), element_bytes)?;
             }
         }
         tracing::trace!("persisting index finished");
 
-        let base_main_path =
-            Self::base_path_main(&directories.main_dir, commit_id.as_ref())?;
+        // let base_main_path =
+        //     Self::base_path_main(&directories.main_dir, commit_id.as_ref())?;
         let base_info_bytes =
             rkyv::to_bytes::<_, 128>(&base_info).map_err(|err| {
                 io::Error::new(
@@ -207,29 +198,28 @@ impl CommitWriter {
                     format!("Failed serializing base info file: {err}"),
                 )
             })?;
-        fs::write(base_main_path, base_info_bytes)?;
+        // fs::write(base_main_path, base_info_bytes)?;
 
         Ok(())
     }
 
-    fn page_path_main<P: AsRef<Path>, S: AsRef<str>>(
-        memory_dir: P,
-        page_index: usize,
-        commit_id: S,
-    ) -> io::Result<PathBuf> {
-        let commit_id = commit_id.as_ref();
-        let dir = memory_dir.as_ref().join(commit_id);
-        fs::create_dir_all(&dir)?;
-        Ok(dir.join(format!("{page_index}")))
+    fn write_element_to_db(connection_pool: SqlitePool, contract_id: &ContractId, commit_id: impl AsRef<str>, element_bytes: impl AsRef<[u8]>) -> Result<(), StorageError> {
+        let mut conn = pool.acquire().await?;
+
+        let contract_id_str = hex::encode(contract_id.as_bytes());
+
+        let _id = sqlx::query!(
+        r#"
+INSERT INTO elements ( contract_id, commit_id, element_bytes )
+VALUES ( ?1, ?2, ?3 )
+        "#,
+            contract_id_str, commit_id, element_bytes,
+        )
+            .execute(&mut *conn)
+            .await?
+            .last_insert_rowid();
+
+        Ok(())
     }
 
-    fn base_path_main<P: AsRef<Path>, S: AsRef<str>>(
-        main_dir: P,
-        commit_id: S,
-    ) -> io::Result<PathBuf> {
-        let commit_id = commit_id.as_ref();
-        let dir = main_dir.as_ref().join(commit_id);
-        fs::create_dir_all(&dir)?;
-        Ok(dir.join(BASE_FILE))
-    }
 }
