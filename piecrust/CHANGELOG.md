@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- Change `callstack` to return callers' id list with no self id at the beginning [#422]
+
 ## [0.27.1] - 2025-01-15
 
 ### Added
@@ -493,6 +495,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 <!-- ISSUES -->
 
 [#rusk_3341]: https://github.com/dusk-network/rusk/issues/3341
+[#422]: https://github.com/dusk-network/piecrust/issues/422
 [#410]: https://github.com/dusk-network/piecrust/issues/410
 [#405]: https://github.com/dusk-network/piecrust/issues/405
 [#396]: https://github.com/dusk-network/piecrust/issues/396
