@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
 - Change `callstack` to return callers' id list with no self id at the beginning [#422]
 
 ## [0.27.1] - 2025-01-15
