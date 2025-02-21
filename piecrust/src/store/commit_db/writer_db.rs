@@ -224,10 +224,7 @@ impl CommitWriterDb {
         let contract_id_str = hex::encode(contract_id.as_bytes());
 
         let _id = sqlx::query!(
-            r#"
-INSERT INTO elements ( contract_id, commit_id, element_bytes )
-VALUES ( ?1, ?2, ?3 )
-        "#,
+            r#"INSERT INTO elements ( contract_id, commit_id, element_bytes )VALUES ( ?, ?, ? )"#,
             contract_id_str,
             commit_id,
             element_bytes,
@@ -239,3 +236,11 @@ VALUES ( ?1, ?2, ?3 )
         Ok(())
     }
 }
+
+/// this worked for me:
+/// cargo install sqlx-cli --features openssl-vendored
+/// export DATABASE_URL=sqlite:/Users/miloszm/abcd
+/// touch /Users/miloszm/abcd
+/// cargo sqlx prepare -- --all-targets --all-features
+/// after that normal cargo compilation works
+/// no cargo sqlx prepare is needed
