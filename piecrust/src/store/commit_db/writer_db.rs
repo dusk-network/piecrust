@@ -4,23 +4,22 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
+use crate::error::StorageError;
 use crate::store::baseinfo::BaseInfo;
 use crate::store::commit::Commit;
 use crate::store::commit_store::CommitStore;
 use crate::store::hasher::Hash;
 use crate::store::session::ContractDataEntry;
 use crate::store::{
-    BASE_FILE, BYTECODE_DIR, ELEMENT_FILE, LEAF_DIR, MAIN_DIR, MEMORY_DIR,
+    BYTECODE_DIR, ELEMENT_FILE, LEAF_DIR, MAIN_DIR, MEMORY_DIR,
     METADATA_EXTENSION, OBJECTCODE_EXTENSION,
 };
 use piecrust_uplink::ContractId;
+use sqlx::SqlitePool;
 use std::collections::{BTreeMap, BTreeSet};
+use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
-use std::{fs, io};
-use sqlx::SqlitePool;
-use crate::error::StorageError;
-use crate::store::index::ContractIndexElement;
 
 pub struct CommitWriterDb;
 
@@ -29,13 +28,13 @@ impl CommitWriterDb {
     /// Creates and writes commit, adds the created commit to commit store.
     /// The created commit is immutable and its hash (root) is calculated and
     /// returned by this method.
-    pub fn create_and_write<P: AsRef<Path>>(
+    pub async fn create_and_write<P: AsRef<Path>>(
         root_dir: P,
         connection_pool: SqlitePool,
         commit_store: Arc<Mutex<CommitStore>>,
         base: Option<Commit>,
         commit_contracts: BTreeMap<ContractId, ContractDataEntry>,
-    ) -> io::Result<Hash> {
+    ) -> Result<Hash, StorageError> {
         let root_dir = root_dir.as_ref();
 
         let base_info = BaseInfo {
@@ -73,21 +72,22 @@ impl CommitWriterDb {
             root_hex,
             base_info,
         )
-            .map(|_| {
-                commit_store.lock().unwrap().insert_commit(root, commit);
-                root
-            })
+        .await
+        .map(|_| {
+            commit_store.lock().unwrap().insert_commit(root, commit);
+            root
+        })
     }
 
     /// Writes a commit to disk.
-    fn write_commit_inner<P: AsRef<Path>, S: AsRef<str>>(
+    async fn write_commit_inner<P: AsRef<Path>, S: AsRef<str>>(
         root_dir: P,
         connection_pool: SqlitePool,
         commit: &Commit,
         commit_contracts: BTreeMap<ContractId, ContractDataEntry>,
         commit_id: S,
         mut base_info: BaseInfo,
-    ) -> io::Result<()> {
+    ) -> Result<(), StorageError> {
         let root_dir = root_dir.as_ref();
 
         struct Directories {
@@ -122,19 +122,19 @@ impl CommitWriterDb {
         for (contract, contract_data) in &commit_contracts {
             let contract_hex = hex::encode(contract);
 
-            let memory_main_dir =
+            let _memory_main_dir =
                 directories.memory_main_dir.join(&contract_hex);
             // fs::create_dir_all(&memory_main_dir)?;
 
-            let leaf_main_dir = directories.leaf_main_dir.join(&contract_hex);
+            let _leaf_main_dir = directories.leaf_main_dir.join(&contract_hex);
             // fs::create_dir_all(&leaf_main_dir)?;
 
             let mut pages = BTreeSet::new();
 
             let mut dirty = false;
             // Write dirty pages and keep track of the page indices.
-            for (dirty_page, _, page_index) in
-            contract_data.memory.dirty_pages()
+            for (_dirty_page, _, page_index) in
+                contract_data.memory.dirty_pages()
             {
                 // let page_path: PathBuf = Self::page_path_main(
                 //     &memory_main_dir,
@@ -148,9 +148,9 @@ impl CommitWriterDb {
 
             let bytecode_main_path =
                 directories.bytecode_main_dir.join(&contract_hex);
-            let module_main_path =
+            let _module_main_path =
                 bytecode_main_path.with_extension(OBJECTCODE_EXTENSION);
-            let metadata_main_path =
+            let _metadata_main_path =
                 bytecode_main_path.with_extension(METADATA_EXTENSION);
 
             // If the contract is new, we write the bytecode, module, and
@@ -158,7 +158,8 @@ impl CommitWriterDb {
             if contract_data.is_new {
                 // we write them to the main location
                 // fs::write(bytecode_main_path, &contract_data.bytecode)?;
-                // fs::write(module_main_path, &contract_data.module.serialize())?;
+                // fs::write(module_main_path,
+                // &contract_data.module.serialize())?;
                 // fs::write(metadata_main_path, &contract_data.metadata)?;
                 dirty = true;
             }
@@ -174,7 +175,7 @@ impl CommitWriterDb {
                     .leaf_main_dir
                     .join(hex::encode(contract_id.as_bytes()))
                     .join(commit_id.as_ref());
-                let element_file_path = element_dir_path.join(ELEMENT_FILE);
+                let _element_file_path = element_dir_path.join(ELEMENT_FILE);
                 // fs::create_dir_all(element_dir_path)?;
                 let element_bytes =
                     rkyv::to_bytes::<_, 128>(element).map_err(|err| {
@@ -184,14 +185,20 @@ impl CommitWriterDb {
                         )
                     })?;
                 // fs::write(&element_file_path, element_bytes)?;
-                Self::write_element_to_db(connection_pool.clone(), contract_id, commit_id.as_ref(), element_bytes)?;
+                Self::write_element_to_db(
+                    connection_pool.clone(),
+                    contract_id,
+                    commit_id.as_ref(),
+                    element_bytes,
+                )
+                .await?;
             }
         }
         tracing::trace!("persisting index finished");
 
         // let base_main_path =
         //     Self::base_path_main(&directories.main_dir, commit_id.as_ref())?;
-        let base_info_bytes =
+        let _base_info_bytes =
             rkyv::to_bytes::<_, 128>(&base_info).map_err(|err| {
                 io::Error::new(
                     io::ErrorKind::InvalidData,
@@ -203,23 +210,32 @@ impl CommitWriterDb {
         Ok(())
     }
 
-    fn write_element_to_db(connection_pool: SqlitePool, contract_id: &ContractId, commit_id: impl AsRef<str>, element_bytes: impl AsRef<[u8]>) -> Result<(), StorageError> {
-        let mut conn = pool.acquire().await?;
+    async fn write_element_to_db(
+        connection_pool: SqlitePool,
+        contract_id: &ContractId,
+        commit_id: impl AsRef<str>,
+        element_bytes: impl AsRef<[u8]>,
+    ) -> Result<(), StorageError> {
+        let mut conn = connection_pool
+            .acquire()
+            .await
+            .map_err(|e| StorageError::Db(Arc::new(e)))?;
 
         let contract_id_str = hex::encode(contract_id.as_bytes());
 
         let _id = sqlx::query!(
-        r#"
+            r#"
 INSERT INTO elements ( contract_id, commit_id, element_bytes )
 VALUES ( ?1, ?2, ?3 )
         "#,
-            contract_id_str, commit_id, element_bytes,
+            contract_id_str,
+            commit_id,
+            element_bytes,
         )
-            .execute(&mut *conn)
-            .await?
-            .last_insert_rowid();
+        .execute(&mut *conn)
+        .await?
+        .last_insert_rowid();
 
         Ok(())
     }
-
 }

@@ -92,7 +92,6 @@ impl CommitWriter {
     /// Writes a commit to disk.
     fn write_commit_inner<P: AsRef<Path>, S: AsRef<str>>(
         root_dir: P,
-        connection_pool: SqlitePool,
         commit: &Commit,
         commit_contracts: BTreeMap<ContractId, ContractDataEntry>,
         commit_id: S,

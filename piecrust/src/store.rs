@@ -95,6 +95,7 @@ impl ContractStore {
     /// [`session spawning`]: ContractStore::session
     pub fn new<P: AsRef<Path>>(engine: Engine, dir: P) -> io::Result<Self> {
         let root_dir = dir.as_ref();
+        let db_path = root_dir.join(DB_DIR);
 
         fs::create_dir_all(root_dir)?;
 
@@ -137,12 +138,13 @@ impl ContractStore {
         // debugging.
         let sync_loop = thread::Builder::new()
             .name(String::from("PiecrustSync"))
-            .spawn(|| sync_loop(loop_root_dir, connection_pool, commit_store, calls))
+            .spawn(|| {
+                sync_loop(loop_root_dir, connection_pool, commit_store, calls)
+            })
             .map_err(|e| StorageError::Io(Arc::new(e)))?;
 
         self.sync_loop = Some(sync_loop);
         self.call = Some(call);
-        let db_path = self.root_dir.join(DB_DIR);
         Ok(())
     }
 
@@ -276,7 +278,7 @@ pub(crate) enum Call {
 
 fn sync_loop<P: AsRef<Path>>(
     root_dir: P,
-    connection_pool: SqlitePool,
+    _connection_pool: SqlitePool,
     commit_store: Arc<Mutex<CommitStore>>,
     calls: mpsc::Receiver<Call>,
 ) {
@@ -298,7 +300,6 @@ fn sync_loop<P: AsRef<Path>>(
                 tracing::trace!("writing commit started");
                 let io_result = CommitWriter::create_and_write(
                     root_dir,
-                    connection_pool.clone(),
                     commit_store.clone(),
                     base,
                     contracts,

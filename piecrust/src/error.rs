@@ -5,6 +5,7 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 use std::borrow::Cow;
+use std::io;
 use std::sync::{mpsc, Arc};
 use thiserror::Error;
 
@@ -145,5 +146,11 @@ impl From<Error> for ContractError {
 impl From<StorageError> for Error {
     fn from(err: StorageError) -> Self {
         Self::PersistenceError(err)
+    }
+}
+
+impl From<io::Error> for StorageError {
+    fn from(err: io::Error) -> Self {
+        Self::Io(Arc::new(err))
     }
 }
