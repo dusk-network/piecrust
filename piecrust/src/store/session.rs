@@ -245,6 +245,50 @@ impl ContractSession {
         }
     }
 
+    pub fn find_element2(
+        commit: Option<Hash>,
+        leaf_path: impl AsRef<Path>,
+        main_path: impl AsRef<Path>,
+        depth: u32,
+    ) -> Option<(PathBuf, u32)> {
+        match commit {
+            None => {
+                let path = leaf_path.as_ref().join(ELEMENT_FILE);
+                if path.is_file() {
+                    Some((path, u32::MAX))
+                } else {
+                    None
+                }
+            }
+            Some(hash) => {
+                let hash_hex = hex::encode(hash.as_bytes());
+                let path =
+                    leaf_path.as_ref().join(&hash_hex).join(ELEMENT_FILE);
+                if path.is_file() {
+                    Some((path, depth + 1))
+                } else {
+                    let base_info_path =
+                        main_path.as_ref().join(hash_hex).join(BASE_FILE);
+                    if let Ok(index) = base_from_path(base_info_path) {
+                        Self::find_element2(
+                            index.maybe_base,
+                            leaf_path,
+                            main_path,
+                            depth + 1,
+                        )
+                    } else {
+                        Self::find_element2(
+                            None,
+                            leaf_path,
+                            main_path,
+                            depth + 1,
+                        )
+                    }
+                }
+            }
+        }
+    }
+
     /// Return the bytecode and memory belonging to the given `contract`, if it
     /// exists.
     ///

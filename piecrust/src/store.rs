@@ -17,10 +17,10 @@ mod tree;
 use std::cell::Ref;
 use std::collections::btree_map::Entry::*;
 use std::collections::btree_map::Keys;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fmt::{Debug, Formatter};
-use std::fs::{create_dir_all, OpenOptions};
-use std::io::{BufReader, BufWriter};
+use std::fs::{create_dir_all, File, OpenOptions};
+use std::io::{BufReader, BufWriter, Write};
 use std::path::{Path, PathBuf};
 use std::sync::{mpsc, Arc, Mutex};
 use std::{fs, io, thread};
@@ -41,6 +41,7 @@ pub use metadata::Metadata;
 pub use module::Module;
 pub use session::ContractSession;
 pub use tree::PageOpening;
+use crate::Error;
 
 const BYTECODE_DIR: &str = "bytecode";
 const MEMORY_DIR: &str = "memory";
@@ -685,7 +686,7 @@ impl Commit {
         }))
     }
 
-    pub fn insert(&mut self, contract_id: ContractId, memory: &Memory) {
+    pub fn insert(&mut self, contract_id: ContractId, memory: &Memory) -> ContractIndexElement {
         if self.index_get(&contract_id).is_none() {
             self.index.insert_contract_index(
                 &contract_id,
@@ -712,11 +713,12 @@ impl Commit {
         let internal_pos = contracts_merkle.insert(pos, root);
         element.set_hash(Some(root));
         element.set_int_pos(Some(internal_pos));
+        element.clone()
     }
 
-    pub fn remove_and_insert(&mut self, contract: ContractId, memory: &Memory) {
+    pub fn remove_and_insert(&mut self, contract: ContractId, memory: &Memory) -> ContractIndexElement {
         self.index.remove_contract_index(&contract);
-        self.insert(contract, memory);
+        self.insert(contract, memory)
     }
 
     pub fn root(&self) -> Ref<Hash> {
@@ -980,12 +982,16 @@ fn write_commit<P: AsRef<Path>>(
 
     let mut commit =
         base.unwrap_or(Commit::new(&commit_store, base_info.maybe_base));
+
+    let mut new_elements =
+        BTreeMap::<ContractId, ContractIndexElement>::new();
     for (contract_id, contract_data) in &commit_contracts {
-        if contract_data.is_new {
-            commit.remove_and_insert(*contract_id, &contract_data.memory);
+        let element = if contract_data.is_new {
+            commit.remove_and_insert(*contract_id, &contract_data.memory)
         } else {
-            commit.insert(*contract_id, &contract_data.memory);
-        }
+            commit.insert(*contract_id, &contract_data.memory)
+        };
+        new_elements.insert(*contract_id, element.clone());
     }
 
     let root = *commit.root();
@@ -999,11 +1005,55 @@ fn write_commit<P: AsRef<Path>>(
         return Ok(root);
     }
 
-    write_commit_inner(root_dir, &commit, commit_contracts, root_hex, base_info)
+    let ret = write_commit_inner(
+        root_dir,
+        &commit,
+        commit_contracts,
+        &root_hex,
+        base_info.clone(),
+        // &new_elements,
+    )
         .map(|_| {
-            commit_store.lock().unwrap().insert_commit(root, commit);
+            commit_store
+                .lock()
+                .unwrap()
+                .insert_commit(root, commit.clone());
             root
-        })
+        });
+
+    if let Ok(written_commit_hash) = ret {
+        // todo: why is this not simply scanning all elements to verify?
+        let elements_to_verify = scan_elements_from_commit(
+            root_dir.join(MAIN_DIR),
+            root_dir.join(MAIN_DIR).join(LEAF_DIR),
+            Some(written_commit_hash),
+        )?;
+
+        let root_from_elements_ok =
+            calc_root_from_elements(&elements_to_verify) == root;
+        println!(
+            "ROOT_OK_WITH_ELEMENTS={} {}",
+            root_from_elements_ok,
+            if root_from_elements_ok {
+                ""
+            } else {
+                "(order matters)"
+            }
+        );
+        println!(
+            "ROOT_OK_WITH_TREE_POS={}",
+            calc_root_from_tree_pos(commit.contracts_merkle.tree_pos())
+                == root
+        );
+        let _ = print_root_infos(
+            &elements_to_verify,
+            &new_elements,
+            commit.contracts_merkle.tree_pos(),
+        );
+        println!("WRITTEN COMMIT {}  ======== (order matters)", root_hex);
+    }
+
+    ret
 }
 
 /// Writes a commit to disk.
@@ -1088,6 +1138,7 @@ fn write_commit_inner<P: AsRef<Path>, S: AsRef<str>>(
     }
 
     tracing::trace!("persisting index started");
+    let mut elem_count = 0;
     for (contract_id, element) in commit.index.iter() {
         if commit_contracts.contains_key(contract_id) {
             let element_dir_path = directories
@@ -1103,7 +1154,12 @@ fn write_commit_inner<P: AsRef<Path>, S: AsRef<str>>(
                         format!("Failed serializing element file: {err}"),
                     )
                 })?;
-            fs::write(&element_file_path, element_bytes)?;
+            println!("{} XWRITE ELEMENT {:?}", elem_count, element_file_path);
+            let mut f = File::create(&element_file_path)?;
+            f.write_all(&element_bytes)?;
+            // fs::write(&element_file_path, element_bytes)?;
+            File::sync_all(&f)?;
+            elem_count += 1;
         }
     }
     tracing::trace!("persisting index finished");
@@ -1205,4 +1261,198 @@ fn finalize_commit<P: AsRef<Path>>(
     fs::remove_dir(commit_path)?;
 
     Ok(())
+}
+
+fn scan_elements_from_commit(
+    main_dir: impl AsRef<Path>,
+    leaf_dir: impl AsRef<Path>,
+    commit: Option<Hash>,
+) -> io::Result<BTreeMap<ContractId, ContractIndexElement>> {
+    let main_dir = main_dir.as_ref();
+    let leaf_dir = leaf_dir.as_ref();
+    let mut count = 0;
+    let mut total_count = 0;
+    let mut elements = BTreeMap::<ContractId, ContractIndexElement>::new();
+    if let Some(hash) = commit {
+        // for all contracts in leaf
+        for entry in fs::read_dir(leaf_dir)? {
+            let entry = entry?;
+            if entry.path().is_dir() {
+                let contract_id_hex =
+                    entry.file_name().to_string_lossy().to_string();
+                let contract_id = contract_id_from_hex(&contract_id_hex);
+                let contract_leaf_path = leaf_dir.join(&contract_id_hex);
+                if let Some((element_path, _)) = ContractSession::find_element2(
+                    Some(hash),
+                    &contract_leaf_path,
+                    main_dir,
+                    0,
+                ) {
+                    if element_path.is_file() {
+                        if !elements.contains_key(&contract_id) {
+                            count += 1;
+                        }
+                        println!(
+                            "{} SCAN FOUND {:?} contains={}",
+                            total_count,
+                            element_path,
+                            elements.contains_key(&contract_id)
+                        );
+                        let element_bytes = fs::read(&element_path)?;
+                        let element: ContractIndexElement =
+                            rkyv::from_bytes(&element_bytes).map_err(|err| {
+                                tracing::trace!(
+                                    "deserializing element file failed {}",
+                                    err
+                                );
+                                io::Error::new(
+                                    io::ErrorKind::InvalidData,
+                                    format!(
+                                        "Invalid element file \"{element_path:?}\": {err}"
+                                    ),
+                                )
+                            })?;
+                        total_count += 1;
+                        elements.entry(contract_id).or_insert(element);
+                    }
+                } else {
+                    println!("SCAN NOT FOUND {:?}", contract_leaf_path);
+                }
+            }
+        }
+    }
+    println!("SCANNED {} ELEMENTS", count);
+    println!("SCANNED {} TOTAL ELEMENTS", total_count);
+    Ok(elements)
+}
+
+fn calc_root_from_elements(
+    elements: &BTreeMap<ContractId, ContractIndexElement>,
+) -> Hash {
+    let mut merkle = ContractsMerkle::default();
+    for (contract_id, element) in elements.iter() {
+        merkle.insert_with_int_pos(
+            position_from_contract(contract_id),
+            element.int_pos().expect("int_pos should exist"),
+            element.hash().expect("hash should exist"),
+        );
+    }
+    let r = *merkle.root();
+    r
+}
+
+fn calc_root_from_tree_pos(tree_pos: &TreePos) -> Hash {
+    let mut merkle = ContractsMerkle::default();
+
+    for (int_pos, (hash, pos)) in tree_pos.iter() {
+        merkle.insert_with_int_pos(*pos, *int_pos as u64, *hash);
+    }
+    let r = *merkle.root();
+    r
+}
+
+fn print_root_infos(
+    elements: &BTreeMap<ContractId, ContractIndexElement>,
+    new_elements: &BTreeMap<ContractId, ContractIndexElement>,
+    tree_pos: &TreePos,
+) -> Result<(), Error> {
+    // println!();
+    // println!("tree_pos");
+    let mut tree_pos_map: HashMap<u64, [u8; 32]> = HashMap::new();
+    for (k, (h, _c)) in tree_pos.iter() {
+        // println!(
+        //     "{} {} {}",
+        //     *k,
+        //     hex::encode(h),
+        //     hex::encode((*c).to_le_bytes())
+        // );
+        tree_pos_map.insert(*k as u64, *h.as_bytes());
+    }
+
+    println!();
+    println!("elems:");
+    let mut sorted_elements: Vec<(ContractId, ContractIndexElement)> =
+        elements.iter().map(|(a, b)| (*a, b.clone())).collect();
+    sorted_elements.sort_by(|(_, el1), (_, el2)| {
+        el1.int_pos()
+            .expect("int_pos")
+            .cmp(&el2.int_pos().expect("int_pos"))
+    });
+    for (contract_id, element) in sorted_elements.iter() {
+        let is_new_element = new_elements.contains_key(contract_id);
+        let contract_pos_hex =
+            hex::encode(position_from_contract(contract_id).to_le_bytes());
+        if Some(element.hash().expect("hash should exist").as_bytes())
+            != tree_pos_map
+            .get(&element.int_pos().expect("int_pos should exist"))
+        {
+            print!("* ");
+            print!(
+                "{} {} ({}) int_pos={} from tree_pos={} is_new={}",
+                hex::encode(element.hash().expect("hash should exist")),
+                contract_prefix(contract_id),
+                contract_pos_hex,
+                element.int_pos().expect("int_pos should exist"),
+                hex::encode(
+                    tree_pos_map
+                        .get(&element.int_pos().expect("int_pos should exist"))
+                        .expect("should be found")
+                ),
+                is_new_element,
+            );
+            println!();
+        }
+    }
+
+    let root_from_elements = calculate_root(elements.iter().map(|(_, el)| {
+        (
+            *el.hash().expect("hash should exist").as_bytes(),
+            el.int_pos().expect("int_pos should exist"),
+        )
+    }));
+    println!();
+    println!("root_from_elements={}", hex::encode(root_from_elements));
+    let root_from_tree_pos_file = calculate_root_pos_32(
+        tree_pos.iter().map(|(k, (h, _c))| (*h.as_bytes(), *k)),
+    );
+    println!();
+    println!(
+        "root_from_tree_pos_file={}",
+        hex::encode(root_from_tree_pos_file)
+    );
+
+    println!("num of elements = {} len of pos file={}",elements.len(), tree_pos_map.len());
+
+    println!();
+    Ok(())
+}
+
+type ContractMemTree = dusk_merkle::Tree<Hash, 32, 2>;
+
+
+fn contract_prefix(contract: &ContractId) -> String {
+    let mut a = [0u8; 8];
+    a.copy_from_slice(&contract.to_bytes()[..8]);
+    hex::encode(a)
+}
+
+fn calculate_root(entries: impl Iterator<Item = ([u8; 32], u64)>) -> [u8; 32] {
+    let mut tree = ContractMemTree::new();
+    for (hash, int_pos) in entries {
+        tree.insert(int_pos, hash);
+    }
+    let r = *(*tree.root()).as_bytes();
+    r
+}
+
+fn calculate_root_pos_32(
+    entries: impl Iterator<Item = ([u8; 32], u32)>,
+) -> [u8; 32] {
+    let mut tree = ContractMemTree::new();
+    for (hash, int_pos) in entries {
+        let int_pos = int_pos as u64;
+        tree.insert(int_pos, hash);
+    }
+    let r = *(*tree.root()).as_bytes();
+    r
 }
