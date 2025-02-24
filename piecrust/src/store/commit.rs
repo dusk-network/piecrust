@@ -98,7 +98,11 @@ impl Commit {
         }))
     }
 
-    pub fn insert(&mut self, contract_id: ContractId, memory: &Memory) {
+    pub fn insert(
+        &mut self,
+        contract_id: ContractId,
+        memory: &Memory,
+    ) -> ContractIndexElement {
         if self.index_get(&contract_id).is_none() {
             self.index.insert_contract_index(
                 &contract_id,
@@ -125,11 +129,16 @@ impl Commit {
         let internal_pos = contracts_merkle.insert(pos, root);
         element.set_hash(Some(root));
         element.set_int_pos(Some(internal_pos));
+        element.clone()
     }
 
-    pub fn remove_and_insert(&mut self, contract: ContractId, memory: &Memory) {
+    pub fn remove_and_insert(
+        &mut self,
+        contract: ContractId,
+        memory: &Memory,
+    ) -> ContractIndexElement {
         self.index.remove_contract_index(&contract);
-        self.insert(contract, memory);
+        self.insert(contract, memory)
     }
 
     pub fn root(&self) -> Ref<Hash> {
