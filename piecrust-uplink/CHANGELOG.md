@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.18.0] - 2025-02-20
+
+### Added
+
+- Add `TryFrom<String>` trait impl for `ContractId` [#420]
+
+### Changed
+
+- Change serialization of event data field from base64 to hex [#425]
+
 ## [0.17.3] - 2024-12-19
 
 ## [0.17.2] - 2024-12-17
@@ -226,6 +236,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - First `piecrust-uplink` release
 
 <!-- ISSUES -->
+[#425]: https://github.com/dusk-network/piecrust/issues/425
+[#420]: https://github.com/dusk-network/piecrust/issues/420
 [#414]: https://github.com/dusk-network/piecrust/issues/414
 [#375]: https://github.com/dusk-network/piecrust/issues/375
 [#365]: https://github.com/dusk-network/piecrust/issues/365
@@ -252,7 +264,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [#136]: https://github.com/dusk-network/piecrust/issues/136
 
 <!-- VERSIONS -->
-[Unreleased]: https://github.com/dusk-network/piecrust/compare/uplink-0.17.3...HEAD
+[Unreleased]: https://github.com/dusk-network/piecrust/compare/uplink-0.18.0...HEAD
+[0.18.0]: https://github.com/dusk-network/piecrust/compare/uplink-0.17.3...uplink-0.18.0
 [0.17.3]: https://github.com/dusk-network/piecrust/compare/uplink-0.17.2...uplink-0.17.3
 [0.17.2]: https://github.com/dusk-network/piecrust/compare/uplink-0.17.1...uplink-0.17.2
 [0.17.1]: https://github.com/dusk-network/piecrust/compare/uplink-0.17.0...uplink-0.17.1
