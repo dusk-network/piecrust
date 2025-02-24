@@ -24,9 +24,8 @@ pub struct CommitWriter;
 impl CommitWriter {
     ///
     /// Creates and writes commit, adds the created commit to commit store.
-    /// The created commit is immutable and its hash (root) is calculated and returned
-    /// by this method.
-    ///
+    /// The created commit is immutable and its hash (root) is calculated and
+    /// returned by this method.
     pub fn create_and_write<P: AsRef<Path>>(
         root_dir: P,
         commit_store: Arc<Mutex<CommitStore>>,
@@ -168,7 +167,7 @@ impl CommitWriter {
             if contract_data.is_new {
                 // we write them to the main location
                 fs::write(bytecode_main_path, &contract_data.bytecode)?;
-                fs::write(module_main_path, &contract_data.module.serialize())?;
+                fs::write(module_main_path, contract_data.module.serialize())?;
                 fs::write(metadata_main_path, &contract_data.metadata)?;
                 dirty = true;
             }

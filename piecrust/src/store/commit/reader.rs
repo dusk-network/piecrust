@@ -30,7 +30,6 @@ pub struct CommitReader;
 impl CommitReader {
     ///
     /// Reads all commits into a given commit store
-    ///
     pub fn read_all_commits<P: AsRef<Path>>(
         engine: &Engine,
         root_dir: P,
