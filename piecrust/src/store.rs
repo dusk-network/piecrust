@@ -138,6 +138,31 @@ impl CommitStore {
     }
 
     pub fn remove_commit(&mut self, hash: &Hash) {
+        let mut elements_to_remove = BTreeMap::new();
+        if let Some(removed_commit) = self.commits.get(hash) {
+            for (contract_id, element) in
+                removed_commit.index.contracts().iter()
+            {
+                if let Some(h) = element.hash() {
+                    elements_to_remove.insert(*contract_id, h);
+                }
+            }
+        }
+        // other commits should not keep finalized elements
+        for (h, commit) in self.commits.iter_mut() {
+            if h == hash {
+                continue;
+            }
+            for (c, hh) in elements_to_remove.iter() {
+                if let Some(el) = commit.index.get(c) {
+                    if let Some(el_hash) = el.hash() {
+                        if el_hash == *hh {
+                            commit.index.remove_contract_index(c);
+                        }
+                    }
+                }
+            }
+        }
         self.commits.remove(hash);
     }
 
@@ -682,7 +707,7 @@ impl Commit {
     }
 
     pub fn insert(&mut self, contract_id: ContractId, memory: &Memory) {
-        if self.index_get(&contract_id).is_none() {
+        if !self.index.contains_key(&contract_id) {
             self.index.insert_contract_index(
                 &contract_id,
                 ContractIndexElement::new(memory.is_64()),
@@ -1183,7 +1208,9 @@ fn finalize_commit<P: AsRef<Path>>(
         if src_leaf_file_path.is_file() {
             fs::rename(&src_leaf_file_path, dst_leaf_file_path)?;
         }
-        fs::remove_dir(src_leaf_path)?;
+        if src_leaf_path.exists() {
+            fs::remove_dir(src_leaf_path)?;
+        }
     }
 
     fs::remove_file(base_info_path)?;
