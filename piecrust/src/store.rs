@@ -10,7 +10,6 @@ mod baseinfo;
 mod bytecode;
 mod commit;
 mod commit_db;
-mod commit_hulk;
 mod commit_store;
 mod hasher;
 mod index;
@@ -237,17 +236,14 @@ impl ContractStore {
 
     fn session_with_base(&self, base: Option<Hash>) -> ContractSession {
         let base_commit = base.and_then(|hash| {
-            self.commit_store
-                .lock()
-                .unwrap()
-                .get_commit(&hash)
-                .map(|commit| commit.to_hulk())
+            self.commit_store.lock().unwrap().get_commit(&hash).cloned()
         });
         ContractSession::new(
             &self.root_dir,
             self.engine.clone(),
             base_commit,
             self.call.as_ref().expect("call should exist").clone(),
+            self.commit_store.clone(),
         )
     }
 }

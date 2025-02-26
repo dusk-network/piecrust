@@ -392,7 +392,7 @@ fn callstack(env: Caller<Env>) -> i32 {
     let instance = env.self_instance();
 
     let mut i = 0usize;
-    for contract_id in env.call_ids() {
+    for contract_id in env.call_ids().iter().skip(1) {
         instance.with_arg_buf_mut(|buf| {
             buf[i * CONTRACT_ID_BYTES..(i + 1) * CONTRACT_ID_BYTES]
                 .copy_from_slice(contract_id.as_bytes());

@@ -167,7 +167,7 @@ impl CommitWriter {
             if contract_data.is_new {
                 // we write them to the main location
                 fs::write(bytecode_main_path, &contract_data.bytecode)?;
-                fs::write(module_main_path, &contract_data.module.serialize())?;
+                fs::write(module_main_path, contract_data.module.serialize())?;
                 fs::write(metadata_main_path, &contract_data.metadata)?;
                 dirty = true;
             }

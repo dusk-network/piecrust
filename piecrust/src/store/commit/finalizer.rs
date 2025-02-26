@@ -48,7 +48,9 @@ impl CommitFinalizer {
             if src_leaf_file_path.is_file() {
                 fs::rename(&src_leaf_file_path, dst_leaf_file_path)?;
             }
-            fs::remove_dir(src_leaf_path)?;
+            if src_leaf_path.exists() {
+                fs::remove_dir(src_leaf_path)?;
+            }
         }
 
         fs::remove_file(base_info_path)?;

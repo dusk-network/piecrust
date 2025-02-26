@@ -108,6 +108,7 @@ impl CommitReader {
             main_dir,
             leaf_dir,
             &maybe_hash,
+            commit_store.clone(),
             tree_pos.as_ref(),
         )?;
         tracing::trace!("after index_merkle_from_path");
@@ -186,6 +187,7 @@ impl CommitReader {
         main_path: impl AsRef<Path>,
         leaf_dir: impl AsRef<Path>,
         maybe_commit_id: &Option<Hash>,
+        commit_store: Arc<Mutex<CommitStore>>,
         maybe_tree_pos: Option<&TreePos>,
     ) -> io::Result<(NewContractIndex, ContractsMerkle)> {
         let leaf_dir = leaf_dir.as_ref();
@@ -237,6 +239,11 @@ impl CommitReader {
                         }
                         if element_depth != u32::MAX {
                             index.insert_contract_index(&contract_id, element);
+                        } else {
+                            commit_store
+                                .lock()
+                                .unwrap()
+                                .insert_main_index(&contract_id, element);
                         }
                     }
                 }
