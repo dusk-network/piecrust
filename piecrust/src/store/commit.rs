@@ -12,7 +12,6 @@ pub mod writer;
 use std::cell::Ref;
 use std::sync::{Arc, Mutex};
 
-use crate::store::commit_hulk::CommitHulk;
 use crate::store::commit_store::CommitStore;
 use crate::store::hasher::Hash;
 use crate::store::index::{ContractIndexElement, NewContractIndex};
@@ -64,10 +63,6 @@ impl Commit {
         }
     }
 
-    pub fn to_hulk(&self) -> CommitHulk {
-        CommitHulk::from_commit(self)
-    }
-
     #[allow(dead_code)]
     pub fn inclusion_proofs(
         mut self,
@@ -99,7 +94,7 @@ impl Commit {
     }
 
     pub fn insert(&mut self, contract_id: ContractId, memory: &Memory) {
-        if self.index_get(&contract_id).is_none() {
+        if !self.index.contains_key(&contract_id) {
             self.index.insert_contract_index(
                 &contract_id,
                 ContractIndexElement::new(memory.is_64()),
@@ -143,13 +138,77 @@ impl Commit {
         &self,
         contract_id: &ContractId,
     ) -> Option<&ContractIndexElement> {
-        self.index.get(contract_id)
+        Hulk::deep_index_get(
+            &self.index,
+            *contract_id,
+            self.commit_store.clone(),
+            self.base,
+        )
+        .map(|a| unsafe { &*a })
     }
 
     pub fn element_and_merkle_mut(
         &mut self,
         contract_id: &ContractId,
     ) -> (Option<&mut ContractIndexElement>, &mut ContractsMerkle) {
-        (self.index.get_mut(contract_id), &mut self.contracts_merkle)
+        (
+            Hulk::deep_index_get_mut(
+                &mut self.index,
+                *contract_id,
+                self.commit_store.clone(),
+                self.base,
+            )
+            .map(|a| unsafe { &mut *a }),
+            &mut self.contracts_merkle,
+        )
+    }
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct Hulk;
+
+impl Hulk {
+    pub fn deep_index_get(
+        index: &NewContractIndex,
+        contract_id: ContractId,
+        commit_store: Option<Arc<Mutex<CommitStore>>>,
+        base: Option<Hash>,
+    ) -> Option<*const ContractIndexElement> {
+        if let Some(e) = index.get(&contract_id) {
+            return Some(e);
+        }
+        let mut base = base?;
+        let commit_store = commit_store.clone()?;
+        let commit_store = commit_store.lock().unwrap();
+        loop {
+            let (maybe_element, commit_base) =
+                commit_store.get_element_and_base(&base, &contract_id);
+            if let Some(e) = maybe_element {
+                return Some(e);
+            }
+            base = commit_base?;
+        }
+    }
+
+    pub fn deep_index_get_mut(
+        index: &mut NewContractIndex,
+        contract_id: ContractId,
+        commit_store: Option<Arc<Mutex<CommitStore>>>,
+        base: Option<Hash>,
+    ) -> Option<*mut ContractIndexElement> {
+        if let Some(e) = index.get_mut(&contract_id) {
+            return Some(e);
+        }
+        let mut base = base?;
+        let commit_store = commit_store.clone()?;
+        let mut commit_store = commit_store.lock().unwrap();
+        loop {
+            let (maybe_element, commit_base) =
+                commit_store.get_element_and_base_mut(&base, &contract_id);
+            if let Some(e) = maybe_element {
+                return Some(e);
+            }
+            base = commit_base?;
+        }
     }
 }

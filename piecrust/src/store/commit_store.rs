@@ -6,18 +6,22 @@
 
 use crate::store::commit::Commit;
 use crate::store::hasher::Hash;
+use crate::store::index::{ContractIndexElement, NewContractIndex};
+use piecrust_uplink::ContractId;
 use std::collections::btree_map::Keys;
 use std::collections::BTreeMap;
 
 #[derive(Debug)]
 pub struct CommitStore {
     commits: BTreeMap<Hash, Commit>,
+    main_index: NewContractIndex,
 }
 
 impl CommitStore {
     pub fn new() -> Self {
         Self {
             commits: BTreeMap::new(),
+            main_index: NewContractIndex::new(),
         }
     }
 
@@ -27,6 +31,40 @@ impl CommitStore {
 
     pub fn get_commit(&self, hash: &Hash) -> Option<&Commit> {
         self.commits.get(hash)
+    }
+
+    pub fn get_element_and_base(
+        &self,
+        hash: &Hash,
+        contract_id: &ContractId,
+    ) -> (Option<*const ContractIndexElement>, Option<Hash>) {
+        match self.commits.get(hash) {
+            Some(commit) => {
+                let e = commit.index.get(contract_id);
+                (e.map(|a| a as *const ContractIndexElement), commit.base)
+            }
+            None => {
+                let e = self.main_index.get(contract_id);
+                (e.map(|a| a as *const ContractIndexElement), None)
+            }
+        }
+    }
+
+    pub fn get_element_and_base_mut(
+        &mut self,
+        hash: &Hash,
+        contract_id: &ContractId,
+    ) -> (Option<*mut ContractIndexElement>, Option<Hash>) {
+        match self.commits.get_mut(hash) {
+            Some(commit) => {
+                let e = commit.index.get_mut(contract_id);
+                (e.map(|a| a as *mut ContractIndexElement), commit.base)
+            }
+            None => {
+                let e = self.main_index.get_mut(contract_id);
+                (e.map(|a| a as *mut ContractIndexElement), None)
+            }
+        }
     }
 
     pub fn contains_key(&self, hash: &Hash) -> bool {
@@ -64,5 +102,13 @@ impl CommitStore {
             }
         }
         self.commits.remove(hash);
+    }
+
+    pub fn insert_main_index(
+        &mut self,
+        contract_id: &ContractId,
+        element: ContractIndexElement,
+    ) {
+        self.main_index.insert_contract_index(contract_id, element);
     }
 }
