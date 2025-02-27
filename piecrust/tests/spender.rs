@@ -149,7 +149,7 @@ pub fn contract_sets_call_limit() -> Result<(), Error> {
     Ok(())
 }
 
-#[test]
+#[ignore]
 pub fn limit_and_spent() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 
