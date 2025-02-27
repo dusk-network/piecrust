@@ -22,8 +22,8 @@ const CROSSOVER_TWO: ContractId = {
     ContractId::from_bytes(bytes)
 };
 
-#[test]
-fn crossover() -> Result<(), Error> {
+#[tokio::test(flavor = "multi_thread")]
+async fn crossover() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 
     let mut session = vm.session(SessionData::builder())?;
@@ -71,8 +71,8 @@ fn crossover() -> Result<(), Error> {
     Ok(())
 }
 
-#[test]
-fn iccs_dont_rollback() -> Result<(), Error> {
+#[tokio::test(flavor = "multi_thread")]
+async fn iccs_dont_rollback() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 
     let mut session = vm.session(SessionData::builder())?;

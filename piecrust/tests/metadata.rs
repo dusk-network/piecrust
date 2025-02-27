@@ -9,8 +9,8 @@ use piecrust_uplink::ContractId;
 
 const LIMIT: u64 = 1_000_000;
 
-#[test]
-fn metadata() -> Result<(), Error> {
+#[tokio::test(flavor = "multi_thread")]
+async fn metadata() -> Result<(), Error> {
     const EXPECTED_OWNER: [u8; 33] = [3u8; 33];
 
     let vm = VM::ephemeral()?;
@@ -48,8 +48,8 @@ fn metadata() -> Result<(), Error> {
     Ok(())
 }
 
-#[test]
-fn owner_of() -> Result<(), Error> {
+#[tokio::test(flavor = "multi_thread")]
+async fn owner_of() -> Result<(), Error> {
     const EXPECTED_OWNER_0: [u8; 33] = [3u8; 33];
     const EXPECTED_OWNER_1: [u8; 33] = [4u8; 33];
 

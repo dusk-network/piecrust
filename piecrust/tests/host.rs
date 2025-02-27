@@ -85,8 +85,8 @@ fn new_ephemeral_vm() -> Result<VM, Error> {
     Ok(vm)
 }
 
-#[test]
-pub fn host_hash() -> Result<(), Error> {
+#[tokio::test(flavor = "multi_thread")]
+pub async fn host_hash() -> Result<(), Error> {
     let vm = new_ephemeral_vm()?;
 
     let mut session = vm.session(SessionData::builder())?;
@@ -107,8 +107,8 @@ pub fn host_hash() -> Result<(), Error> {
     Ok(())
 }
 
-#[test]
-pub fn host_very_expensive_oog() -> Result<(), Error> {
+#[tokio::test(flavor = "multi_thread")]
+pub async fn host_very_expensive_oog() -> Result<(), Error> {
     let vm = new_ephemeral_vm()?;
 
     let mut session = vm.session(SessionData::builder())?;
@@ -176,8 +176,8 @@ impl Circuit for TestCircuit {
     }
 }
 
-#[test]
-pub fn host_proof() -> Result<(), Error> {
+#[tokio::test(flavor = "multi_thread")]
+pub async fn host_proof() -> Result<(), Error> {
     let vm = new_ephemeral_vm()?;
 
     let mut session = vm.session(SessionData::builder())?;

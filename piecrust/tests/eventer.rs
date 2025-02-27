@@ -9,8 +9,8 @@ use piecrust::{contract_bytecode, ContractData, Error, SessionData, VM};
 const OWNER: [u8; 32] = [0u8; 32];
 const LIMIT: u64 = 1_000_000;
 
-#[test]
-pub fn vm_center_events() -> Result<(), Error> {
+#[tokio::test(flavor = "multi_thread")]
+pub async fn vm_center_events() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 
     let mut session = vm.session(SessionData::builder())?;
@@ -56,8 +56,8 @@ pub fn vm_center_events() -> Result<(), Error> {
     Ok(())
 }
 
-#[test]
-pub fn event_costs() -> Result<(), Error> {
+#[tokio::test(flavor = "multi_thread")]
+pub async fn event_costs() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 
     let mut session = vm.session(SessionData::builder())?;

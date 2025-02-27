@@ -11,8 +11,8 @@ use piecrust::{contract_bytecode, ContractData, Error, SessionData, VM};
 const OWNER: [u8; 32] = [0u8; 32];
 const LIMIT: u64 = 1_000_000;
 
-#[test]
-fn feed() -> Result<(), Error> {
+#[tokio::test(flavor = "multi_thread")]
+async fn feed() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 
     let mut session = vm.session(SessionData::builder())?;
@@ -83,8 +83,8 @@ fn feed() -> Result<(), Error> {
     Ok(())
 }
 
-#[test]
-fn feed_errors_when_normal_call() -> Result<(), Error> {
+#[tokio::test(flavor = "multi_thread")]
+async fn feed_errors_when_normal_call() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 
     let mut session = vm.session(SessionData::builder())?;
@@ -104,8 +104,8 @@ fn feed_errors_when_normal_call() -> Result<(), Error> {
     Ok(())
 }
 
-#[test]
-fn feed_out_of_gas() -> Result<(), Error> {
+#[tokio::test(flavor = "multi_thread")]
+async fn feed_out_of_gas() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 
     let mut session = vm.session(SessionData::builder())?;

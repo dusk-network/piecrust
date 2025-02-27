@@ -9,8 +9,8 @@ use piecrust::{contract_bytecode, ContractData, Error, SessionData, VM};
 const OWNER: [u8; 32] = [0u8; 32];
 const LIMIT: u64 = 1_000_000;
 
-#[test]
-pub fn height() -> Result<(), Error> {
+#[tokio::test(flavor = "multi_thread")]
+pub async fn height() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 
     const HEIGHT: u64 = 29_000u64;
@@ -29,8 +29,8 @@ pub fn height() -> Result<(), Error> {
     Ok(())
 }
 
-#[test]
-pub fn meta_data_optionality() -> Result<(), Error> {
+#[tokio::test(flavor = "multi_thread")]
+pub async fn meta_data_optionality() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
     let mut session = vm.session(SessionData::builder())?;
     let id = session.deploy(

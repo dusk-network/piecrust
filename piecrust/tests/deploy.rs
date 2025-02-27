@@ -12,8 +12,8 @@ use piecrust::{
 const OWNER: [u8; 32] = [0u8; 32];
 const LIMIT: u64 = 1_000_000;
 
-#[test]
-pub fn deploy_with_id() -> Result<(), Error> {
+#[tokio::test(flavor = "multi_thread")]
+pub async fn deploy_with_id() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 
     let bytecode = contract_bytecode!("counter");
@@ -47,8 +47,8 @@ pub fn deploy_with_id() -> Result<(), Error> {
     Ok(())
 }
 
-#[test]
-fn call_non_deployed() -> Result<(), Error> {
+#[tokio::test(flavor = "multi_thread")]
+async fn call_non_deployed() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 
     let bytecode = contract_bytecode!("double_counter");

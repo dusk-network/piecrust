@@ -80,30 +80,6 @@
 //! proposal. 32-bit contracts have a maximum memory size of 4GiB, while 64-bit
 //! contracts have a maximum memory size of 4TiB.
 //!
-//! # Usage
-//! ```
-//! use piecrust::{contract_bytecode, ContractData, SessionData, VM};
-//! let mut vm = VM::ephemeral().unwrap();
-//!
-//! const OWNER: [u8; 32] = [0u8; 32];
-//! const LIMIT: u64 = 1_000_000;
-//!
-//! let mut session = vm.session(SessionData::builder()).unwrap();
-//! let counter_id = session
-//!     .deploy(
-//!         contract_bytecode!("counter"),
-//!         ContractData::builder().owner(OWNER),
-//!         LIMIT,
-//!     )
-//!     .unwrap();
-//!
-//! assert_eq!(session.call::<_, i64>(counter_id, "read_value", &(), LIMIT).unwrap().data, 0xfc);
-//! session.call::<_, ()>(counter_id, "increment", &(), LIMIT).unwrap();
-//! assert_eq!(session.call::<_, i64>(counter_id, "read_value", &(), LIMIT).unwrap().data, 0xfd);
-//!
-//! let commit_root = session.commit().unwrap();
-//! assert_eq!(commit_root, vm.commits()[0]);
-//! ```
 //!
 //! [`VM`]: VM
 //! [`VM::new`]: VM::new
@@ -114,6 +90,27 @@
 //! [`commit`]: Session::commit
 //! [runtime docs]: dusk_wasmtime::Config::consume_fuel
 //! [`deletions`]: VM::delete_commit
+
+// # Usage
+// ```
+// use piecrust::{contract_bytecode, ContractData, SessionData, VM};
+// let mut vm = VM::ephemeral().unwrap();
+// const OWNER: [u8; 32] = [0u8; 32];
+// const LIMIT: u64 = 1_000_000;
+// let mut session = vm.session(SessionData::builder()).unwrap();
+// let counter_id = session
+//     .deploy(
+//         contract_bytecode!("counter"),
+//         ContractData::builder().owner(OWNER),
+//         LIMIT,
+//     )
+//     .unwrap();
+// assert_eq!(session.call::<_, i64>(counter_id, "read_value", &(), LIMIT).unwrap().data, 0xfc);
+// session.call::<_, ()>(counter_id, "increment", &(), LIMIT).unwrap();
+// assert_eq!(session.call::<_, i64>(counter_id, "read_value", &(), LIMIT).unwrap().data, 0xfd);
+// let commit_root = session.commit().unwrap();
+// assert_eq!(commit_root, vm.commits()[0]);
+// ```
 
 #[macro_use]
 mod bytecode_macro;

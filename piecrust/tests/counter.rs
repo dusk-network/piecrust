@@ -9,8 +9,8 @@ use piecrust::{contract_bytecode, ContractData, Error, SessionData, VM};
 const OWNER: [u8; 32] = [0u8; 32];
 const LIMIT: u64 = 1_000_000;
 
-#[test]
-fn counter_read_simple() -> Result<(), Error> {
+#[tokio::test(flavor = "multi_thread")]
+async fn counter_read_simple() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 
     let mut session = vm.session(SessionData::builder())?;
@@ -29,8 +29,8 @@ fn counter_read_simple() -> Result<(), Error> {
     Ok(())
 }
 
-#[test]
-fn counter_read_write_simple() -> Result<(), Error> {
+#[tokio::test(flavor = "multi_thread")]
+async fn counter_read_write_simple() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 
     let mut session = vm.session(SessionData::builder())?;
@@ -56,8 +56,8 @@ fn counter_read_write_simple() -> Result<(), Error> {
     Ok(())
 }
 
-#[test]
-fn call_through_c() -> Result<(), Error> {
+#[tokio::test(flavor = "multi_thread")]
+async fn call_through_c() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 
     let mut session = vm.session(SessionData::builder())?;
@@ -88,8 +88,8 @@ fn call_through_c() -> Result<(), Error> {
     Ok(())
 }
 
-#[test]
-fn increment_panic() -> Result<(), Error> {
+#[tokio::test(flavor = "multi_thread")]
+async fn increment_panic() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 
     let mut session = vm.session(SessionData::builder())?;

@@ -9,8 +9,8 @@ use piecrust::{contract_bytecode, ContractData, Error, SessionData, VM};
 const OWNER: [u8; 32] = [0u8; 32];
 const LIMIT: u64 = 1_000_000;
 
-#[test]
-pub fn vector_push_pop() -> Result<(), Error> {
+#[tokio::test(flavor = "multi_thread")]
+pub async fn vector_push_pop() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 
     let mut session = vm.session(SessionData::builder())?;

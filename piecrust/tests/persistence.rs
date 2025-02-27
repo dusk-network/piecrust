@@ -11,8 +11,8 @@ use piecrust::{
 const OWNER: [u8; 32] = [0u8; 32];
 const LIMIT: u64 = 1_000_000;
 
-#[test]
-fn session_commits_persistence() -> Result<(), Error> {
+#[tokio::test(flavor = "multi_thread")]
+async fn session_commits_persistence() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 
     let id_1;
@@ -102,8 +102,8 @@ fn session_commits_persistence() -> Result<(), Error> {
     Ok(())
 }
 
-#[test]
-fn contracts_persistence() -> Result<(), Error> {
+#[tokio::test(flavor = "multi_thread")]
+async fn contracts_persistence() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
     let mut session = vm.session(SessionData::builder())?;
     let id_1 = session.deploy(
@@ -151,8 +151,8 @@ fn contracts_persistence() -> Result<(), Error> {
     Ok(())
 }
 
-#[test]
-fn migration() -> Result<(), Error> {
+#[tokio::test(flavor = "multi_thread")]
+async fn migration() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
     let mut session = vm.session(SessionData::builder())?;
 
@@ -211,8 +211,8 @@ fn migration() -> Result<(), Error> {
     Ok(())
 }
 
-#[test]
-fn migration_new_owner() -> Result<(), Error> {
+#[tokio::test(flavor = "multi_thread")]
+async fn migration_new_owner() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
     let mut session = vm.session(SessionData::builder())?;
 
@@ -246,8 +246,8 @@ fn migration_new_owner() -> Result<(), Error> {
     Ok(())
 }
 
-#[test]
-fn migration_old_owner() -> Result<(), Error> {
+#[tokio::test(flavor = "multi_thread")]
+async fn migration_old_owner() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
     let mut session = vm.session(SessionData::builder())?;
 
@@ -280,8 +280,8 @@ fn migration_old_owner() -> Result<(), Error> {
     Ok(())
 }
 
-#[test]
-fn migration_self_id_remains_same() -> Result<(), Error> {
+#[tokio::test(flavor = "multi_thread")]
+async fn migration_self_id_remains_same() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
     let mut session = vm.session(SessionData::builder())?;
 

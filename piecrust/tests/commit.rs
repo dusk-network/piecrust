@@ -13,8 +13,8 @@ use std::thread;
 const OWNER: [u8; 32] = [0u8; 32];
 const LIMIT: u64 = 1_000_000;
 
-#[test]
-fn read_write_session() -> Result<(), Error> {
+#[tokio::test(flavor = "multi_thread")]
+async fn read_write_session() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 
     {
@@ -70,8 +70,8 @@ fn read_write_session() -> Result<(), Error> {
     Ok(())
 }
 
-#[test]
-fn commit_restore() -> Result<(), Error> {
+#[tokio::test(flavor = "multi_thread")]
+async fn commit_restore() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
     let mut session_1 = vm.session(SessionData::builder())?;
     let id = session_1.deploy(
@@ -118,8 +118,8 @@ fn commit_restore() -> Result<(), Error> {
     Ok(())
 }
 
-#[test]
-fn commit_restore_two_contracts_session() -> Result<(), Error> {
+#[tokio::test(flavor = "multi_thread")]
+async fn commit_restore_two_contracts_session() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 
     let mut session = vm.session(SessionData::builder())?;
@@ -183,8 +183,8 @@ fn commit_restore_two_contracts_session() -> Result<(), Error> {
     Ok(())
 }
 
-#[test]
-fn multiple_commits() -> Result<(), Error> {
+#[tokio::test(flavor = "multi_thread")]
+async fn multiple_commits() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 
     let mut session = vm.session(SessionData::builder())?;
@@ -232,8 +232,8 @@ fn multiple_commits() -> Result<(), Error> {
     Ok(())
 }
 
-#[test]
-fn root_equal_on_err() -> Result<(), Error> {
+#[tokio::test(flavor = "multi_thread")]
+async fn root_equal_on_err() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 
     let mut session = vm.session(SessionData::builder())?;
@@ -304,8 +304,8 @@ fn increment_counter_and_commit(
     session.commit()
 }
 
-#[test]
-fn concurrent_sessions() -> Result<(), Error> {
+#[tokio::test(flavor = "multi_thread")]
+async fn concurrent_sessions() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 
     let mut session = vm.session(SessionData::builder())?;
@@ -411,8 +411,8 @@ fn make_session(vm: &VM) -> Result<(Session, ContractId), Error> {
     Ok((session, contract_id))
 }
 
-#[test]
-fn session_move() -> Result<(), Error> {
+#[tokio::test(flavor = "multi_thread")]
+async fn session_move() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
     let (mut session, contract_id) = make_session(&vm)?;
 

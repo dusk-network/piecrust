@@ -79,7 +79,8 @@ fn confirm<P: AsRef<str>>(vm_data_path: P) -> Result<(), piecrust::Error> {
     confirm_counter(&vm, commit_id_file_path)
 }
 
-fn main() -> Result<(), piecrust::Error> {
+#[tokio::main(flavor = "multi_thread")]
+async fn main() -> Result<(), piecrust::Error> {
     const MESSAGE: &str =
         "argument expected: <path_for_vm_data> (initialize|confirm|test_both)";
     let args: Vec<String> = env::args().collect();

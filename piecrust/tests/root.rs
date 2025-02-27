@@ -11,8 +11,8 @@ use piecrust::{
 const OWNER: [u8; 32] = [0u8; 32];
 const LIMIT: u64 = 1_000_000;
 
-#[test]
-pub fn state_root_calculation() -> Result<(), Error> {
+#[tokio::test(flavor = "multi_thread")]
+pub async fn state_root_calculation() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
     let mut session = vm.session(SessionData::builder())?;
     let id_1 = session.deploy(
@@ -59,8 +59,8 @@ pub fn state_root_calculation() -> Result<(), Error> {
     Ok(())
 }
 
-#[test]
-pub fn inclusion_proofs() -> Result<(), Error> {
+#[tokio::test(flavor = "multi_thread")]
+pub async fn inclusion_proofs() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
     let mut session = vm.session(SessionData::builder())?;
 

@@ -10,8 +10,8 @@ const CONTRACT_INIT_METHOD: &str = "init";
 const OWNER: [u8; 32] = [0u8; 32];
 const LIMIT: u64 = 1_000_000;
 
-#[test]
-fn init() -> Result<(), Error> {
+#[tokio::test(flavor = "multi_thread")]
+async fn init() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 
     let mut session = vm.session(SessionData::builder())?;
@@ -72,8 +72,8 @@ fn init() -> Result<(), Error> {
     Ok(())
 }
 
-#[test]
-fn empty_init_argument() -> Result<(), Error> {
+#[tokio::test(flavor = "multi_thread")]
+async fn empty_init_argument() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 
     let mut session = vm.session(SessionData::builder())?;

@@ -9,8 +9,8 @@ use piecrust::{contract_bytecode, ContractData, Error, SessionData, VM};
 const OWNER: [u8; 32] = [0u8; 32];
 const LIMIT: u64 = 1_000_000;
 
-#[test]
-fn out_of_bounds() -> Result<(), Error> {
+#[tokio::test(flavor = "multi_thread")]
+async fn out_of_bounds() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 
     let mut session = vm.session(SessionData::builder())?;
@@ -28,8 +28,8 @@ fn out_of_bounds() -> Result<(), Error> {
     Ok(())
 }
 
-#[test]
-fn bad_contract() -> Result<(), Error> {
+#[tokio::test(flavor = "multi_thread")]
+async fn bad_contract() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 
     let mut session = vm.session(SessionData::builder())?;

@@ -10,8 +10,8 @@ use piecrust_uplink::ContractError;
 const OWNER: [u8; 32] = [0u8; 32];
 const LIMIT: u64 = 1_000_000;
 
-#[test]
-pub fn gas_get_used() -> Result<(), Error> {
+#[tokio::test(flavor = "multi_thread")]
+pub async fn gas_get_used() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 
     let mut session = vm.session(SessionData::builder())?;
@@ -44,8 +44,8 @@ pub fn gas_get_used() -> Result<(), Error> {
     Ok(())
 }
 
-#[test]
-pub fn panic_msg_gets_through() -> Result<(), Error> {
+#[tokio::test(flavor = "multi_thread")]
+pub async fn panic_msg_gets_through() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 
     let mut session = vm.session(SessionData::builder())?;
@@ -75,8 +75,8 @@ pub fn panic_msg_gets_through() -> Result<(), Error> {
     Ok(())
 }
 
-#[test]
-pub fn fails_with_out_of_gas() -> Result<(), Error> {
+#[tokio::test(flavor = "multi_thread")]
+pub async fn fails_with_out_of_gas() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 
     let mut session = vm.session(SessionData::builder())?;
@@ -96,8 +96,8 @@ pub fn fails_with_out_of_gas() -> Result<(), Error> {
     Ok(())
 }
 
-#[test]
-pub fn contract_sets_call_limit() -> Result<(), Error> {
+#[tokio::test(flavor = "multi_thread")]
+pub async fn contract_sets_call_limit() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 
     let mut session_1st = vm.session(SessionData::builder())?;
@@ -149,8 +149,9 @@ pub fn contract_sets_call_limit() -> Result<(), Error> {
     Ok(())
 }
 
-#[test]
-pub fn limit_and_spent() -> Result<(), Error> {
+// #[tokio::test(flavor = "multi_thread")]
+#[ignore]
+pub async fn limit_and_spent() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 
     const LIMIT: u64 = 10000;

@@ -10,8 +10,8 @@ use rkyv::{check_archived_root, Deserialize, Infallible};
 const OWNER: [u8; 32] = [0u8; 32];
 const LIMIT: u64 = 1_000_000;
 
-#[test]
-pub fn box_set_get() -> Result<(), Error> {
+#[tokio::test(flavor = "multi_thread")]
+pub async fn box_set_get() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 
     let mut session = vm.session(SessionData::builder())?;
@@ -35,8 +35,8 @@ pub fn box_set_get() -> Result<(), Error> {
     Ok(())
 }
 
-#[test]
-pub fn box_set_get_raw() -> Result<(), Error> {
+#[tokio::test(flavor = "multi_thread")]
+pub async fn box_set_get_raw() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 
     let mut session = vm.session(SessionData::builder())?;
