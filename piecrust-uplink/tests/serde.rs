@@ -9,6 +9,7 @@
 use piecrust_uplink::{ContractId, Event, CONTRACT_ID_BYTES};
 use rand::rngs::StdRng;
 use rand::{RngCore, SeedableRng};
+use serde::Serialize;
 
 fn rand_contract_id(rng: &mut StdRng) -> ContractId {
     let mut bytes = [0; CONTRACT_ID_BYTES];
@@ -26,27 +27,46 @@ fn rand_event(rng: &mut StdRng) -> Event {
     }
 }
 
-#[test]
-fn serde_contract_id() {
-    let mut rng = StdRng::seed_from_u64(0xdead);
-    let id: ContractId = rand_contract_id(&mut rng);
-    let ser = serde_json::to_string(&id).unwrap();
-    let deser: ContractId = serde_json::from_str(&ser).unwrap();
-    assert_eq!(id, deser);
+fn assert_canonical_json<T>(
+    input: &T,
+    expected: &str,
+) -> Result<String, Box<dyn std::error::Error>>
+where
+    T: ?Sized + Serialize,
+{
+    let serialized = serde_json::to_string(input)?;
+    let input_canonical: serde_json::Value = serialized.parse()?;
+    let expected_canonical: serde_json::Value = expected.parse()?;
+    assert_eq!(input_canonical, expected_canonical);
+    Ok(serialized)
 }
 
 #[test]
-fn serde_event() {
+fn serde_contract_id() -> Result<(), Box<dyn std::error::Error>> {
+    let mut rng = StdRng::seed_from_u64(0xdead);
+    let id: ContractId = rand_contract_id(&mut rng);
+    let ser = assert_canonical_json(
+        &id,
+        "\"c48dcb7e531ccc3b334ae122d4fd40e242e7d8a85fdb82bd4c9e9621a9a60d44\"",
+    )?;
+    let deser: ContractId = serde_json::from_str(&ser)?;
+    assert_eq!(id, deser);
+    Ok(())
+}
+
+#[test]
+fn serde_event() -> Result<(), Box<dyn std::error::Error>> {
     let mut rng = StdRng::seed_from_u64(0xbeef);
     let event = rand_event(&mut rng);
-    let ser = serde_json::to_string(&event).unwrap();
-    let deser: Event = serde_json::from_str(&ser).unwrap();
+    let ser = assert_canonical_json(&event, include_str!("./event.json"))?;
+    let deser: Event = serde_json::from_str(&ser)?;
     assert_eq!(event, deser);
+    Ok(())
 }
 
 #[test]
 fn serde_wrong_encoded() {
-    let wrong_encoded = "wrong-encoded";
+    let wrong_encoded = "\"wrong-encoded\"";
 
     let contract_id: Result<ContractId, _> =
         serde_json::from_str(&wrong_encoded);
@@ -70,16 +90,4 @@ fn serde_too_short_encoded() {
     let contract_id: Result<ContractId, _> =
         serde_json::from_str(&length_31_enc);
     assert!(contract_id.is_err());
-}
-
-#[test]
-fn serde_event_fields() {
-    let serde_json_string = "{\"source\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"topic\":\"\",\"data\":\"\"}";
-    let event = Event {
-        source: ContractId::from_bytes([0; CONTRACT_ID_BYTES]),
-        topic: String::new(),
-        data: Vec::new(),
-    };
-    let ser = serde_json::to_string(&event).unwrap();
-    assert_eq!(serde_json_string, ser);
 }
