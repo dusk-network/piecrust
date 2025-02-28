@@ -203,7 +203,7 @@ pub fn cc_self() -> Result<(), Error> {
     Ok(())
 }
 
-#[ignore]
+#[test]
 pub fn cc_caller() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 
@@ -242,7 +242,7 @@ pub fn cc_caller_uninit() -> Result<(), Error> {
     Ok(())
 }
 
-#[ignore]
+#[test]
 pub fn cc_callstack() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 

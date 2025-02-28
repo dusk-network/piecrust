@@ -204,12 +204,20 @@ impl WrappedInstance {
 
     // Write argument into instance
     pub(crate) fn write_argument(&mut self, arg: &[u8]) {
-        self.with_arg_buf_mut(|buf| buf[..arg.len()].copy_from_slice(arg))
+        self.with_arg_buf_mut(|buf| {
+            if arg.as_ptr() != buf.as_ptr() {
+                buf[..arg.len()].copy_from_slice(arg)
+            }
+        })
     }
 
     // Read argument from instance
     pub(crate) fn read_argument(&mut self, arg: &mut [u8]) {
-        self.with_arg_buf(|buf| arg.copy_from_slice(&buf[..arg.len()]))
+        self.with_arg_buf(|buf| {
+            if arg.as_ptr() != buf.as_ptr() {
+                arg.copy_from_slice(&buf[..arg.len()])
+            }
+        })
     }
 
     pub(crate) fn read_bytes_from_arg_buffer(&self, arg_len: u32) -> Vec<u8> {
