@@ -909,7 +909,7 @@ fn sync_loop<P: AsRef<Path>>(
                             e
                         ),
                     }
-                    commit_store.remove_commit(&root, true);
+                    commit_store.remove_commit(&root, false);
                     tracing::trace!("finalizing commit finished");
                     let _ = replier.send(io_result);
                 } else {
