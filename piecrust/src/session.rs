@@ -334,9 +334,8 @@ impl Session {
             Ok(())
         };
 
-        instantiate().map_err(|err| {
+        instantiate().inspect_err(|_| {
             self.inner.contract_session.remove_contract(&contract_id);
-            err
         })
     }
 
@@ -654,7 +653,7 @@ impl Session {
         contract: ContractId,
     ) -> Result<usize, Error> {
         let instance = self.new_instance(contract)?;
-        if self.inner.instances.get(&contract).is_some() {
+        if self.inner.instances.contains_key(&contract) {
             panic!("Contract already in the stack: {contract:?}");
         }
 
