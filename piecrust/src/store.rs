@@ -102,27 +102,27 @@ impl CommitStore {
     }
 
     pub fn remove_commit(&mut self, hash: &Hash) {
-        let mut elements_to_remove = BTreeMap::new();
-        if let Some(removed_commit) = self.commits.get(hash) {
-            for (contract_id, element) in
-                removed_commit.index.contracts().iter()
-            {
-                elements_to_remove.insert(*contract_id, element.hash());
-            }
-        }
+        // let mut elements_to_remove = BTreeMap::new();
+        // if let Some(removed_commit) = self.commits.get(hash) {
+        //     for (contract_id, element) in
+        //         removed_commit.index.contracts().iter()
+        //     {
+        //         elements_to_remove.insert(*contract_id, element.hash());
+        //     }
+        // }
         // other commits should not keep finalized elements
-        for (h, commit) in self.commits.iter_mut() {
-            if h == hash {
-                continue;
-            }
-            for (c, hh) in elements_to_remove.iter() {
-                if let Some(el) = commit.index.get(c) {
-                    if el.hash() == *hh {
-                        commit.index.remove_contract_index(c);
-                    }
-                }
-            }
-        }
+        // for (h, commit) in self.commits.iter_mut() {
+        //     if h == hash {
+        //         continue;
+        //     }
+        //     for (c, hh) in elements_to_remove.iter() {
+        //         if let Some(el) = commit.index.get(c) {
+        //             if el.hash() == *hh {
+        //                 commit.index.remove_contract_index(c);
+        //             }
+        //         }
+        //     }
+        // }
         self.commits.remove(hash);
     }
 }
