@@ -334,9 +334,8 @@ impl Session {
             Ok(())
         };
 
-        instantiate().map_err(|err| {
+        instantiate().inspect_err(|_| {
             self.inner.contract_session.remove_contract(&contract_id);
-            err
         })
     }
 
