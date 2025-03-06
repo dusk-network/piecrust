@@ -390,7 +390,7 @@ where
 
 #[allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
 fn system_page_size() -> usize {
-    static mut PAGE_SIZE: OnceLock<usize> = OnceLock::new();
+    static PAGE_SIZE: OnceLock<usize> = OnceLock::new();
     unsafe {
         *PAGE_SIZE.get_or_init(|| libc::sysconf(libc::_SC_PAGESIZE) as usize)
     }
