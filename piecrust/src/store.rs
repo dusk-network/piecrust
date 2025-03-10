@@ -137,27 +137,34 @@ impl CommitStore {
         self.commits.keys()
     }
 
-    pub fn remove_commit(&mut self, hash: &Hash) {
-        let mut elements_to_remove = BTreeMap::new();
-        if let Some(removed_commit) = self.commits.get(hash) {
-            for (contract_id, element) in
-                removed_commit.index.contracts().iter()
-            {
-                if let Some(h) = element.hash() {
-                    elements_to_remove.insert(*contract_id, h);
+    pub fn remove_commit(&mut self, hash: &Hash, deep: bool) {
+        if deep {
+            let mut elements_to_remove = BTreeMap::new();
+            if let Some(removed_commit) = self.commits.get(hash) {
+                for (contract_id, element) in
+                    removed_commit.index.contracts().iter()
+                {
+                    if let Some(h) = element.hash() {
+                        elements_to_remove.insert(*contract_id, h);
+                    }
                 }
             }
-        }
-        // other commits should not keep finalized elements
-        for (h, commit) in self.commits.iter_mut() {
-            if h == hash {
-                continue;
-            }
-            for (c, hh) in elements_to_remove.iter() {
-                if let Some(el) = commit.index.get(c) {
-                    if let Some(el_hash) = el.hash() {
-                        if el_hash == *hh {
-                            commit.index.remove_contract_index(c);
+            // other commits should not keep finalized elements
+            for (h, commit) in self.commits.iter_mut() {
+                if *h == *hash {
+                    continue;
+                }
+                for (c, hh) in elements_to_remove.iter() {
+                    if let Some(el) = commit.index.get(c) {
+                        if let Some(el_hash) = el.hash() {
+                            if el_hash == *hh {
+                                if let Some(element) =
+                                    commit.index.remove_contract_index(c)
+                                {
+                                    self.main_index
+                                        .insert_contract_index(c, element);
+                                }
+                            }
                         }
                     }
                 }
@@ -707,7 +714,7 @@ impl Commit {
     }
 
     pub fn insert(&mut self, contract_id: ContractId, memory: &Memory) {
-        if !self.index.contains_key(&contract_id) {
+        if self.index_get(&contract_id).is_none() {
             self.index.insert_contract_index(
                 &contract_id,
                 ContractIndexElement::new(memory.is_64()),
@@ -867,7 +874,7 @@ fn sync_loop<P: AsRef<Path>>(
                 }
 
                 let io_result = delete_commit_dir(root_dir, root);
-                commit_store.lock().unwrap().remove_commit(&root);
+                commit_store.lock().unwrap().remove_commit(&root, false);
                 tracing::trace!("delete commit finished");
                 let _ = replier.send(io_result);
             }
@@ -907,7 +914,7 @@ fn sync_loop<P: AsRef<Path>>(
                             e
                         ),
                     }
-                    commit_store.remove_commit(&root);
+                    commit_store.remove_commit(&root, true);
                     tracing::trace!("finalizing commit finished");
                     let _ = replier.send(io_result);
                 } else {
@@ -957,7 +964,7 @@ fn sync_loop<P: AsRef<Path>>(
                                     for replier in entry.remove() {
                                         let io_result =
                                             delete_commit_dir(root_dir, base);
-                                        commit_store.lock().unwrap().remove_commit(&base);
+                                        commit_store.lock().unwrap().remove_commit(&base, false);
                                         let _ = replier.send(io_result);
                                     }
                                 }
