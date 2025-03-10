@@ -22,11 +22,11 @@ use piecrust_uplink::ContractId;
 
 #[derive(Debug, Clone)]
 pub(crate) struct Commit {
-    pub index: NewContractIndex,
-    pub contracts_merkle: ContractsMerkle,
-    pub maybe_hash: Option<Hash>,
-    pub commit_store: Option<Arc<Mutex<CommitStore>>>,
-    pub base: Option<Hash>,
+    index: NewContractIndex,
+    contracts_merkle: ContractsMerkle,
+    maybe_hash: Option<Hash>,
+    commit_store: Option<Arc<Mutex<CommitStore>>>,
+    base: Option<Hash>,
 }
 
 impl Commit {
@@ -94,7 +94,7 @@ impl Commit {
     }
 
     pub fn insert(&mut self, contract_id: ContractId, memory: &Memory) {
-        if !self.index.contains_key(&contract_id) {
+        if self.index_get(&contract_id).is_none() {
             self.index.insert_contract_index(
                 &contract_id,
                 ContractIndexElement::new(memory.is_64()),
@@ -145,6 +145,18 @@ impl Commit {
             self.base,
         )
         .map(|a| unsafe { &*a })
+    }
+
+    pub fn index(&self) -> &NewContractIndex {
+        &self.index
+    }
+
+    pub fn index_mut(&mut self) -> &mut NewContractIndex {
+        &mut self.index
+    }
+
+    pub fn base(&self) -> Option<Hash> {
+        self.base
     }
 
     pub fn element_and_merkle_mut(
