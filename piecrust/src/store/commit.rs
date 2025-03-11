@@ -43,7 +43,6 @@ impl Commit {
         }
     }
 
-    #[allow(dead_code)]
     pub fn fast_clone<'a>(
         &self,
         contract_ids: impl Iterator<Item = &'a ContractId>,
@@ -154,7 +153,6 @@ impl Commit {
         for c in to_remove.iter() {
             self.index_mut().remove_contract_index(c);
         }
-        println!("removed {} redundant elements", to_remove.len());
     }
 
     pub fn root(&self) -> Ref<Hash> {

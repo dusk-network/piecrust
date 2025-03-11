@@ -72,12 +72,6 @@ impl CommitWriter {
         commit.maybe_hash = Some(root);
         commit.base = base_info.maybe_base;
 
-        println!(
-            "new commit {} with index sz = {}",
-            root_hex,
-            commit.index().len()
-        );
-
         // Don't write the commit if it already exists on disk. This may happen
         // if the same transactions on the same base commit for example.
         if commit_store.lock().unwrap().contains_key(&root) {
