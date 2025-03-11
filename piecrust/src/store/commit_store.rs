@@ -87,7 +87,7 @@ impl CommitStore {
                     }
                 }
             }
-            // other commits should not keep finalized elements
+            // copy finalized elements from other commits to main
             for (h, commit) in self.commits.iter_mut() {
                 if *h == *hash {
                     continue;
@@ -96,11 +96,11 @@ impl CommitStore {
                     if let Some(el) = commit.index().get(c) {
                         if let Some(el_hash) = el.hash() {
                             if el_hash == *hh {
-                                if let Some(element) =
-                                    commit.index_mut().remove_contract_index(c)
-                                {
-                                    self.main_index
-                                        .insert_contract_index(c, element);
+                                if let Some(element) = commit.index().get(c) {
+                                    self.main_index.insert_contract_index(
+                                        c,
+                                        element.clone(),
+                                    );
                                 }
                             }
                         }
@@ -117,5 +117,12 @@ impl CommitStore {
         element: ContractIndexElement,
     ) {
         self.main_index.insert_contract_index(contract_id, element);
+    }
+
+    pub fn get_from_main_index(
+        &mut self,
+        contract_id: &ContractId,
+    ) -> Option<&ContractIndexElement> {
+        self.main_index.get(contract_id)
     }
 }

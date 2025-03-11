@@ -94,7 +94,7 @@ impl Commit {
     }
 
     pub fn insert(&mut self, contract_id: ContractId, memory: &Memory) {
-        if self.index_get(&contract_id).is_none() {
+        if self.index.get(&contract_id).is_none() {
             self.index.insert_contract_index(
                 &contract_id,
                 ContractIndexElement::new(memory.is_64()),
@@ -125,6 +125,36 @@ impl Commit {
     pub fn remove_and_insert(&mut self, contract: ContractId, memory: &Memory) {
         self.index.remove_contract_index(&contract);
         self.insert(contract, memory);
+    }
+
+    fn redundant_elements(&self) -> Vec<ContractId> {
+        let mut to_remove = vec![];
+        for (c, e) in self.index().iter() {
+            if let Some(h) = e.hash {
+                let mut commit_store = self
+                    .commit_store
+                    .as_ref()
+                    .expect("commit store present")
+                    .lock()
+                    .unwrap();
+                if let Some(mel) = commit_store.get_from_main_index(c) {
+                    if mel.hash() == Some(h) {
+                        to_remove.push(*c)
+                    }
+                }
+            }
+        }
+        to_remove
+    }
+
+    /// remove commit-specific elements if they are the same
+    /// as the corresponding elements in main
+    pub fn squash(&mut self) {
+        let to_remove = self.redundant_elements();
+        for c in to_remove.iter() {
+            self.index_mut().remove_contract_index(c);
+        }
+        println!("removed {} redundant elements", to_remove.len());
     }
 
     pub fn root(&self) -> Ref<Hash> {

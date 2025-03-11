@@ -229,7 +229,8 @@ impl CommitReader {
                             })?;
                         if let Some(h) = element.hash() {
                             merkle_from_elements.insert(
-                                element.int_pos().expect("aa") as u32,
+                                element.int_pos().expect("internal pos exists")
+                                    as u32,
                                 (
                                     h,
                                     position_from_contract(&contract_id),
