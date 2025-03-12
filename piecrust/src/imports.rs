@@ -20,6 +20,7 @@ use piecrust_uplink::{
 
 use crate::config::BYTE_STORE_COST;
 use crate::instance::{Env, WrappedInstance};
+use crate::session::INIT_METHOD;
 use crate::Error;
 
 pub const GAS_PASS_PCT: u64 = 93;
@@ -277,6 +278,11 @@ pub(crate) fn c(
 
         let name = core::str::from_utf8(&memory[name_ofs..][..name_len])
             .map_err(|e| WithMemoryError::AfterPush(e.into()))?;
+        if name == INIT_METHOD {
+            return Err(WithMemoryError::AfterPush(Error::InitalizationError(
+                "init call not allowed".into(),
+            )));
+        }
 
         let arg = &arg_buf[..arg_len as usize];
 
