@@ -34,6 +34,11 @@ impl Callcenter {
         uplink::call(counter_id, "increment", &()).unwrap()
     }
 
+    /// Call specified contract's init method with an empty argument
+    pub fn call_init(&mut self, contract_id: ContractId) {
+        uplink::call(contract_id, "init", &()).unwrap()
+    }
+
     /// Query a contract specified by its ID
     pub fn delegate_query(
         &self,
@@ -101,7 +106,7 @@ impl Callcenter {
         match n {
             0 => uplink::callstack(),
             _ => uplink::call(self_id, "call_self_n_times", &(n - 1))
-                .expect("calling self should succeed")
+                .expect("calling self should succeed"),
         }
     }
 
@@ -134,6 +139,14 @@ unsafe fn query_counter(arg_len: u32) -> u32 {
 #[no_mangle]
 unsafe fn increment_counter(arg_len: u32) -> u32 {
     wrap_call(arg_len, |counter_id| STATE.increment_counter(counter_id))
+}
+
+/// Expose `Callcenter::call_init()` to the host
+#[no_mangle]
+unsafe fn call_init(arg_len: u32) -> u32 {
+    wrap_call(arg_len, |contract_id| {
+        STATE.call_init(contract_id)
+    })
 }
 
 /// Expose `Callcenter::calling_self()` to the host
