@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Added blocking 'init' method to be called only during deployment [#433]
+
 ## [0.27.2] - 2025-02-20
 
 ### Changed
@@ -499,6 +503,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 <!-- ISSUES -->
 
 [#rusk_3341]: https://github.com/dusk-network/rusk/issues/3341
+[#433]: https://github.com/dusk-network/piecrust/issues/433
 [#422]: https://github.com/dusk-network/piecrust/issues/422
 [#410]: https://github.com/dusk-network/piecrust/issues/410
 [#405]: https://github.com/dusk-network/piecrust/issues/405
