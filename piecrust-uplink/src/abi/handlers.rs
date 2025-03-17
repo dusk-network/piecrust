@@ -17,11 +17,10 @@ unsafe fn handle_panic(info: &PanicInfo) -> ! {
 
     // If we fail in writing to the argument buffer, we just call `panic` after
     // writing a standard message instead.
-    if let Some(args) = info.message() {
-        if w.write_fmt(*args).is_err() {
-            w = crate::ArgbufWriter::default();
-            let _ = write!(w, "PANIC INFO TOO LONG");
-        }
+
+    if w.write_fmt(format_args!("{}", info.message())).is_err() {
+        w = crate::ArgbufWriter::default();
+        let _ = write!(w, "PANIC INFO TOO LONG");
     }
 
     panic(w.ofs() as u32);
