@@ -129,6 +129,7 @@ impl From<Error> for ContractError {
             Error::OutOfGas => Self::OutOfGas,
             Error::Panic(msg) => Self::Panic(msg),
             Error::ContractDoesNotExist(_) => Self::DoesNotExist,
+            Error::InitalizationError(_) => Self::DoesNotExist,
             _ => Self::Unknown,
         }
     }
