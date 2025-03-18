@@ -339,7 +339,7 @@ fn sync_loop<P: AsRef<Path>>(
                 }
 
                 let io_result = CommitRemover::remove(root_dir, root);
-                commit_store.lock().unwrap().remove_commit(&root);
+                commit_store.lock().unwrap().remove_commit(&root, false);
                 tracing::trace!("delete commit finished");
                 let _ = replier.send(io_result);
             }
@@ -379,7 +379,7 @@ fn sync_loop<P: AsRef<Path>>(
                             e
                         ),
                     }
-                    commit_store.remove_commit(&root);
+                    commit_store.remove_commit(&root, true);
                     tracing::trace!("finalizing commit finished");
                     let _ = replier.send(io_result);
                 } else {
@@ -429,7 +429,7 @@ fn sync_loop<P: AsRef<Path>>(
                                     for replier in entry.remove() {
                                         let io_result =
                                             CommitRemover::remove(root_dir, base);
-                                        commit_store.lock().unwrap().remove_commit(&base);
+                                        commit_store.lock().unwrap().remove_commit(&base, false);
                                         let _ = replier.send(io_result);
                                     }
                                 }

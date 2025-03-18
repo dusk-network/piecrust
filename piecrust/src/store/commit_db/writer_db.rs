@@ -53,6 +53,8 @@ impl CommitWriterDb {
             };
         }
 
+        commit.squash();
+
         let root = *commit.root();
         let root_hex = hex::encode(root);
         commit.maybe_hash = Some(root);
@@ -91,6 +93,7 @@ impl CommitWriterDb {
         let root_dir = root_dir.as_ref();
 
         struct Directories {
+            #[allow(dead_code)]
             main_dir: PathBuf,
             bytecode_main_dir: PathBuf,
             memory_main_dir: PathBuf,
@@ -169,7 +172,7 @@ impl CommitWriterDb {
         }
 
         tracing::trace!("persisting index started");
-        for (contract_id, element) in commit.index.iter() {
+        for (contract_id, element) in commit.index().iter() {
             if commit_contracts.contains_key(contract_id) {
                 let element_dir_path = directories
                     .leaf_main_dir
@@ -213,15 +216,15 @@ impl CommitWriterDb {
     async fn write_element_to_db(
         connection_pool: SqlitePool,
         contract_id: &ContractId,
-        commit_id: impl AsRef<str>,
-        element_bytes: impl AsRef<[u8]>,
+        _commit_id: impl AsRef<str>,
+        _element_bytes: impl AsRef<[u8]>,
     ) -> Result<(), StorageError> {
-        let mut conn = connection_pool
+        let mut _conn = connection_pool
             .acquire()
             .await
             .map_err(|e| StorageError::Db(Arc::new(e)))?;
 
-        let contract_id_str = hex::encode(contract_id.as_bytes());
+        let _contract_id_str = hex::encode(contract_id.as_bytes());
 
         // let _id = sqlx::query!(
         //     r#"INSERT INTO elements ( contract_id, commit_id, element_bytes

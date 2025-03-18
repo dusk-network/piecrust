@@ -56,7 +56,7 @@ impl CommitReader {
                     entry.path(),
                     commit_store.clone(),
                 )?;
-                tracing::trace!("before read_commit");
+                tracing::trace!("after read_commit");
                 let root = *commit.root();
                 commit_store.lock().unwrap().insert_commit(root, commit);
             }
@@ -229,7 +229,8 @@ impl CommitReader {
                             })?;
                         if let Some(h) = element.hash() {
                             merkle_from_elements.insert(
-                                element.int_pos().expect("aa") as u32,
+                                element.int_pos().expect("internal pos exists")
+                                    as u32,
                                 (
                                     h,
                                     position_from_contract(&contract_id),

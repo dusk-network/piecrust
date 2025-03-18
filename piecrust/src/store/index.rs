@@ -63,10 +63,15 @@ impl NewContractIndex {
     pub fn contracts(&self) -> &BTreeMap<ContractId, ContractIndexElement> {
         &self.inner_contracts
     }
+
     pub fn contracts_mut(
         &mut self,
     ) -> &mut BTreeMap<ContractId, ContractIndexElement> {
         &mut self.inner_contracts
+    }
+
+    pub fn len(&self) -> usize {
+        self.inner_contracts.len()
     }
 }
 

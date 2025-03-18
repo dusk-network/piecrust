@@ -39,21 +39,6 @@ impl CommitWriter {
             ..Default::default()
         };
 
-        // base is already a copy, no point cloning it again
-
-        // let index = base
-        //     .as_ref()
-        //     .map_or(NewContractIndex::new(), |base| base.index.clone());
-        // let contracts_merkle =
-        //     base.as_ref().map_or(ContractsMerkle::default(), |base| {
-        //         base.contracts_merkle.clone()
-        //     });
-        // let mut commit = Commit {
-        //     index,
-        //     contracts_merkle,
-        //     maybe_hash: base.as_ref().and_then(|base| base.maybe_hash),
-        // };
-
         let mut commit =
             base.unwrap_or(Commit::new(&commit_store, base_info.maybe_base));
 
@@ -64,6 +49,8 @@ impl CommitWriter {
                 commit.insert(*contract_id, &contract_data.memory)
             };
         }
+
+        commit.squash();
 
         let root = *commit.root();
         let root_hex = hex::encode(root);

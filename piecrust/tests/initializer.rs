@@ -40,12 +40,6 @@ async fn init() -> Result<(), Error> {
         result.is_err(),
         "calling init directly as transaction should not be allowed"
     );
-    // we should not be able to call init as query neither
-    let result = session.call::<u8, ()>(id, CONTRACT_INIT_METHOD, &0xaa, LIMIT);
-    assert!(
-        result.is_err(),
-        "calling init directly as query should not be allowed"
-    );
 
     // make sure the state is still ok
     assert_eq!(
@@ -67,6 +61,39 @@ async fn init() -> Result<(), Error> {
     assert!(
         result.is_err(),
         "calling init directly should never be allowed"
+    );
+
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn init_indirect_call_blocked() -> Result<(), Error> {
+    let vm = VM::ephemeral()?;
+
+    let mut session = vm.session(SessionData::builder())?;
+
+    let empty_initializer_contract_id = session.deploy(
+        contract_bytecode!("empty_initializer"),
+        ContractData::builder().owner(OWNER),
+        LIMIT,
+    )?;
+
+    let callcenter_contract_id = session.deploy(
+        contract_bytecode!("callcenter"),
+        ContractData::builder().owner(OWNER),
+        LIMIT,
+    )?;
+
+    let result = session.call::<_, ()>(
+        callcenter_contract_id,
+        "call_init",
+        &empty_initializer_contract_id,
+        LIMIT,
+    );
+
+    assert!(
+        result.is_err(),
+        "calling init indirectly should not be allowed"
     );
 
     Ok(())

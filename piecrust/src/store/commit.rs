@@ -22,10 +22,10 @@ use piecrust_uplink::ContractId;
 
 #[derive(Debug, Clone)]
 pub(crate) struct Commit {
-    pub index: NewContractIndex,
-    pub contracts_merkle: ContractsMerkle,
+    index: NewContractIndex,
+    contracts_merkle: ContractsMerkle,
     pub maybe_hash: Option<Hash>,
-    pub commit_store: Option<Arc<Mutex<CommitStore>>>,
+    commit_store: Option<Arc<Mutex<CommitStore>>>,
     pub base: Option<Hash>,
 }
 
@@ -43,7 +43,6 @@ impl Commit {
         }
     }
 
-    #[allow(dead_code)]
     pub fn fast_clone<'a>(
         &self,
         contract_ids: impl Iterator<Item = &'a ContractId>,
@@ -94,7 +93,7 @@ impl Commit {
     }
 
     pub fn insert(&mut self, contract_id: ContractId, memory: &Memory) {
-        if !self.index.contains_key(&contract_id) {
+        if self.index.get(&contract_id).is_none() {
             self.index.insert_contract_index(
                 &contract_id,
                 ContractIndexElement::new(memory.is_64()),
@@ -127,6 +126,35 @@ impl Commit {
         self.insert(contract, memory);
     }
 
+    fn redundant_elements(&self) -> Vec<ContractId> {
+        let mut to_remove = vec![];
+        for (c, e) in self.index().iter() {
+            if let Some(h) = e.hash {
+                let mut commit_store = self
+                    .commit_store
+                    .as_ref()
+                    .expect("commit store present")
+                    .lock()
+                    .unwrap();
+                if let Some(mel) = commit_store.get_from_main_index(c) {
+                    if mel.hash() == Some(h) {
+                        to_remove.push(*c)
+                    }
+                }
+            }
+        }
+        to_remove
+    }
+
+    /// remove commit-specific elements if they are the same
+    /// as the corresponding elements in main
+    pub fn squash(&mut self) {
+        let to_remove = self.redundant_elements();
+        for c in to_remove.iter() {
+            self.index_mut().remove_contract_index(c);
+        }
+    }
+
     pub fn root(&self) -> Ref<Hash> {
         tracing::trace!("calculating root started");
         let ret = self.contracts_merkle.root();
@@ -145,6 +173,18 @@ impl Commit {
             self.base,
         )
         .map(|a| unsafe { &*a })
+    }
+
+    pub fn index(&self) -> &NewContractIndex {
+        &self.index
+    }
+
+    pub fn index_mut(&mut self) -> &mut NewContractIndex {
+        &mut self.index
+    }
+
+    pub fn base(&self) -> Option<Hash> {
+        self.base
     }
 
     pub fn element_and_merkle_mut(

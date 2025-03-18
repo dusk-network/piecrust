@@ -40,8 +40,8 @@ impl CommitStore {
     ) -> (Option<*const ContractIndexElement>, Option<Hash>) {
         match self.commits.get(hash) {
             Some(commit) => {
-                let e = commit.index.get(contract_id);
-                (e.map(|a| a as *const ContractIndexElement), commit.base)
+                let e = commit.index().get(contract_id);
+                (e.map(|a| a as *const ContractIndexElement), commit.base())
             }
             None => {
                 let e = self.main_index.get(contract_id);
@@ -57,8 +57,8 @@ impl CommitStore {
     ) -> (Option<*mut ContractIndexElement>, Option<Hash>) {
         match self.commits.get_mut(hash) {
             Some(commit) => {
-                let e = commit.index.get_mut(contract_id);
-                (e.map(|a| a as *mut ContractIndexElement), commit.base)
+                let e = commit.index_mut().get_mut(contract_id);
+                (e.map(|a| a as *mut ContractIndexElement), commit.base())
             }
             None => {
                 let e = self.main_index.get_mut(contract_id);
@@ -75,27 +75,34 @@ impl CommitStore {
         self.commits.keys()
     }
 
-    pub fn remove_commit(&mut self, hash: &Hash) {
-        let mut elements_to_remove = BTreeMap::new();
-        if let Some(removed_commit) = self.commits.get(hash) {
-            for (contract_id, element) in
-                removed_commit.index.contracts().iter()
-            {
-                if let Some(h) = element.hash() {
-                    elements_to_remove.insert(*contract_id, h);
+    pub fn remove_commit(&mut self, hash: &Hash, deep: bool) {
+        if deep {
+            let mut elements_to_remove = BTreeMap::new();
+            if let Some(removed_commit) = self.commits.get(hash) {
+                for (contract_id, element) in
+                    removed_commit.index().contracts().iter()
+                {
+                    if let Some(h) = element.hash() {
+                        elements_to_remove.insert(*contract_id, h);
+                    }
                 }
             }
-        }
-        // other commits should not keep finalized elements
-        for (h, commit) in self.commits.iter_mut() {
-            if h == hash {
-                continue;
-            }
-            for (c, hh) in elements_to_remove.iter() {
-                if let Some(el) = commit.index.get(c) {
-                    if let Some(el_hash) = el.hash() {
-                        if el_hash == *hh {
-                            commit.index.remove_contract_index(c);
+            // copy finalized elements from other commits to main
+            for (h, commit) in self.commits.iter_mut() {
+                if *h == *hash {
+                    continue;
+                }
+                for (c, hh) in elements_to_remove.iter() {
+                    if let Some(el) = commit.index().get(c) {
+                        if let Some(el_hash) = el.hash() {
+                            if el_hash == *hh {
+                                if let Some(element) = commit.index().get(c) {
+                                    self.main_index.insert_contract_index(
+                                        c,
+                                        element.clone(),
+                                    );
+                                }
+                            }
                         }
                     }
                 }
@@ -110,5 +117,12 @@ impl CommitStore {
         element: ContractIndexElement,
     ) {
         self.main_index.insert_contract_index(contract_id, element);
+    }
+
+    pub fn get_from_main_index(
+        &mut self,
+        contract_id: &ContractId,
+    ) -> Option<&ContractIndexElement> {
+        self.main_index.get(contract_id)
     }
 }
