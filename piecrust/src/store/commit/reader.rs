@@ -56,7 +56,7 @@ impl CommitReader {
                     entry.path(),
                     commit_store.clone(),
                 )?;
-                tracing::trace!("before read_commit");
+                tracing::trace!("after read_commit");
                 let root = *commit.root();
                 commit_store.lock().unwrap().insert_commit(root, commit);
             }

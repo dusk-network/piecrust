@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-- Further improvement commit operations' performance [#396, 419]
+- Further improvement commit operations' performance [#396], [#419]
 
 ### Added
 
