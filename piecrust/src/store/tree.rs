@@ -4,19 +4,17 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use std::{
-    cell::Ref,
-    collections::{BTreeMap, BTreeSet},
-};
+use std::{cell::Ref, collections::BTreeMap};
 
+use crate::store::hasher::Hash;
+use crate::store::treepos::TreePos;
 use bytecheck::CheckBytes;
 use piecrust_uplink::ContractId;
 use rkyv::{Archive, Deserialize, Serialize};
-use std::io::{self, ErrorKind, Read, Write};
 
 // There are max `2^16` pages in a 32-bit memory
 const P32_HEIGHT: usize = 8;
-const P32_ARITY: usize = 4;
+pub const P32_ARITY: usize = 4;
 
 type PageTree32 = dusk_merkle::Tree<Hash, P32_HEIGHT, P32_ARITY>;
 
@@ -28,7 +26,7 @@ type PageTree64 = dusk_merkle::Tree<Hash, P64_HEIGHT, P64_ARITY>;
 
 // This means we have max `2^32` contracts
 const C_HEIGHT: usize = 32;
-const C_ARITY: usize = 2;
+pub const C_ARITY: usize = 2;
 
 #[derive(Debug, Clone, Archive, Deserialize, Serialize)]
 #[archive_attr(derive(CheckBytes))]
@@ -75,23 +73,6 @@ impl PageTree {
 }
 
 pub type Tree = dusk_merkle::Tree<Hash, C_HEIGHT, C_ARITY>;
-
-#[derive(Debug, Clone, Archive, Deserialize, Serialize)]
-#[archive_attr(derive(CheckBytes))]
-pub struct NewContractIndex {
-    inner_contracts: BTreeMap<ContractId, ContractIndexElement>,
-}
-
-impl NewContractIndex {
-    pub fn contracts(&self) -> &BTreeMap<ContractId, ContractIndexElement> {
-        &self.inner_contracts
-    }
-    pub fn contracts_mut(
-        &mut self,
-    ) -> &mut BTreeMap<ContractId, ContractIndexElement> {
-        &mut self.inner_contracts
-    }
-}
 
 #[derive(Debug, Clone, Archive, Deserialize, Serialize)]
 #[archive_attr(derive(CheckBytes))]
@@ -147,226 +128,6 @@ impl ContractsMerkle {
 
     pub fn len(&self) -> u64 {
         self.inner_tree.len()
-    }
-}
-
-#[derive(Debug, Clone, Archive, Deserialize, Serialize)]
-#[archive_attr(derive(CheckBytes))]
-pub struct ContractIndex {
-    pub tree: Tree,
-    pub contracts: BTreeMap<ContractId, ContractIndexElement>,
-    pub contract_hints: Vec<ContractId>,
-    pub maybe_base: Option<Hash>,
-}
-
-#[derive(Debug, Clone, Default, Archive, Deserialize, Serialize)]
-#[archive_attr(derive(CheckBytes))]
-pub struct BaseInfo {
-    pub contract_hints: Vec<ContractId>,
-    pub maybe_base: Option<Hash>,
-}
-
-#[derive(Debug, Clone, Default, Archive, Deserialize, Serialize)]
-#[archive_attr(derive(CheckBytes))]
-pub struct TreePos {
-    tree_pos: BTreeMap<u32, (Hash, u64)>,
-}
-
-impl TreePos {
-    pub fn insert(&mut self, k: u32, v: (Hash, u64)) {
-        self.tree_pos.insert(k, v);
-    }
-
-    pub fn marshall<W: Write>(&self, w: &mut W) -> io::Result<()> {
-        const CHUNK_SIZE: usize = 8192;
-        const ELEM_SIZE: usize = 4 + 32 + 4;
-        let mut b = [0u8; ELEM_SIZE * CHUNK_SIZE];
-        let mut chk = 0;
-        for (k, (h, p)) in self.tree_pos.iter() {
-            let offset = chk * ELEM_SIZE;
-            b[offset..(offset + 4)].copy_from_slice(&(*k).to_le_bytes());
-            b[(offset + 4)..(offset + 36)].copy_from_slice(h.as_bytes());
-            b[(offset + 36)..(offset + 40)]
-                .copy_from_slice(&(*p as u32).to_le_bytes());
-            chk = (chk + 1) % CHUNK_SIZE;
-            if chk == 0 {
-                w.write_all(b.as_slice())?;
-            }
-        }
-        if chk != 0 {
-            w.write_all(&b[..(chk * ELEM_SIZE)])?;
-        }
-        Ok(())
-    }
-
-    fn read_bytes<R: Read, const N: usize>(r: &mut R) -> io::Result<[u8; N]> {
-        let mut buffer = [0u8; N];
-        r.read_exact(&mut buffer)?;
-        Ok(buffer)
-    }
-
-    fn is_eof<T>(r: &io::Result<T>) -> bool {
-        if let Err(ref e) = r {
-            if e.kind() == ErrorKind::UnexpectedEof {
-                return true;
-            }
-        }
-        false
-    }
-
-    pub fn unmarshall<R: Read>(r: &mut R) -> io::Result<Self> {
-        let mut slf = Self::default();
-        loop {
-            let res = Self::read_bytes(r);
-            if Self::is_eof(&res) {
-                break;
-            }
-            let k = u32::from_le_bytes(res?);
-
-            let res = Self::read_bytes(r);
-            if Self::is_eof(&res) {
-                break;
-            }
-            let hash = Hash::from(res?);
-
-            let res = Self::read_bytes(r);
-            if Self::is_eof(&res) {
-                break;
-            }
-            let p = u32::from_le_bytes(res?);
-            slf.tree_pos.insert(k, (hash, p as u64));
-        }
-        Ok(slf)
-    }
-
-    pub fn iter(&self) -> impl Iterator<Item = (&u32, &(Hash, u64))> {
-        self.tree_pos.iter()
-    }
-}
-
-#[derive(Debug, Clone, Archive, Deserialize, Serialize)]
-#[archive_attr(derive(CheckBytes))]
-pub struct ContractIndexElement {
-    tree: PageTree,
-    len: usize,
-    page_indices: BTreeSet<usize>,
-    hash: Option<Hash>,
-    int_pos: Option<u64>,
-}
-
-impl ContractIndexElement {
-    pub fn new(is_64: bool) -> Self {
-        Self {
-            tree: PageTree::new(is_64),
-            len: 0,
-            page_indices: BTreeSet::new(),
-            hash: None,
-            int_pos: None,
-        }
-    }
-
-    pub fn page_indices_and_tree(
-        self,
-    ) -> (impl Iterator<Item = usize>, PageTree) {
-        (self.page_indices.into_iter(), self.tree)
-    }
-
-    pub fn page_indices(&self) -> &BTreeSet<usize> {
-        &self.page_indices
-    }
-
-    pub fn set_len(&mut self, len: usize) {
-        self.len = len;
-    }
-
-    pub fn len(&self) -> usize {
-        self.len
-    }
-
-    pub fn set_hash(&mut self, hash: Option<Hash>) {
-        self.hash = hash;
-    }
-
-    pub fn hash(&self) -> Option<Hash> {
-        self.hash
-    }
-
-    pub fn set_int_pos(&mut self, int_pos: Option<u64>) {
-        self.int_pos = int_pos;
-    }
-
-    pub fn int_pos(&self) -> Option<u64> {
-        self.int_pos
-    }
-
-    pub fn tree(&self) -> &PageTree {
-        &self.tree
-    }
-
-    pub fn insert_page_index_hash(
-        &mut self,
-        page_index: usize,
-        page_index_u64: u64,
-        page_hash: impl Into<Hash>,
-    ) {
-        self.page_indices.insert(page_index);
-        self.tree.insert(page_index_u64, page_hash);
-    }
-}
-
-impl Default for NewContractIndex {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl NewContractIndex {
-    pub fn new() -> Self {
-        Self {
-            inner_contracts: BTreeMap::new(),
-        }
-    }
-
-    pub fn remove_contract_index(
-        &mut self,
-        contract_id: &ContractId,
-    ) -> Option<ContractIndexElement> {
-        self.inner_contracts.remove(contract_id)
-    }
-
-    pub fn insert_contract_index(
-        &mut self,
-        contract_id: &ContractId,
-        element: ContractIndexElement,
-    ) {
-        self.inner_contracts.insert(*contract_id, element);
-    }
-
-    pub fn get(&self, contract: &ContractId) -> Option<&ContractIndexElement> {
-        self.inner_contracts.get(contract)
-    }
-
-    pub fn get_mut(
-        &mut self,
-        contract: &ContractId,
-    ) -> Option<&mut ContractIndexElement> {
-        self.inner_contracts.get_mut(contract)
-    }
-
-    pub fn contains_key(&self, contract: &ContractId) -> bool {
-        self.inner_contracts.contains_key(contract)
-    }
-
-    pub fn iter(
-        &self,
-    ) -> impl Iterator<Item = (&ContractId, &ContractIndexElement)> {
-        self.inner_contracts.iter()
-    }
-
-    pub fn move_into(self, target: &mut Self) {
-        for (contract_id, element) in self.inner_contracts.into_iter() {
-            target.insert_contract_index(&contract_id, element);
-        }
     }
 }
 
@@ -434,99 +195,6 @@ impl PageOpening {
     }
 }
 
-#[derive(
-    Debug,
-    Clone,
-    Copy,
-    PartialEq,
-    Eq,
-    PartialOrd,
-    Ord,
-    Hash,
-    Archive,
-    Deserialize,
-    Serialize,
-    CheckBytes,
-)]
-#[archive(as = "Self")]
-pub struct Hash([u8; blake3::OUT_LEN]);
-
-impl Hash {
-    pub fn new(bytes: &[u8]) -> Self {
-        let mut hasher = Hasher::new();
-        hasher.update(bytes);
-        hasher.finalize()
-    }
-
-    pub fn as_bytes(&self) -> &[u8; blake3::OUT_LEN] {
-        &self.0
-    }
-}
-
-impl From<Hash> for [u8; blake3::OUT_LEN] {
-    fn from(hash: Hash) -> Self {
-        hash.0
-    }
-}
-
-impl From<[u8; blake3::OUT_LEN]> for Hash {
-    fn from(bytes: [u8; blake3::OUT_LEN]) -> Self {
-        Self(bytes)
-    }
-}
-
-impl AsRef<[u8]> for Hash {
-    fn as_ref(&self) -> &[u8] {
-        &self.0
-    }
-}
-
-impl dusk_merkle::Aggregate<C_ARITY> for Hash {
-    const EMPTY_SUBTREE: Self = Hash([0; blake3::OUT_LEN]);
-
-    fn aggregate(items: [&Self; C_ARITY]) -> Self {
-        let mut hasher = Hasher::new();
-        for item in items {
-            hasher.update(item.as_bytes());
-        }
-        hasher.finalize()
-    }
-}
-
-impl dusk_merkle::Aggregate<P32_ARITY> for Hash {
-    const EMPTY_SUBTREE: Self = Hash([0; blake3::OUT_LEN]);
-
-    fn aggregate(items: [&Self; P32_ARITY]) -> Self {
-        let mut hasher = Hasher::new();
-        for item in items {
-            hasher.update(item.as_bytes());
-        }
-        hasher.finalize()
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct Hasher(blake3::Hasher);
-
-impl Hasher {
-    #[inline(always)]
-    pub fn new() -> Self {
-        Self(blake3::Hasher::new())
-    }
-
-    #[inline(always)]
-    pub fn update(&mut self, input: &[u8]) -> &mut Self {
-        self.0.update(input);
-        self
-    }
-
-    #[inline(always)]
-    pub fn finalize(&self) -> Hash {
-        let hash = self.0.finalize();
-        Hash(hash.into())
-    }
-}
-
 /// Returns the position of a `contract` in the tree  given its ID. The position
 /// is computed by dividing the 32-byte id into 8 4-byte slices, which are then
 /// summed up (`u32::wrapping_add`).
@@ -550,30 +218,4 @@ pub fn position_from_contract(contract: &ContractId) -> u64 {
         .fold(0, u32::wrapping_add);
 
     pos as u64
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::io::{BufReader, BufWriter};
-
-    #[test]
-    fn merkle_position_serialization() -> Result<(), io::Error> {
-        const TEST_SIZE: u32 = 262144;
-        const ELEM_SIZE: usize = 4 + 32 + 4;
-        let mut marshalled = TreePos::default();
-        let h = Hash::from([1u8; 32]);
-        for i in 0..TEST_SIZE {
-            marshalled.insert(i, (h, i as u64));
-        }
-        let v: Vec<u8> = Vec::new();
-        let mut w = BufWriter::with_capacity(TEST_SIZE as usize * ELEM_SIZE, v);
-        marshalled.marshall(&mut w)?;
-        let mut r = BufReader::new(w.buffer());
-        let unmarshalled = TreePos::unmarshall(&mut r)?;
-        for i in 0..TEST_SIZE {
-            assert_eq!(unmarshalled.tree_pos.get(&i), Some(&(h, i as u64)));
-        }
-        Ok(())
-    }
 }

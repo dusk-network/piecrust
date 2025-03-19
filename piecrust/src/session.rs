@@ -654,7 +654,7 @@ impl Session {
         contract: ContractId,
     ) -> Result<usize, Error> {
         let instance = self.new_instance(contract)?;
-        if self.inner.instances.get(&contract).is_some() {
+        if self.inner.instances.contains_key(&contract) {
             panic!("Contract already in the stack: {contract:?}");
         }
 
