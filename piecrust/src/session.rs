@@ -54,6 +54,7 @@ pub struct Session {
     engine: Engine,
     inner: &'static mut SessionInner,
     original: bool,
+    config: SessionConfig,
 }
 
 impl Debug for Session {
@@ -138,6 +139,7 @@ impl Session {
         contract_session: ContractSession,
         host_queries: HostQueries,
         data: SessionData,
+        config: SessionConfig,
     ) -> Self {
         let inner = SessionInner {
             current: ContractId::from_bytes([0; CONTRACT_ID_BYTES]),
@@ -159,6 +161,7 @@ impl Session {
             engine: engine.clone(),
             inner,
             original: true,
+            config,
         };
 
         let mut config = engine.config().clone();
@@ -185,12 +188,21 @@ impl Session {
             engine: self.engine.clone(),
             inner: unsafe { &mut *inner },
             original: false,
+            config: self.config.clone(),
         }
     }
 
     /// Return a reference to the engine used in this session.
     pub(crate) fn engine(&self) -> &Engine {
         &self.engine
+    }
+
+    pub(crate) fn gas_per_deploy_byte(&self) -> u64 {
+        self.config.gas_per_deploy_byte
+    }
+
+    pub(crate) fn min_deploy_points(&self) -> u64 {
+        self.config.min_deploy_points
     }
 
     /// Deploy a contract, returning its [`ContractId`]. The ID is computed
@@ -966,6 +978,24 @@ impl SessionDataBuilder {
         SessionData {
             data: self.data.clone(),
             base: self.base,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct SessionConfig {
+    gas_per_deploy_byte: u64,
+    min_deploy_points: u64,
+}
+
+impl SessionConfig {
+    pub(crate) fn new(
+        gas_per_deploy_byte: Option<u64>,
+        min_deploy_points: Option<u64>,
+    ) -> Self {
+        Self {
+            gas_per_deploy_byte: gas_per_deploy_byte.unwrap_or(100),
+            min_deploy_points: min_deploy_points.unwrap_or(5_000_000),
         }
     }
 }
