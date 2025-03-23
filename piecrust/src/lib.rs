@@ -115,6 +115,8 @@
 //! [runtime docs]: dusk_wasmtime::Config::consume_fuel
 //! [`deletions`]: VM::delete_commit
 
+#![feature(result_option_inspect)]
+
 #[macro_use]
 mod bytecode_macro;
 mod call_tree;
@@ -131,6 +133,7 @@ mod vm;
 pub use call_tree::{CallTree, CallTreeElem};
 pub use contract::{ContractData, ContractDataBuilder};
 pub use error::Error;
+pub use imports::gen_contract_id;
 pub use session::{CallReceipt, Session, SessionData};
 pub use store::PageOpening;
 pub use vm::{HostQuery, VM};

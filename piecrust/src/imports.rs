@@ -8,9 +8,11 @@ mod wasm32;
 mod wasm64;
 
 use std::any::Any;
+use std::cmp::max;
 use std::sync::Arc;
 
 use crate::contract::ContractMetadata;
+use blake2b_simd::Params;
 use dusk_wasmtime::{
     Caller, Extern, Func, Module, Result as WasmtimeResult, Store,
 };
@@ -84,6 +86,10 @@ impl Imports {
             "self_id" => Func::wrap(store, self_id),
             #[cfg(feature = "debug")]
             "hdebug" => Func::wrap(store, hdebug),
+            "deploy" => match is_64 {
+                false => Func::wrap(store, wasm32::deploy),
+                true => Func::wrap(store, wasm64::deploy),
+            },
             _ => return None,
         })
     }
@@ -217,6 +223,137 @@ pub(crate) fn hd(
     Ok(data.len() as u32)
 }
 
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn deploy(
+    mut fenv: Caller<Env>,
+    bytecode_ofs: usize,
+    bytecode_len: u64,
+    init_arg_ofs: usize,
+    init_arg_len: u32,
+    owner_ofs: usize,
+    owner_len: u32,
+    deploy_nonce: u64,
+    gas_limit: u64,
+) -> WasmtimeResult<i32> {
+    let env = fenv.data_mut();
+    let instance = env.self_instance();
+
+    check_ptr(instance, init_arg_ofs, init_arg_len as usize)?;
+    check_ptr(instance, owner_ofs, owner_len as usize)?;
+    check_ptr(instance, init_arg_ofs, init_arg_len as usize)?;
+    check_ptr(instance, owner_ofs, owner_len as usize)?;
+    // Safe to cast `u64` to `usize` because wasmtime doesn't support 32-bit
+    // platforms https://docs.wasmtime.dev/stability-platform-support.html#compiler-support
+    check_ptr(instance, bytecode_ofs, bytecode_len as usize)?;
+
+    let (deployer_gas_remaining, deployed_init_limit) = {
+        let gas_remaining = instance.get_remaining_gas();
+        let deploy_gas_limit =
+            compute_gas_limit_for_callee(gas_remaining, gas_limit);
+        let deploy_charge = max(
+            bytecode_len * env.gas_per_deploy_byte(),
+            env.min_deploy_points(),
+        );
+        if deploy_gas_limit < deploy_charge {
+            instance.set_remaining_gas(gas_remaining - deploy_gas_limit);
+            let err = ContractError::from(Error::OutOfGas);
+            instance.with_arg_buf_mut(|buf| {
+                err.to_parts(buf);
+            });
+            return Ok(err.into());
+        }
+        instance.set_remaining_gas(gas_remaining - deploy_charge);
+        (
+            gas_remaining - deploy_charge,
+            deploy_gas_limit - deploy_charge,
+        )
+    };
+
+    let deploy_result: Result<_, Error> = instance.with_memory(|mem| {
+        let bytecode = &mem[bytecode_ofs..bytecode_ofs + bytecode_len as usize];
+        let owner = mem[owner_ofs..owner_ofs + owner_len as usize].to_vec();
+        let contract_id = gen_contract_id(bytecode, deploy_nonce, &owner);
+        let init_arg = if init_arg_ofs == 0 {
+            None
+        } else {
+            Some(
+                mem[init_arg_ofs..init_arg_ofs + init_arg_len as usize]
+                    .to_vec(),
+            )
+        };
+        env.deploy_raw(
+            Some(contract_id),
+            bytecode,
+            init_arg.clone(),
+            owner,
+            gas_limit,
+            false,
+        )?;
+        Ok((contract_id, init_arg))
+    });
+
+    let (contract_id, init_arg) = match deploy_result {
+        Ok(val) => val,
+        Err(err) => {
+            let err = ContractError::from(err);
+            instance.with_arg_buf_mut(|buf| {
+                err.to_parts(buf);
+            });
+            return Ok(err.into());
+        }
+    };
+
+    let call_init_result: Result<_, Error> = (|| {
+        env.push_callstack(contract_id, gas_limit)?;
+        let deployed = env
+            .instance(&contract_id)
+            .expect("The contract just deployed should exist");
+        init_arg.inspect(|arg| deployed.write_argument(arg));
+        deployed
+            .call(INIT_METHOD, init_arg_len, deployed_init_limit)
+            .map_err(Error::normalize)
+            .map_err(|err| {
+                // On failure, charge the full gas limit for calling init and
+                // restore to previous state.
+                instance.set_remaining_gas(
+                    deployer_gas_remaining - deployed_init_limit,
+                );
+                env.remove_contract(&contract_id);
+                env.move_up_prune_call_tree();
+                let revert_res = env.revert_callstack();
+                if let Err(io_err) = revert_res {
+                    Error::MemorySnapshotFailure {
+                        reason: Some(Arc::new(err)),
+                        io: Arc::new(io_err),
+                    }
+                } else {
+                    err
+                }
+            })?;
+        let spent_on_init = deployed_init_limit - deployed.get_remaining_gas();
+        env.move_up_call_tree(spent_on_init);
+        instance.set_remaining_gas(deployer_gas_remaining - spent_on_init);
+        Ok(())
+    })();
+
+    match call_init_result {
+        Ok(()) => {
+            instance.with_arg_buf_mut(|arg_buf| {
+                arg_buf[..CONTRACT_ID_BYTES]
+                    .copy_from_slice(contract_id.as_bytes());
+            });
+            Ok(0)
+        }
+        Err(err) => {
+            let err = ContractError::from(err);
+            instance.with_arg_buf_mut(|buf| {
+                err.to_parts(buf);
+            });
+            Ok(err.into())
+        }
+    }
+}
+
 pub(crate) fn c(
     mut fenv: Caller<Env>,
     callee_ofs: usize,
@@ -239,13 +376,8 @@ pub(crate) fn c(
 
     let caller_remaining = instance.get_remaining_gas();
 
-    let callee_limit = if gas_limit > 0 && gas_limit < caller_remaining {
-        gas_limit
-    } else {
-        let div = caller_remaining / 100 * GAS_PASS_PCT;
-        let rem = caller_remaining % 100 * GAS_PASS_PCT / 100;
-        div + rem
-    };
+    let callee_limit =
+        compute_gas_limit_for_callee(caller_remaining, gas_limit);
 
     enum WithMemoryError {
         BeforePush(Error),
@@ -533,4 +665,36 @@ fn self_id(mut fenv: Caller<Env>) {
     let len = slice.len();
     env.self_instance()
         .with_arg_buf_mut(|arg| arg[..len].copy_from_slice(&slice));
+}
+
+pub fn gen_contract_id(
+    bytes: impl AsRef<[u8]>,
+    nonce: u64,
+    owner: impl AsRef<[u8]>,
+) -> ContractId {
+    let mut hasher = Params::new().hash_length(CONTRACT_ID_BYTES).to_state();
+    hasher.update(bytes.as_ref());
+    hasher.update(&nonce.to_le_bytes()[..]);
+    hasher.update(owner.as_ref());
+    let hash_bytes: [u8; CONTRACT_ID_BYTES] = hasher
+        .finalize()
+        .as_bytes()
+        .try_into()
+        .expect("the hash result is exactly `CONTRACT_ID_BYTES` long");
+    ContractId::from_bytes(hash_bytes)
+}
+
+fn compute_gas_limit_for_callee(
+    caller_gas_left: u64,
+    preferred_callee_gas_limit: u64,
+) -> u64 {
+    if preferred_callee_gas_limit > 0
+        && preferred_callee_gas_limit < caller_gas_left
+    {
+        preferred_callee_gas_limit
+    } else {
+        let div = caller_gas_left / 100 * GAS_PASS_PCT;
+        let rem = caller_gas_left % 100 * GAS_PASS_PCT / 100;
+        div + rem
+    }
 }
