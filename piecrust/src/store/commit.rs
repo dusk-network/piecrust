@@ -94,10 +94,22 @@ impl Commit {
 
     pub fn insert(&mut self, contract_id: ContractId, memory: &Memory) {
         if self.index.get(&contract_id).is_none() {
-            self.index.insert_contract_index(
-                &contract_id,
-                ContractIndexElement::new(memory.is_64()),
-            );
+            if let Some(element) = self
+                .commit_store
+                .as_ref()
+                .expect("commit store should exist")
+                .lock()
+                .unwrap()
+                .get_from_main_index(&contract_id)
+            {
+                self.index
+                    .insert_contract_index(&contract_id, element.clone())
+            } else {
+                self.index.insert_contract_index(
+                    &contract_id,
+                    ContractIndexElement::new(memory.is_64()),
+                );
+            }
         }
         let (element, contracts_merkle) =
             self.element_and_merkle_mut(&contract_id);
