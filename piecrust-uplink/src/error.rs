@@ -22,12 +22,13 @@ use core::str;
 //
 // The contract writer, however, is free to pass it around and react to it if it
 // wishes.
-#[derive(Debug, Clone, Archive, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Archive, Serialize, Deserialize)]
 #[archive_attr(derive(CheckBytes))]
 pub enum ContractError {
     Panic(String),
     OutOfGas,
     DoesNotExist,
+    InitializationError(String),
     Unknown,
 }
 
@@ -59,6 +60,7 @@ impl ContractError {
             -1 => Self::Panic(get_msg(slice)),
             -2 => Self::OutOfGas,
             -3 => Self::DoesNotExist,
+            -4 => Self::InitializationError(get_msg(slice)),
             i32::MIN => Self::Unknown,
             _ => unreachable!("The host must guarantee that the code is valid"),
         }
@@ -84,6 +86,10 @@ impl ContractError {
             }
             Self::OutOfGas => -2,
             Self::DoesNotExist => -3,
+            Self::InitializationError(msg) => {
+                put_msg(msg, slice);
+                -4
+            }
             Self::Unknown => i32::MIN,
         }
     }
@@ -95,6 +101,7 @@ impl From<ContractError> for i32 {
             ContractError::Panic(_) => -1,
             ContractError::OutOfGas => -2,
             ContractError::DoesNotExist => -3,
+            ContractError::InitializationError(_) => -4,
             ContractError::Unknown => i32::MIN,
         }
     }
@@ -107,6 +114,9 @@ impl Display for ContractError {
             ContractError::OutOfGas => write!(f, "OutOfGas"),
             ContractError::DoesNotExist => {
                 write!(f, "Contract does not exist")
+            }
+            ContractError::InitializationError(msg) => {
+                write!(f, "Initialization error: {msg}")
             }
             ContractError::Unknown => write!(f, "Unknown"),
         }

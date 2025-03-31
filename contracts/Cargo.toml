@@ -7,6 +7,8 @@ members = [
     "initializer",
     "counter",
     "counter_float",
+    "counter_deployer",
+    "counter_deployer_template",
     "debugger",
     "double_counter",
     "empty_initializer",
