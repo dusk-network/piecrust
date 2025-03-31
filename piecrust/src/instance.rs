@@ -204,12 +204,26 @@ impl WrappedInstance {
 
     // Write argument into instance
     pub(crate) fn write_argument(&mut self, arg: &[u8]) {
-        self.with_arg_buf_mut(|buf| buf[..arg.len()].copy_from_slice(arg))
+        self.with_arg_buf_mut(|buf| {
+            // Using `ptr::copy` instead of `[T].copy_from_slice` because it's
+            // possible for `arg` and `buf` to point to the same
+            // location, in the case of an inter-contract
+            // call to the same contract and `[T].copy_from_slice` requires that
+            // the two slices must be non-overlapping.
+            unsafe {
+                core::ptr::copy(arg.as_ptr(), buf.as_mut_ptr(), arg.len());
+            }
+        })
     }
 
     // Read argument from instance
     pub(crate) fn read_argument(&mut self, arg: &mut [u8]) {
-        self.with_arg_buf(|buf| arg.copy_from_slice(&buf[..arg.len()]))
+        self.with_arg_buf(|buf| {
+            // Using `ptr::copy` for the same reason as in `write_argument`.
+            unsafe {
+                core::ptr::copy(buf.as_ptr(), arg.as_mut_ptr(), arg.len());
+            }
+        })
     }
 
     pub(crate) fn read_bytes_from_arg_buffer(&self, arg_len: u32) -> Vec<u8> {
