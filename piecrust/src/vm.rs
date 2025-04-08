@@ -13,18 +13,18 @@ use std::sync::Arc;
 use std::thread;
 
 use dusk_wasmtime::{
-    Config, Engine, ModuleVersionStrategy, OperatorCost, OptLevel, Strategy,
-    WasmBacktraceDetails,
+    Config as WasmtimeConfig, Engine, ModuleVersionStrategy, OperatorCost,
+    OptLevel, Strategy, WasmBacktraceDetails,
 };
 use tempfile::tempdir;
 
 use crate::config::BYTE_STORE_COST;
-use crate::session::{Session, SessionData};
+use crate::session::{Session, SessionConfig, SessionData};
 use crate::store::ContractStore;
 use crate::Error::{self, PersistenceError};
 
-fn config() -> Config {
-    let mut config = Config::new();
+fn config() -> WasmtimeConfig {
+    let mut config = WasmtimeConfig::new();
 
     // Neither WASM backtrace, nor native unwind info.
     config.wasm_backtrace(false);
@@ -116,6 +116,7 @@ pub struct VM {
     engine: Engine,
     host_queries: HostQueries,
     store: ContractStore,
+    session_config: SessionConfig,
 }
 
 impl Debug for VM {
@@ -124,6 +125,7 @@ impl Debug for VM {
             .field("config", self.engine.config())
             .field("host_queries", &self.host_queries)
             .field("store", &self.store)
+            .field("session_config", &self.session_config)
             .finish()
     }
 }
@@ -137,7 +139,11 @@ impl VM {
     ///
     /// # Errors
     /// If the directory contains unparseable or inconsistent data.
-    pub fn new<P: AsRef<Path>>(root_dir: P) -> Result<Self, Error> {
+    pub fn new<P: AsRef<Path>>(
+        root_dir: P,
+        gas_per_deploy_byte: Option<u64>,
+        min_deploy_points: Option<u64>,
+    ) -> Result<Self, Error> {
         tracing::trace!("vm::new");
         let config = config();
 
@@ -158,6 +164,10 @@ impl VM {
             engine,
             host_queries: HostQueries::default(),
             store,
+            session_config: SessionConfig::new(
+                gas_per_deploy_byte,
+                min_deploy_points,
+            ),
         })
     }
 
@@ -169,6 +179,13 @@ impl VM {
     /// # Errors
     /// If creating a temporary directory fails.
     pub fn ephemeral() -> Result<Self, Error> {
+        Self::ephemeral_with_session_config(None, None)
+    }
+
+    pub fn ephemeral_with_session_config(
+        gas_per_deploy_byte: Option<u64>,
+        min_deploy_points: Option<u64>,
+    ) -> Result<Self, Error> {
         let tmp = tempdir().map_err(|err| PersistenceError(Arc::new(err)))?;
         let tmp = tmp.path().to_path_buf();
 
@@ -188,6 +205,10 @@ impl VM {
             engine,
             host_queries: HostQueries::default(),
             store,
+            session_config: SessionConfig::new(
+                gas_per_deploy_byte,
+                min_deploy_points,
+            ),
         })
     }
 
@@ -228,6 +249,7 @@ impl VM {
             contract_session,
             self.host_queries.clone(),
             data,
+            self.session_config.clone(),
         ))
     }
 

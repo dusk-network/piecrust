@@ -63,6 +63,16 @@ mod ext {
         pub fn spent() -> u64;
         pub fn owner(contract_id: *const u8) -> i32;
         pub fn self_id();
+        pub fn deploy(
+            bytecode: *const u8,
+            bytecode_len: u64,
+            init_arg: *const u8,
+            init_arg_len: u32,
+            owner: *const u8,
+            owner_len: u32,
+            deploy_nonce: u64,
+            gas_limit: u64,
+        ) -> i32;
     }
 }
 
@@ -215,6 +225,86 @@ pub fn call_raw_with_limit(
             Err(ContractError::from_parts(ret_len, buf))
         } else {
             Ok(buf[..ret_len as usize].to_vec())
+        }
+    })
+}
+
+/// Deploys the contract `bytecode` with init argument `init_arg` and
+/// deploy nonce `deploy_nonce`, assigning `owner` as the owner.
+///
+/// To specify the gas allowed to be spent by the called contract, use
+/// [`deploy_with_limit`].
+pub fn deploy<D, const N: usize>(
+    bytecode: &[u8],
+    init_arg: Option<&D>,
+    owner: [u8; N],
+    deploy_nonce: u64,
+) -> Result<ContractId, ContractError>
+where
+    for<'a> D: Serialize<StandardBufSerializer<'a>>,
+{
+    deploy_with_limit(bytecode, init_arg, owner, deploy_nonce, 0)
+}
+
+/// Deploys the contract `bytecode` with init argument `init_arg` and
+/// deploy nonce `deploy_nonce`, assigning `owner` as the owner.
+///
+/// A gas limit of `0` will use the default behavior - `93%` of the remaining
+/// gas will be used to deploy the contract. If the gas limit given is above or
+/// equal the remaining amount, the default behavior will be used instead.
+///
+/// On invocation, the deploy charge, which is the length of the bytecode * gas
+/// per deploy byte, will first be deducted.
+/// The remaining gas after that deduction will be used to call the contract's
+/// init function, if any.
+/// If the gas is exhausted at any point, the entire gas limit used for
+/// deployment will be consumed.
+pub fn deploy_with_limit<D, const N: usize>(
+    bytecode: &[u8],
+    init_arg: Option<&D>,
+    owner: [u8; N],
+    deploy_nonce: u64,
+    gas_limit: u64,
+) -> Result<ContractId, ContractError>
+where
+    for<'a> D: Serialize<StandardBufSerializer<'a>>,
+{
+    let (init_arg, init_arg_len) = with_arg_buf(|buf| {
+        if let Some(init_arg) = init_arg {
+            let mut sbuf = [0u8; SCRATCH_BUF_BYTES];
+            let scratch = BufferScratch::new(&mut sbuf);
+            let ptr = buf.as_ptr();
+            let ser = BufferSerializer::new(buf);
+            let mut ser = CompositeSerializer::new(ser, scratch, Infallible);
+            ser.serialize_value(init_arg)
+                .expect("should not fail to serialize");
+            let pos = ser.pos();
+            (ptr, pos)
+        } else {
+            (ptr::null(), 0)
+        }
+    });
+
+    let ret = unsafe {
+        ext::deploy(
+            bytecode.as_ptr(),
+            bytecode.len() as u64,
+            init_arg,
+            init_arg_len as u32,
+            owner.as_ptr(),
+            owner.len() as u32,
+            deploy_nonce,
+            gas_limit,
+        )
+    };
+
+    with_arg_buf(|buf| {
+        if ret == 0 {
+            let mut id = [0; CONTRACT_ID_BYTES];
+            id.copy_from_slice(&buf[..CONTRACT_ID_BYTES]);
+            Ok(ContractId::from_bytes(id))
+        } else {
+            Err(ContractError::from_parts(ret, buf))
         }
     })
 }
