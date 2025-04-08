@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Changed commits' strip-off algorithm to be able to bring back still needed elements [#440]
+
 ## [0.28.0] - 2025-03-19
 
 - Further improvement commit operations' performance [#396], [#419]
@@ -507,6 +511,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 <!-- ISSUES -->
 
 [#rusk_3341]: https://github.com/dusk-network/rusk/issues/3341
+[#440]: https://github.com/dusk-network/piecrust/issues/440
 [#433]: https://github.com/dusk-network/piecrust/issues/433
 [#422]: https://github.com/dusk-network/piecrust/issues/422
 [#419]: https://github.com/dusk-network/piecrust/issues/419
