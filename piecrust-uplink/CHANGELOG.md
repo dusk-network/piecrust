@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Serde feature no longer has any std dependence [#rusk_3596]
+
 ## [0.18.0] - 2025-02-20
 
 ### Added
@@ -236,6 +240,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - First `piecrust-uplink` release
 
 <!-- ISSUES -->
+[#rusk_3596]: https://github.com/dusk-network/rusk/issues/3596
 [#425]: https://github.com/dusk-network/piecrust/issues/425
 [#420]: https://github.com/dusk-network/piecrust/issues/420
 [#414]: https://github.com/dusk-network/piecrust/issues/414
