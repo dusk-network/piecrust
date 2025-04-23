@@ -56,3 +56,28 @@ pub(crate) fn emit(
 pub(crate) fn owner(fenv: Caller<Env>, mod_id_ofs: u32) -> WasmtimeResult<i32> {
     imports::owner(fenv, mod_id_ofs as usize)
 }
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn deploy(
+    fenv: Caller<Env>,
+    bytecode_ofs: u32,
+    bytecode_len: u64,
+    init_arg_ofs: u32,
+    init_arg_len: u32,
+    owner_ofs: u32,
+    owner_len: u32,
+    deploy_nonce: u64,
+    gas_limit: u64,
+) -> WasmtimeResult<i32> {
+    imports::deploy(
+        fenv,
+        bytecode_ofs as usize,
+        bytecode_len,
+        init_arg_ofs as usize,
+        init_arg_len,
+        owner_ofs as usize,
+        owner_len,
+        deploy_nonce,
+        gas_limit,
+    )
+}

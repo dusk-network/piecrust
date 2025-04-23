@@ -54,6 +54,7 @@ pub struct Session {
     engine: Engine,
     inner: &'static mut SessionInner,
     original: bool,
+    config: SessionConfig,
 }
 
 impl Debug for Session {
@@ -138,6 +139,7 @@ impl Session {
         contract_session: ContractSession,
         host_queries: HostQueries,
         data: SessionData,
+        config: SessionConfig,
     ) -> Self {
         let inner = SessionInner {
             current: ContractId::from_bytes([0; CONTRACT_ID_BYTES]),
@@ -159,6 +161,7 @@ impl Session {
             engine: engine.clone(),
             inner,
             original: true,
+            config,
         };
 
         let mut config = engine.config().clone();
@@ -185,12 +188,21 @@ impl Session {
             engine: self.engine.clone(),
             inner: unsafe { &mut *inner },
             original: false,
+            config: self.config.clone(),
         }
     }
 
     /// Return a reference to the engine used in this session.
     pub(crate) fn engine(&self) -> &Engine {
         &self.engine
+    }
+
+    pub(crate) fn gas_per_deploy_byte(&self) -> u64 {
+        self.config.gas_per_deploy_byte
+    }
+
+    pub(crate) fn min_deploy_points(&self) -> u64 {
+        self.config.min_deploy_points
     }
 
     /// Deploy a contract, returning its [`ContractId`]. The ID is computed
@@ -247,6 +259,7 @@ impl Session {
                 .owner
                 .expect("Owner must be specified when deploying a contract"),
             gas_limit,
+            true,
         )
     }
 
@@ -275,12 +288,20 @@ impl Session {
         init_arg: Option<Vec<u8>>,
         owner: Vec<u8>,
         gas_limit: u64,
+        call_init: bool,
     ) -> Result<ContractId, Error> {
         let contract_id = contract_id.unwrap_or({
             let hash = blake3::hash(bytecode);
             ContractId::from_bytes(hash.into())
         });
-        self.do_deploy(contract_id, bytecode, init_arg, owner, gas_limit)?;
+        self.do_deploy(
+            contract_id,
+            bytecode,
+            init_arg,
+            owner,
+            gas_limit,
+            call_init,
+        )?;
 
         Ok(contract_id)
     }
@@ -293,6 +314,7 @@ impl Session {
         arg: Option<Vec<u8>>,
         owner: Vec<u8>,
         gas_limit: u64,
+        call_init: bool,
     ) -> Result<(), Error> {
         if self.inner.contract_session.contract_deployed(contract_id) {
             return Err(InitalizationError(
@@ -321,7 +343,7 @@ impl Session {
             let instance =
                 self.instance(&contract_id).expect("instance should exist");
 
-            if instance.is_function_exported(INIT_METHOD) {
+            if call_init && instance.is_function_exported(INIT_METHOD) {
                 // If no argument was provided, we call the init method anyway,
                 // but with an empty argument. The alternative is to panic, but
                 // that assumes that the caller of `deploy` knows that the
@@ -646,6 +668,10 @@ impl Session {
         self.inner.call_tree.call_ids()
     }
 
+    pub(crate) fn remove_contract(&mut self, contract_id: &ContractId) {
+        self.inner.contract_session.remove_contract(contract_id)
+    }
+
     /// Creates a new instance of the given contract, returning its memory
     /// length.
     fn create_instance(
@@ -965,6 +991,24 @@ impl SessionDataBuilder {
         SessionData {
             data: self.data.clone(),
             base: self.base,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct SessionConfig {
+    gas_per_deploy_byte: u64,
+    min_deploy_points: u64,
+}
+
+impl SessionConfig {
+    pub(crate) fn new(
+        gas_per_deploy_byte: Option<u64>,
+        min_deploy_points: Option<u64>,
+    ) -> Self {
+        Self {
+            gas_per_deploy_byte: gas_per_deploy_byte.unwrap_or(100),
+            min_deploy_points: min_deploy_points.unwrap_or(5_000_000),
         }
     }
 }
