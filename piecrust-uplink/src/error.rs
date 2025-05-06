@@ -22,7 +22,7 @@ use core::str;
 //
 // The contract writer, however, is free to pass it around and react to it if it
 // wishes.
-#[derive(Debug, Clone, Archive, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Archive, Serialize, Deserialize)]
 #[archive_attr(derive(CheckBytes))]
 pub enum ContractError {
     Panic(String),
