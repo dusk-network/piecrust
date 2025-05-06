@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Update rust toolchain to nightly 2024-07-30 (1.82.0) [#rusk_3470]
 
+### Added
+
+- Add `PartialEq` and `Eq` derive on `ContractError` [#445]
+
 ## [0.18.0] - 2025-02-20
 
 ### Added
@@ -240,6 +244,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - First `piecrust-uplink` release
 
 <!-- ISSUES -->
+[#445]: https://github.com/dusk-network/piecrust/issues/445
 [#rusk_3470]: https://github.com/dusk-network/rusk/issues/3470
 [#425]: https://github.com/dusk-network/piecrust/issues/425
 [#420]: https://github.com/dusk-network/piecrust/issues/420
