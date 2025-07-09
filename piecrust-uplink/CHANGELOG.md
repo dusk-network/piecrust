@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Update rust toolchain to nightly 2024-07-30 (1.82.0) [#rusk_3470]
+- Serde feature no longer has any std dependence [#rusk_3596]
 
 ### Added
 
@@ -246,6 +247,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 <!-- ISSUES -->
 [#445]: https://github.com/dusk-network/piecrust/issues/445
 [#rusk_3470]: https://github.com/dusk-network/rusk/issues/3470
+[#rusk_3596]: https://github.com/dusk-network/rusk/issues/3596
 [#425]: https://github.com/dusk-network/piecrust/issues/425
 [#420]: https://github.com/dusk-network/piecrust/issues/420
 [#414]: https://github.com/dusk-network/piecrust/issues/414
