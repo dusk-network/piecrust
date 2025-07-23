@@ -205,6 +205,11 @@ impl VM {
         self.host_queries.insert(name, query);
     }
 
+    /// Return a list of all registered host queries.
+    pub fn host_queries(&self) -> &HostQueries {
+        &self.host_queries
+    }
+
     /// Spawn a [`Session`].
     ///
     /// # Errors
@@ -223,10 +228,14 @@ impl VM {
                 .map_err(|err| PersistenceError(Arc::new(err)))?,
             _ => self.store.genesis_session(),
         };
+        let mut host_queries = self.host_queries.clone();
+        for excluded in data.excluded_host_queries() {
+            host_queries.remove(excluded);
+        }
         Ok(Session::new(
             self.engine.clone(),
             contract_session,
-            self.host_queries.clone(),
+            host_queries,
             data,
         ))
     }
@@ -289,6 +298,10 @@ impl HostQueries {
 
     pub fn get(&self, name: &str) -> Option<&dyn HostQuery> {
         self.map.get(name).map(|q| q.as_ref())
+    }
+
+    pub fn remove(&mut self, name: &str) {
+        self.map.remove(name);
     }
 }
 
