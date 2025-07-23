@@ -5,7 +5,8 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 use std::borrow::Cow;
-use std::collections::BTreeMap;
+use std::collections::btree_set::Iter;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{Debug, Formatter};
 use std::mem;
 use std::sync::{mpsc, Arc};
@@ -905,6 +906,7 @@ impl CallReceipt<Vec<u8>> {
 pub struct SessionData {
     data: BTreeMap<Cow<'static, str>, Vec<u8>>,
     pub base: Option<[u8; 32]>,
+    excluded_host_queries: BTreeSet<String>,
 }
 
 impl SessionData {
@@ -912,6 +914,7 @@ impl SessionData {
         SessionDataBuilder {
             data: BTreeMap::new(),
             base: None,
+            excluded_host_queries: BTreeSet::new(),
         }
     }
 
@@ -932,6 +935,10 @@ impl SessionData {
     {
         self.data.remove(&name.into())
     }
+
+    pub fn excluded_host_queries(&self) -> Iter<String> {
+        self.excluded_host_queries.iter()
+    }
 }
 
 impl From<SessionDataBuilder> for SessionData {
@@ -943,6 +950,7 @@ impl From<SessionDataBuilder> for SessionData {
 pub struct SessionDataBuilder {
     data: BTreeMap<Cow<'static, str>, Vec<u8>>,
     base: Option<[u8; 32]>,
+    excluded_host_queries: BTreeSet<String>,
 }
 
 impl SessionDataBuilder {
@@ -961,10 +969,16 @@ impl SessionDataBuilder {
         self
     }
 
+    pub fn exclude_hq(mut self, name: String) -> Self {
+        self.excluded_host_queries.insert(name);
+        self
+    }
+
     fn build(&self) -> SessionData {
         SessionData {
             data: self.data.clone(),
             base: self.base,
+            excluded_host_queries: self.excluded_host_queries.clone(),
         }
     }
 }
