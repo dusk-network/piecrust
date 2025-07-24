@@ -1,7 +1,7 @@
 help: ## Display this help screen
 	@grep -h -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-15s\033[0m %s\n", $$1, $$2}'
 
-COMPILER_VERSION=v0.3.0-rc
+COMPILER_VERSION=v0.3.0-rc.1
 
 setup-compiler: ## Setup the Dusk Contract Compiler
 	@./scripts/setup-compiler.sh $(COMPILER_VERSION)
