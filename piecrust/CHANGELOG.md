@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Update rust toolchain to nightly 2024-07-30 (1.82.0) [#rusk_3470]
+- Allow to exclude host queries when creating a session
+- Relax `tracing` dependency from "=0.1.40" to "0.1.40"
 
 ## [0.28.1] - 2025-04-16
 
