@@ -7,8 +7,8 @@
 use crate::store::baseinfo::BaseInfo;
 use crate::store::hasher::Hash;
 use crate::store::{
-    BASE_FILE, ELEMENT_FILE, LEAF_DIR, MAIN_DIR, MEMORY_DIR, TREE_POS_FILE,
-    TREE_POS_OPT_FILE,
+    BASE_FILE, BYTECODE_DIR, ELEMENT_FILE, LEAF_DIR, MAIN_DIR, MEMORY_DIR,
+    METADATA_EXTENSION, OBJECTCODE_EXTENSION, TREE_POS_FILE, TREE_POS_OPT_FILE,
 };
 use std::path::Path;
 use std::{fs, io};
@@ -26,6 +26,27 @@ impl CommitFinalizer {
         let base_info = BaseInfo::from_path(&base_info_path)?;
         for contract_hint in base_info.contract_hints {
             let contract_hex = hex::encode(contract_hint);
+            // BYTECODE
+            let bytecode_src_dir = main_dir.join(BYTECODE_DIR).join(&root);
+            let bytecode_src_path = bytecode_src_dir.join(&contract_hex);
+            let module_src_path =
+                bytecode_src_path.with_extension(OBJECTCODE_EXTENSION);
+            let metadata_src_path =
+                bytecode_src_path.with_extension(METADATA_EXTENSION);
+            let bytecode_dst_path =
+                main_dir.join(BYTECODE_DIR).join(&contract_hex);
+            let module_dst_path =
+                bytecode_dst_path.with_extension(OBJECTCODE_EXTENSION);
+            let metadata_dst_path =
+                bytecode_dst_path.with_extension(METADATA_EXTENSION);
+            if bytecode_src_path.is_file()
+                && module_src_path.is_file()
+                && metadata_src_path.is_file()
+            {
+                fs::rename(&bytecode_src_path, bytecode_dst_path)?;
+                fs::rename(&module_src_path, module_dst_path)?;
+                fs::rename(&metadata_src_path, metadata_dst_path)?;
+            }
             // MEMORY
             let src_path =
                 main_dir.join(MEMORY_DIR).join(&contract_hex).join(&root);
