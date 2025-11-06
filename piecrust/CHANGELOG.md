@@ -25,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Enriched commit-specific storage to support contract bytecodes [#450]
 - Added blocking 'init' method to be called only during deployment [#433]
 
 ## [0.27.2] - 2025-02-20
@@ -518,6 +519,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- ISSUES -->
 
+[#450]: https://github.com/dusk-network/piecrust/issues/450
 [#rusk_3470]: https://github.com/dusk-network/rusk/issues/3470
 [#rusk_3341]: https://github.com/dusk-network/rusk/issues/3341
 [#440]: https://github.com/dusk-network/piecrust/issues/440

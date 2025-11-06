@@ -121,7 +121,11 @@ impl CommitReader {
 
             // Check that all contracts in the index file have a corresponding
             // bytecode and memory pages specified.
-            let bytecode_path = bytecode_dir.join(&contract_hex);
+            let bytecode_path = commit_id
+                .as_ref()
+                .map(|cid| bytecode_dir.join(cid).join(&contract_hex))
+                .filter(|p| p.is_file())
+                .unwrap_or(bytecode_dir.join(&contract_hex));
             if !bytecode_path.is_file() {
                 return Err(io::Error::new(
                     io::ErrorKind::InvalidData,

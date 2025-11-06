@@ -89,6 +89,7 @@ impl CommitWriter {
         struct Directories {
             main_dir: PathBuf,
             bytecode_main_dir: PathBuf,
+            bytecode_commit_dir: PathBuf,
             memory_main_dir: PathBuf,
             leaf_main_dir: PathBuf,
         }
@@ -100,6 +101,10 @@ impl CommitWriter {
             let bytecode_main_dir = main_dir.join(BYTECODE_DIR);
             fs::create_dir_all(&bytecode_main_dir)?;
 
+            let bytecode_commit_dir =
+                bytecode_main_dir.join(commit_id.as_ref());
+            fs::create_dir_all(&bytecode_commit_dir)?;
+
             let memory_main_dir = main_dir.join(MEMORY_DIR);
             fs::create_dir_all(&memory_main_dir)?;
 
@@ -109,6 +114,7 @@ impl CommitWriter {
             Directories {
                 main_dir,
                 bytecode_main_dir,
+                bytecode_commit_dir,
                 memory_main_dir,
                 leaf_main_dir,
             }
@@ -149,13 +155,33 @@ impl CommitWriter {
             let metadata_main_path =
                 bytecode_main_path.with_extension(METADATA_EXTENSION);
 
+            let bytecode_commit_path =
+                directories.bytecode_commit_dir.join(&contract_hex);
+            let module_commit_path =
+                bytecode_commit_path.with_extension(OBJECTCODE_EXTENSION);
+            let metadata_commit_path =
+                bytecode_commit_path.with_extension(METADATA_EXTENSION);
+
             // If the contract is new, we write the bytecode, module, and
             // metadata files to disk.
             if contract_data.is_new {
                 // we write them to the main location
-                fs::write(bytecode_main_path, &contract_data.bytecode)?;
-                fs::write(module_main_path, contract_data.module.serialize())?;
-                fs::write(metadata_main_path, &contract_data.metadata)?;
+                fs::write(bytecode_commit_path, &contract_data.bytecode)?;
+                fs::write(
+                    module_commit_path,
+                    contract_data.module.serialize(),
+                )?;
+                fs::write(metadata_commit_path, &contract_data.metadata)?;
+                // if main does not have this contract yet, we store it there as
+                // well
+                if !bytecode_main_path.is_file() {
+                    fs::write(bytecode_main_path, &contract_data.bytecode)?;
+                    fs::write(
+                        module_main_path,
+                        contract_data.module.serialize(),
+                    )?;
+                    fs::write(metadata_main_path, &contract_data.metadata)?;
+                }
                 dirty = true;
             }
             if dirty {

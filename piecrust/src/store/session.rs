@@ -297,8 +297,21 @@ impl ContractSession {
 
                             let contract_hex = hex::encode(contract);
 
-                            let bytecode_path =
-                                base_dir.join(BYTECODE_DIR).join(&contract_hex);
+                            let bytecode_path = commit_id
+                                .as_ref()
+                                .map(|hash| {
+                                    base_dir
+                                        .join(BYTECODE_DIR)
+                                        .join(hex::encode(hash.as_bytes()))
+                                        .join(&contract_hex)
+                                })
+                                .filter(|p| p.is_file())
+                                .unwrap_or(
+                                    base_dir
+                                        .join(BYTECODE_DIR)
+                                        .join(&contract_hex),
+                                );
+
                             let module_path = bytecode_path
                                 .with_extension(OBJECTCODE_EXTENSION);
                             let metadata_path = bytecode_path
