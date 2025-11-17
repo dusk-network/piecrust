@@ -309,8 +309,20 @@ impl WrappedInstance {
 
         self.set_remaining_gas(limit);
 
-        fun.call(&mut self.store, arg_len)
-            .map_err(|e| map_call_err(self, e))
+        debug!(
+            "Calling function '{}' with arg_len={} and gas limit={} and store {:?}",
+            method_name, arg_len, limit, self.store
+        );
+
+        // Error can only originate here:
+        let ret = fun.call(&mut self.store, arg_len);
+
+        debug!(
+            "Function '{}' returned {:?} with store {:?}",
+            method_name, ret, self.store
+        );
+
+        ret.map_err(|e| map_call_err(self, e))
     }
 
     pub fn set_remaining_gas(&mut self, limit: u64) {
@@ -372,6 +384,11 @@ fn map_call_err(
     instance: &mut WrappedInstance,
     err: dusk_wasmtime::Error,
 ) -> Error {
+    debug!(
+        "map_call_err: Call error: {:?} Instance {:?}",
+        err, instance
+    );
+
     if instance.get_remaining_gas() == 0 {
         return Error::OutOfGas;
     }

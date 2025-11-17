@@ -556,6 +556,8 @@ impl Session {
         self.inner.instances.get(contract_id).map(|instance| {
             // SAFETY: We guarantee that the instance exists since we're in
             // control over if it is dropped with the session.
+            // Check if this is really the case by debug tracing.
+            debug!("Accessing instance {:?}", instance);
             unsafe { &mut **instance }
         })
     }
@@ -728,7 +730,10 @@ impl Session {
             .contract_session
             .commit()
             .map(Into::into)
-            .map_err(|err| PersistenceError(Arc::new(err)))
+            .map_err(|err| {
+                debug!("Commit error: {:?}", err);
+                PersistenceError(Arc::new(err))
+            })
     }
 
     #[cfg(feature = "debug")]
@@ -817,6 +822,11 @@ impl Session {
             .call(fname, arg_len, limit)
             .map_err(|err| {
                 if let Err(io_err) = self.revert_callstack() {
+                    debug!(
+                        "Failed to revert callstack after call error: {:?}",
+                        io_err
+                    );
+
                     return Error::MemorySnapshotFailure {
                         reason: Some(Arc::new(err)),
                         io: Arc::new(io_err),
@@ -826,21 +836,34 @@ impl Session {
                 self.clear_stack_and_instances();
                 err
             })
-            .map_err(Error::normalize)?;
+            .map_err(Error::normalize)?; // Imo normalizes the error and potentially gives out the RuntimeError
+                                         // we are getting
+
+        debug!("Call to {fname} on {contract:?} returned {ret_len} bytes");
+
         let ret = instance.read_bytes_from_arg_buffer(ret_len as u32);
 
         let spent = limit - instance.get_remaining_gas();
 
+        debug!("spent gas: {}", spent);
+        debug!("remaining gas: {}", instance.get_remaining_gas());
+
         for elem in self.inner.call_tree.iter() {
-            let instance = self
-                .instance(&elem.contract_id)
-                .expect("instance should exist");
-            instance
-                .apply()
-                .map_err(|err| Error::MemorySnapshotFailure {
+            let instance =
+                self.instance(&elem.contract_id).unwrap_or_else(|| {
+                    debug!("Instance missing for {:?}", elem.contract_id);
+                    panic!("instance should exist for {:?}", elem.contract_id)
+                });
+            instance.apply().map_err(|err| {
+                debug!(
+                    "Failed to apply memory changes for {:?}: {:?}",
+                    elem.contract_id, err
+                );
+                Error::MemorySnapshotFailure {
                     reason: None,
                     io: Arc::new(err),
-                })?;
+                }
+            })?;
         }
         self.clear_stack_and_instances();
 
