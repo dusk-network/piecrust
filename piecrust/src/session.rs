@@ -24,6 +24,7 @@ use rkyv::{
     check_archived_root, validation::validators::DefaultValidator, Archive,
     Deserialize, Infallible, Serialize,
 };
+use tracing::debug;
 
 use crate::call_tree::{CallTree, CallTreeElem};
 use crate::contract::{ContractData, ContractMetadata, WrappedContract};
