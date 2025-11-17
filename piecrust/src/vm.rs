@@ -44,9 +44,12 @@ fn config() -> Config {
     // Host memory creator is set in the session.
     // config.with_host_memory()
 
-    config.static_memory_forced(true);
-    config.static_memory_guard_size(0);
-    config.dynamic_memory_guard_size(0);
+    // This setting doesn't exist anymore.
+    // Changed here: https://github.com/bytecodealliance/wasmtime/pull/9545
+    //config.static_memory_forced(true); change to memory_may_move
+    config.memory_may_move(false);
+
+    config.memory_guard_size(0);
     config.guard_before_linear_memory(false);
     config.memory_init_cow(false);
 
@@ -88,7 +91,7 @@ fn config() -> Config {
         V128Store32Lane: BYTE16_STORE_COST,
         V128Store64Lane: BYTE16_STORE_COST,
 
-        ..Default::default()
+        ..OperatorCost::new()
     });
 
     config
