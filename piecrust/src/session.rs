@@ -378,12 +378,15 @@ impl Session {
         ser.serialize_value(fn_arg)?;
         let pos = ser.pos();
 
+        debug!("before calling call_raw");
         let receipt = self.call_raw(
             contract,
             fn_name,
             self.inner.buffer[..pos].to_vec(),
             gas_limit,
-        )?;
+        ); // this gets propagated upwards directly
+        debug!("after calling call_raw {:?}", receipt);
+        let receipt = receipt?;
 
         receipt.deserialize()
     }
@@ -407,9 +410,13 @@ impl Session {
         if fn_name == INIT_METHOD {
             return Err(InitalizationError("init call not allowed".into()));
         }
+        debug!("before calling call_inner");
+        let result =
+            self.call_inner(contract, fn_name, fn_arg.into(), gas_limit);
+        debug!("after calling call_inner {:?}", result);
 
-        let (data, gas_spent, call_tree) =
-            self.call_inner(contract, fn_name, fn_arg.into(), gas_limit)?;
+        let (data, gas_spent, call_tree) = result?; // this gets propagated upwards directly
+
         let events = mem::take(&mut self.inner.events);
 
         Ok(CallReceipt {
@@ -559,7 +566,9 @@ impl Session {
             // control over if it is dropped with the session.
             // Check if this is really the case by debug tracing.
             debug!("Accessing instance {:?}", instance);
-            unsafe { &mut **instance }
+            let x = unsafe { &mut **instance };
+            debug!("Accessed instance {:?}", x);
+            x
         })
     }
 
@@ -807,6 +816,7 @@ impl Session {
         limit: u64,
     ) -> Result<(Vec<u8>, u64, CallTree), Error> {
         let stack_element = self.push_callstack(contract, limit)?;
+        debug!("after pushing callstack {:?}", stack_element);
         let instance = self
             .instance(&stack_element.contract_id)
             .expect("instance should exist");
@@ -818,10 +828,15 @@ impl Session {
                 io: Arc::new(err),
             })?;
 
-        let arg_len = instance.write_bytes_to_arg_buffer(&fdata)?;
+        debug!("before write bytes to arg buffer");
+        let ret = instance.write_bytes_to_arg_buffer(&fdata);
+        debug!("after write bytes to arg buffer");
+        let arg_len = ret?;
         let ret_len = instance
             .call(fname, arg_len, limit)
             .map_err(|err| {
+                debug!("CALL ERROR: {:?}", err);
+
                 if let Err(io_err) = self.revert_callstack() {
                     debug!(
                         "Failed to revert callstack after call error: {:?}",
@@ -833,14 +848,18 @@ impl Session {
                         io: Arc::new(io_err),
                     };
                 }
+                debug!("Reverted callstack successfully after call error");
                 self.move_up_prune_call_tree();
                 self.clear_stack_and_instances();
+                debug!(
+                    "Cleared stack and instances successfully after call error"
+                );
                 err
             })
             .map_err(Error::normalize)?; // Imo normalizes the error and potentially gives out the RuntimeError
                                          // we are getting
 
-        debug!("Call to {fname} on {contract:?} returned {ret_len} bytes");
+        debug!("Call to {fname} on {contract:?} returned {ret_len} bytes"); // still reaching
 
         let ret = instance.read_bytes_from_arg_buffer(ret_len as u32);
 
@@ -866,12 +885,19 @@ impl Session {
                 }
             })?;
         }
+        debug!("Before clear stack and instances");
         self.clear_stack_and_instances();
+        debug!("After clear stack and instances");
 
         let mut call_tree = CallTree::new();
+        debug!("before swap call tree");
         mem::swap(&mut self.inner.call_tree, &mut call_tree);
+        debug!("after swap call tree");
+        debug!("before update spent");
         call_tree.update_spent(spent);
+        debug!("after update spent");
 
+        debug!("call inner successful");
         Ok((ret, spent, call_tree))
     }
 

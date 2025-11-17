@@ -284,6 +284,10 @@ impl WrappedInstance {
         &mut self,
         buf: &[u8],
     ) -> Result<u32, Error> {
+        debug!(
+            "Getting write_bytes_to_arg_buffer with buf len {}",
+            buf.len()
+        );
         self.with_arg_buf_mut(|arg_buffer| {
             if buf.len() > arg_buffer.len() {
                 return Err(Error::MemoryAccessOutOfBounds {
@@ -292,10 +296,11 @@ impl WrappedInstance {
                     mem_len: ARGBUF_LEN,
                 });
             }
-
+            debug!("Writing bytes to arg buffer with length {}", buf.len());
             arg_buffer[..buf.len()].copy_from_slice(buf);
             // It is safe to cast to u32 because the length of the buffer is
             // guaranteed to be less than 4GiB.
+            debug!("Successfully wrote bytes to arg buffer");
             Ok(buf.len() as u32)
         })
     }
@@ -313,17 +318,14 @@ impl WrappedInstance {
         self.set_remaining_gas(limit);
 
         debug!(
-            "Calling function '{}' with arg_len={} and gas limit={} and store {:?}",
-            method_name, arg_len, limit, self.store
+            "Calling function '{}' with arg_len={} and gas limit={}",
+            method_name, arg_len, limit
         );
 
         // Error can only originate here:
         let ret = fun.call(&mut self.store, arg_len);
 
-        debug!(
-            "Function '{}' returned {:?} with store {:?}",
-            method_name, ret, self.store
-        );
+        debug!("Function '{}' returned {:?}", method_name, ret);
 
         ret.map_err(|e| map_call_err(self, e))
     }
