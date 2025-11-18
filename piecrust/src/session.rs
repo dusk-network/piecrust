@@ -403,6 +403,7 @@ impl Session {
         fn_arg: V,
         gas_limit: u64,
     ) -> Result<CallReceipt<Vec<u8>>, Error> {
+        println!("SESSION_CALL_RAW {contract} {fn_name}");
         if fn_name == INIT_METHOD {
             return Err(InitalizationError("init call not allowed".into()));
         }

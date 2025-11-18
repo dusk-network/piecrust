@@ -15,6 +15,7 @@ pub(crate) fn hq(
     name_len: u32,
     arg_len: u32,
 ) -> WasmtimeResult<u32> {
+    println!("------ IN wasm64 hq");
     imports::hq(fenv, name_ofs as usize, name_len, arg_len)
 }
 
@@ -23,6 +24,7 @@ pub(crate) fn hd(
     name_ofs: u64,
     name_len: u32,
 ) -> WasmtimeResult<u32> {
+    println!("------ IN wasm64 hd");
     imports::hd(fenv, name_ofs as usize, name_len)
 }
 
@@ -34,6 +36,7 @@ pub(crate) fn c(
     arg_len: u32,
     gas_limit: u64,
 ) -> WasmtimeResult<i32> {
+    println!("in wasm_64::c");
     imports::c(
         fenv,
         mod_id_ofs as usize,

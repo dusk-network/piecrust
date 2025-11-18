@@ -193,6 +193,7 @@ pub fn call_raw_with_limit(
     fn_arg: &[u8],
     gas_limit: u64,
 ) -> Result<Vec<u8>, ContractError> {
+    println!("in call_raw_with_limit");
     with_arg_buf(|buf| {
         buf[..fn_arg.len()].copy_from_slice(fn_arg);
     });

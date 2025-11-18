@@ -77,7 +77,7 @@ use libc::{
 /// [`new`]: Mmap::new
 /// [`with_files`]: Mmap::with_files
 /// [`snap`]: Mmap::snap
-pub struct Mmap(&'static mut MmapInner);
+pub struct Mmap(pub &'static mut MmapInner);
 
 impl Mmap {
     /// Create a new mmap, backed entirely by physical memory. The memory is
@@ -160,6 +160,9 @@ impl Mmap {
     where
         FL: 'static + LocateFile,
     {
+        println!(
+            "mmap::with_files page_number {page_number} with size {page_size}"
+        );
         let inner = MmapInner::new(page_number, page_size, file_locator)?;
 
         with_global_map_mut(|global_map| {
@@ -380,10 +383,12 @@ fn with_global_map_mut<T, F>(closure: F) -> T
 where
     F: FnOnce(&mut InnerMap) -> T,
 {
+    println!("before get_or_init");
     let mut global_map = INNER_MAP
         .get_or_init(|| RwLock::new(InnerMap::new()))
         .write()
         .unwrap();
+    println!("after get_or_init");
 
     closure(&mut global_map)
 }
@@ -418,9 +423,12 @@ struct PageBits(&'static mut [u8]);
 impl PageBits {
     /// Maps one bit per each page of memory.
     fn new(page_number: usize) -> io::Result<Self> {
+        println!("new pagebit for page_number = {page_number}");
         let page_bits = unsafe {
             let len = page_number / 8 + usize::from(page_number % 8 != 0);
-
+            println!(
+                "new pagebit for page_number = {page_number:x} with len {len}"
+            );
             let ptr = libc::mmap(
                 ptr::null_mut(),
                 len,
@@ -475,8 +483,11 @@ impl Drop for PageBits {
         unsafe {
             let ptr = self.0.as_mut_ptr();
             let len = self.0.len();
+            let ptr = ptr.cast();
 
-            libc::munmap(ptr.cast(), len);
+            println!("before munmap in pagebits::drop {ptr:?} len {len}");
+            libc::munmap(ptr, len);
+            println!("after munmap in pagebits::drop");
         }
     }
 }
@@ -498,6 +509,7 @@ where
     F: Send + Sync,
 {
     fn locate_file(&mut self, page_index: usize) -> Option<PathBuf> {
+        println!("locate file page_index={page_index}");
         self(page_index)
     }
 }
@@ -542,7 +554,7 @@ impl MmapInner {
 
         let bytes = {
             let len = page_number * page_size;
-
+            println!("new mapInner for page_number = {page_number:x}, size={page_size}, len={len}");
             let ptr = libc::mmap(
                 ptr::null_mut(),
                 len,
@@ -584,6 +596,10 @@ impl MmapInner {
     /// whether the page has been mapped, and one for whether the page has
     /// been hit at least once.
     unsafe fn process_segv(&mut self, si_addr: usize) -> io::Result<()> {
+        if si_addr == 0 {
+            println!("Processing segv for si_addr: {si_addr}");
+            return Ok(());
+        }
         let start_addr = self.bytes.as_mut_ptr() as usize;
         let page_size = self.page_size;
         let page_index = (si_addr - start_addr) / page_size;
@@ -602,11 +618,10 @@ impl MmapInner {
                 if is_bit_set {
                     return Ok(());
                 }
-
                 if let Some(path) = self.file_locator.locate_file(page_index) {
                     let file =
                         OpenOptions::new().read(true).write(true).open(path)?;
-
+ println!("SEGV mapInner for page_number = {page_addr:x}, size={page_size}, index={page_index}");
                     let ptr = libc::mmap(
                         page_addr as _,
                         page_size,
@@ -617,6 +632,7 @@ impl MmapInner {
                     );
 
                     if ptr == MAP_FAILED {
+                        println!("EEEEEEE");
                         return Err(io::Error::last_os_error());
                     }
                 }
@@ -650,6 +666,7 @@ impl MmapInner {
             }
 
             if libc::mprotect(page_addr as _, page_size, prot) != 0 {
+                println!("Cannot protect");
                 return Err(io::Error::last_os_error());
             }
 
@@ -663,6 +680,7 @@ impl MmapInner {
         let len = self.bytes.len();
 
         if libc::mprotect(self.bytes.as_mut_ptr().cast(), len, PROT_NONE) != 0 {
+            println!("Cannot protec in snap");
             return Err(io::Error::last_os_error());
         }
 
@@ -675,6 +693,7 @@ impl MmapInner {
         let len = self.bytes.len();
 
         if libc::mprotect(self.bytes.as_mut_ptr().cast(), len, PROT_NONE) != 0 {
+               println!("Cannot protec in apply");
             return Err(io::Error::last_os_error());
         }
 
@@ -718,6 +737,7 @@ impl MmapInner {
         let len = self.bytes.len();
 
         if libc::mprotect(self.bytes.as_mut_ptr().cast(), len, PROT_NONE) != 0 {
+             println!("Cannot protec in revert");
             return Err(io::Error::last_os_error());
         }
 
@@ -743,7 +763,11 @@ impl Drop for MmapInner {
             let ptr = self.bytes.as_mut_ptr();
             let len = self.bytes.len();
 
-            libc::munmap(ptr.cast(), len);
+            let ptr = ptr.cast();
+
+            println!("before munmap in MmapInner::drop {ptr:?} len {len}");
+            libc::munmap(ptr, len);
+            println!("after munmap in MmapInner::drop");
         }
     }
 }
@@ -768,6 +792,7 @@ unsafe fn setup_action() -> sigaction {
         };
         let mut old_act = MaybeUninit::<sigaction>::uninit();
 
+        // #[cfg(not(target_os = "macos"))]
         if libc::sigaction(libc::SIGSEGV, &act, old_act.as_mut_ptr()) != 0 {
             process::exit(1);
         }
@@ -810,9 +835,13 @@ unsafe fn segfault_handler(
     info: *mut siginfo_t,
     ctx: *mut ucontext_t,
 ) {
-    with_global_map(move |global_map| {
-        let si_addr = (*info).si_addr() as usize;
+    let si_addr = (*info).si_addr() as usize;
+    let si_value = (*info).si_value();
+    let si_code = (*info).si_code;
 
+    println!("segfault_handler sig={sig} - info {info:?} - ctx {ctx:?} - si_addr 0x{si_addr:x} - si_value {si_value:?} - si_code {si_code:?}");
+    with_global_map(move |global_map| {
+        println!("segfault_handler si_addr {si_addr}");
         if let Some(inner_ptr) = global_map.get(&si_addr) {
             let inner = &mut *(*inner_ptr as *mut MmapInner);
 
@@ -822,7 +851,8 @@ unsafe fn segfault_handler(
 
             return;
         }
-
+        let ctz_new = *ctx;
+        println!("call old action {ctz_new:?}",);
         call_old_action(sig, info, ctx);
     });
 }

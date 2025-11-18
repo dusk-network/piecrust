@@ -31,6 +31,7 @@ where
     R: for<'a> Serialize<StandardBufSerializer<'a>>,
     F: Fn(A) -> R,
 {
+    println!("in wrap_call");
     with_arg_buf(|buf| {
         let slice = &buf[..arg_len as usize];
 
@@ -60,6 +61,7 @@ where
     R: for<'a> Serialize<StandardBufSerializer<'a>>,
     F: Fn(A) -> R,
 {
+    println!("in wrap_call_unchecked");
     with_arg_buf(|buf| {
         let slice = &buf[..arg_len as usize];
 

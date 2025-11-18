@@ -91,12 +91,15 @@ impl Memory {
         } else {
             WASM32_MAX_PAGES
         };
+        println!("loading is_64={is_64}");
+
+        let mmap =
+            unsafe { Mmap::with_files(max_pages, PAGE_SIZE, file_locator)? };
+
 
         Ok(Self {
             inner: Box::leak(Box::new(MemoryInner {
-                mmap: unsafe {
-                    Mmap::with_files(max_pages, PAGE_SIZE, file_locator)?
-                },
+                mmap,
                 current_len: len,
                 is_new: false,
                 is_64,
@@ -136,7 +139,9 @@ impl Drop for Memory {
     fn drop(&mut self) {
         if self.ref_count.fetch_sub(1, Ordering::SeqCst) == 1 {
             unsafe {
+                println!("before memory drop");
                 let _ = Box::from_raw(self.inner);
+                println!("after memory drop");
             }
         }
     }
@@ -158,14 +163,17 @@ impl DerefMut for Memory {
 
 unsafe impl LinearMemory for Memory {
     fn byte_size(&self) -> usize {
+        println!("byte_size {}", self.inner.current_len);
         self.inner.current_len
     }
 
     fn maximum_byte_size(&self) -> Option<usize> {
+        println!("byte_size {}", self.inner.len());
         Some(self.inner.len())
     }
 
     fn grow_to(&mut self, new_size: usize) -> Result<(), dusk_wasmtime::Error> {
+        println!("grow from {} to {}", self.inner.current_len, new_size);
         self.inner.current_len = new_size;
         Ok(())
     }
@@ -182,7 +190,7 @@ unsafe impl LinearMemory for Memory {
         let begin = self.inner.mmap.as_ptr() as _;
         let len = self.inner.current_len;
         let end = begin + len;
-
+        println!("wasm_accessible {begin}..{end}");
         begin..end
     }
 }

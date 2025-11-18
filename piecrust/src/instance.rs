@@ -289,8 +289,9 @@ impl WrappedInstance {
                     mem_len: ARGBUF_LEN,
                 });
             }
-
+            println!("before");
             arg_buffer[..buf.len()].copy_from_slice(buf);
+            println!("after");
             // It is safe to cast to u32 because the length of the buffer is
             // guaranteed to be less than 4GiB.
             Ok(buf.len() as u32)
@@ -303,6 +304,7 @@ impl WrappedInstance {
         arg_len: u32,
         limit: u64,
     ) -> Result<i32, Error> {
+        println!("wrapped_instance call method_name {method_name}");
         let fun = self
             .instance
             .get_typed_func::<u32, i32>(&mut self.store, method_name)?;

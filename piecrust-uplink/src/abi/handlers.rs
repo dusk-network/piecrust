@@ -13,6 +13,8 @@ extern "C" {
 
 #[panic_handler]
 unsafe fn handle_panic(info: &PanicInfo) -> ! {
+
+    println!("PANIC {info:?}");
     let mut w = crate::ArgbufWriter::default();
 
     // If we fail in writing to the argument buffer, we just call `panic` after

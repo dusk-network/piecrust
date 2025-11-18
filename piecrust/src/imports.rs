@@ -94,6 +94,7 @@ pub fn check_ptr(
     offset: usize,
     len: usize,
 ) -> Result<(), Error> {
+    println!("------ IN CHECK_PTR");
     let mem_len = instance.with_memory(|mem| mem.len());
 
     let end =
@@ -120,6 +121,8 @@ pub fn check_arg(
     instance: &WrappedInstance,
     arg_len: u32,
 ) -> Result<(), Error> {
+
+    println!("------ IN CHECK_ARGS");
     let mem_len = instance.with_memory(|mem| mem.len());
 
     let arg_ofs = instance.arg_buffer_offset();
@@ -150,6 +153,7 @@ pub(crate) fn hq(
     name_len: u32,
     arg_len: u32,
 ) -> WasmtimeResult<u32> {
+    println!("------ IN HQ");
     let env = fenv.data_mut();
 
     let instance = env.self_instance();
@@ -194,6 +198,7 @@ pub(crate) fn hd(
     name_ofs: usize,
     name_len: u32,
 ) -> WasmtimeResult<u32> {
+    println!("------ IN HD");
     let env = fenv.data_mut();
 
     let instance = env.self_instance();
@@ -225,6 +230,7 @@ pub(crate) fn c(
     arg_len: u32,
     gas_limit: u64,
 ) -> WasmtimeResult<i32> {
+    println!("in piecrust_import::c");
     let env = fenv.data_mut();
 
     let instance = env.self_instance();
@@ -394,6 +400,8 @@ fn caller(env: Caller<Env>) -> i32 {
 }
 
 fn callstack(env: Caller<Env>) -> i32 {
+
+    println!("------ IN callstack");
     let env = env.data();
     let instance = env.self_instance();
 
@@ -459,6 +467,8 @@ fn spent(fenv: Caller<Env>) -> u64 {
 }
 
 fn panic(fenv: Caller<Env>, arg_len: u32) -> WasmtimeResult<()> {
+
+    println!("------ IN panic");
     let env = fenv.data();
     let instance = env.self_instance();
 

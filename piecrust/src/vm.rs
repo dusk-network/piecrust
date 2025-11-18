@@ -33,7 +33,7 @@ fn config() -> Config {
     config.native_unwind_info(false);
 
     // 512KiB of max stack is the default, but we want to be explicit about it.
-    config.max_wasm_stack(0x80000);
+    config.max_wasm_stack(0x880000);
     config.consume_fuel(true);
 
     config.strategy(Strategy::Cranelift);
