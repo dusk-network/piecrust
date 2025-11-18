@@ -27,10 +27,10 @@ fn config() -> Config {
     let mut config = Config::new();
 
     // Neither WASM backtrace, nor native unwind info.
-    config.wasm_backtrace(false);
-    config.wasm_backtrace_details(WasmBacktraceDetails::Disable);
+    config.wasm_backtrace(true);
+    config.wasm_backtrace_details(WasmBacktraceDetails::Enable);
 
-    config.native_unwind_info(false);
+    config.native_unwind_info(true);
 
     // 512KiB of max stack is the default, but we want to be explicit about it.
     config.max_wasm_stack(0x80000);
