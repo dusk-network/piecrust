@@ -245,7 +245,6 @@ impl CommitReader {
                             main_path.as_ref().join(BYTECODE_DIR);
                         let memory_dir = main_path.as_ref().join(MEMORY_DIR);
 
-
                         // Check that all contracts in the index file have a
                         // corresponding bytecode and
                         // memory pages specified.

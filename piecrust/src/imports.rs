@@ -17,6 +17,7 @@ use dusk_wasmtime::{
 use piecrust_uplink::{
     ContractError, ContractId, ARGBUF_LEN, CONTRACT_ID_BYTES,
 };
+use tracing::debug;
 
 use crate::config::BYTE_STORE_COST;
 use crate::instance::{Env, WrappedInstance};
@@ -268,8 +269,9 @@ pub(crate) fn c(
             .instance(&callee_stack_element.contract_id)
             .expect("callee instance should exist");
 
+        debug!("fn c: snapshotting callee memory");
         callee
-            .snap()
+            .instance_snap()
             .map_err(|err| Error::MemorySnapshotFailure {
                 reason: None,
                 io: Arc::new(err),
@@ -317,13 +319,20 @@ pub(crate) fn c(
             c_err.into()
         }
         Err(WithMemoryError::AfterPush(mut err)) => {
+            debug!("fn c: invoke revert_callstack due to {:?}", err);
             if let Err(io_err) = env.revert_callstack() {
                 err = Error::MemorySnapshotFailure {
                     reason: Some(Arc::new(err)),
                     io: Arc::new(io_err),
                 };
             }
+            debug!("fn c: call tree: {:?}", env.call_tree().call_ids());
+
             env.move_up_prune_call_tree();
+            //env.clear_stack_and_instances(); // TODO: isn't
+            // clear_stack_and_instances needed here too?
+            // NOTE: for some reason when adding this, we also get a SIGSEGV
+            // when doing only activate_tx
             instance.set_remaining_gas(caller_remaining - callee_limit);
 
             let c_err = ContractError::from(err);

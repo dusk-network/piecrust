@@ -187,17 +187,17 @@ impl WrappedInstance {
         Ok(wrapped)
     }
 
-    pub(crate) fn snap(&mut self) -> io::Result<()> {
+    pub(crate) fn instance_snap(&mut self) -> io::Result<()> {
         self.memory.snap()?;
         Ok(())
     }
 
-    pub(crate) fn revert(&mut self) -> io::Result<()> {
+    pub(crate) fn instance_revert(&mut self) -> io::Result<()> {
         self.memory.revert()?;
         Ok(())
     }
 
-    pub(crate) fn apply(&mut self) -> io::Result<()> {
+    pub(crate) fn instance_apply(&mut self) -> io::Result<()> {
         self.memory.apply()?;
         Ok(())
     }

@@ -9,6 +9,7 @@ use std::collections::btree_set::Iter;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{Debug, Formatter};
 use std::mem;
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{mpsc, Arc};
 
 use bytecheck::CheckBytes;
@@ -24,6 +25,7 @@ use rkyv::{
     check_archived_root, validation::validators::DefaultValidator, Archive,
     Deserialize, Infallible, Serialize,
 };
+use tracing::debug;
 
 use crate::call_tree::{CallTree, CallTreeElem};
 use crate::contract::{ContractData, ContractMetadata, WrappedContract};
@@ -35,6 +37,8 @@ use crate::vm::{HostQueries, HostQuery};
 
 const MAX_META_SIZE: usize = ARGBUF_LEN;
 pub const INIT_METHOD: &str = "init";
+
+static GLOBAL_DEBUG_COUNTER: AtomicU32 = AtomicU32::new(0);
 
 unsafe impl Send for Session {}
 
@@ -560,7 +564,8 @@ impl Session {
         })
     }
 
-    fn clear_stack_and_instances(&mut self) {
+    pub(crate) fn clear_stack_and_instances(&mut self) {
+        debug!("Clearing call stack and instances");
         self.inner.call_tree.clear();
 
         while !self.inner.instances.is_empty() {
@@ -709,15 +714,46 @@ impl Session {
         self.inner.call_tree.move_up_prune();
     }
 
+    pub(crate) fn call_tree(&self) -> &CallTree {
+        &self.inner.call_tree
+    }
+
     pub(crate) fn revert_callstack(&mut self) -> Result<(), std::io::Error> {
         for elem in self.inner.call_tree.iter() {
             let instance = self
                 .instance(&elem.contract_id)
                 .expect("instance should exist");
-            instance.revert()?;
+
+            let mut skip_revert = false;
+            if elem.contract_id
+                == ContractId::from_bytes([
+                    0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                    0x00, 0x00,
+                ])
+            {
+                let global_counter =
+                    GLOBAL_DEBUG_COUNTER.fetch_add(1, Ordering::SeqCst) + 1;
+                debug!("Revert now called {}", global_counter);
+                if global_counter == 3 {
+                    skip_revert = true;
+                }
+            };
+
+            if skip_revert {
+                debug!("Skipping revert on contract: {:?}", elem.contract_id);
+                continue;
+            } else {
+                debug!(
+                    "fn: revert_callstack revert memory on contract: {:?}",
+                    elem.contract_id
+                );
+                instance.instance_revert()?;
+            }
+
             instance.set_len(elem.mem_len);
         }
-
         Ok(())
     }
 
@@ -805,17 +841,22 @@ impl Session {
             .instance(&stack_element.contract_id)
             .expect("instance should exist");
 
-        instance
-            .snap()
-            .map_err(|err| Error::MemorySnapshotFailure {
+        debug!("Snapshotting instance memory for call");
+        instance.instance_snap().map_err(|err| {
+            Error::MemorySnapshotFailure {
                 reason: None,
                 io: Arc::new(err),
-            })?;
+            }
+        })?;
 
         let arg_len = instance.write_bytes_to_arg_buffer(&fdata)?;
         let ret_len = instance
             .call(fname, arg_len, limit)
             .map_err(|err| {
+                debug!(
+                    "fn call_inner: invoke revert_callstack due to {:?}",
+                    err
+                );
                 if let Err(io_err) = self.revert_callstack() {
                     return Error::MemorySnapshotFailure {
                         reason: Some(Arc::new(err)),
@@ -835,12 +876,16 @@ impl Session {
             let instance = self
                 .instance(&elem.contract_id)
                 .expect("instance should exist");
-            instance
-                .apply()
-                .map_err(|err| Error::MemorySnapshotFailure {
+            instance.instance_apply().map_err(|err| {
+                Error::MemorySnapshotFailure {
                     reason: None,
                     io: Arc::new(err),
-                })?;
+                }
+            })?;
+            debug!(
+                "Applying instance memory for call on contract: {:?}",
+                elem.contract_id
+            );
         }
         self.clear_stack_and_instances();
 
