@@ -8,7 +8,7 @@ use std::sync::atomic::Ordering;
 use std::{
     fmt::{Debug, Formatter},
     io,
-    ops::{Deref, DerefMut, Range},
+    ops::{Deref, DerefMut},
     sync::atomic::AtomicUsize,
 };
 
@@ -161,28 +161,20 @@ unsafe impl LinearMemory for Memory {
         self.inner.current_len
     }
 
-    fn maximum_byte_size(&self) -> Option<usize> {
-        Some(self.inner.len())
-    }
-
     fn grow_to(&mut self, new_size: usize) -> Result<(), dusk_wasmtime::Error> {
         self.inner.current_len = new_size;
         Ok(())
-    }
-
-    fn needs_init(&self) -> bool {
-        self.is_new
     }
 
     fn as_ptr(&self) -> *mut u8 {
         self.inner.as_ptr() as _
     }
 
-    fn wasm_accessible(&self) -> Range<usize> {
-        let begin = self.inner.mmap.as_ptr() as _;
-        let len = self.inner.current_len;
-        let end = begin + len;
+    fn byte_capacity(&self) -> usize {
+        self.inner.len()
+    }
 
-        begin..end
+    fn needs_init(&self) -> bool {
+        self.is_new
     }
 }
