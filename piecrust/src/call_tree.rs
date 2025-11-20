@@ -4,22 +4,90 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
+//! Cursor-based n-ary tree for tracking hierarchical contract calls.
+//!
+//! This module implements a specialized tree structure for the Piecrust VM that
+//! maintains a "current position" cursor moving through the tree as contracts
+//! call each other and return.
+//!
+//! ## Structure
+//!
+//! - **N-ary tree**: Each node can have any number of children
+//! - **Bidirectional pointers**: Parent and child pointers enable both upward
+//!   and downward traversal
+//! - **Cursor semantics**: A current position pointer tracks the active
+//!   contract call
+//! - **Manual memory management**: Uses `Box::leak()` for allocation and
+//!   recursive deallocation
+//!
+//! ## Operations
+//!
+//! - **`push()`**: Add child to current node and move cursor down (making a
+//!   call)
+//! - **`move_up()`**: Move cursor to parent with gas recording (returning from
+//!   a call)
+//! - **`move_up_prune()`**: Move up while removing current subtree (reverting a
+//!   call)
+//! - **`update_spent()`**: Recursively adjust gas accounting across the tree
+//! - **`iter()`**: Traverse from current position through all descendants in
+//!   reverse post-order
+//!
+//! ## Iterator Behavior
+//!
+//! The iterator does **not** traverse the entire tree. It only visits nodes
+//! from the current cursor position downward through all its descendants.
+//!
+//! Traversal order is reverse post-order:
+//!
+//! 1. Rightmost leaf nodes are visited first i.e., recursively go to the
+//!    rightmost leaf in right subtrees
+//! 2. Then traverse left siblings (that become rightmost) and, if existent,
+//!    their subtrees again, with rightmost leaf priority again
+//! 3. Visit current node (current cursor) last and stop
+//!
+//! This mirrors how contract calls unwind their deepest
+//! calls complete first. More information is in the `iter()` documentation.
+//!
+//! ## Safety
+//!
+//! Internally uses raw pointers with manual memory management. Nodes are
+//! allocated via `Box::leak()` and freed via `free_tree()`. Memory is
+//! automatically cleaned up when `CallTree` is dropped.
+
 use std::fmt;
 use std::marker::PhantomData;
 use std::mem;
 
 use piecrust_uplink::ContractId;
 
-/// An element of the call tree.
+/// An element of the call tree, representing a single contract call.
+///
+/// Each element tracks the contract being called along with its resource usage:
+/// - Gas limit and spending for the call
+/// - Memory length allocated during execution
 #[derive(Debug, Clone, Copy)]
 pub struct CallTreeElem {
+    /// The unique identifier of the contract being called
     pub contract_id: ContractId,
+    /// The gas limit available for this contract call
     pub limit: u64,
+    /// The amount of gas spent by this contract call (including child calls)
     pub spent: u64,
+    /// The length of memory allocated for this contract call
     pub mem_len: usize,
 }
 
-/// The tree of contract calls.
+/// A cursor-based tree structure for tracking hierarchical contract calls.
+///
+/// The tree maintains a "current position" pointer that moves through the tree
+/// as contracts call each other and return. The internal pointer represents:
+/// - `None`: Empty tree (no calls have been made)
+/// - `Some(node)`: Points to the currently executing contract call
+///
+/// # Memory Management
+///
+/// Uses raw pointers with manual allocation (`Box::leak`) and deallocation
+/// (`free_tree`). The `Drop` implementation ensures proper cleanup.
 #[derive(Default)]
 pub struct CallTree(Option<*mut CallTreeNode>);
 
@@ -106,56 +174,127 @@ impl CallTree {
         Self(None)
     }
 
-    /// Push an element to the call tree.
+    /// Pushes a new contract call as a child of the current node and moves to
+    /// it.
     ///
-    /// This pushes a new child to the current node, and advances to it.
+    /// This represents a contract making a call to another contract. The tree
+    /// grows downward, adding the new call as the last child of the current
+    /// node.
+    ///
+    /// # Tree Structure Impact
+    ///
+    /// - If tree is empty: Creates root node and positions cursor there
+    /// - If tree is not empty: Adds new node as child of current, moves cursor
+    ///   to child
+    ///
+    /// The new node becomes the current position, allowing subsequent `push()`
+    /// calls to create deeper call chains.
     pub(crate) fn push(&mut self, elem: CallTreeElem) {
         match self.0 {
+            // Tree is empty: create root node
             None => self.0 = Some(CallTreeNode::new(elem)),
+            // Tree exists: add as child of current node
             Some(inner) => unsafe {
+                // Create new node with current as parent
                 let node = CallTreeNode::with_parent(elem, inner);
+                // Add new node to current's children
                 (*inner).children.push(node);
+                // Move cursor down to new node
                 self.0 = Some(node)
             },
         }
     }
 
-    /// Moves to the parent node and set the gas spent of the current element,
-    /// returning it.
+    /// Returns from the current contract call to its parent, recording gas
+    /// spent.
+    ///
+    /// This represents a contract call completing and returning control to its
+    /// caller. The spent gas is recorded on the current node before moving
+    /// up.
+    ///
+    /// # Memory Management
+    ///
+    /// If moving up from the root (no parent), the entire tree is freed since
+    /// the call chain has completed.
+    ///
+    /// # Returns
+    ///
+    /// The element of the node we're moving up from (with updated spent value),
+    /// or `None` if the tree is empty.
     pub(crate) fn move_up(&mut self, spent: u64) -> Option<CallTreeElem> {
+        // inner = current node we're pointing to = our cursor
         self.0.map(|inner| unsafe {
+            // Record gas spent at current node
             (*inner).elem.spent = spent;
             let elem = (*inner).elem;
 
+            // Get parent pointer from current node
             let parent = (*inner).parent;
+            // If at root, deallocate entire tree
             if parent.is_none() {
                 free_tree(inner);
             }
+            // Move cursor up to parent
             self.0 = parent;
 
             elem
         })
     }
 
-    /// Moves to the parent node, clearing the tree under it, and returns the
-    /// current element.
+    /// Returns to parent while pruning the current node and its entire subtree.
+    ///
+    /// This represents a contract call that failed or was reverted. The current
+    /// node and all its descendants are removed from the tree and freed.
+    ///
+    /// # Use Case
+    ///
+    /// When a contract call reverts, we want to undo not just that call, but
+    /// all calls it made (its children). This operation removes the entire
+    /// subtree.
+    ///
+    /// # Parent Adjustment
+    ///
+    /// The parent's children vector has the current node removed via `pop()`,
+    /// assuming it's the last child (which it is, since we always push to the
+    /// end).
+    ///
+    /// # Returns
+    ///
+    /// The element being pruned, or `None` if the tree is empty.
     pub(crate) fn move_up_prune(&mut self) -> Option<CallTreeElem> {
+        // inner = current node we're pointing to = our cursor
         self.0.map(|inner| unsafe {
             let elem = (*inner).elem;
 
+            // Get parent pointer before freeing
             let parent = (*inner).parent;
+            // Remove current node from parent's children
             if let Some(parent) = parent {
                 (*parent).children.pop();
             }
+            // Deallocate current node and entire subtree
             free_tree(inner);
+            // Move cursor up to parent
             self.0 = parent;
 
             elem
         })
     }
 
-    /// Give the current node the amount spent and recursively update amount
-    /// spent to accurately reflect what each node spent during each call.
+    /// Updates gas spending to reflect the total spent by current node.
+    ///
+    /// This performs recursive gas accounting to separate the direct gas spent
+    /// by each contract from the gas spent by its child calls.
+    ///
+    /// # Gas Accounting Logic
+    ///
+    /// The `spent` parameter represents the **total** gas spent by this
+    /// contract, including all child calls. The recursive `update_spent()`
+    /// function subtracts each child's spending from the parent, leaving
+    /// only the parent's direct spend.
+    ///
+    /// Example: If parent spent 1000 total, child A spent 300, child B spent
+    /// 200, then parent's direct spend is 500 (1000 - 300 - 200).
     pub(crate) fn update_spent(&mut self, spent: u64) {
         if let Some(inner) = self.0 {
             unsafe {
@@ -165,8 +304,20 @@ impl CallTree {
         }
     }
 
-    /// Returns the `n`th parent element counting from the current node. The
-    /// zeroth parent element is the current node.
+    /// Returns the ancestor at distance `n` from the current position.
+    ///
+    /// This traverses upward through parent pointers to find ancestors.
+    ///
+    /// # Parameters
+    ///
+    /// - `n = 0`: Returns current node
+    /// - `n = 1`: Returns parent of current node
+    /// - `n = 2`: Returns grandparent, etc.
+    ///
+    /// # Returns
+    ///
+    /// `Some(elem)` if an ancestor exists at distance `n`, `None` if we reach
+    /// the root before counting to `n` (or if tree is empty).
     pub(crate) fn nth_parent(&self, n: usize) -> Option<CallTreeElem> {
         let mut current = self.0;
 
@@ -179,7 +330,18 @@ impl CallTree {
         current.map(|inner| unsafe { (*inner).elem })
     }
 
-    /// Returns all call ids.
+    /// Returns the call stack path from current position to root.
+    ///
+    /// Traverses parent pointers from the current node up to the root,
+    /// collecting contract IDs along the way.
+    ///
+    /// # Returns
+    ///
+    /// A vector of contract IDs representing the call chain:
+    /// - `[0]`: Current contract
+    /// - `[1]`: Parent (caller of current)
+    /// - `[2]`: Grandparent, etc.
+    /// - `[n-1]`: Root (first contract called)
     pub(crate) fn call_ids(&self) -> Vec<&ContractId> {
         let mut v = Vec::new();
         let mut current = self.0;
@@ -194,6 +356,10 @@ impl CallTree {
     }
 
     /// Clears the call tree of all elements.
+    ///
+    /// Traverses upward to find the root node, then recursively frees the
+    /// entire tree starting from the root. This ensures all nodes are
+    /// properly deallocated regardless of the current cursor position.
     pub(crate) fn clear(&mut self) {
         unsafe {
             if let Some(inner) = self.0 {
@@ -209,8 +375,58 @@ impl CallTree {
         }
     }
 
-    /// Returns an iterator over the call tree, starting from the rightmost
-    /// leaf, and proceeding to the top of the current position of the tree.
+    /// Returns an iterator over the current node and its descendants.
+    ///
+    /// Traverses in **reverse post-order** (rightmost leaf first):
+    /// deepest-rightmost children first, then left siblings, then parents.
+    /// This matches how contract calls unwind (deepest calls complete first).
+    ///
+    /// # Example
+    ///
+    /// **Notation**:
+    /// - `->` means "calls"
+    /// - `[]` groups sibling calls (sequential calls made by the same contract)
+    /// - `,` separates siblings (calls made one after another)
+    ///
+    /// For tree `A -> B -> [D, E]` and `A -> C`, if positioned at A:
+    /// A calls B, which calls D then E, then A calls C.
+    ///
+    /// Tree structure:
+    /// ```text
+    ///      A
+    ///     / \
+    ///    B   C
+    ///   / \
+    ///  D   E
+    /// ```
+    ///
+    /// Iterator yields: C, E, D, B, A (rightmost leaves first)
+    ///
+    /// For tree where TC calls A, which makes two sequential calls to TC and D:
+    /// - TC means "Transfer contract"
+    /// - A means "Alice contract"
+    /// - B means "Bob contract"
+    /// - C means "Charlie contract"
+    /// - D means "David contract"
+    ///
+    /// Tree structure:
+    /// ```text
+    /// TC (root)
+    ///     |
+    ///     A
+    ///    / \
+    ///  TC   D
+    ///  /
+    /// C
+    /// ```
+    ///
+    /// Call sequence: `TC -> [A -> [TC -> C], D]`
+    /// - TC calls A
+    /// - A calls TC (which calls C), then A calls D
+    /// - TC and D are siblings (both called by A sequentially)
+    ///
+    /// Iterator at root TC yields: D, C, TC (from A), A, TC (root)
+    /// Iterator at A yields: D, C, TC, A
     pub fn iter(&self) -> impl Iterator<Item = &CallTreeElem> {
         CallTreeIter {
             tree: self.0.map(|root| unsafe {
@@ -228,8 +444,14 @@ impl CallTree {
     }
 }
 
+/// Represents the iteration state over a subtree.
+///
+/// Tracks both the root of the subtree (for boundary checking) and the
+/// current node being iterated.
 struct Subtree {
+    /// The root of the subtree being iterated (boundary limit)
     root: *mut CallTreeNode,
+    /// The current node in the iteration
     node: *mut CallTreeNode,
 }
 
@@ -239,6 +461,15 @@ impl Drop for CallTree {
     }
 }
 
+/// Recursively adjusts gas spending to separate direct spend from child spend.
+///
+/// For each node, subtracts the spending of all direct children from the node's
+/// total spending, leaving only the gas spent directly by that contract.
+///
+/// # Safety
+///
+/// Assumes `node` is a valid pointer to a CallTreeNode. The caller must ensure
+/// the pointer remains valid for the duration of this call.
 unsafe fn update_spent(node: *mut CallTreeNode) {
     let node = &mut *node;
     node.children.iter_mut().for_each(|&mut child| unsafe {
@@ -250,6 +481,16 @@ unsafe fn update_spent(node: *mut CallTreeNode) {
     });
 }
 
+/// Recursively deallocates a tree node and all its descendants.
+///
+/// Uses post-order traversal to free children before freeing the parent,
+/// ensuring no dangling pointers.
+///
+/// # Safety
+///
+/// - `root` must be a valid pointer obtained from `Box::leak()`
+/// - `root` and all descendants must not be accessed after this call
+/// - Each node should only be freed once
 unsafe fn free_tree(root: *mut CallTreeNode) {
     let mut node = Box::from_raw(root);
 
@@ -261,13 +502,28 @@ unsafe fn free_tree(root: *mut CallTreeNode) {
     }
 }
 
+/// Internal tree node structure.
+///
+/// Each node contains:
+/// - The contract call data (`elem`) i.e., element at this node
+/// - Pointers to child nodes (enabling n-ary tree structure)
+/// - Optional parent pointer (enabling upward traversal)
+///
+/// Nodes are heap-allocated via `Box::leak()` and must be manually freed.
 struct CallTreeNode {
+    /// The contract call data stored in this node
     elem: CallTreeElem,
+    /// Child nodes representing calls made by this contract
     children: Vec<*mut Self>,
+    /// Pointer to parent node (None for root)
     parent: Option<*mut Self>,
 }
 
 impl CallTreeNode {
+    /// Creates a new root node (no parent).
+    ///
+    /// Allocates the node on the heap via `Box::leak()`, returning a raw
+    /// pointer that must be manually freed later.
     fn new(elem: CallTreeElem) -> *mut Self {
         Box::leak(Box::new(Self {
             elem,
@@ -276,6 +532,10 @@ impl CallTreeNode {
         }))
     }
 
+    /// Creates a new child node with a parent pointer.
+    ///
+    /// Allocates the node on the heap via `Box::leak()`, returning a raw
+    /// pointer that must be manually freed later.
     fn with_parent(elem: CallTreeElem, parent: *mut Self) -> *mut Self {
         Box::leak(Box::new(Self {
             elem,
@@ -297,6 +557,10 @@ struct CallTreeIter<'a> {
 impl<'a> Iterator for CallTreeIter<'a> {
     type Item = &'a CallTreeElem;
 
+    /// Advances the iterator to the next node in reverse post-order.
+    ///
+    /// Yields the current node, then moves to the next node: either the
+    /// rightmost leaf of the left sibling's subtree, or the parent.
     fn next(&mut self) -> Option<Self::Item> {
         // SAFETY: This is safe since we guarantee that the tree exists between
         // the root and the current node. This is done by ensuring the iterator
