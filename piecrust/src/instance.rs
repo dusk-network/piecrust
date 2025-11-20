@@ -9,6 +9,7 @@ use std::ops::{Deref, DerefMut};
 
 use dusk_wasmtime::{Instance, Module, Mutability, Store, ValType};
 use piecrust_uplink::{ContractId, Event, ARGBUF_LEN};
+use tracing::debug;
 
 use crate::contract::WrappedContract;
 use crate::imports::Imports;
@@ -20,7 +21,7 @@ pub struct WrappedInstance {
     instance: Instance,
     arg_buf_ofs: usize,
     store: Store<Env>,
-    memory: Memory,
+    pub memory: Memory,
 }
 
 pub(crate) struct Env {

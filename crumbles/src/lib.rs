@@ -52,6 +52,7 @@ use libc::{
     MAP_ANONYMOUS, MAP_FAILED, MAP_FIXED, MAP_NORESERVE, MAP_PRIVATE,
     PROT_NONE, PROT_READ, PROT_WRITE, SA_SIGINFO,
 };
+use tracing::debug;
 
 /// A handle to a copy-on-write memory-mapped region that keeps track of which
 /// pages have been written to.
@@ -77,7 +78,7 @@ use libc::{
 /// [`new`]: Mmap::new
 /// [`with_files`]: Mmap::with_files
 /// [`snap`]: Mmap::snap
-pub struct Mmap(&'static mut MmapInner);
+pub struct Mmap(pub &'static mut MmapInner);
 
 impl Mmap {
     /// Create a new mmap, backed entirely by physical memory. The memory is
@@ -503,11 +504,12 @@ where
 }
 
 /// Contains the actual memory region, together with the set of dirty pages.
-struct MmapInner {
+pub struct MmapInner {
     bytes: &'static mut [u8],
-
-    page_size: usize,
-    page_number: usize,
+    /// page size
+    pub page_size: usize,
+    /// page number
+    pub page_number: usize,
 
     mapped_pages: PageBits,
     snapshots: Vec<Snapshot>,
@@ -660,6 +662,10 @@ impl MmapInner {
     }
 
     unsafe fn snap(&mut self) -> io::Result<()> {
+        debug!(
+            "2 crumbles: amount of snapshots before snap: {}",
+            self.snapshots.len()
+        );
         let len = self.bytes.len();
 
         if libc::mprotect(self.bytes.as_mut_ptr().cast(), len, PROT_NONE) != 0 {
@@ -667,7 +673,10 @@ impl MmapInner {
         }
 
         self.snapshots.push(Snapshot::new(self.page_number)?);
-
+        debug!(
+            "3 crumbles: amount of snapshots after snap: {}",
+            self.snapshots.len()
+        );
         Ok(())
     }
 
@@ -677,7 +686,10 @@ impl MmapInner {
         if libc::mprotect(self.bytes.as_mut_ptr().cast(), len, PROT_NONE) != 0 {
             return Err(io::Error::last_os_error());
         }
-
+        debug!(
+            "2 crumbles: amount of snapshots before apply: {}",
+            self.snapshots.len()
+        );
         let popped_snapshot = self
             .snapshots
             .pop()
@@ -685,6 +697,10 @@ impl MmapInner {
         if self.snapshots.is_empty() {
             self.snapshots.push(Snapshot::new(self.page_number)?);
         }
+        debug!(
+            "3 crumbles: amount of snapshots after apply: {}",
+            self.snapshots.len()
+        );
         let snapshot = self.last_snapshot_mut();
 
         for (page_index, clean_page) in popped_snapshot.clean_pages {
@@ -695,12 +711,18 @@ impl MmapInner {
     }
 
     unsafe fn revert(&mut self) -> io::Result<()> {
+        debug!("2 crumbles: amount of snapshots: {}", self.snapshots.len());
         let popped_snapshot = self
             .snapshots
             .pop()
             .expect("There should always be at least one snapshot");
+        debug!(
+            "3 crumbles: amount of snapshots after pop: {}",
+            self.snapshots.len()
+        );
 
         if self.snapshots.is_empty() {
+            debug!("crumbles: adding new snapshot");
             self.snapshots.push(Snapshot::new(self.page_number)?);
         } else {
             self.last_snapshot_mut().hit_pages =

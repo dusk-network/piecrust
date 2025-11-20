@@ -226,6 +226,11 @@ pub(crate) fn c(
     arg_len: u32,
     gas_limit: u64,
 ) -> WasmtimeResult<i32> {
+    debug!(
+        "fn c: entering ICC from {:?}",
+        fenv.data().self_contract_id()
+    );
+
     let env = fenv.data_mut();
 
     let instance = env.self_instance();
@@ -269,7 +274,7 @@ pub(crate) fn c(
             .instance(&callee_stack_element.contract_id)
             .expect("callee instance should exist");
 
-        debug!("fn c: snapshotting callee memory");
+        debug!("1 fn c: snapshotting callee memory");
         callee
             .instance_snap()
             .map_err(|err| Error::MemorySnapshotFailure {

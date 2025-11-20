@@ -723,7 +723,6 @@ impl Session {
             let instance = self
                 .instance(&elem.contract_id)
                 .expect("instance should exist");
-
             let mut skip_revert = false;
             if elem.contract_id
                 == ContractId::from_bytes([
@@ -736,7 +735,7 @@ impl Session {
                 let global_counter =
                     GLOBAL_DEBUG_COUNTER.fetch_add(1, Ordering::SeqCst) + 1;
                 debug!("Revert now called {}", global_counter);
-                if global_counter == 3 {
+                if global_counter == 30 {
                     skip_revert = true;
                 }
             };
@@ -746,12 +745,11 @@ impl Session {
                 continue;
             } else {
                 debug!(
-                    "fn: revert_callstack revert memory on contract: {:?}",
+                    "1 fn: revert_callstack revert memory on contract: {:?}",
                     elem.contract_id
                 );
                 instance.instance_revert()?;
             }
-
             instance.set_len(elem.mem_len);
         }
         Ok(())
@@ -841,7 +839,7 @@ impl Session {
             .instance(&stack_element.contract_id)
             .expect("instance should exist");
 
-        debug!("Snapshotting instance memory for call");
+        debug!("1 call_inner: snapshotting instance memory for call");
         instance.instance_snap().map_err(|err| {
             Error::MemorySnapshotFailure {
                 reason: None,
@@ -876,16 +874,20 @@ impl Session {
             let instance = self
                 .instance(&elem.contract_id)
                 .expect("instance should exist");
+            debug!(
+                "1 call_inner: applying instance memory for call to contract: {:?}",
+                elem.contract_id
+            );
             instance.instance_apply().map_err(|err| {
+                debug!(
+                    "call_inner: apply failed for contract: {:?} due to {:?}",
+                    elem.contract_id, err
+                );
                 Error::MemorySnapshotFailure {
                     reason: None,
                     io: Arc::new(err),
                 }
             })?;
-            debug!(
-                "Applying instance memory for call on contract: {:?}",
-                elem.contract_id
-            );
         }
         self.clear_stack_and_instances();
 

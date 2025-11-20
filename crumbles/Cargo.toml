@@ -15,6 +15,7 @@ license = "MPL-2.0"
 [dependencies]
 libc = "0.2"
 rangemap = "1"
+tracing = "0.1.40"
 
 [dev-dependencies]
 blake3 = "1"

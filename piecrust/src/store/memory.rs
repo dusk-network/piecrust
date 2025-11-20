@@ -35,6 +35,9 @@ impl Debug for MemoryInner {
             .field("mmap_len", &self.mmap.len())
             .field("current_len", &self.current_len)
             .field("is_new", &self.is_new)
+            .field("ref_count", &self.ref_count.load(Ordering::SeqCst))
+            .field("page_size", &self.mmap.0.page_size)
+            .field("page_number", &self.mmap.0.page_number)
             .finish()
     }
 }
