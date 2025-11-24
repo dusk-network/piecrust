@@ -25,7 +25,7 @@ use rkyv::{
     check_archived_root, validation::validators::DefaultValidator, Archive,
     Deserialize, Infallible, Serialize,
 };
-use tracing::{debug, warn};
+use tracing::{debug, trace, warn};
 
 use crate::call_tree::{CallTree, CallTreeElem};
 use crate::contract::{ContractData, ContractMetadata, WrappedContract};
@@ -726,8 +726,8 @@ impl Session {
         );
         for (contract_id, instance_ptr) in &self.inner.instances {
             let instance = unsafe { &**instance_ptr };
-            warn!(
-                "fn revert_callstack: instance memory before for {:?}: {:?}",
+            trace!(
+                "fn revert_callstack: instance memory for ALL contracts before: {:?}: {:?}",
                 contract_id, instance
             );
         }
@@ -736,6 +736,13 @@ impl Session {
             let instance = self
                 .instance(&elem.contract_id)
                 .expect("instance should exist");
+
+            warn!("entering call tree iter for revert_callstack");
+            warn!(
+                "contractid: {} is being reverted. Instance: {:?}",
+                elem.contract_id, instance
+            );
+
             let mut skip_revert = false;
             if elem.contract_id
                 == ContractId::from_bytes([
@@ -757,24 +764,33 @@ impl Session {
                 debug!("Skipping revert on contract: {:?}", elem.contract_id);
                 continue;
             } else {
-                debug!(
+                warn!(
                     "1 fn: revert_callstack revert memory for contract: {:?}",
                     elem.contract_id
                 );
                 instance.instance_revert(
                     GLOBAL_DEBUG_COUNTER.load(Ordering::SeqCst),
                 )?; // TODO: Analyze this function
+
+                warn!(
+                    "contractid: {} was reverted. Instance: {:?}",
+                    elem.contract_id, instance
+                );
+
                 for (contract_id, instance_ptr) in &self.inner.instances {
                     let instance = unsafe { &**instance_ptr };
-                    warn!("fn revert_callstack: instance memory after for {:?}: {:?}", contract_id, instance);
+                    trace!("fn revert_callstack: instance memory for ALL contracts after: {:?}: {:?}", contract_id, instance);
                 }
             }
-            instance.set_len(elem.mem_len);
+            instance.set_len(elem.mem_len); // TODO: this could be wrongly set,
+                                            // causing subsequent instance
+                                            // accesses to be out of bounds
         }
         warn!(
             "fn revert_callstack: call tree after: {:#?}",
             self.inner.call_tree
         );
+        warn!("Call tree after, looks the same as before revert?");
         Ok(())
     }
 
@@ -862,7 +878,8 @@ impl Session {
             .instance(&stack_element.contract_id)
             .expect("instance should exist");
 
-        debug!("1 call_inner: snapshotting instance memory for call");
+        //warn!("call_inner: snapshotting instance memory for {} with memory
+        // hash: {:?}", contract, instance);
         instance.instance_snap().map_err(|err| {
             Error::MemorySnapshotFailure {
                 reason: None,

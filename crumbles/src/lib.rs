@@ -732,18 +732,21 @@ impl MmapInner {
         let page_size = self.page_size;
 
         if global_debug_counter == 30 {
-            /*warn!(
+            warn!(
                 "Third transfer contract revert happening, skipping copy_from_slice"
-            );*/
+            );
         } else {
+            //warn!("fn revert, before loop - hit pages len: {}",
+            // popped_snapshot.hit_pages.0.len());
+
             for (page_index, clean_page) in popped_snapshot.clean_pages {
                 let page_offset = page_index * page_size;
-                /*warn!(
-                    "page_index = {}, clean_page_len = {:?}, page_offset = {}",
+                warn!(
+                    "fn revert: page_index = {}, clean_page_len = {:?}, page_offset = {}",
                     page_index,
                     clean_page.len(),
                     page_offset
-                );*/
+                );
                 self.bytes[page_offset..][..page_size]
                     .copy_from_slice(&clean_page[..]);
             }

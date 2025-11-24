@@ -17,7 +17,7 @@ use dusk_wasmtime::{
 use piecrust_uplink::{
     ContractError, ContractId, ARGBUF_LEN, CONTRACT_ID_BYTES,
 };
-use tracing::debug;
+use tracing::{debug, warn};
 
 use crate::config::BYTE_STORE_COST;
 use crate::instance::{Env, WrappedInstance};
@@ -275,6 +275,10 @@ pub(crate) fn c(
             .expect("callee instance should exist");
 
         debug!("1 fn c: snapshotting callee memory");
+        warn!(
+            "fn c: snapshotting callee memory for {:?} with Instance: {:?}",
+            callee_stack_element.contract_id, callee
+        );
         callee
             .instance_snap()
             .map_err(|err| Error::MemorySnapshotFailure {
@@ -330,17 +334,23 @@ pub(crate) fn c(
                     reason: Some(Arc::new(err)),
                     io: Arc::new(io_err),
                 };
-            }
+            } // Tree is still the same here
             debug!(
                 "fn c: call tree ids (height only): {:?}",
                 env.call_tree().call_ids()
             );
 
-            env.move_up_prune_call_tree();
+            env.move_up_prune_call_tree(); // now tree is pruned, including the root the cursor points at (we
+                                           // reverted it) -> did we
+                                           // revert the instance here of the root & potentially any called
+                                           // contracts instances correctly?
+
             //env.clear_stack_and_instances(); // TODO: isn't
             // clear_stack_and_instances needed here too?
             // NOTE: for some reason when adding this, we also get a SIGSEGV
             // when doing only activate_tx
+            // No its not because this is inter contract, clear stack & instanes
+            // is from the outside
             instance.set_remaining_gas(caller_remaining - callee_limit);
 
             let c_err = ContractError::from(err);
