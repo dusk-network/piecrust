@@ -331,7 +331,10 @@ pub(crate) fn c(
                     io: Arc::new(io_err),
                 };
             }
-            debug!("fn c: call tree: {:?}", env.call_tree().call_ids());
+            debug!(
+                "fn c: call tree ids (height only): {:?}",
+                env.call_tree().call_ids()
+            );
 
             env.move_up_prune_call_tree();
             //env.clear_stack_and_instances(); // TODO: isn't

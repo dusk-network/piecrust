@@ -52,7 +52,7 @@ use libc::{
     MAP_ANONYMOUS, MAP_FAILED, MAP_FIXED, MAP_NORESERVE, MAP_PRIVATE,
     PROT_NONE, PROT_READ, PROT_WRITE, SA_SIGINFO,
 };
-use tracing::debug;
+use tracing::{debug, warn};
 
 /// A handle to a copy-on-write memory-mapped region that keeps track of which
 /// pages have been written to.
@@ -243,8 +243,8 @@ impl Mmap {
     /// ```
     ///
     /// [`snap`]: Mmap::snap
-    pub fn revert(&mut self) -> io::Result<()> {
-        unsafe { self.0.revert() }
+    pub fn revert(&mut self, global_debug_counter: u32) -> io::Result<()> {
+        unsafe { self.0.revert(global_debug_counter) }
     }
 
     /// Apply current changes to the last snapshot.
@@ -710,7 +710,7 @@ impl MmapInner {
         Ok(())
     }
 
-    unsafe fn revert(&mut self) -> io::Result<()> {
+    unsafe fn revert(&mut self, global_debug_counter: u32) -> io::Result<()> {
         debug!("2 crumbles: amount of snapshots: {}", self.snapshots.len());
         let popped_snapshot = self
             .snapshots
@@ -731,10 +731,22 @@ impl MmapInner {
 
         let page_size = self.page_size;
 
-        for (page_index, clean_page) in popped_snapshot.clean_pages {
-            let page_offset = page_index * page_size;
-            self.bytes[page_offset..][..page_size]
-                .copy_from_slice(&clean_page[..]);
+        if global_debug_counter == 30 {
+            /*warn!(
+                "Third transfer contract revert happening, skipping copy_from_slice"
+            );*/
+        } else {
+            for (page_index, clean_page) in popped_snapshot.clean_pages {
+                let page_offset = page_index * page_size;
+                /*warn!(
+                    "page_index = {}, clean_page_len = {:?}, page_offset = {}",
+                    page_index,
+                    clean_page.len(),
+                    page_offset
+                );*/
+                self.bytes[page_offset..][..page_size]
+                    .copy_from_slice(&clean_page[..]);
+            }
         }
 
         let len = self.bytes.len();

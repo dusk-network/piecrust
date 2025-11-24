@@ -25,7 +25,7 @@ use rkyv::{
     check_archived_root, validation::validators::DefaultValidator, Archive,
     Deserialize, Infallible, Serialize,
 };
-use tracing::debug;
+use tracing::{debug, warn};
 
 use crate::call_tree::{CallTree, CallTreeElem};
 use crate::contract::{ContractData, ContractMetadata, WrappedContract};
@@ -719,6 +719,19 @@ impl Session {
     }
 
     pub(crate) fn revert_callstack(&mut self) -> Result<(), std::io::Error> {
+        warn!("fn revert_callstack: revert_callstack called");
+        warn!(
+            "fn revert_callstack: call tree before: {:#?}",
+            self.inner.call_tree
+        );
+        for (contract_id, instance_ptr) in &self.inner.instances {
+            let instance = unsafe { &**instance_ptr };
+            warn!(
+                "fn revert_callstack: instance memory before for {:?}: {:?}",
+                contract_id, instance
+            );
+        }
+
         for elem in self.inner.call_tree.iter() {
             let instance = self
                 .instance(&elem.contract_id)
@@ -745,13 +758,23 @@ impl Session {
                 continue;
             } else {
                 debug!(
-                    "1 fn: revert_callstack revert memory on contract: {:?}",
+                    "1 fn: revert_callstack revert memory for contract: {:?}",
                     elem.contract_id
                 );
-                instance.instance_revert()?;
+                instance.instance_revert(
+                    GLOBAL_DEBUG_COUNTER.load(Ordering::SeqCst),
+                )?; // TODO: Analyze this function
+                for (contract_id, instance_ptr) in &self.inner.instances {
+                    let instance = unsafe { &**instance_ptr };
+                    warn!("fn revert_callstack: instance memory after for {:?}: {:?}", contract_id, instance);
+                }
             }
             instance.set_len(elem.mem_len);
         }
+        warn!(
+            "fn revert_callstack: call tree after: {:#?}",
+            self.inner.call_tree
+        );
         Ok(())
     }
 

@@ -4,12 +4,12 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
+use std::fmt;
 use std::io;
 use std::ops::{Deref, DerefMut};
 
 use dusk_wasmtime::{Instance, Module, Mutability, Store, ValType};
 use piecrust_uplink::{ContractId, Event, ARGBUF_LEN};
-use tracing::debug;
 
 use crate::contract::WrappedContract;
 use crate::imports::Imports;
@@ -22,6 +22,15 @@ pub struct WrappedInstance {
     arg_buf_ofs: usize,
     store: Store<Env>,
     pub memory: Memory,
+}
+
+impl fmt::Debug for WrappedInstance {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let memory_hash = blake3::hash(&self.memory[..self.memory.current_len]);
+        f.debug_struct("WrappedInstance")
+            .field("memory_hash", &format!("{}", memory_hash))
+            .finish()
+    }
 }
 
 pub(crate) struct Env {
@@ -193,8 +202,11 @@ impl WrappedInstance {
         Ok(())
     }
 
-    pub(crate) fn instance_revert(&mut self) -> io::Result<()> {
-        self.memory.revert()?;
+    pub(crate) fn instance_revert(
+        &mut self,
+        global_debug_counter: u32,
+    ) -> io::Result<()> {
+        self.memory.revert(global_debug_counter)?;
         Ok(())
     }
 

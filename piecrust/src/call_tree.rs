@@ -4,6 +4,7 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
+use std::fmt;
 use std::marker::PhantomData;
 use std::mem;
 
@@ -19,7 +20,7 @@ pub struct CallTreeElem {
 }
 
 /// The tree of contract calls.
-#[derive(Debug, Default)]
+#[derive(Default)]
 pub struct CallTree(Option<*mut CallTreeNode>);
 
 impl CallTree {
@@ -159,6 +160,131 @@ impl Drop for CallTree {
     fn drop(&mut self) {
         self.clear()
     }
+}
+
+impl fmt::Display for CallTree {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.0 {
+            None => write!(f, "[]"),
+            Some(root) => unsafe {
+                // Find the actual root of the tree
+                let mut actual_root = root;
+                while let Some(parent) = (*actual_root).parent {
+                    actual_root = parent;
+                }
+
+                // Format the tree from the root
+                format_node(f, actual_root, root)
+            },
+        }
+    }
+}
+
+impl fmt::Debug for CallTree {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.0 {
+            None => write!(f, "[]"),
+            Some(root) => unsafe {
+                // Find the actual root of the tree
+                let mut actual_root = root;
+                while let Some(parent) = (*actual_root).parent {
+                    actual_root = parent;
+                }
+
+                // Format the tree with pretty printing
+                format_node_pretty(f, actual_root, root, "", true, true)
+            },
+        }
+    }
+}
+
+/// Helper function to format a node and its children recursively
+unsafe fn format_node(
+    f: &mut fmt::Formatter<'_>,
+    node: *mut CallTreeNode,
+    cursor: *mut CallTreeNode,
+) -> fmt::Result {
+    let node_ref = &*node;
+    let is_cursor = node == cursor;
+
+    // Format contract ID (first 4 bytes for brevity)
+    let id_bytes = node_ref.elem.contract_id.to_bytes();
+    let short_id = format!(
+        "{:02x}{:02x}{:02x}{:02x}",
+        id_bytes[0], id_bytes[1], id_bytes[2], id_bytes[3]
+    );
+
+    if is_cursor {
+        write!(f, "*0x{}", short_id)?;
+    } else {
+        write!(f, "0x{}", short_id)?;
+    }
+
+    // If there are children, format them in brackets
+    if !node_ref.children.is_empty() {
+        write!(f, "[")?;
+        for (i, &child) in node_ref.children.iter().enumerate() {
+            if i > 0 {
+                write!(f, ", ")?;
+            }
+            format_node(f, child, cursor)?;
+        }
+        write!(f, "]")?;
+    }
+
+    Ok(())
+}
+
+/// Helper function to format a node and its children in a tree structure
+unsafe fn format_node_pretty(
+    f: &mut fmt::Formatter<'_>,
+    node: *mut CallTreeNode,
+    cursor: *mut CallTreeNode,
+    prefix: &str,
+    is_root: bool,
+    is_last: bool,
+) -> fmt::Result {
+    let node_ref = &*node;
+    let is_cursor = node == cursor;
+
+    // Format contract ID (first 4 bytes for brevity)
+    let id_bytes = node_ref.elem.contract_id.to_bytes();
+    let short_id = format!(
+        "{:02x}{:02x}{:02x}{:02x}",
+        id_bytes[0], id_bytes[1], id_bytes[2], id_bytes[3]
+    );
+
+    if !is_root {
+        write!(f, "{}", prefix)?;
+        write!(f, "{}", if is_last { "└── " } else { "├── " })?;
+    }
+
+    if is_cursor {
+        writeln!(f, "*0x{}", short_id)?;
+    } else {
+        writeln!(f, "0x{}", short_id)?;
+    }
+
+    // Format children
+    let child_count = node_ref.children.len();
+    for (i, &child) in node_ref.children.iter().enumerate() {
+        let is_last_child = i == child_count - 1;
+        let new_prefix = if is_root {
+            String::new()
+        } else {
+            format!("{}{}    ", prefix, if is_last { " " } else { "│" })
+        };
+        format_node_pretty(
+            f,
+            child,
+            cursor,
+            &new_prefix,
+            false,
+            is_last_child,
+        )?;
+    }
+
+    Ok(())
 }
 
 unsafe fn update_spent(node: *mut CallTreeNode) {
