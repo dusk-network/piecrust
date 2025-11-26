@@ -129,17 +129,17 @@ impl CommitWriter {
 
             let mut dirty = false;
             // Write dirty pages and keep track of the page indices.
-            for (dirty_page, _, page_index) in
-                contract_data.memory.dirty_pages()
-            {
-                let page_path: PathBuf = Self::page_path_main(
-                    &memory_main_dir,
-                    *page_index,
-                    &commit_id,
-                )?;
-                fs::write(page_path, dirty_page)?;
-                pages.insert(*page_index);
-                dirty = true;
+            if let Some(dirty_pages) = contract_data.memory.dirty_pages() {
+                for (dirty_page, _, page_index) in dirty_pages {
+                    let page_path: PathBuf = Self::page_path_main(
+                        &memory_main_dir,
+                        *page_index,
+                        &commit_id,
+                    )?;
+                    fs::write(page_path, dirty_page)?;
+                    pages.insert(*page_index);
+                    dirty = true;
+                }
             }
 
             let bytecode_main_path =

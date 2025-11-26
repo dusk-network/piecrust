@@ -298,18 +298,23 @@ impl Mmap {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn dirty_pages(&self) -> impl Iterator<Item = (&[u8], &[u8], &usize)> {
-        self.0.last_snapshot().clean_pages.iter().map(
-            move |(page_index, clean_page)| {
-                let page_size = self.0.page_size;
-                let offset = page_index * page_size;
-                (
-                    &self.0.bytes[offset..][..page_size],
-                    &clean_page[..],
-                    page_index,
-                )
-            },
-        )
+    pub fn dirty_pages(
+        &self,
+    ) -> Option<impl Iterator<Item = (&[u8], &[u8], &usize)>> {
+        self.0.snapshots.last().map(|last_snapshot| {
+            last_snapshot.clean_pages.iter().map(
+                move |(page_index, clean_page)| {
+                    let page_size = self.0.page_size;
+                    let offset = page_index * page_size;
+                    (
+                        &self.0.bytes[offset..][..page_size],
+                        &clean_page[..],
+                        page_index,
+                    )
+                },
+            )
+        })
+        // .into_iter()
     }
 }
 
@@ -624,6 +629,10 @@ impl MmapInner {
                 Ok(())
             },
         )?;
+        if self.snapshots.is_empty() {
+            println!("pushing a snap for page index {}", page_index);
+            self.snapshots.push(Snapshot::new(self.page_number)?);
+        }
 
         let snapshot = self
             .snapshots
@@ -641,6 +650,10 @@ impl MmapInner {
 
                 if let Entry::Vacant(e) = snapshot.clean_pages.entry(page_index)
                 {
+                    if libc::mprotect(page_addr as _, page_size, PROT_READ) != 0
+                    {
+                        return Err(io::Error::last_os_error());
+                    }
                     let mut clean_page = vec![0; page_size];
                     clean_page.copy_from_slice(
                         &self.bytes[page_offset..][..page_size],
@@ -660,6 +673,7 @@ impl MmapInner {
     }
 
     unsafe fn snap(&mut self) -> io::Result<()> {
+        println!("snapping - len: {}", self.snapshots.len());
         let len = self.bytes.len();
 
         if libc::mprotect(self.bytes.as_mut_ptr().cast(), len, PROT_NONE) != 0 {
@@ -678,14 +692,24 @@ impl MmapInner {
             return Err(io::Error::last_os_error());
         }
 
-        let popped_snapshot = self
-            .snapshots
-            .pop()
-            .expect("There should always be at least one snapshot");
+        let popped_snapshot = self.snapshots.pop();
+
+        if popped_snapshot.is_none() {
+            println!("Apply called with no popped snapshot");
+            return Ok(());
+        };
+        let popped_snapshot = popped_snapshot
+            .expect("[CHECKED] There should always be at least one snapshot");
+
         if self.snapshots.is_empty() {
+            println!("Apply called with no snapshot");
             self.snapshots.push(Snapshot::new(self.page_number)?);
+            return Ok(());
         }
-        let snapshot = self.last_snapshot_mut();
+        let snapshot = self
+            .snapshots
+            .last_mut()
+            .expect("[CHECKED] There should always be at least one snapshot");
 
         for (page_index, clean_page) in popped_snapshot.clean_pages {
             snapshot.clean_pages.entry(page_index).or_insert(clean_page);
@@ -695,26 +719,33 @@ impl MmapInner {
     }
 
     unsafe fn revert(&mut self) -> io::Result<()> {
+        println!("snap len during revert: {}", self.snapshots.len());
         let popped_snapshot = self
             .snapshots
             .pop()
             .expect("There should always be at least one snapshot");
 
-        if self.snapshots.is_empty() {
-            self.snapshots.push(Snapshot::new(self.page_number)?);
-        } else {
-            self.last_snapshot_mut().hit_pages =
-                PageBits::new(self.page_number)?;
-        }
+        // if self.snapshots.is_empty() {
+        //     self.snapshots.push(Snapshot::new(self.page_number)?);
+        // } else {
+        //     self.last_snapshot_mut().hit_pages =
+        //         PageBits::new(self.page_number)?;
+        // }
 
         let page_size = self.page_size;
 
         for (page_index, clean_page) in popped_snapshot.clean_pages {
-            let page_offset = page_index * page_size;
+            let start_addr = self.bytes.as_mut_ptr() as usize;
+            let page_size = self.page_size;
+
+            let page_offset = page_index * self.page_size;
+            let page_addr = start_addr + page_offset;
+            if libc::mprotect(page_addr as _, page_size, PROT_WRITE) != 0 {
+                return Err(io::Error::last_os_error());
+            }
             self.bytes[page_offset..][..page_size]
                 .copy_from_slice(&clean_page[..]);
         }
-
         let len = self.bytes.len();
 
         if libc::mprotect(self.bytes.as_mut_ptr().cast(), len, PROT_NONE) != 0 {
@@ -724,17 +755,17 @@ impl MmapInner {
         Ok(())
     }
 
-    fn last_snapshot(&self) -> &Snapshot {
-        self.snapshots
-            .last()
-            .expect("There should always be at least one snapshot")
-    }
+    // fn last_snapshot(&self) -> &Snapshot {
+    //     self.snapshots
+    //         .last()
+    //         .expect("There should always be at least one snapshot")
+    // }
 
-    fn last_snapshot_mut(&mut self) -> &mut Snapshot {
-        self.snapshots
-            .last_mut()
-            .expect("There should always be at least one snapshot")
-    }
+    // fn last_snapshot_mut(&mut self) -> &mut Snapshot {
+    //     self.snapshots
+    //         .last_mut()
+    //         .expect("There should always be at least one snapshot")
+    // }
 }
 
 impl Drop for MmapInner {
@@ -852,7 +883,7 @@ mod tests {
         slice.copy_from_slice(&DIRT);
 
         assert_eq!(slice, DIRT, "Slice should be dirt just written");
-        assert_eq!(mem.dirty_pages().count(), 3);
+        assert_eq!(mem.dirty_pages().expect("3 dirty pages").count(), 3);
     }
 
     #[test]
@@ -870,7 +901,10 @@ mod tests {
                 slice.copy_from_slice(&DIRT);
 
                 assert_eq!(slice, DIRT, "Slice should be dirt just written");
-                assert_eq!(mem.dirty_pages().count(), 3);
+                assert_eq!(
+                    mem.dirty_pages().expect("3 dirty pages").count(),
+                    3
+                );
             }));
         }
 
@@ -889,7 +923,7 @@ mod tests {
 
         mem.snap().expect("Snapshotting should succeed");
 
-        assert_eq!(mem.dirty_pages().count(), 0);
+        assert_eq!(mem.dirty_pages().expect("0 dirty pages").count(), 0);
         let slice = &mem[OFFSET..][..DIRT.len()];
         assert_eq!(slice, DIRT, "Slice should be dirt just written");
 
@@ -899,7 +933,7 @@ mod tests {
 
         mem.revert().expect("Reverting should succeed");
 
-        assert_eq!(mem.dirty_pages().count(), 3);
+        assert_eq!(mem.dirty_pages().expect("0 dirty pages").count(), 3);
         let slice = &mut mem[OFFSET..][..DIRT.len()];
         assert_eq!(
             slice, DIRT,
@@ -917,7 +951,7 @@ mod tests {
 
         mem.snap().expect("Snapshotting should succeed");
 
-        assert_eq!(mem.dirty_pages().count(), 0);
+        assert_eq!(mem.dirty_pages().expect("0 dirty pages").count(), 0);
         let slice = &mem[OFFSET..][..DIRT.len()];
         assert_eq!(slice, DIRT, "Slice should be dirt just written");
 
@@ -926,19 +960,19 @@ mod tests {
 
         mem.snap().expect("Snapshotting should succeed");
 
-        assert_eq!(mem.dirty_pages().count(), 0);
+        assert_eq!(mem.dirty_pages().expect("0 dirty pages").count(), 0);
         let slice = &mem[OFFSET..][..DIRT2.len()];
         assert_eq!(slice, DIRT2, "Slice should be dirt just written");
 
         mem.revert().expect("Reverting should succeed");
 
-        assert_eq!(mem.dirty_pages().count(), 3);
+        assert_eq!(mem.dirty_pages().expect("3 dirty pages").count(), 3);
         let slice = &mem[OFFSET..][..DIRT2.len()];
         assert_eq!(slice, DIRT2, "Slice should be dirt written second");
 
         mem.revert().expect("Reverting should succeed");
 
-        assert_eq!(mem.dirty_pages().count(), 3);
+        assert_eq!(mem.dirty_pages().expect("3 dirty pages").count(), 3);
         let slice = &mem[OFFSET..][..DIRT.len()];
         assert_eq!(slice, DIRT, "Slice should be dirt written first");
     }
@@ -953,7 +987,7 @@ mod tests {
 
         mem.snap().expect("Snapshotting should succeed");
 
-        assert_eq!(mem.dirty_pages().count(), 0);
+        assert_eq!(mem.dirty_pages().expect("0 dirty pages").count(), 0);
         let slice = &mem[OFFSET..][..DIRT.len()];
         assert_eq!(slice, DIRT, "Slice should be dirt just written");
 
@@ -963,7 +997,7 @@ mod tests {
 
         mem.apply().expect("Applying should succeed");
 
-        assert_eq!(mem.dirty_pages().count(), 3);
+        assert_eq!(mem.dirty_pages().expect("3 dirty pages").count(), 3);
         let slice = &mut mem[OFFSET..][..DIRT.len()];
         assert_eq!(
             slice,
@@ -1021,33 +1055,36 @@ mod tests {
         mem.apply().expect("Applying should succeed");
         mem_alt.apply().expect("Applying should succeed");
 
-        mem.dirty_pages().zip(mem_alt.dirty_pages()).for_each(
-            |((dirty, clean, index), (alt_dirty, alt_clean, alt_index))| {
-                let hash_dirty = blake3::hash(dirty);
-                let hash_alt_dirty = blake3::hash(alt_dirty);
+        mem.dirty_pages()
+            .expect("some dirty pages")
+            .zip(mem_alt.dirty_pages().expect("some dirty pages"))
+            .for_each(
+                |((dirty, clean, index), (alt_dirty, alt_clean, alt_index))| {
+                    let hash_dirty = blake3::hash(dirty);
+                    let hash_alt_dirty = blake3::hash(alt_dirty);
 
-                let hash_dirty = hex::encode(hash_dirty.as_bytes());
-                let hash_alt_dirty = hex::encode(hash_alt_dirty.as_bytes());
+                    let hash_dirty = hex::encode(hash_dirty.as_bytes());
+                    let hash_alt_dirty = hex::encode(hash_alt_dirty.as_bytes());
 
-                assert_eq!(
-                    hash_dirty, hash_alt_dirty,
-                    "Dirty state should be the same"
-                );
+                    assert_eq!(
+                        hash_dirty, hash_alt_dirty,
+                        "Dirty state should be the same"
+                    );
 
-                let hash_clean = blake3::hash(clean);
-                let hash_alt_clean = blake3::hash(alt_clean);
+                    let hash_clean = blake3::hash(clean);
+                    let hash_alt_clean = blake3::hash(alt_clean);
 
-                let hash_clean = hex::encode(hash_clean.as_bytes());
-                let hash_alt_clean = hex::encode(hash_alt_clean.as_bytes());
+                    let hash_clean = hex::encode(hash_clean.as_bytes());
+                    let hash_alt_clean = hex::encode(hash_alt_clean.as_bytes());
 
-                assert_eq!(
-                    hash_clean, hash_alt_clean,
-                    "Clean state should be the same"
-                );
+                    assert_eq!(
+                        hash_clean, hash_alt_clean,
+                        "Clean state should be the same"
+                    );
 
-                assert_eq!(index, alt_index, "Index should be the same");
-            },
-        );
+                    assert_eq!(index, alt_index, "Index should be the same");
+                },
+            );
     }
 
     #[test]
@@ -1084,15 +1121,15 @@ mod tests {
         }
 
         println!("Initial memory state after filling:");
-        let hahsh = blake3::hash(mem.as_ref());
-        println!("{}", hex::encode(hahsh.as_bytes()));
+        // let hahsh = blake3::hash(mem.as_ref());
+        // println!("{}", hex::encode(hahsh.as_bytes()));
 
         // call_inner, snap is taken -> spend and execute is being called
         mem.snap().expect("call_inner: Snap 1 should succeed");
 
         println!("Memory state after snap 1:");
-        let hahsh = blake3::hash(mem.as_ref());
-        println!("{}", hex::encode(hahsh.as_bytes()));
+        // let hahsh = blake3::hash(mem.as_ref());
+        // println!("{}", hex::encode(hahsh.as_bytes()));
 
         // alice, snap is taken but not for tc
         // alice_mem.snap().expect("alice: Snap 1 should succeed");
@@ -1101,8 +1138,8 @@ mod tests {
         mem.snap().expect("fn c query Snap 2 should succeed");
 
         println!("Memory state after snap 2:");
-        let hahsh = blake3::hash(mem.as_ref());
-        println!("{}", hex::encode(hahsh.as_bytes()));
+        // let hahsh = blake3::hash(mem.as_ref());
+        // println!("{}", hex::encode(hahsh.as_bytes()));
 
         // transfer, snap is taken for contract_to_contract
         mem.snap()
@@ -1117,8 +1154,8 @@ mod tests {
         mem[30 * PAGE_SIZE] = 0x56;
 
         println!("Memory state after snap 3 & writing:");
-        let hahsh = blake3::hash(mem.as_ref());
-        println!("{}", hex::encode(hahsh.as_bytes()));
+        // let hahsh = blake3::hash(mem.as_ref());
+        // println!("{}", hex::encode(hahsh.as_bytes()));
 
         // charlie, snap is taken, but not for tc
         // charlie_mem.snap().expect("charlie: Snap 1 should succeed");
@@ -1139,8 +1176,8 @@ mod tests {
         mem[3 * PAGE_SIZE] = 0x33;
 
         println!("Memory state after snap 4 & writing:");
-        let hahsh = blake3::hash(mem.as_ref());
-        println!("{}", hex::encode(hahsh.as_bytes()));
+        // let hahsh = blake3::hash(mem.as_ref());
+        // println!("{}", hex::encode(hahsh.as_bytes()));
 
         // stake, snap is taken, but not for tc
         // stake_mem.snap().expect("stake: Snap 1 should succeed");
@@ -1162,8 +1199,8 @@ mod tests {
             .expect("fn c contract_to_contract Revert 1 should succeed");
 
         println!("Memory state after Revert 1:");
-        let hahsh = blake3::hash(mem.as_ref());
-        println!("{}", hex::encode(hahsh.as_bytes()));
+        // let hahsh = blake3::hash(mem.as_ref());
+        // println!("{}", hex::encode(hahsh.as_bytes()));
 
         assert_eq!(mem[1 * PAGE_SIZE], 0xAB);
         assert_eq!(mem[2 * PAGE_SIZE], 0xCD);
@@ -1180,8 +1217,8 @@ mod tests {
             .expect("fn c contract_to_contract Revert 2 should succeed");
 
         println!("Memory state after Revert 2:");
-        let hahsh = blake3::hash(mem.as_ref());
-        println!("{}", hex::encode(hahsh.as_bytes()));
+        // let hahsh = blake3::hash(mem.as_ref());
+        // println!("{}", hex::encode(hahsh.as_bytes()));
 
         /*
            Memory should be now as it was after Snap 2
@@ -1201,10 +1238,11 @@ mod tests {
 
         // transfer, revert taken for any query call
         mem.revert().expect("fn c query Revert 3 should succeed");
+        // mem.revert().expect("fn c query Revert 3 should succeed");
 
         println!("Memory state after Revert 3:");
-        let hahsh = blake3::hash(mem.as_ref());
-        println!("{}", hex::encode(hahsh.as_bytes()));
+        // let hahsh = blake3::hash(mem.as_ref());
+        // println!("{}", hex::encode(hahsh.as_bytes()));
 
         /*
            Memory should be now as it was after Snap 1
@@ -1220,5 +1258,134 @@ mod tests {
 
         // transfer: spend_and_execute ends here
         // do we revert here as well now or do we apply the snap?
+    }
+
+    #[test]
+    fn snap_revert_revert_apply_scenario() {
+        use blake3::Hasher;
+        const N_PAGES: usize = 65536;
+        const PAGE_SIZE: usize = 65536;
+        const OFFSET: usize = 0;
+
+        // Helper to fill a region with a constant byte
+        fn fill_region(mem: &mut Mmap, offset: usize, len: usize, value: u8) {
+            let slice = &mut mem[offset..][..len];
+            for b in slice {
+                *b = value;
+            }
+        }
+
+        // Helper to assert a region is filled with a constant byte
+        fn assert_region_eq(
+            mem: &Mmap,
+            offset: usize,
+            len: usize,
+            value: u8,
+            msg: &str,
+        ) {
+            let slice = &mem[offset..][..len];
+            assert!(
+                slice.iter().all(|&b| b == value),
+                "{msg}: expected all {:#x}, found: first few bytes = {:?}",
+                value,
+                &slice[..std::cmp::min(16, slice.len())]
+            );
+        }
+
+        // Helper to assert a region is filled with a constant byte
+        fn print_region(mem: &Mmap, offset: usize, len: usize, msg: &str) {
+            let slice = &mem[offset..][..len];
+            println!(
+                "memory region at {msg}: {:?}",
+                &slice[..std::cmp::min(16, slice.len())]
+            );
+        }
+
+        let mut mem = Mmap::new(N_PAGES, PAGE_SIZE)
+            .expect("Instantiating new memory should succeed");
+
+        let len = 2 * PAGE_SIZE; // same size as in other tests
+
+        print_region(&mem, OFFSET, len, "beginning");
+        // 1. snap 1  (baseline: all zeros)
+        mem.snap().expect("Snapshot 1 should succeed"); // TC: spend_and_execute call
+
+        // 2. modify memory 1  (value 0x11)
+        fill_region(&mut mem, OFFSET, len, 0x11);
+        print_region(&mem, OFFSET, len, "After modify #1");
+        // assert_region_eq(&mem, OFFSET, len, 0x11, "After modify #1");
+
+        // 3. new snap 2  (baseline: memory1)
+        mem.snap().expect("Snapshot 2 should succeed"); // TC: prepare for ICC
+
+        // 4. modify memory 2  (value 0x22)
+        fill_region(&mut mem, OFFSET, len, 0x22); // TC: Start ICC
+                                                  // print_region(&mem, OFFSET, len, "After modify #2");
+                                                  // mem.apply().expect("Apply snapshot 2 should succeed");
+                                                  // mem.apply().expect("Apply snapshot 1 should succeed");
+                                                  // assert_region_eq(&mem, OFFSET, len, 0x22, "After modify #2");
+
+        print_region(&mem, OFFSET, len, "After modify #2");
+
+        // 5. new snap 3  (baseline: memory2)
+        mem.snap().expect("Snapshot 3 should succeed"); // Call TC::balance
+        fill_region(&mut mem, len, PAGE_SIZE, 0x33); //
+        print_region(&mem, len, PAGE_SIZE, "After modify #3");
+        mem.apply().expect("Apply snapshot 3 should succeed"); // TC: balance ICC returned
+
+        assert_region_eq(&mem, len, PAGE_SIZE, 0x33, "After apply #3");
+
+        fill_region(&mut mem, OFFSET, len, 0x44); //
+
+        print_region(&mem, OFFSET, len, "After modify #4");
+        mem.snap().expect("Snapshot 4 should succeed"); // TC: Call StakeContract::stake
+        fill_region(&mut mem, OFFSET, len, 0x55); //
+
+        print_region(&mem, OFFSET, len, "After modify #5");
+        mem.revert().expect("Revert from snapshot 4 should succeed"); // TC: StakeContract::stake panic
+                                                                      // assert_region_eq(&mem, OFFSET, len, 0x22, "After revert #3");
+
+        print_region(&mem, OFFSET, len, "After revert #5");
+        mem.revert().expect("Revert from snapshot 2 should succeed");
+        // print_region(&mem, OFFSET, len, "After first right revert");
+        // print_region(&mem, OFFSET, len, "After revert #2");
+        // mem.revert().expect("Revert from snapshot 2 should succeed");
+        // // print_region(&mem, OFFSET, len, "After first wrong revert");
+        // mem.revert().expect("Revert from snapshot 2 should succeed");
+        // print_region(&mem, OFFSET, len, "After second wrong revert");
+        //    mem.revert().expect("Revert from snapshot 2 should succeed");
+        //     mem.revert().expect("Revert from snapshot 2 should succeed");
+
+        // 8. revert 2  → back to memory1 (0x11)
+        mem.apply().expect("Apply snapshot 1 should succeed"); // finish the spend_and_execute
+                                                               // 9. apply 1  → keep memory1 changes as dirty, state should stay 0x11
+                                                               // mem.apply().expect("Apply snapshot 1 should succeed");
+        mem.dirty_pages()
+            .expect("expecting dirty pages here")
+            .for_each(|(dirty, clean, page_index)| {
+                println!(
+                    "Dirty page index: {page_index} - dirty {} - clean {}",
+                    hex::encode(
+                        Hasher::new().update(dirty).finalize().as_bytes()
+                    ),
+                    hex::encode(
+                        Hasher::new().update(clean).finalize().as_bytes()
+                    )
+                );
+            });
+        print_region(&mem, OFFSET, len, "After apply #1");
+
+        assert_region_eq(&mem, OFFSET, len, 0x11, "After apply #1");
+
+        mem.snap().expect("Snapshot 5 should succeed");
+        print_region(&mem, OFFSET, len, "new call");
+        print_region(&mem, len, PAGE_SIZE, "new call");
+        assert_region_eq(
+            &mem,
+            OFFSET,
+            len,
+            0x11,
+            "After apply #1 (final state must be memory #1)",
+        );
     }
 }

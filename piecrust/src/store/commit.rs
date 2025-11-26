@@ -117,13 +117,15 @@ impl Commit {
 
         element.set_len(memory.current_len);
 
-        for (dirty_page, _, page_index) in memory.dirty_pages() {
-            let hash = Hash::new(dirty_page);
-            element.insert_page_index_hash(
-                *page_index,
-                *page_index as u64,
-                hash,
-            );
+        if let Some(dirty_pages) = memory.dirty_pages() {
+            for (dirty_page, _, page_index) in dirty_pages {
+                let hash = Hash::new(dirty_page);
+                element.insert_page_index_hash(
+                    *page_index,
+                    *page_index as u64,
+                    hash,
+                );
+            }
         }
 
         let root = *element.tree().root();
