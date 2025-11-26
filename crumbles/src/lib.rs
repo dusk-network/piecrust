@@ -641,6 +641,16 @@ impl MmapInner {
 
                 if let Entry::Vacant(e) = snapshot.clean_pages.entry(page_index)
                 {
+                    // Ensure the memory is readable before saving the clean
+                    // page.
+                    //
+                    // Previous implementations didn't do this, but it's
+                    // necessare because if the memory was
+                    // previously reverted it's now PROT_NONE
+                    if libc::mprotect(page_addr as _, page_size, PROT_READ) != 0
+                    {
+                        return Err(io::Error::last_os_error());
+                    }
                     let mut clean_page = vec![0; page_size];
                     clean_page.copy_from_slice(
                         &self.bytes[page_offset..][..page_size],
@@ -711,6 +721,16 @@ impl MmapInner {
 
         for (page_index, clean_page) in popped_snapshot.clean_pages {
             let page_offset = page_index * page_size;
+
+            // Ensure the memory is writable before copying the clean page back.
+            //
+            // Previous implementations didn't do this, but it's necessare
+            // because if the memory was previously reverted it's now PROT_NONE
+            let start_addr = self.bytes.as_mut_ptr() as usize;
+            let page_addr = start_addr + page_offset;
+            if libc::mprotect(page_addr as _, page_size, PROT_WRITE) != 0 {
+                return Err(io::Error::last_os_error());
+            }
             self.bytes[page_offset..][..page_size]
                 .copy_from_slice(&clean_page[..]);
         }
