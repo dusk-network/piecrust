@@ -1226,4 +1226,34 @@ mod tests {
         // transfer: spend_and_execute ends here
         // do we revert here as well now or do we apply the snap?
     }
+
+    #[test]
+    fn apply_preserves_earliest_clean_state() {
+        // Validates that apply() preserves the earliest clean state (0x11),
+        // not the immediate pre-modification value (0x22).
+
+        let mut mem = Mmap::new(N_PAGES, PAGE_SIZE)
+            .expect("Instantiating new memory should succeed");
+
+        mem[2 * PAGE_SIZE] = 0x11;
+        mem.snap().expect("Snap S1 should succeed");
+
+        mem[2 * PAGE_SIZE] = 0x22;
+        mem.snap().expect("Snap S2 should succeed");
+
+        mem[2 * PAGE_SIZE] = 0x33;
+
+        mem.apply().expect("Apply should succeed");
+
+        let dirty: Vec<_> = mem.dirty_pages().collect();
+        let (dirty_page, clean_page, &page_index) = dirty[0];
+
+        assert_eq!(page_index, 2);
+        assert_eq!(dirty_page[0], 0x33);
+        assert_eq!(clean_page[0], 0x11, 
+            "or_insert keeps earliest state (0x11), not immediate pre-mod (0x22)");
+
+        mem.revert().expect("Revert should succeed");
+        assert_eq!(mem[2 * PAGE_SIZE], 0x11);
+    }
 }
