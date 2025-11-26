@@ -122,6 +122,9 @@ impl Commit {
         for (dirty_page, clean, page_index) in memory.dirty_pages() {
             let hash = Hash::new(dirty_page);
             let clean = Hash::new(clean);
+            if hash == clean {
+                continue;
+            }
             debug!(
                 msg = "insert page",
                 page_index,
