@@ -660,6 +660,7 @@ impl MmapInner {
     }
 
     unsafe fn snap(&mut self) -> io::Result<()> {
+        println!("Length before snap: {}", self.snapshots.len());
         let len = self.bytes.len();
 
         if libc::mprotect(self.bytes.as_mut_ptr().cast(), len, PROT_NONE) != 0 {
@@ -667,7 +668,7 @@ impl MmapInner {
         }
 
         self.snapshots.push(Snapshot::new(self.page_number)?);
-
+        println!("Length after snap: {}", self.snapshots.len());
         Ok(())
     }
 
@@ -685,6 +686,7 @@ impl MmapInner {
         if self.snapshots.is_empty() {
             self.snapshots.push(Snapshot::new(self.page_number)?);
         }
+
         let snapshot = self.last_snapshot_mut();
 
         for (page_index, clean_page) in popped_snapshot.clean_pages {
@@ -695,12 +697,14 @@ impl MmapInner {
     }
 
     unsafe fn revert(&mut self) -> io::Result<()> {
+        println!("Length before revert: {}", self.snapshots.len());
         let popped_snapshot = self
             .snapshots
             .pop()
             .expect("There should always be at least one snapshot");
 
         if self.snapshots.is_empty() {
+            println!("push happening");
             self.snapshots.push(Snapshot::new(self.page_number)?);
         } else {
             self.last_snapshot_mut().hit_pages =
@@ -720,7 +724,7 @@ impl MmapInner {
         if libc::mprotect(self.bytes.as_mut_ptr().cast(), len, PROT_NONE) != 0 {
             return Err(io::Error::last_os_error());
         }
-
+        println!("Length after revert: {}", self.snapshots.len());
         Ok(())
     }
 
@@ -1074,8 +1078,8 @@ mod tests {
 
         // blake3 hahs of initial memory state
         //println!("Initial memory state:");
-        //let hahsh = blake3::hash(mem.as_ref());
-        //println!("{}", hex::encode(hahsh.as_bytes()));
+        //let hash = blake3::hash(mem.as_ref());
+        //println!("{}", hex::encode(hash.as_bytes()));
 
         // Fill half the memory with random data to simulate contract state
         // 50 or N_PAGES / 2
@@ -1084,15 +1088,16 @@ mod tests {
         }
 
         println!("Initial memory state after filling:");
-        let hahsh = blake3::hash(mem.as_ref());
-        println!("{}", hex::encode(hahsh.as_bytes()));
+        let hash = blake3::hash(mem.as_ref());
+        println!("{}", hex::encode(hash.as_bytes()));
 
         // call_inner, snap is taken -> spend and execute is being called
         mem.snap().expect("call_inner: Snap 1 should succeed");
+        println!("Snap length: {}", mem.0.snapshots.len());
 
         println!("Memory state after snap 1:");
-        let hahsh = blake3::hash(mem.as_ref());
-        println!("{}", hex::encode(hahsh.as_bytes()));
+        let hash = blake3::hash(mem.as_ref());
+        println!("{}", hex::encode(hash.as_bytes()));
 
         // alice, snap is taken but not for tc
         // alice_mem.snap().expect("alice: Snap 1 should succeed");
@@ -1101,8 +1106,8 @@ mod tests {
         mem.snap().expect("fn c query Snap 2 should succeed");
 
         println!("Memory state after snap 2:");
-        let hahsh = blake3::hash(mem.as_ref());
-        println!("{}", hex::encode(hahsh.as_bytes()));
+        let hash = blake3::hash(mem.as_ref());
+        println!("{}", hex::encode(hash.as_bytes()));
 
         // transfer, snap is taken for contract_to_contract
         mem.snap()
@@ -1117,8 +1122,8 @@ mod tests {
         mem[30 * PAGE_SIZE] = 0x56;
 
         println!("Memory state after snap 3 & writing:");
-        let hahsh = blake3::hash(mem.as_ref());
-        println!("{}", hex::encode(hahsh.as_bytes()));
+        let hash = blake3::hash(mem.as_ref());
+        println!("{}", hex::encode(hash.as_bytes()));
 
         // charlie, snap is taken, but not for tc
         // charlie_mem.snap().expect("charlie: Snap 1 should succeed");
@@ -1139,8 +1144,8 @@ mod tests {
         mem[3 * PAGE_SIZE] = 0x33;
 
         println!("Memory state after snap 4 & writing:");
-        let hahsh = blake3::hash(mem.as_ref());
-        println!("{}", hex::encode(hahsh.as_bytes()));
+        let hash = blake3::hash(mem.as_ref());
+        println!("{}", hex::encode(hash.as_bytes()));
 
         // stake, snap is taken, but not for tc
         // stake_mem.snap().expect("stake: Snap 1 should succeed");
@@ -1162,8 +1167,8 @@ mod tests {
             .expect("fn c contract_to_contract Revert 1 should succeed");
 
         println!("Memory state after Revert 1:");
-        let hahsh = blake3::hash(mem.as_ref());
-        println!("{}", hex::encode(hahsh.as_bytes()));
+        let hash = blake3::hash(mem.as_ref());
+        println!("{}", hex::encode(hash.as_bytes()));
 
         assert_eq!(mem[1 * PAGE_SIZE], 0xAB);
         assert_eq!(mem[2 * PAGE_SIZE], 0xCD);
@@ -1180,8 +1185,8 @@ mod tests {
             .expect("fn c contract_to_contract Revert 2 should succeed");
 
         println!("Memory state after Revert 2:");
-        let hahsh = blake3::hash(mem.as_ref());
-        println!("{}", hex::encode(hahsh.as_bytes()));
+        let hash = blake3::hash(mem.as_ref());
+        println!("{}", hex::encode(hash.as_bytes()));
 
         /*
            Memory should be now as it was after Snap 2
@@ -1203,8 +1208,8 @@ mod tests {
         mem.revert().expect("fn c query Revert 3 should succeed");
 
         println!("Memory state after Revert 3:");
-        let hahsh = blake3::hash(mem.as_ref());
-        println!("{}", hex::encode(hahsh.as_bytes()));
+        let hash = blake3::hash(mem.as_ref());
+        println!("{}", hex::encode(hash.as_bytes()));
 
         /*
            Memory should be now as it was after Snap 1
