@@ -1049,4 +1049,762 @@ mod tests {
             },
         );
     }
+
+    #[test]
+    fn tc_snaps() {
+        // Replicate the chain of snapshots for a specific contract
+        //
+        // transfer: spend_and_execute
+        // └── alice: stake_activate
+        // ├── transfer: any query call
+        // └── transfer: contract_to_contract
+        //      └── charlie: stake
+        //           └── transfer: contract_to_contract
+        //                └── stake: stake_from_contract
+        //
+        // We are recreating snaps on transfer contract
+
+        /*
+         * Initial Call chain
+         */
+
+        // Initialize memory for the Transfer Contract
+        let mut mem = Mmap::new(N_PAGES, PAGE_SIZE)
+            .expect("Instantiating new memory should succeed");
+
+        // blake3 hahs of initial memory state
+        //println!("Initial memory state:");
+        //let hahsh = blake3::hash(mem.as_ref());
+        //println!("{}", hex::encode(hahsh.as_bytes()));
+
+        // Fill half the memory with random data to simulate contract state
+        // 50 or N_PAGES / 2
+        for i in 0..((50) * PAGE_SIZE) {
+            mem[i] = (i % 256) as u8;
+        }
+
+        println!("Initial memory state after filling:");
+        // let hahsh = blake3::hash(mem.as_ref());
+        // println!("{}", hex::encode(hahsh.as_bytes()));
+
+        // call_inner, snap is taken -> spend and execute is being called
+        mem.snap().expect("call_inner: Snap 1 should succeed");
+
+        println!("Memory state after snap 1:");
+        // let hahsh = blake3::hash(mem.as_ref());
+        // println!("{}", hex::encode(hahsh.as_bytes()));
+
+        // alice, snap is taken but not for tc
+        // alice_mem.snap().expect("alice: Snap 1 should succeed");
+
+        // transfer, snap is taken for any query call
+        mem.snap().expect("fn c query Snap 2 should succeed");
+
+        println!("Memory state after snap 2:");
+        // let hahsh = blake3::hash(mem.as_ref());
+        // println!("{}", hex::encode(hahsh.as_bytes()));
+
+        // transfer, snap is taken for contract_to_contract
+        mem.snap()
+            .expect("fn c contract_to_contract Snap 3 should succeed");
+
+        // memory is changed as well
+        mem[1 * PAGE_SIZE] = 0xAB;
+        mem[2 * PAGE_SIZE] = 0xCD;
+        mem[3 * PAGE_SIZE] = 0xEF;
+        mem[27 * PAGE_SIZE] = 0x12;
+        mem[28 * PAGE_SIZE] = 0x34;
+        mem[30 * PAGE_SIZE] = 0x56;
+
+        println!("Memory state after snap 3 & writing:");
+        // let hahsh = blake3::hash(mem.as_ref());
+        // println!("{}", hex::encode(hahsh.as_bytes()));
+
+        // charlie, snap is taken, but not for tc
+        // charlie_mem.snap().expect("charlie: Snap 1 should succeed");
+
+        // transfer, snap is taken for contract_to_contract
+        mem.snap()
+            .expect("fn c contract_to_contract Snap 4 should succeed");
+
+        assert_eq!(mem[1 * PAGE_SIZE], 0xAB);
+        assert_eq!(mem[2 * PAGE_SIZE], 0xCD);
+        assert_eq!(mem[3 * PAGE_SIZE], 0xEF);
+        assert_eq!(mem[27 * PAGE_SIZE], 0x12);
+        assert_eq!(mem[28 * PAGE_SIZE], 0x34);
+        assert_eq!(mem[30 * PAGE_SIZE], 0x56);
+
+        mem[1 * PAGE_SIZE] = 0x11;
+        mem[2 * PAGE_SIZE] = 0x22;
+        mem[3 * PAGE_SIZE] = 0x33;
+
+        println!("Memory state after snap 4 & writing:");
+        // let hahsh = blake3::hash(mem.as_ref());
+        // println!("{}", hex::encode(hahsh.as_bytes()));
+
+        // stake, snap is taken, but not for tc
+        // stake_mem.snap().expect("stake: Snap 1 should succeed");
+
+        /*
+         * Stake panics
+         * Revert chain
+         */
+
+        // stake, revert taken, but not for tc
+        // stake_mem.revert().expect("stake: Revert 1 should succeed");
+
+        assert_eq!(mem[1 * PAGE_SIZE], 0x11);
+        assert_eq!(mem[2 * PAGE_SIZE], 0x22);
+        assert_eq!(mem[3 * PAGE_SIZE], 0x33);
+
+        // transfer, revert taken for contract_to_contract
+        mem.revert()
+            .expect("fn c contract_to_contract Revert 1 should succeed");
+
+        println!("Memory state after Revert 1:");
+        // let hahsh = blake3::hash(mem.as_ref());
+        // println!("{}", hex::encode(hahsh.as_bytes()));
+
+        assert_eq!(mem[1 * PAGE_SIZE], 0xAB);
+        assert_eq!(mem[2 * PAGE_SIZE], 0xCD);
+        assert_eq!(mem[3 * PAGE_SIZE], 0xEF);
+        assert_eq!(mem[27 * PAGE_SIZE], 0x12);
+        assert_eq!(mem[28 * PAGE_SIZE], 0x34);
+        assert_eq!(mem[30 * PAGE_SIZE], 0x56);
+
+        // charlie, revert taken, but not for tc
+        // charlie_mem.revert().expect("charlie: Revert 1 should succeed");
+
+        // transfer, revert taken for contract_to_contract
+        mem.revert()
+            .expect("fn c contract_to_contract Revert 2 should succeed");
+
+        println!("Memory state after Revert 2:");
+        // let hahsh = blake3::hash(mem.as_ref());
+        // println!("{}", hex::encode(hahsh.as_bytes()));
+
+        /*
+           Memory should be now as it was after Snap 2
+        */
+
+        for i in 0..((50) * PAGE_SIZE) {
+            assert_eq!(
+                mem[i],
+                (i % 256) as u8,
+                "Memory should match initial state on page num {}",
+                i / PAGE_SIZE + 1
+            );
+        }
+
+        // alice, revert taken, but not for tc
+        // alice_mem.revert().expect("alice: Revert 1 should succeed");
+
+        // transfer, revert taken for any query call
+        mem.revert().expect("fn c query Revert 3 should succeed");
+        // mem.revert().expect("fn c query Revert 3 should succeed");
+
+        println!("Memory state after Revert 3:");
+        // let hahsh = blake3::hash(mem.as_ref());
+        // println!("{}", hex::encode(hahsh.as_bytes()));
+
+        /*
+           Memory should be now as it was after Snap 1
+        */
+        for i in 0..((50) * PAGE_SIZE) {
+            assert_eq!(
+                mem[i],
+                (i % 256) as u8,
+                "Memory should match initial state on page num {}",
+                i / PAGE_SIZE + 1
+            );
+        }
+
+        // transfer: spend_and_execute ends here
+        // do we revert here as well now or do we apply the snap?
+    }
+
+    #[test]
+    fn snap_revert_revert_apply_scenario() {
+        use blake3::Hasher;
+        const N_PAGES: usize = 65536;
+        const PAGE_SIZE: usize = 65536;
+        const OFFSET: usize = 0;
+
+        // Helper to fill a region with a constant byte
+        fn fill_region(mem: &mut Mmap, offset: usize, len: usize, value: u8) {
+            let slice = &mut mem[offset..][..len];
+            for b in slice {
+                *b = value;
+            }
+        }
+
+        // Helper to assert a region is filled with a constant byte
+        fn assert_region_eq(
+            mem: &Mmap,
+            offset: usize,
+            len: usize,
+            value: u8,
+            msg: &str,
+        ) {
+            let slice = &mem[offset..][..len];
+            assert!(
+                slice.iter().all(|&b| b == value),
+                "{msg}: expected all {:#x}, found: first few bytes = {:?}",
+                value,
+                &slice[..std::cmp::min(16, slice.len())]
+            );
+        }
+
+        // Helper to assert a region is filled with a constant byte
+        fn print_region(mem: &Mmap, offset: usize, len: usize, msg: &str) {
+            let slice = &mem[offset..][..len];
+            println!(
+                "memory region at {msg}: {:?}",
+                &slice[..std::cmp::min(16, slice.len())]
+            );
+        }
+
+        let mut mem = Mmap::new(N_PAGES, PAGE_SIZE)
+            .expect("Instantiating new memory should succeed");
+
+        let len = 2 * PAGE_SIZE; // same size as in other tests
+
+        print_region(&mem, OFFSET, len, "beginning");
+        // 1. snap 1  (baseline: all zeros)
+        mem.snap().expect("Snapshot 1 should succeed"); // TC: spend_and_execute call
+
+        // 2. modify memory 1  (value 0x11)
+        fill_region(&mut mem, OFFSET, len, 0x11);
+        print_region(&mem, OFFSET, len, "After modify #1");
+        // assert_region_eq(&mem, OFFSET, len, 0x11, "After modify #1");
+
+        // 3. new snap 2  (baseline: memory1)
+        mem.snap().expect("Snapshot 2 should succeed"); // TC: prepare for ICC
+
+        // 4. modify memory 2  (value 0x22)
+        fill_region(&mut mem, OFFSET, len, 0x22); // TC: Start ICC
+                                                  // print_region(&mem, OFFSET, len, "After modify #2");
+                                                  // mem.apply().expect("Apply snapshot 2 should succeed");
+                                                  // mem.apply().expect("Apply snapshot 1 should succeed");
+                                                  // assert_region_eq(&mem, OFFSET, len, 0x22, "After modify #2");
+
+        print_region(&mem, OFFSET, len, "After modify #2");
+
+        // 5. new snap 3  (baseline: memory2)
+        mem.snap().expect("Snapshot 3 should succeed"); // Call TC::balance
+        fill_region(&mut mem, len, PAGE_SIZE, 0x33); //
+        print_region(&mem, len, PAGE_SIZE, "After modify #3");
+        mem.apply().expect("Apply snapshot 3 should succeed"); // TC: balance ICC returned
+
+        assert_region_eq(&mem, len, PAGE_SIZE, 0x33, "After apply #3");
+
+        fill_region(&mut mem, OFFSET, len, 0x44); //
+
+        print_region(&mem, OFFSET, len, "After modify #4");
+        mem.snap().expect("Snapshot 4 should succeed"); // TC: Call StakeContract::stake
+        fill_region(&mut mem, OFFSET, len, 0x55); //
+
+        print_region(&mem, OFFSET, len, "After modify #5");
+        mem.revert().expect("Revert from snapshot 4 should succeed"); // TC: StakeContract::stake panic
+                                                                      // assert_region_eq(&mem, OFFSET, len, 0x22, "After revert #3");
+
+        print_region(&mem, OFFSET, len, "After revert #5");
+        mem.revert().expect("Revert from snapshot 2 should succeed");
+        // print_region(&mem, OFFSET, len, "After first right revert");
+        // print_region(&mem, OFFSET, len, "After revert #2");
+        // mem.revert().expect("Revert from snapshot 2 should succeed");
+        // // print_region(&mem, OFFSET, len, "After first wrong revert");
+        // mem.revert().expect("Revert from snapshot 2 should succeed");
+        // print_region(&mem, OFFSET, len, "After second wrong revert");
+        //    mem.revert().expect("Revert from snapshot 2 should succeed");
+        //     mem.revert().expect("Revert from snapshot 2 should succeed");
+
+        // 8. revert 2  → back to memory1 (0x11)
+        mem.apply().expect("Apply snapshot 1 should succeed"); // finish the spend_and_execute
+                                                               // 9. apply 1  → keep memory1 changes as dirty, state should stay 0x11
+                                                               // mem.apply().expect("Apply snapshot 1 should succeed");
+        mem.dirty_pages().for_each(|(dirty, clean, page_index)| {
+            println!(
+                "Dirty page index: {page_index} - dirty {} - clean {}",
+                hex::encode(Hasher::new().update(dirty).finalize().as_bytes()),
+                hex::encode(Hasher::new().update(clean).finalize().as_bytes())
+            );
+        });
+        print_region(&mem, OFFSET, len, "After apply #1");
+
+        assert_region_eq(&mem, OFFSET, len, 0x11, "After apply #1");
+
+        mem.snap().expect("Snapshot 5 should succeed");
+        print_region(&mem, OFFSET, len, "new call");
+        print_region(&mem, len, PAGE_SIZE, "new call");
+        assert_region_eq(
+            &mem,
+            OFFSET,
+            len,
+            0x11,
+            "After apply #1 (final state must be memory #1)",
+        );
+    }
+
+    #[test]
+    fn apply_preserves_earliest_clean_state() {
+        // Validates that apply() preserves the earliest clean state (0x11),
+        // not the immediate pre-modification value (0x22).
+
+        let mut mem = Mmap::new(N_PAGES, PAGE_SIZE)
+            .expect("Instantiating new memory should succeed");
+
+        mem[2 * PAGE_SIZE] = 0x11;
+        mem.snap().expect("Snap S1 should succeed");
+
+        mem[2 * PAGE_SIZE] = 0x22;
+        mem.snap().expect("Snap S2 should succeed");
+
+        mem[2 * PAGE_SIZE] = 0x33;
+
+        mem.apply().expect("Apply should succeed");
+
+        let dirty: Vec<_> = mem.dirty_pages().collect();
+        let (dirty_page, clean_page, &page_index) = dirty[0];
+
+        assert_eq!(page_index, 2);
+        assert_eq!(dirty_page[0], 0x33);
+        assert_eq!(clean_page[0], 0x11, "or_insert keeps earliest state (0x11), not immediate pre-mod (0x22)");
+
+        mem.revert().expect("Revert should succeed");
+        assert_eq!(mem[2 * PAGE_SIZE], 0x11);
+    }
+
+    /// Test deep nesting (simulates the tc_snaps scenario)
+    #[test]
+    fn more_reverts_than_snaps() {
+        let mut mem = Mmap::new(N_PAGES, PAGE_SIZE).unwrap();
+
+        // Simulate nested contract calls
+        mem[0] = 1;
+        mem.snap().unwrap(); // Call 1: snapshot with 1
+
+        mem[0] = 2;
+        mem.snap().unwrap(); // Call 2: snapshot with 2
+
+        mem[0] = 3;
+        mem.snap().unwrap(); // Call 3: snapshot with 3
+
+        mem[0] = 4;
+        mem.snap().unwrap(); // Call 4: snapshot with 4
+
+        mem[0] = 5;
+        mem.snap().unwrap(); // Call 5: snapshot with 5
+
+        mem[0] = 6; // Write after last snapshot
+
+        // Unwind with reverts (simulates panics)
+        mem.revert().unwrap();
+        assert_eq!(mem[0], 5, "First revert goes back to last snap value");
+
+        mem.revert().unwrap();
+        assert_eq!(mem[0], 4);
+
+        mem.revert().unwrap();
+        assert_eq!(mem[0], 3);
+
+        mem.revert().unwrap();
+        assert_eq!(mem[0], 2);
+
+        mem.revert().unwrap();
+        assert_eq!(mem[0], 1);
+
+        mem.revert().unwrap();
+        assert_eq!(mem[0], 0, "Final revert goes back to initial state");
+        mem.revert().unwrap();
+        mem.revert().unwrap();
+        mem.revert().unwrap();
+        mem.revert().unwrap();
+        mem.revert().unwrap();
+        mem.revert().unwrap();
+        mem.revert().unwrap();
+        mem.revert().unwrap();
+        mem.revert().unwrap();
+        mem.revert().unwrap();
+        mem.revert().unwrap();
+        mem.revert().unwrap();
+        assert_eq!(mem[0], 0, "Further reverts stay at initial state");
+    }
+
+    fn print_mem(mem: &[u8]) {
+        if mem.len() <= PAGE_SIZE {
+            // Only show the first two bits
+            println!("Memory: {:?}", &mem[0..6]);
+        } else {
+            let hash = blake3::hash(mem);
+            println!("Memory hash: {}", hex::encode(hash.as_bytes()));
+        }
+    }
+
+    #[test]
+    fn tc_snaps_min() {
+        // Replicate the chain of snapshots for a specific contract
+        //
+        // 1: non modifying snap
+        // 2: non modifying snap
+        // 3: modifying snap
+
+        // Initialize memory
+        let mut mem = Mmap::new(1, PAGE_SIZE).unwrap();
+
+        // Fill the first memory bit, no need to make the test case more complex
+        mem[0] = 1;
+
+        println!("Initial memory state after filling:");
+        print_mem(mem.as_ref());
+
+        // 1: non modifying snap
+        mem.snap().unwrap();
+        assert_eq!(mem[0], 1);
+        println!("After snap 1:");
+        print_mem(mem.as_ref());
+
+        // 2: non modifying snap
+        mem.snap().unwrap();
+        println!("After snap 2:");
+        assert_eq!(mem[0], 1);
+        print_mem(mem.as_ref());
+
+        // memory is changed
+        mem[0] = 2;
+
+        // 3: modifying snap
+        mem.snap().unwrap();
+        println!("After snap 3:");
+        print_mem(mem.as_ref());
+        assert_eq!(mem[0], 2);
+
+        // memory is changed
+        //mem[0] = 3; - not needed to recreate the bug
+        //assert_eq!(mem[0], 3);
+        assert_eq!(mem[1..PAGE_SIZE], [0; PAGE_SIZE - 1]); // remaining areas are zero
+
+        // Panic before any apply or commit & start revert
+        // Current change chain vs expected Expected revert chain:
+        /*
+            | Snap     | Revert     |
+            |----------|------------|
+         ↓  | Snap1(1) | Revert3(1) | ↑
+         ↓  | Snap2(1) | Revert2(1) | ↑
+         ↓  | Snap3(2) | Revert1(2) | ↑
+            | (3)     -> (3)        | ↑
+        */
+
+        // 1: revert to modifying snap (revert to snap3)
+        mem.revert().unwrap();
+        assert_eq!(mem[0], 2);
+        println!("After revert 1:");
+        print_mem(mem.as_ref());
+
+        // 2: revert to non modifying snap (revert to snap2)
+        mem.revert().unwrap();
+        // Memory should be now as it was after Snap 2
+        assert_eq!(mem[0], 1);
+        println!("After revert 2:");
+        print_mem(mem.as_ref());
+
+        // 3: revert to non modifying snap (revert to snap1 - no change
+        // from 1 to 1)
+        mem.revert().unwrap();
+        println!("After reverts 3:");
+        print_mem(mem.as_ref());
+        // Instead of going from 1 to 1, we go backwards, back to "2"
+        assert_eq!(mem[0], 1);
+    }
+
+    #[test]
+    fn tc_apply2() {
+        // Initialize memory
+        let mut mem = Mmap::new(1, PAGE_SIZE).unwrap();
+
+        println!("Initial memory state after filling:");
+        print_mem(mem.as_ref());
+
+        // snap
+        mem.snap().unwrap();
+        println!("After snap 1:");
+        print_mem(mem.as_ref());
+
+        // non modifying consecutive snap
+        mem[0] = 1;
+        mem.snap().unwrap();
+        assert_eq!(mem[0], 1);
+        println!("After snap 1:");
+        print_mem(mem.as_ref());
+
+        // memory is changed
+        mem[0] = 2;
+        mem.snap().unwrap();
+        println!("After snap 2:");
+        print_mem(mem.as_ref());
+        assert_eq!(mem[0], 2);
+
+        mem[0] = 3;
+        mem.snap().unwrap();
+        println!("After snap 3:");
+        print_mem(mem.as_ref());
+        assert_eq!(mem[0], 3);
+
+        // apply
+        mem.apply().unwrap();
+        assert_eq!(mem[0], 3);
+        println!("After apply:");
+        print_mem(mem.as_ref());
+
+        mem.revert().unwrap();
+        assert_eq!(mem[0], 2);
+        println!("After revert:");
+        print_mem(mem.as_ref());
+
+        mem.apply().unwrap();
+        assert_eq!(mem[0], 2);
+        println!("After apply 2:");
+        print_mem(mem.as_ref());
+
+        mem.apply().unwrap();
+        assert_eq!(mem[0], 2);
+        println!("After apply 3:");
+        print_mem(mem.as_ref());
+
+        mem.apply().unwrap();
+        assert_eq!(mem[0], 2);
+        println!("After apply 4:");
+        print_mem(mem.as_ref());
+
+        mem.revert().unwrap();
+        assert_eq!(mem[0], 0);
+        println!("After revert it goes to 0");
+        print_mem(mem.as_ref());
+    }
+
+    #[test]
+    fn tc_apply3() {
+        // Initialize memory
+        let mut mem = Mmap::new(1, PAGE_SIZE).unwrap();
+
+        println!("Initial memory state after filling:");
+        print_mem(mem.as_ref());
+
+        // snap
+        mem.snap().unwrap();
+        println!("After snap 1:");
+        print_mem(mem.as_ref());
+
+        // non modifying consecutive snap
+        mem[0] = 1;
+        mem.snap().unwrap();
+        assert_eq!(mem[0], 1);
+        println!("After snap 1:");
+        print_mem(mem.as_ref());
+
+        // memory is changed
+        mem[0] = 2;
+        mem.snap().unwrap();
+        println!("After snap 2:");
+        print_mem(mem.as_ref());
+        assert_eq!(mem[0], 2);
+
+        mem[0] = 3;
+        mem.snap().unwrap();
+        println!("After snap 3:");
+        print_mem(mem.as_ref());
+        assert_eq!(mem[0], 3);
+
+        // apply
+        mem.apply().unwrap();
+        assert_eq!(mem[0], 3);
+        println!("After apply:");
+        print_mem(mem.as_ref());
+
+        mem.apply().unwrap();
+        assert_eq!(mem[0], 3); // thow 2 away
+        println!("After revert:");
+        print_mem(mem.as_ref());
+
+        mem.revert().unwrap();
+        assert_eq!(mem[0], 1); // now we are at 1 already
+        println!("After apply 2:");
+        print_mem(mem.as_ref());
+
+        mem.apply().unwrap();
+        assert_eq!(mem[0], 1); // we stay at one
+        println!("After apply 3:");
+        print_mem(mem.as_ref());
+
+        mem.apply().unwrap();
+        assert_eq!(mem[0], 1); // we stay at one
+        println!("After apply 4:");
+        print_mem(mem.as_ref());
+    }
+
+    #[test]
+    fn tc_snaps_min_neo() {
+        // Initialize memory & don't fill memory at all
+        let mut mem = Mmap::new(1, PAGE_SIZE).unwrap();
+
+        // 1: non modifying snap
+        mem.snap().unwrap();
+        assert_eq!(mem[0], 0);
+        println!("After snap 1:");
+        print_mem(mem.as_ref());
+
+        // 2: non modifying snap
+        mem.snap().unwrap();
+        println!("After snap 2:");
+        assert_eq!(mem[0], 0);
+        print_mem(mem.as_ref());
+
+        // memory is changed
+        mem[0] = 1;
+
+        // 3: modifying snap
+        mem.snap().unwrap();
+        println!("After snap 3:");
+        print_mem(mem.as_ref());
+        assert_eq!(mem[0], 1);
+
+        // sanity check: remaining areas are zero
+        assert_eq!(mem[1..PAGE_SIZE], [0; PAGE_SIZE - 1]);
+
+        // Panic before any apply or commit & start revert
+        // Expected revert chain
+        /*
+            | Snap     | Revert     |
+            |----------|------------|
+         ↓  | Snap1(0) | Revert3(0) | ↑
+         ↓  | Snap2(0) | Revert2(0) | ↑
+         ↓  | Snap3(1) -> Revert1(1) | ↑
+        */
+
+        // 1: revert to modifying snap (revert to snap3)
+        mem.revert().unwrap();
+        assert_eq!(mem[0], 1);
+        println!("After revert 1:");
+        print_mem(mem.as_ref());
+
+        // 2: revert to non modifying snap (revert to snap2)
+        mem.revert().unwrap();
+        // Memory should be now as it was after Snap 2
+        assert_eq!(mem[0], 0);
+        println!("After revert 2:");
+        print_mem(mem.as_ref());
+
+        // 3: revert to non modifying snap (revert to snap1 - no change
+        // from 1 to 1)
+        mem.revert().unwrap();
+        println!("After reverts 3:");
+        print_mem(mem.as_ref());
+
+        assert_eq!(mem[0], 0);
+    }
+
+    #[test]
+    fn tc_apply_neo() {
+        let mut mem = Mmap::new(1, PAGE_SIZE).unwrap();
+
+        println!("Initial memory state after filling:");
+        print_mem(mem.as_ref());
+
+        // snap
+        mem.snap().unwrap();
+        println!("After snap 1:");
+        print_mem(mem.as_ref());
+
+        // modifying consecutive snap
+        mem[0] = 1;
+        mem.snap().unwrap();
+        assert_eq!(mem[0], 1);
+        println!("After snap 1:");
+        print_mem(mem.as_ref());
+
+        // memory is changed
+        mem[0] = 2;
+        mem.snap().unwrap();
+        println!("After snap 2:");
+        print_mem(mem.as_ref());
+        assert_eq!(mem[0], 2);
+
+        mem[0] = 3;
+        mem.snap().unwrap();
+        println!("After snap 3:");
+        print_mem(mem.as_ref());
+        assert_eq!(mem[0], 3);
+
+        // apply
+        mem.apply().unwrap();
+        assert_eq!(mem[0], 3);
+        println!("After apply:");
+        print_mem(mem.as_ref());
+
+        mem.revert().unwrap();
+        assert_eq!(mem[0], 2);
+        println!("After revert:");
+        print_mem(mem.as_ref());
+
+        // apply 3 times in a row
+        for i in 2..=4 {
+            mem.apply().unwrap();
+            assert_eq!(mem[0], 2);
+            println!("After apply {}:", i);
+            print_mem(mem.as_ref());
+        }
+
+        mem.revert().unwrap();
+        assert_eq!(mem[0], 0);
+        println!("After revert it goes to 0");
+        print_mem(mem.as_ref());
+    }
+
+    #[test]
+    fn tc_apply2_neo() {
+        let mut mem = Mmap::new(1, PAGE_SIZE).unwrap();
+
+        println!("Initial memory state after filling:");
+        print_mem(mem.as_ref());
+
+        // Perform 99 consecutive snaps with changing memory
+        for i in 0..99 {
+            mem[0] = i + 1;
+            mem.snap().unwrap();
+            assert_eq!(mem[0], i + 1);
+            println!("After snap {}:", i + 1);
+            print_mem(mem.as_ref());
+        }
+        assert_eq!(mem.0.snapshots.len(), 100);
+
+        // apply x times in a row
+        for i in 0usize..10 {
+            assert_eq!(mem[0], 99);
+            assert_eq!(mem.0.snapshots.len(), 100 - i);
+            mem.apply().unwrap();
+
+            println!("After apply {}:", i);
+            print_mem(mem.as_ref());
+        }
+        assert_eq!(mem[0], 99); // still 99 after 10 times applies
+        mem.revert().unwrap(); // now jumps to 89
+        assert_eq!(mem[0], 89); // since 10 times applies, we threw 90-98 away
+
+        mem.revert().unwrap(); // now it is sequential again
+        assert_eq!(mem[0], 88); // 88 because 1 snapshot before 89 is 88
+        println!("After apply revert:");
+        print_mem(mem.as_ref());
+
+        // apply/revert all the way to the beginning
+        for i in 0..88 {
+            if i % 2 == 0 {
+                mem.apply().unwrap();
+                assert_eq!(mem[0], 88 - i);
+            } else {
+                mem.revert().unwrap();
+                assert_eq!(mem[0], 88 - (i + 1));
+            }
+        }
+        assert_eq!(mem[0], 0); // back to 0
+    }
 }
