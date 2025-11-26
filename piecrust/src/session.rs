@@ -686,6 +686,8 @@ impl Session {
                     limit,
                     spent: 0,
                     mem_len: instance.mem_len(),
+                    applied: false,
+                    reverted: false,
                 });
             }
             None => {
@@ -695,6 +697,8 @@ impl Session {
                     limit,
                     spent: 0,
                     mem_len,
+                    applied: false,
+                    reverted: false,
                 });
             }
         }

@@ -26,6 +26,7 @@ pub struct MemoryInner {
     pub is_new: bool,
     is_64: bool,
     ref_count: AtomicUsize,
+    contract_id: String
 }
 
 impl Debug for MemoryInner {
@@ -60,10 +61,11 @@ impl DerefMut for MemoryInner {
 #[derive(Debug)]
 pub struct Memory {
     inner: &'static mut MemoryInner,
+    contract_id: String,
 }
 
 impl Memory {
-    pub fn new(is_64: bool) -> io::Result<Self> {
+    pub fn new(is_64: bool, contract_id: String) -> io::Result<Self> {
         let max_pages = if is_64 {
             WASM64_MAX_PAGES
         } else {
@@ -72,16 +74,19 @@ impl Memory {
 
         Ok(Self {
             inner: Box::leak(Box::new(MemoryInner {
-                mmap: Mmap::new(max_pages, PAGE_SIZE)?,
+                mmap: Mmap::new(contract_id.clone(), max_pages, PAGE_SIZE)?,
                 current_len: 0,
                 is_new: true,
                 is_64,
                 ref_count: AtomicUsize::new(1),
+                contract_id: contract_id.clone(),
             })),
+            contract_id,
         })
     }
 
     pub fn from_files<FL>(
+        contract_id: String,
         is_64: bool,
         file_locator: FL,
         len: usize,
@@ -98,13 +103,20 @@ impl Memory {
         Ok(Self {
             inner: Box::leak(Box::new(MemoryInner {
                 mmap: unsafe {
-                    Mmap::with_files(max_pages, PAGE_SIZE, file_locator)?
+                    Mmap::with_files(
+                        contract_id.clone(),
+                        max_pages,
+                        PAGE_SIZE,
+                        file_locator,
+                    )?
                 },
                 current_len: len,
                 is_new: false,
                 is_64,
                 ref_count: AtomicUsize::new(1),
+                contract_id: contract_id.clone(),
             })),
+            contract_id,
         })
     }
 
@@ -131,6 +143,7 @@ impl Clone for Memory {
         // use.
         Self {
             inner: unsafe { &mut *inner },
+            contract_id: self.contract_id.clone(),
         }
     }
 }

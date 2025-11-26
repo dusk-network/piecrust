@@ -17,6 +17,8 @@ pub struct CallTreeElem {
     pub limit: u64,
     pub spent: u64,
     pub mem_len: usize,
+    pub reverted: bool,
+    pub applied: bool,
 }
 
 /// The tree of contract calls.

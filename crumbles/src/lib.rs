@@ -103,8 +103,14 @@ impl Mmap {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn new(page_number: usize, page_size: usize) -> io::Result<Self> {
-        unsafe { Self::with_files(page_number, page_size, |_| None) }
+    pub fn new(
+        contract_id: String,
+        page_number: usize,
+        page_size: usize,
+    ) -> io::Result<Self> {
+        unsafe {
+            Self::with_files(contract_id, page_number, page_size, |_| None)
+        }
     }
 
     /// Create a new mmap, backed partially by physical memory, and partially
@@ -154,6 +160,7 @@ impl Mmap {
     /// # }
     /// ```
     pub unsafe fn with_files<FL>(
+        contract_id: String,
         page_number: usize,
         page_size: usize,
         file_locator: FL,
@@ -161,7 +168,8 @@ impl Mmap {
     where
         FL: 'static + LocateFile,
     {
-        let inner = MmapInner::new(page_number, page_size, file_locator)?;
+        let inner =
+            MmapInner::new(contract_id, page_number, page_size, file_locator)?;
 
         with_global_map_mut(|global_map| {
             let inner = Box::leak(Box::new(inner));
@@ -505,6 +513,8 @@ where
 
 /// Contains the actual memory region, together with the set of dirty pages.
 pub struct MmapInner {
+    contract_id: String,
+
     bytes: &'static mut [u8],
     /// page size
     pub page_size: usize,
@@ -519,6 +529,7 @@ pub struct MmapInner {
 
 impl MmapInner {
     unsafe fn new<FL>(
+        contract_id: String,
         page_number: usize,
         page_size: usize,
         file_locator: FL,
@@ -562,6 +573,7 @@ impl MmapInner {
         };
 
         Ok(Self {
+            contract_id,
             bytes,
             page_size,
             page_number,
@@ -663,8 +675,9 @@ impl MmapInner {
 
     unsafe fn snap(&mut self) -> io::Result<()> {
         debug!(
-            "2 crumbles: amount of snapshots before snap: {}",
-            self.snapshots.len()
+            "2 crumbles: amount of snapshots before snap: {} - contract_id: {}",
+            self.snapshots.len(),
+            self.contract_id
         );
         let len = self.bytes.len();
 
@@ -674,8 +687,9 @@ impl MmapInner {
 
         self.snapshots.push(Snapshot::new(self.page_number)?);
         debug!(
-            "3 crumbles: amount of snapshots after snap: {}",
-            self.snapshots.len()
+            "3 crumbles: amount of snapshots after snap: {} - contract_id: {}",
+            self.snapshots.len(),
+            self.contract_id
         );
         Ok(())
     }
@@ -687,8 +701,9 @@ impl MmapInner {
             return Err(io::Error::last_os_error());
         }
         debug!(
-            "2 crumbles: amount of snapshots before apply: {}",
-            self.snapshots.len()
+            "2 crumbles: amount of snapshots before apply: {} - contract_id: {}",
+            self.snapshots.len(),
+            self.contract_id
         );
         let popped_snapshot = self
             .snapshots
@@ -698,8 +713,9 @@ impl MmapInner {
             self.snapshots.push(Snapshot::new(self.page_number)?);
         }
         debug!(
-            "3 crumbles: amount of snapshots after apply: {}",
-            self.snapshots.len()
+            "3 crumbles: amount of snapshots after apply: {} - contract_id: {}",
+            self.snapshots.len(),
+            self.contract_id
         );
         let snapshot = self.last_snapshot_mut();
 
@@ -711,20 +727,32 @@ impl MmapInner {
     }
 
     unsafe fn revert(&mut self, global_debug_counter: u32) -> io::Result<()> {
-        debug!("2 crumbles: amount of snapshots: {}", self.snapshots.len());
+        debug!(
+            "2 crumbles: amount of snapshots: {} - contract_id: {}",
+            self.snapshots.len(),
+            self.contract_id
+        );
         let popped_snapshot = self
             .snapshots
             .pop()
             .expect("There should always be at least one snapshot");
         debug!(
-            "3 crumbles: amount of snapshots after pop: {}",
-            self.snapshots.len()
+            "3 crumbles: amount of snapshots after pop: {} - contract_id: {}",
+            self.snapshots.len(),
+            self.contract_id
         );
 
         if self.snapshots.is_empty() {
-            debug!("crumbles: adding new snapshot");
+            debug!(
+                "crumbles: adding new snapshot - contract_id: {}",
+                self.contract_id
+            );
             self.snapshots.push(Snapshot::new(self.page_number)?);
         } else {
+            debug!(
+                "crumbles: SKIPPING (WHY????) new snapshot - contract_id: {}",
+                self.contract_id
+            );
             self.last_snapshot_mut().hit_pages =
                 PageBits::new(self.page_number)?;
         }
