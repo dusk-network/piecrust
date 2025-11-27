@@ -123,6 +123,14 @@ impl Commit {
             let hash = Hash::new(dirty_page);
             let clean = Hash::new(clean);
             if hash == clean {
+                 debug!(
+                msg = "SKIPPING page",
+                page_index,
+                contract_id = hex::encode(&contract_id.as_bytes()[0..8]),
+                dirty = hex::encode(hash.as_bytes()),
+                clean = hex::encode(clean.as_bytes())
+            );
+
                 continue;
             }
             debug!(
