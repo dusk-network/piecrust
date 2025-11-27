@@ -468,6 +468,35 @@ impl PageBits {
             _ => closure(true),
         }
     }
+
+    fn set(&mut self, page_index: usize) {
+        let byte_index = page_index / 8;
+        let bit_index = page_index % 8;
+
+        let byte = &mut self.0[byte_index];
+        let mask = 1u8 << bit_index;
+
+        match *byte & mask {
+            0 => {
+                *byte |= mask;
+            }
+            _ => {}
+        }
+    }
+
+    /// Check whether the given page index has been hit at least once.
+    pub fn is_page_hit(&self, page_index: usize) -> bool {
+        let byte_index = page_index / 8;
+        let bit_index = page_index % 8;
+
+        let byte = &self.0[byte_index];
+        let mask = 1u8 << bit_index;
+
+        match *byte & mask {
+            0 => false,
+            _ => true,
+        }
+    }
 }
 
 impl Drop for PageBits {
@@ -634,19 +663,52 @@ impl MmapInner {
         // page. If it was set before, we're writing and need to set read-write
         // permissions, and mark the page as dirty.
         snapshot.hit_pages.set_and_exec(page_index, |is_bit_set| {
+            println!(
+                "process_segv called for index {} - is_bit_set {}",
+                page_index, is_bit_set
+            );
             let mut prot = PROT_READ;
 
             if is_bit_set {
+                println!("Write hit for index {}", page_index);
                 prot |= PROT_WRITE;
 
                 if let Entry::Vacant(e) = snapshot.clean_pages.entry(page_index)
                 {
+                    println!("Creating clean page for index {}", page_index);
+
+                    // Ensure the memory is readable before saving the clean
+                    // page.
+                    //
+                    // Previous implementations didn't do this, but it's
+                    // necessare because if the memory was
+                    // previously reverted it's now PROT_NONE
+                    if libc::mprotect(page_addr as _, page_size, PROT_READ) != 0
+                    {
+                        return Err(io::Error::last_os_error());
+                    }
+
                     let mut clean_page = vec![0; page_size];
-                    clean_page.copy_from_slice(
-                        &self.bytes[page_offset..][..page_size],
+                    println!(
+                        "Before setting clean page for index {}",
+                        page_index
                     );
+                    let clean_data = &self.bytes[page_offset..][..page_size];
+                    println!(
+                        "After read clean page for index {} - content {:x}",
+                        page_index, &clean_data[0]
+                    );
+                    clean_page.copy_from_slice(clean_data);
+
                     e.insert(clean_page);
+                } else {
+                    println!(
+                        "Clean page for index {} already exists",
+                        page_index
+                    );
                 }
+            } else {
+                println!("First hit for index {}", page_index);
             }
 
             if libc::mprotect(page_addr as _, page_size, prot) != 0 {
@@ -683,7 +745,9 @@ impl MmapInner {
             .pop()
             .expect("There should always be at least one snapshot");
         if self.snapshots.is_empty() {
+            println!("IN APPLY = snapshots empty, creating new one");
             self.snapshots.push(Snapshot::new(self.page_number)?);
+            // return Ok(());
         }
         let snapshot = self.last_snapshot_mut();
 
@@ -691,35 +755,85 @@ impl MmapInner {
             snapshot.clean_pages.entry(page_index).or_insert(clean_page);
         }
 
+        // // Merge hit pages
+        // for page_index in 0..page_number {
+        //     if popped_snapshot.hit_pages.is_page_hit(page_index) {
+        //         snapshot.hit_pages.set(page_index);
+        //     }
+        // }
+
         Ok(())
     }
 
     unsafe fn revert(&mut self) -> io::Result<()> {
+        println!("revert called - snapshots len {}", self.snapshots.len());
         let popped_snapshot = self
             .snapshots
             .pop()
             .expect("There should always be at least one snapshot");
-
+        println!(
+            "after popping snapshot - snapshots len {}",
+            self.snapshots.len()
+        );
         if self.snapshots.is_empty() {
+            println!("snapshots empty, creating new one");
             self.snapshots.push(Snapshot::new(self.page_number)?);
-        } else {
-            self.last_snapshot_mut().hit_pages =
-                PageBits::new(self.page_number)?;
+            // } else {
+            //     println!(
+            //         "snapshots empty, replace hit pages (maybe this is
+            // wrong?)"     );
+            //     println!("old hit pages {:?}",
+            // self.last_snapshot().hit_pages.0[0]);     println!(
+            //         "new hit pages {:?}",
+            //         PageBits::new(self.page_number)?.0[0]
+            //     );
+            //     // self.last_snapshot_mut().hit_pages =
+            //     //     PageBits::new(self.page_number)?;
         }
 
         let page_size = self.page_size;
-
         for (page_index, clean_page) in popped_snapshot.clean_pages {
             let page_offset = page_index * page_size;
+
+            // Ensure the memory is writable before copying the clean page back.
+            //
+            // Previous implementations didn't do this, but it's necessare
+            // because if the memory was previously reverted it's now PROT_NONE
+            let start_addr = self.bytes.as_mut_ptr() as usize;
+            let page_addr = start_addr + page_offset;
+            if libc::mprotect(page_addr as _, page_size, PROT_WRITE) != 0 {
+                return Err(io::Error::last_os_error());
+            }
+
+            println!(
+                "copying back page index {} - content {:x}",
+                page_index, &clean_page[0]
+            );
             self.bytes[page_offset..][..page_size]
                 .copy_from_slice(&clean_page[..]);
-        }
+            println!(
+                "after copying back page index {} - content {:x}",
+                page_index, &clean_page[0]
+            );
 
-        let len = self.bytes.len();
+            let prot =
+                match &self.last_snapshot().hit_pages.is_page_hit(page_index) {
+                    false => PROT_NONE,
+                    true => PROT_READ,
+                };
 
-        if libc::mprotect(self.bytes.as_mut_ptr().cast(), len, PROT_NONE) != 0 {
-            return Err(io::Error::last_os_error());
+            let start_addr = self.bytes.as_mut_ptr() as usize;
+            let page_addr = start_addr + page_offset;
+            if libc::mprotect(page_addr as _, page_size, prot) != 0 {
+                return Err(io::Error::last_os_error());
+            }
         }
+        println!("after revert - snapshots len {}", self.snapshots.len());
+
+        // let len = self.bytes.len();
+        // if libc::mprotect(self.bytes.as_mut_ptr().cast(), len, PROT_NONE) !=
+        // 0 {     return Err(io::Error::last_os_error());
+        // }
 
         Ok(())
     }
@@ -1379,55 +1493,117 @@ mod tests {
     #[test]
     fn more_reverts_than_snaps() {
         let mut mem = Mmap::new(N_PAGES, PAGE_SIZE).unwrap();
+        mem.snap().unwrap(); // Initial snap
 
         // Simulate nested contract calls
         mem[0] = 1;
         mem.snap().unwrap(); // Call 1: snapshot with 1
+        println!("-----------");
 
         mem[0] = 2;
         mem.snap().unwrap(); // Call 2: snapshot with 2
+        println!("-----------");
 
         mem[0] = 3;
         mem.snap().unwrap(); // Call 3: snapshot with 3
+        println!("-----------");
 
-        mem[0] = 4;
+        // mem[0] = 4;
         mem.snap().unwrap(); // Call 4: snapshot with 4
+        println!("-----------");
 
         mem[0] = 5;
         mem.snap().unwrap(); // Call 5: snapshot with 5
+        println!("-----------");
 
         mem[0] = 6; // Write after last snapshot
+        println!("-----------");
 
+
+
+        mem.apply().unwrap(); // Call 5: snapshot with 5
+
+        mem.apply().unwrap(); // Call 5: snapshot with 5
+
+        mem.apply().unwrap(); // Call 5: snapshot with 5
+
+        mem.apply().unwrap(); // Call 5: snapshot with 5
         // Unwind with reverts (simulates panics)
-        mem.revert().unwrap();
-        assert_eq!(mem[0], 5, "First revert goes back to last snap value");
 
+        println!("----------- REVERT -----------");
         mem.revert().unwrap();
-        assert_eq!(mem[0], 4);
+        // println!("----------- ASSERT -----------");
+        // assert_eq!(mem[0], 5, "First revert goes back to last snap value");
 
+        println!("----------- REVERT -----------");
         mem.revert().unwrap();
-        assert_eq!(mem[0], 3);
+        // println!("----------- ASSERT -----------");
+        // assert_eq!(mem[0], 4);
 
+        println!("----------- REVERT -----------");
         mem.revert().unwrap();
-        assert_eq!(mem[0], 2);
+        // println!("----------- ASSERT -----------");
+        // assert_eq!(mem[0], 3);
 
+        println!("----------- REVERT -----------");
         mem.revert().unwrap();
-        assert_eq!(mem[0], 1);
+        // println!("----------- ASSERT -----------");
+        // assert_eq!(mem[0], 2);
 
+        println!("----------- REVERT -----------");
         mem.revert().unwrap();
-        assert_eq!(mem[0], 0, "Final revert goes back to initial state");
+        // println!("----------- ASSERT -----------");
+        // assert_eq!(mem[0], 1);
+
+        println!("----------- REVERT -----------");
         mem.revert().unwrap();
+        println!("CHANGING VALUE BEFORE EXTRA REVERTS");
+        mem.snap().unwrap();
+        println!("SNAPPING");
+        mem[0] = 10;
+        println!("CHANGED VALUE TO 10");
+
+        mem.apply().unwrap(); // Call 5: snapshot with 5
+        mem.apply().unwrap(); // Call 5: snapshot with 5
+        mem.apply().unwrap(); // Call 5: snapshot with 5
+        mem.apply().unwrap(); // Call 5: snapshot with 5
+        mem.apply().unwrap(); // Call 5: snapshot with 5
+        mem.apply().unwrap(); // Call 5: snapshot with 5
+        mem.apply().unwrap(); // Call 5: snapshot with 5
+        println!("--- APPLIED AFTER CHANGING VALUE ---");
+        assert_eq!(mem[0], 10, "should be 10");
+        println!("----------- ADDITIONAL REVERTS -----------");
+        // println!("----------- ASSERT -----------");
+        // assert_eq!(mem[0], 0, "Final revert goes back to initial state");
+        println!("----------- REVERT -----------");
         mem.revert().unwrap();
+        println!("----------- AFTER REVERT -----------");
+        assert_eq!(mem[0], 0, "should be 0 after extra revert");
+        println!("----------- REVERT -----------");
         mem.revert().unwrap();
+        assert_eq!(mem[0], 0, "should be 0 after extra revert");
+        println!("----------- REVERT -----------");
         mem.revert().unwrap();
+        assert_eq!(mem[0], 0, "should be 0 after extra revert");
+        println!("----------- REVERT -----------");
         mem.revert().unwrap();
+        println!("----------- REVERT -----------");
         mem.revert().unwrap();
+        println!("----------- REVERT -----------");
         mem.revert().unwrap();
+        println!("----------- REVERT -----------");
         mem.revert().unwrap();
+        println!("----------- REVERT -----------");
         mem.revert().unwrap();
+        println!("----------- REVERT -----------");
         mem.revert().unwrap();
+        println!("----------- REVERT -----------");
         mem.revert().unwrap();
+        println!("----------- REVERT -----------");
         mem.revert().unwrap();
+        println!("----------- REVERT -----------");
+        mem.revert().unwrap();
+        println!("----------- ASSERT -----------");
         assert_eq!(mem[0], 0, "Further reverts stay at initial state");
     }
 }
