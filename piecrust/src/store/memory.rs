@@ -108,6 +108,10 @@ impl Memory {
     pub fn is_64(&self) -> bool {
         self.inner.is_64
     }
+
+    pub(crate) fn snapshot_len(&self) -> usize {
+        self.inner.mmap.snapshot_len()
+    }
 }
 
 /// This implementation of clone is dangerous, and must be accompanied by the

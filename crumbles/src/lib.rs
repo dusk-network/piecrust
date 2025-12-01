@@ -311,6 +311,11 @@ impl Mmap {
             },
         )
     }
+
+    /// Returns the number of snapshots taken.
+    pub fn snapshot_len(&self) -> usize {
+        self.0.snapshots.len()
+    }
 }
 
 impl AsRef<[u8]> for Mmap {

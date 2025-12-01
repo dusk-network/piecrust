@@ -366,6 +366,10 @@ impl WrappedInstance {
     pub fn arg_buffer_offset(&self) -> usize {
         self.arg_buf_ofs
     }
+
+    pub(super) fn snapshot_len(&self) -> usize {
+        self.memory.snapshot_len()
+    }
 }
 
 fn map_call_err(

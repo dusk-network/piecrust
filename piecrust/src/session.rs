@@ -24,6 +24,7 @@ use rkyv::{
     check_archived_root, validation::validators::DefaultValidator, Archive,
     Deserialize, Infallible, Serialize,
 };
+use tracing::debug;
 
 use crate::call_tree::{CallTree, CallTreeElem};
 use crate::contract::{ContractData, ContractMetadata, WrappedContract};
@@ -142,6 +143,7 @@ impl Session {
     ) -> Self {
         let inner = SessionInner {
             current: ContractId::from_bytes([0; CONTRACT_ID_BYTES]),
+            // Every session starts with an empty call tree.
             call_tree: CallTree::new(),
             instances: BTreeMap::new(),
             debug: vec![],
@@ -560,11 +562,21 @@ impl Session {
         })
     }
 
+    /// Traverses upward to the root node, then recursively free the
+    /// entire tree (dealloc all tree nodes).
+    ///
+    /// Then pop all instances and dealloc them as well.
     fn clear_stack_and_instances(&mut self) {
         self.inner.call_tree.clear();
 
         while !self.inner.instances.is_empty() {
-            let (_, instance) = self.inner.instances.pop_first().unwrap();
+            let (contract_id, instance) =
+                self.inner.instances.pop_first().unwrap();
+            debug!(
+                "Dropping instance for contract {:?} with snapshot len {}",
+                contract_id,
+                unsafe { (*instance).snapshot_len() }
+            );
             unsafe {
                 let _ = Box::from_raw(instance);
             };
@@ -675,6 +687,8 @@ impl Session {
         let instance = self.instance(&contract_id);
 
         match instance {
+            // There is already an instance for this contract from a previous
+            // call
             Some(instance) => {
                 self.inner.call_tree.push(CallTreeElem {
                     contract_id,
@@ -683,6 +697,8 @@ impl Session {
                     mem_len: instance.mem_len(),
                 });
             }
+            // There is no instance yet for this contract, its the first time we
+            // call it
             None => {
                 let mem_len = self.create_instance(contract_id)?;
                 self.inner.call_tree.push(CallTreeElem {
@@ -695,10 +711,14 @@ impl Session {
         }
 
         Ok(self
-            .inner
-            .call_tree
-            .nth_parent(0)
+            .current_elem()
             .expect("We just pushed an element to the stack"))
+    }
+
+    /// Returns the current node in the call tree.
+    fn current_elem(&self) -> Option<CallTreeElem> {
+        // The zeroth parent element is the current node.
+        self.inner.call_tree.nth_parent(0)
     }
 
     pub(crate) fn move_up_call_tree(&mut self, spent: u64) {
@@ -710,14 +730,20 @@ impl Session {
     }
 
     pub(crate) fn revert_callstack(&mut self) -> Result<(), std::io::Error> {
+        // iterating over the call_tree means we revert in the exact order of
+        // calls (including sub-calls) where our current cursor position
+        // is e.g., root of the call or the root of an inter-contract
+        // call
         for elem in self.inner.call_tree.iter() {
             let instance = self
                 .instance(&elem.contract_id)
                 .expect("instance should exist");
+            // each time we revert, we also pop a snapshot
             instance.revert()?;
             instance.set_len(elem.mem_len);
         }
-
+        // after this loop, the snapshots must be reduced by the number of
+        // calls made (len = 1 for every instance)
         Ok(())
     }
 
@@ -793,6 +819,8 @@ impl Session {
         Ok(buf[..pos].to_vec())
     }
 
+    /// Internal function to perform the actual call logic of a direct call to a
+    /// contract from the host/outside.
     fn call_inner(
         &mut self,
         contract: ContractId,
@@ -800,6 +828,8 @@ impl Session {
         fdata: Vec<u8>,
         limit: u64,
     ) -> Result<(Vec<u8>, u64, CallTree), Error> {
+        // Push the call onto the call stack
+        // while returning the element of the current call we just pushed
         let stack_element = self.push_callstack(contract, limit)?;
         let instance = self
             .instance(&stack_element.contract_id)
@@ -813,28 +843,46 @@ impl Session {
             })?;
 
         let arg_len = instance.write_bytes_to_arg_buffer(&fdata)?;
-        let ret_len = instance
-            .call(fname, arg_len, limit)
-            .map_err(|err| {
+
+        // Execute the actual call
+        let call_result = instance.call(fname, arg_len, limit);
+        // If the call fails, we revert back to the snapshot that was just taken
+        // & early exit call_inner with the normalized error
+        let ret_len = match call_result {
+            Ok(len) => len,
+            Err(err) => {
                 if let Err(io_err) = self.revert_callstack() {
-                    return Error::MemorySnapshotFailure {
+                    // early exit call_inner with memory snapshot failure error
+                    return Err(Error::MemorySnapshotFailure {
                         reason: Some(Arc::new(err)),
                         io: Arc::new(io_err),
-                    };
+                    });
                 }
+                // We move back to the parent node (the one we started the call
+                // from in this function), pruning the whole tree under
+                // it
                 self.move_up_prune_call_tree();
+                // Finally, we clear all instances and the call stack
                 self.clear_stack_and_instances();
-                err
-            })
-            .map_err(Error::normalize)?;
+                return Err(Error::normalize(err));
+            }
+        };
+
         let ret = instance.read_bytes_from_arg_buffer(ret_len as u32);
 
         let spent = limit - instance.get_remaining_gas();
 
+        // Reaching this means the call is successfully finished, so we apply
+        // the change this is either
+        // 1. The last memory state that is not snapped, as nothing was reverted
+        //    or called after it
+        // 2. The memory state from a snap after the last successful revert of a
+        //    sub-call
         for elem in self.inner.call_tree.iter() {
             let instance = self
                 .instance(&elem.contract_id)
                 .expect("instance should exist");
+            // each time we apply, we also pop a snapshot
             instance
                 .apply()
                 .map_err(|err| Error::MemorySnapshotFailure {
@@ -842,8 +890,14 @@ impl Session {
                     io: Arc::new(err),
                 })?;
         }
-        self.clear_stack_and_instances();
+        // after this loop, the snapshots must be reduced by the number of
+        // calls made (len = 1 for every instance)
 
+        // Since we applied all changes, the calls that are still in the call
+        // tree (and related to any popped snapshots) can be completely
+        // cleared, along with all instances
+        self.clear_stack_and_instances();
+        // finally, we
         let mut call_tree = CallTree::new();
         mem::swap(&mut self.inner.call_tree, &mut call_tree);
         call_tree.update_spent(spent);

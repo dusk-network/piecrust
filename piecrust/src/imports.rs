@@ -217,6 +217,8 @@ pub(crate) fn hd(
     Ok(data.len() as u32)
 }
 
+/// This function implements the `c` import, which allows a contract to call
+/// another contract. (Inter contract calls)
 pub(crate) fn c(
     mut fenv: Caller<Env>,
     callee_ofs: usize,
@@ -226,7 +228,8 @@ pub(crate) fn c(
     gas_limit: u64,
 ) -> WasmtimeResult<i32> {
     let env = fenv.data_mut();
-
+    // get the caller instance (your own instance) that invoked this function to
+    // perform the inter-contract call to another contract
     let instance = env.self_instance();
 
     let name_len = name_len as usize;
