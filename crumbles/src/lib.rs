@@ -477,10 +477,7 @@ impl PageBits {
         let byte = &self.0[byte_index];
         let mask = 1u8 << bit_index;
 
-        match *byte & mask {
-            0 => false,
-            _ => true,
-        }
+        !matches!(*byte & mask, 0)
     }
 }
 
