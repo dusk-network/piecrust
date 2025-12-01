@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Fix memory replacement on consecutive reverts
+
 ## [0.3.0] - 2023-10-11
 
 ### Added
