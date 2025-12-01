@@ -122,17 +122,19 @@ impl Commit {
         for (dirty_page, clean, page_index) in memory.dirty_pages() {
             let hash = Hash::new(dirty_page);
             let clean = Hash::new(clean);
-            if hash == clean {
-                 debug!(
-                msg = "SKIPPING page",
-                page_index,
-                contract_id = hex::encode(&contract_id.as_bytes()[0..8]),
-                dirty = hex::encode(hash.as_bytes()),
-                clean = hex::encode(clean.as_bytes())
-            );
-
-                continue;
-            }
+            // TODO: re-enable skipping of unchanged pages behind an env var to
+            //       preserve old behavior
+            //
+            // if hash == clean {
+            //     debug!(
+            //         msg = "SKIPPING page",
+            //         page_index,
+            //         contract_id = hex::encode(&contract_id.as_bytes()[0..8]),
+            //         dirty = hex::encode(hash.as_bytes()),
+            //         clean = hex::encode(clean.as_bytes())
+            //     );
+            //     continue;
+            // }
             debug!(
                 msg = "insert page",
                 page_index,
