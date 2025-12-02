@@ -19,6 +19,7 @@ use crate::store::tree::{position_from_contract, ContractsMerkle};
 use crate::store::Memory;
 use crate::PageOpening;
 use piecrust_uplink::ContractId;
+use tracing::debug;
 
 #[derive(Debug, Clone)]
 pub(crate) struct Commit {
@@ -117,8 +118,31 @@ impl Commit {
 
         element.set_len(memory.current_len);
 
-        for (dirty_page, _, page_index) in memory.dirty_pages() {
+        debug!("Check dirty pages for {contract_id}");
+        for (dirty_page, clean, page_index) in memory.dirty_pages() {
             let hash = Hash::new(dirty_page);
+            let clean = Hash::new(clean);
+            // TODO: re-enable skipping of unchanged pages behind an env var to
+            //       preserve old behavior
+            //
+            // if hash == clean {
+            //     debug!(
+            //         msg = "SKIPPING page",
+            //         page_index,
+            //         contract_id = hex::encode(&contract_id.as_bytes()[0..8]),
+            //         dirty = hex::encode(hash.as_bytes()),
+            //         clean = hex::encode(clean.as_bytes())
+            //     );
+            //     continue;
+            // }
+            debug!(
+                msg = "insert page",
+                page_index,
+                contract_id = hex::encode(&contract_id.as_bytes()[0..8]),
+                dirty = hex::encode(hash.as_bytes()),
+                clean = hex::encode(clean.as_bytes())
+            );
+
             element.insert_page_index_hash(
                 *page_index,
                 *page_index as u64,
