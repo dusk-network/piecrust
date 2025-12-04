@@ -25,6 +25,10 @@ pub struct WrappedInstance {
     memory: Memory,
 }
 
+pub struct MockWrappedInstance {
+    memory: Memory,
+}
+
 pub(crate) struct Env {
     self_id: ContractId,
     session: Session,
@@ -85,7 +89,7 @@ impl Env {
 
 pub enum ContractInstanceWrapper {
     WT(WrappedInstance),
-    Mock(WrappedInstance),
+    Mock(MockWrappedInstance),
 }
 
 impl WrappedInstance {
@@ -195,10 +199,26 @@ impl WrappedInstance {
     }
 }
 
+impl MockWrappedInstance {
+    pub fn new(memory: Memory) -> Result<Self, Error> {
+        let mut memory = memory;
+        // A memory is no longer new after one instantiation
+        memory.is_new = false;
+
+        let wrapped = MockWrappedInstance { memory };
+
+        Ok(wrapped)
+    }
+}
+
 impl ContractInstance for ContractInstanceWrapper {
     fn snap(&mut self) -> io::Result<()> {
         match self {
-            Mock(slf) | WT(slf) => {
+            Mock(slf) => {
+                slf.memory.snap()?;
+                Ok(())
+            }
+            WT(slf) => {
                 slf.memory.snap()?;
                 Ok(())
             }
@@ -207,7 +227,11 @@ impl ContractInstance for ContractInstanceWrapper {
 
     fn revert(&mut self) -> io::Result<()> {
         match self {
-            Mock(slf) | WT(slf) => {
+            Mock(slf) => {
+                slf.memory.revert()?;
+                Ok(())
+            }
+            WT(slf) => {
                 slf.memory.revert()?;
                 Ok(())
             }
@@ -216,7 +240,11 @@ impl ContractInstance for ContractInstanceWrapper {
 
     fn apply(&mut self) -> io::Result<()> {
         match self {
-            Mock(slf) | WT(slf) => {
+            Mock(slf) => {
+                slf.memory.apply()?;
+                Ok(())
+            }
+            WT(slf) => {
                 slf.memory.apply()?;
                 Ok(())
             }
@@ -259,7 +287,8 @@ impl ContractInstance for ContractInstanceWrapper {
         F: FnOnce(&[u8]) -> R,
     {
         match self {
-            Mock(slf) | WT(slf) => f(&slf.memory),
+            Mock(slf) => f(&slf.memory),
+            WT(slf) => f(&slf.memory),
         }
     }
 
@@ -268,21 +297,26 @@ impl ContractInstance for ContractInstanceWrapper {
         F: FnOnce(&mut [u8]) -> R,
     {
         match self {
-            Mock(slf) | WT(slf) => f(&mut slf.memory),
+            Mock(slf) => f(&mut slf.memory),
+            WT(slf) => f(&mut slf.memory),
         }
     }
 
     /// Returns the current length of the memory.
     fn mem_len(&self) -> usize {
         match self {
-            Mock(slf) | WT(slf) => slf.memory.current_len,
+            Mock(slf) => slf.memory.current_len,
+            WT(slf) => slf.memory.current_len,
         }
     }
 
     /// Sets the length of the memory.
     fn set_len(&mut self, len: usize) {
         match self {
-            Mock(slf) | WT(slf) => {
+            Mock(slf) => {
+                slf.memory.current_len = len;
+            }
+            WT(slf) => {
                 slf.memory.current_len = len;
             }
         }
@@ -293,7 +327,13 @@ impl ContractInstance for ContractInstanceWrapper {
         F: FnOnce(&[u8]) -> R,
     {
         match self {
-            Mock(slf) | WT(slf) => {
+            Mock(_slf) => {
+                let offset = 0; // this won't be used so zero is ok
+                self.with_memory(|memory_bytes| {
+                    f(&memory_bytes[offset..][..ARGBUF_LEN])
+                })
+            }
+            WT(slf) => {
                 let offset = slf.arg_buf_ofs;
                 self.with_memory(|memory_bytes| {
                     f(&memory_bytes[offset..][..ARGBUF_LEN])
@@ -307,7 +347,13 @@ impl ContractInstance for ContractInstanceWrapper {
         F: FnOnce(&mut [u8]) -> R,
     {
         match self {
-            Mock(slf) | WT(slf) => {
+            Mock(_slf) => {
+                let offset = 0; // this won't be used so zero is ok
+                self.with_memory_mut(|memory_bytes| {
+                    f(&mut memory_bytes[offset..][..ARGBUF_LEN])
+                })
+            }
+            WT(slf) => {
                 let offset = slf.arg_buf_ofs;
                 self.with_memory_mut(|memory_bytes| {
                     f(&mut memory_bytes[offset..][..ARGBUF_LEN])
@@ -335,7 +381,8 @@ impl ContractInstance for ContractInstanceWrapper {
 
     fn set_remaining_gas(&mut self, limit: u64) {
         match self {
-            Mock(slf) | WT(slf) => {
+            Mock(_slf) => (),
+            WT(slf) => {
                 slf.store.set_fuel(limit).expect("Fuel is enabled");
             }
         }
@@ -343,15 +390,15 @@ impl ContractInstance for ContractInstanceWrapper {
 
     fn get_remaining_gas(&mut self) -> u64 {
         match self {
-            Mock(slf) | WT(slf) => {
-                slf.store.get_fuel().expect("Fuel is enabled")
-            }
+            Mock(_slf) => 0,
+            WT(slf) => slf.store.get_fuel().expect("Fuel is enabled"),
         }
     }
 
     fn is_function_exported<N: AsRef<str>>(&mut self, name: N) -> bool {
         match self {
-            Mock(slf) | WT(slf) => slf
+            Mock(_slf) => false,
+            WT(slf) => slf
                 .instance
                 .get_func(&mut slf.store, name.as_ref())
                 .is_some(),
@@ -361,7 +408,7 @@ impl ContractInstance for ContractInstanceWrapper {
     #[allow(unused)]
     fn print_state(&self) {
         match self {
-            Mock(slf) | WT(slf) => {
+            WT(slf) => {
                 self.with_memory(|mem| {
                     const CSZ: usize = 128;
                     const RSZ: usize = 16;
@@ -396,12 +443,14 @@ impl ContractInstance for ContractInstanceWrapper {
                     }
                 });
             }
+            _ => (),
         }
     }
 
     fn arg_buffer_offset(&self) -> usize {
         match self {
-            Mock(slf) | WT(slf) => slf.arg_buf_ofs,
+            Mock(_slf) => 0,
+            WT(slf) => slf.arg_buf_ofs,
         }
     }
 

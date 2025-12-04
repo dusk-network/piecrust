@@ -29,7 +29,9 @@ use crate::call_tree::{CallTree, CallTreeElem};
 use crate::contract::contract_instance::ContractInstance;
 use crate::contract::{ContractData, ContractMetadata, WrappedContract};
 use crate::error::Error::{self, InitalizationError, PersistenceError};
-use crate::instance::{ContractInstanceWrapper, WrappedInstance};
+use crate::instance::{
+    ContractInstanceWrapper, MockWrappedInstance, WrappedInstance,
+};
 use crate::store::{ContractSession, PageOpening, PAGE_SIZE};
 use crate::types::StandardBufSerializer;
 use crate::vm::{HostQueries, HostQuery};
@@ -630,16 +632,17 @@ impl Session {
 
         self.inner.current = contract_id;
 
-        let wrapped_instance = WrappedInstance::new(
-            self.clone(),
-            contract_id,
-            &contract,
-            store_data.memory,
-        )?;
-
         Ok(if self.is_mock {
-            ContractInstanceWrapper::Mock(wrapped_instance)
+            let mock_wrapped_instance =
+                MockWrappedInstance::new(store_data.memory)?;
+            ContractInstanceWrapper::Mock(mock_wrapped_instance)
         } else {
+            let wrapped_instance = WrappedInstance::new(
+                self.clone(),
+                contract_id,
+                &contract,
+                store_data.memory,
+            )?;
             ContractInstanceWrapper::WT(wrapped_instance)
         })
     }
