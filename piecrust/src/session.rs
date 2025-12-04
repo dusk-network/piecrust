@@ -26,9 +26,10 @@ use rkyv::{
 };
 
 use crate::call_tree::{CallTree, CallTreeElem};
+use crate::contract::contract_instance::ContractInstance;
 use crate::contract::{ContractData, ContractMetadata, WrappedContract};
 use crate::error::Error::{self, InitalizationError, PersistenceError};
-use crate::instance::WrappedInstance;
+use crate::instance::{ContractInstanceWrapper, WrappedInstance};
 use crate::store::{ContractSession, PageOpening, PAGE_SIZE};
 use crate::types::StandardBufSerializer;
 use crate::vm::{HostQueries, HostQuery};
@@ -89,7 +90,7 @@ struct SessionInner {
     current: ContractId,
 
     call_tree: CallTree,
-    instances: BTreeMap<ContractId, *mut WrappedInstance>,
+    instances: BTreeMap<ContractId, *mut ContractInstanceWrapper>,
     debug: Vec<String>,
     data: SessionData,
 
@@ -552,7 +553,7 @@ impl Session {
     pub(crate) fn instance<'a>(
         &self,
         contract_id: &ContractId,
-    ) -> Option<&'a mut WrappedInstance> {
+    ) -> Option<&'a mut ContractInstanceWrapper> {
         self.inner.instances.get(contract_id).map(|instance| {
             // SAFETY: We guarantee that the instance exists since we're in
             // control over if it is dropped with the session.
@@ -609,7 +610,7 @@ impl Session {
     fn new_instance(
         &mut self,
         contract_id: ContractId,
-    ) -> Result<WrappedInstance, Error> {
+    ) -> Result<ContractInstanceWrapper, Error> {
         let store_data = self
             .inner
             .contract_session
@@ -625,12 +626,12 @@ impl Session {
 
         self.inner.current = contract_id;
 
-        let instance = WrappedInstance::new(
+        let instance = ContractInstanceWrapper::WT(WrappedInstance::new(
             self.clone(),
             contract_id,
             &contract,
             store_data.memory,
-        )?;
+        )?);
 
         Ok(instance)
     }
@@ -661,7 +662,7 @@ impl Session {
         let mem_len = instance.mem_len();
 
         let instance = Box::new(instance);
-        let instance = Box::leak(instance) as *mut WrappedInstance;
+        let instance = Box::leak(instance) as *mut ContractInstanceWrapper;
 
         self.inner.instances.insert(contract, instance);
         Ok(mem_len)

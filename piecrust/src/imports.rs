@@ -19,7 +19,8 @@ use piecrust_uplink::{
 };
 
 use crate::config::BYTE_STORE_COST;
-use crate::instance::{Env, WrappedInstance};
+use crate::contract::contract_instance::ContractInstance;
+use crate::instance::{ContractInstanceWrapper, Env};
 use crate::session::INIT_METHOD;
 use crate::Error;
 
@@ -90,7 +91,7 @@ impl Imports {
 }
 
 pub fn check_ptr(
-    instance: &WrappedInstance,
+    instance: &ContractInstanceWrapper,
     offset: usize,
     len: usize,
 ) -> Result<(), Error> {
@@ -117,7 +118,7 @@ pub fn check_ptr(
 }
 
 pub fn check_arg(
-    instance: &WrappedInstance,
+    instance: &ContractInstanceWrapper,
     arg_len: u32,
 ) -> Result<(), Error> {
     let mem_len = instance.with_memory(|mem| mem.len());

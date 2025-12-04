@@ -4,6 +4,8 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
+pub mod contract_instance;
+
 use std::sync::Arc;
 
 use bytecheck::CheckBytes;
