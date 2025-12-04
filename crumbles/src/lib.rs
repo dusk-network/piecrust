@@ -1926,7 +1926,14 @@ mod tests {
 
     #[test]
     fn read_snapb_read_snapc() {
-        let mut mem = Mmap::new(2, 4096).expect("Mmap::new should succeed");
+        let mut mem =
+            Mmap::new(2, PAGE_SIZE).expect("Mmap::new should succeed");
+        // fill memory with some data
+        for i in 0..mem.len() {
+            mem[i] = DIRT2[i % DIRT2.len()];
+        }
+        clear_protect_log();
+
 
         // Get base address of page 0
         let base_addr = mem.0.bytes.as_ptr() as usize;
@@ -1994,7 +2001,14 @@ mod tests {
 
     #[test]
     fn no_read_in_snapb_read_snapc() {
-        let mut mem = Mmap::new(2, 4096).expect("Mmap::new should succeed");
+        let mut mem =
+            Mmap::new(2, PAGE_SIZE).expect("Mmap::new should succeed");
+        // fill memory with some data
+        for i in 0..mem.len() {
+            mem[i] = DIRT2[i % DIRT2.len()];
+        }
+        clear_protect_log();
+
 
         // Get base address of page 0
         let base_addr = mem.0.bytes.as_ptr() as usize;
@@ -2056,7 +2070,14 @@ mod tests {
 
     #[test]
     fn read_snapb_do_nothing_snapc() {
-        let mut mem = Mmap::new(2, 4096).expect("Mmap::new should succeed");
+        let mut mem =
+            Mmap::new(2, PAGE_SIZE).expect("Mmap::new should succeed");
+        // fill memory with some data
+        for i in 0..mem.len() {
+            mem[i] = DIRT2[i % DIRT2.len()];
+        }
+        clear_protect_log();
+
 
         // Get base address of page 0
         let base_addr = mem.0.bytes.as_ptr() as usize;
@@ -2123,7 +2144,15 @@ mod tests {
 
     #[test]
     fn read_snapb_write_snapc() {
-        let mut mem = Mmap::new(2, 4096).expect("Mmap::new should succeed");
+        let mut mem =
+            Mmap::new(2, PAGE_SIZE).expect("Mmap::new should succeed");
+
+        // fill memory with some data
+        for i in 0..mem.len() {
+            mem[i] = DIRT2[i % DIRT2.len()];
+        }
+        clear_protect_log();
+
 
         // Get base address of page 0
         let base_addr = mem.0.bytes.as_ptr() as usize;
@@ -2201,7 +2230,15 @@ mod tests {
 
     #[test]
     fn no_read_snapb_write_snapc() {
-        let mut mem = Mmap::new(2, 4096).expect("Mmap::new should succeed");
+        let mut mem =
+            Mmap::new(2, PAGE_SIZE).expect("Mmap::new should succeed");
+
+        // fill memory with some data
+        for i in 0..mem.len() {
+            mem[i] = DIRT2[i % DIRT2.len()];
+        }
+        clear_protect_log();
+
 
         // Get base address of page 0
         let base_addr = mem.0.bytes.as_ptr() as usize;
@@ -2264,7 +2301,8 @@ mod tests {
         assert_eq!(snapshot_protect_log().len(), 1);
         assert_prot(base_addr, libc::PROT_READ, 0);
 
-        // PROT_NONE was there and also on snapshot B, which is correct this time
+        // PROT_NONE was there and also on snapshot B, which is correct this
+        // time
     }
 }
 
