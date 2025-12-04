@@ -431,7 +431,7 @@ impl ContractInstance for ContractInstanceWrapper {
                 fun.call(&mut slf.store, arg_len)
                     .map_err(|e| self.map_call_err(e))
             }
-            Mock(_) => Ok(0),
+            Mock(_) => Ok(8),
         }
     }
 }

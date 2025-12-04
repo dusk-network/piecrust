@@ -56,6 +56,7 @@ pub struct Session {
     engine: Engine,
     inner: &'static mut SessionInner,
     original: bool,
+    is_mock: bool,
 }
 
 impl Debug for Session {
@@ -141,6 +142,7 @@ impl Session {
         host_queries: HostQueries,
         data: SessionData,
     ) -> Self {
+        let is_mock = data.get("mock").is_some();
         let inner = SessionInner {
             current: ContractId::from_bytes([0; CONTRACT_ID_BYTES]),
             call_tree: CallTree::new(),
@@ -161,6 +163,7 @@ impl Session {
             engine: engine.clone(),
             inner,
             original: true,
+            is_mock,
         };
 
         let mut config = engine.config().clone();
@@ -187,6 +190,7 @@ impl Session {
             engine: self.engine.clone(),
             inner: unsafe { &mut *inner },
             original: false,
+            is_mock: self.is_mock,
         }
     }
 
@@ -626,14 +630,18 @@ impl Session {
 
         self.inner.current = contract_id;
 
-        let instance = ContractInstanceWrapper::WT(WrappedInstance::new(
+        let wrapped_instance = WrappedInstance::new(
             self.clone(),
             contract_id,
             &contract,
             store_data.memory,
-        )?);
+        )?;
 
-        Ok(instance)
+        Ok(if self.is_mock {
+            ContractInstanceWrapper::Mock(wrapped_instance)
+        } else {
+            ContractInstanceWrapper::WT(wrapped_instance)
+        })
     }
 
     pub(crate) fn host_query(&self, name: &str) -> Option<&dyn HostQuery> {
@@ -694,6 +702,8 @@ impl Session {
                 });
             }
         }
+
+        println!("call_tree={:?}", self.inner.call_tree);
 
         Ok(self
             .inner
