@@ -658,7 +658,7 @@ impl MmapInner {
                     // Previous implementations didn't do this, but it's
                     // necessare because if the memory was
                     // previously reverted it's now PROT_NONE
-                    if libc::mprotect(page_addr as _, page_size, PROT_READ) != 0
+                    if libc_mprotect(page_addr as _, page_size, PROT_READ) != 0
                     {
                         return Err(io::Error::last_os_error());
                     }
@@ -671,7 +671,7 @@ impl MmapInner {
                 }
             }
 
-            if libc::mprotect(page_addr as _, page_size, prot) != 0 {
+            if libc_mprotect(page_addr as _, page_size, prot) != 0 {
                 return Err(io::Error::last_os_error());
             }
 
@@ -684,7 +684,7 @@ impl MmapInner {
     unsafe fn snap(&mut self) -> io::Result<()> {
         let len = self.bytes.len();
 
-        if libc::mprotect(self.bytes.as_mut_ptr().cast(), len, PROT_NONE) != 0 {
+        if libc_mprotect(self.bytes.as_mut_ptr().cast(), len, PROT_NONE) != 0 {
             return Err(io::Error::last_os_error());
         }
 
@@ -696,7 +696,7 @@ impl MmapInner {
     unsafe fn apply(&mut self) -> io::Result<()> {
         let len = self.bytes.len();
 
-        if libc::mprotect(self.bytes.as_mut_ptr().cast(), len, PROT_NONE) != 0 {
+        if libc_mprotect(self.bytes.as_mut_ptr().cast(), len, PROT_NONE) != 0 {
             return Err(io::Error::last_os_error());
         }
 
@@ -748,7 +748,7 @@ impl MmapInner {
             // because if the memory was previously reverted it's now PROT_NONE
             let start_addr = self.bytes.as_mut_ptr() as usize;
             let page_addr = start_addr + page_offset;
-            if libc::mprotect(page_addr as _, page_size, PROT_WRITE) != 0 {
+            if libc_mprotect(page_addr as _, page_size, PROT_WRITE) != 0 {
                 return Err(io::Error::last_os_error());
             }
 
@@ -761,7 +761,7 @@ impl MmapInner {
                     true => PROT_READ,
                 };
 
-            if libc::mprotect(page_addr as _, page_size, prot) != 0 {
+            if libc_mprotect(page_addr as _, page_size, prot) != 0 {
                 return Err(io::Error::last_os_error());
             }
         }
@@ -1923,4 +1923,434 @@ mod tests {
         }
         assert_eq!(mem[0], 0); // back to 0
     }
+
+    #[test]
+    fn read_snapb_read_snapc() {
+        let mut mem = Mmap::new(2, 4096).expect("Mmap::new should succeed");
+
+        // Get base address of page 0
+        let base_addr = mem.0.bytes.as_ptr() as usize;
+
+        mem.snap().expect("snap() should succeed"); // Snapshot A
+
+        // sanity check:
+        assert_eq!(mem.0.snapshots.len(), 2);
+
+        // There should only be one mprotect call in general
+        assert_eq!(snapshot_protect_log().len(), 1);
+        // Which is PROT_NONE
+        assert_prot_count(libc::PROT_NONE, 1);
+
+        clear_protect_log();
+        assert_eq!(snapshot_protect_log().len(), 0, "log should be empty");
+
+        // Read page 0 (transition from PROT_NONE -> PROT_READ)
+        let _val = mem[0];
+
+        // There should be one mprotect transition now
+        assert_eq!(snapshot_protect_log().len(), 1);
+        // Which is PROT_READ
+        assert_prot(base_addr, libc::PROT_READ, 0);
+        clear_protect_log();
+
+        mem.snap().expect("snap() should succeed"); // snapshot B with READ to page 0
+
+        // There should be one mprotect call now
+        assert_eq!(snapshot_protect_log().len(), 1);
+        // Reset it to PROT_NONE after the new snap
+        assert_prot(base_addr, libc::PROT_NONE, 0);
+        clear_protect_log();
+
+        mem.snap().expect("snap() should succeed"); // snapshot C
+
+        // There should be one mprotect call now
+        assert_eq!(snapshot_protect_log().len(), 1);
+        // Reset it to PROT_NONE after the new snap
+        assert_prot(base_addr, libc::PROT_NONE, 0);
+        clear_protect_log();
+        // 1. if read again, no mprotect calls happen in revert
+        // 2. If we read, 1 prots happen
+        let _val = mem[0];
+        assert_eq!(snapshot_protect_log().len(), 1);
+        assert_prot(base_addr, libc::PROT_READ, 0);
+        clear_protect_log();
+
+        // Revert back to snapshot C
+        mem.revert().expect("revert() should succeed");
+        // Revert back to snapshot B
+        mem.revert().expect("revert() should succeed");
+        // Not a single new mprotect call occurred
+        // the page is still at PROT_READ
+        assert_eq!(snapshot_protect_log().len(), 0);
+
+        let _val = mem[0]; // we now READ again while the val is at PROT_READ
+
+        // Because it is already PROT_READ, no mprotect call happened
+        assert_eq!(snapshot_protect_log().len(), 0);
+
+        // PROT_READ is there and also on snapshot B but not for the correct
+        // reason
+    }
+
+    #[test]
+    fn no_read_in_snapb_read_snapc() {
+        let mut mem = Mmap::new(2, 4096).expect("Mmap::new should succeed");
+
+        // Get base address of page 0
+        let base_addr = mem.0.bytes.as_ptr() as usize;
+
+        mem.snap().expect("snap() should succeed"); // Snapshot A
+
+        // sanity check:
+        assert_eq!(mem.0.snapshots.len(), 2);
+
+        // There should only be one mprotect call in general
+        assert_eq!(snapshot_protect_log().len(), 1);
+        // Which is PROT_NONE
+        assert_prot_count(libc::PROT_NONE, 1);
+
+        clear_protect_log();
+        assert_eq!(snapshot_protect_log().len(), 0, "log should be empty");
+
+        // Do not READ
+        // PROT NONE stays
+
+        mem.snap().expect("snap() should succeed"); // snapshot B
+
+        // There should be one mprotect call now
+        assert_eq!(snapshot_protect_log().len(), 1);
+        // Reset it to PROT_NONE after the new snap
+        assert_prot(base_addr, libc::PROT_NONE, 0);
+        clear_protect_log();
+
+        mem.snap().expect("snap() should succeed"); // snapshot C
+
+        // There should be one mprotect call now
+        assert_eq!(snapshot_protect_log().len(), 1);
+        // Reset it to PROT_NONE after the new snap
+        assert_prot(base_addr, libc::PROT_NONE, 0);
+        clear_protect_log();
+
+        // 1. if read again, no mprotect calls happen in revert
+        // 2. If we read, 1 prots happen
+        let _val = mem[0];
+        assert_eq!(snapshot_protect_log().len(), 1);
+        assert_prot(base_addr, libc::PROT_READ, 0);
+        clear_protect_log();
+
+        // Revert back to snapshot C
+        mem.revert().expect("revert() should succeed");
+        // Revert back to snapshot B
+        mem.revert().expect("revert() should succeed");
+        // Not a single new mprotect call occurred
+        assert_eq!(snapshot_protect_log().len(), 0);
+
+        let _val = mem[0]; // we now READ again while the val is at PROT_READ
+
+        // Because it is already PROT_READ, no mprotect call happened
+        assert_eq!(snapshot_protect_log().len(), 0);
+
+        // PROT_READ is there but Snapshot B never read it and it should be
+        // PROT_NONE
+    }
+
+    #[test]
+    fn read_snapb_do_nothing_snapc() {
+        let mut mem = Mmap::new(2, 4096).expect("Mmap::new should succeed");
+
+        // Get base address of page 0
+        let base_addr = mem.0.bytes.as_ptr() as usize;
+
+        mem.snap().expect("snap() should succeed"); // Snapshot A
+
+        // sanity check:
+        assert_eq!(mem.0.snapshots.len(), 2);
+
+        // There should only be one mprotect call in general
+        assert_eq!(snapshot_protect_log().len(), 1);
+        // Which is PROT_NONE
+        assert_prot_count(libc::PROT_NONE, 1);
+
+        clear_protect_log();
+        assert_eq!(snapshot_protect_log().len(), 0, "log should be empty");
+
+        // Read page 0 (transition from PROT_NONE -> PROT_READ)
+        let _val = mem[0];
+
+        // There should be one mprotect transition now
+        assert_eq!(snapshot_protect_log().len(), 1);
+        // Which is PROT_READ
+        assert_prot(base_addr, libc::PROT_READ, 0);
+        clear_protect_log();
+
+        mem.snap().expect("snap() should succeed"); // snapshot B with READ to page 0
+
+        // There should be one mprotect call now
+        assert_eq!(snapshot_protect_log().len(), 1);
+        // Reset it to PROT_NONE after the new snap
+        assert_prot(base_addr, libc::PROT_NONE, 0);
+        clear_protect_log();
+
+        mem.snap().expect("snap() should succeed"); // snapshot C
+
+        // There should be one mprotect call now
+        assert_eq!(snapshot_protect_log().len(), 1);
+        // Reset it to PROT_NONE after the new snap
+        assert_prot(base_addr, libc::PROT_NONE, 0);
+        clear_protect_log();
+
+        // do nothing, just snap C
+        // 1. no new mprotect calls happen in revert,
+        // 2. no prot happens here obviously
+
+        // Revert back to snapshot C
+        mem.revert().expect("revert() should succeed");
+        // Revert back to snapshot B
+        mem.revert().expect("revert() should succeed");
+        // No new mprotect call occurred
+        assert_eq!(snapshot_protect_log().len(), 0);
+
+        // Now we read the value again and check if it causes a PROT_READ due to
+        // being at PROT_NONE
+        let _val = mem[0];
+        assert_eq!(snapshot_protect_log().len(), 2);
+        assert_prot(base_addr, libc::PROT_READ, 0);
+        assert_prot(base_addr, 3, 1); // what is 3?
+
+        // PROT_NONE was there and also on snapshot B, but it should've been
+        // PROT_READ as snapshot B read it
+    }
+
+    #[test]
+    fn read_snapb_write_snapc() {
+        let mut mem = Mmap::new(2, 4096).expect("Mmap::new should succeed");
+
+        // Get base address of page 0
+        let base_addr = mem.0.bytes.as_ptr() as usize;
+
+        mem.snap().expect("snap() should succeed"); // Snapshot A
+
+        // sanity check:
+        assert_eq!(mem.0.snapshots.len(), 2);
+
+        // There should only be one mprotect call in general
+        assert_eq!(snapshot_protect_log().len(), 1);
+        // Which is PROT_NONE
+        assert_prot_count(libc::PROT_NONE, 1);
+
+        clear_protect_log();
+        assert_eq!(snapshot_protect_log().len(), 0, "log should be empty");
+
+        // Read page 0 (transition from PROT_NONE -> PROT_READ)
+        let _val = mem[0];
+
+        // There should be one mprotect transition now
+        assert_eq!(snapshot_protect_log().len(), 1);
+        // Which is PROT_READ
+        assert_prot(base_addr, libc::PROT_READ, 0);
+        clear_protect_log();
+
+        mem.snap().expect("snap() should succeed"); // snapshot B with READ to page 0
+
+        // There should be one mprotect call now
+        assert_eq!(snapshot_protect_log().len(), 1);
+        // Reset it to PROT_NONE after the new snap
+        assert_prot(base_addr, libc::PROT_NONE, 0);
+        clear_protect_log();
+
+        mem.snap().expect("snap() should succeed"); // snapshot C
+
+        // There should be one mprotect call now
+        assert_eq!(snapshot_protect_log().len(), 1);
+        // Reset it to PROT_NONE after the new snap
+        assert_prot(base_addr, libc::PROT_NONE, 0);
+        clear_protect_log();
+
+        // 1. if we mutate, two mprotect calls happen in revert
+        // 2. If we write, 3 prots happen
+        mem[0] = 0xAA;
+        assert_eq!(snapshot_protect_log().len(), 3);
+        assert_prot(base_addr, libc::PROT_READ, 0);
+        assert_prot(base_addr, libc::PROT_READ, 1);
+        assert_prot(base_addr, 3, 2); // what is 3?
+        clear_protect_log();
+
+        // Revert back to snapshot C
+        mem.revert().expect("revert() should succeed");
+        // 2 new mprotect call occurred
+        assert_eq!(snapshot_protect_log().len(), 2);
+        assert_prot(base_addr, libc::PROT_WRITE, 0);
+        assert_prot(base_addr, libc::PROT_NONE, 1);
+        clear_protect_log();
+        // Revert back to snapshot B
+        mem.revert().expect("revert() should succeed");
+        // no new call
+        assert_eq!(snapshot_protect_log().len(), 0);
+        clear_protect_log();
+
+        // Now we read the value again and check if it causes a PROT_READ due to
+        // being at PROT_NONE
+        let _val = mem[0];
+        assert_eq!(snapshot_protect_log().len(), 2);
+        assert_prot(base_addr, libc::PROT_READ, 0);
+        assert_prot(base_addr, 3, 1); // what is 3?
+
+        // PROT_NONE was there and also on snapshot B, but it should've been
+        // PROT_READ as snapshot B read it
+    }
+
+    #[test]
+    fn no_read_snapb_write_snapc() {
+        let mut mem = Mmap::new(2, 4096).expect("Mmap::new should succeed");
+
+        // Get base address of page 0
+        let base_addr = mem.0.bytes.as_ptr() as usize;
+
+        mem.snap().expect("snap() should succeed"); // Snapshot A
+
+        // sanity check:
+        assert_eq!(mem.0.snapshots.len(), 2);
+
+        // There should only be one mprotect call in general
+        assert_eq!(snapshot_protect_log().len(), 1);
+        // Which is PROT_NONE
+        assert_prot_count(libc::PROT_NONE, 1);
+
+        clear_protect_log();
+        assert_eq!(snapshot_protect_log().len(), 0, "log should be empty");
+
+        // Do nothing, stay at PROT NONE
+
+        mem.snap().expect("snap() should succeed"); // snapshot B
+
+        // There should be one mprotect call now
+        assert_eq!(snapshot_protect_log().len(), 1);
+        // Reset it to PROT_NONE after the new snap
+        assert_prot(base_addr, libc::PROT_NONE, 0);
+        clear_protect_log();
+
+        mem.snap().expect("snap() should succeed"); // snapshot C
+
+        // There should be one mprotect call now
+        assert_eq!(snapshot_protect_log().len(), 1);
+        // Reset it to PROT_NONE after the new snap
+        assert_prot(base_addr, libc::PROT_NONE, 0);
+        clear_protect_log();
+
+        // 1. if we mutate, two mprotect calls happen in revert
+        // 2. If we write, 3 prots happen
+        mem[0] = 0xAA;
+        assert_eq!(snapshot_protect_log().len(), 3);
+        assert_prot(base_addr, libc::PROT_READ, 0);
+        assert_prot(base_addr, libc::PROT_READ, 1);
+        assert_prot(base_addr, 3, 2); // what is 3?
+        clear_protect_log();
+
+        // Revert back to snapshot C
+        mem.revert().expect("revert() should succeed");
+        // 2 new mprotect call occurred
+        assert_eq!(snapshot_protect_log().len(), 2);
+        assert_prot(base_addr, libc::PROT_WRITE, 0);
+        assert_prot(base_addr, libc::PROT_NONE, 1);
+        clear_protect_log();
+        // Revert back to snapshot B
+        mem.revert().expect("revert() should succeed");
+        // No new call
+        assert_eq!(snapshot_protect_log().len(), 0);
+
+        // Now we read the value again and check if it causes a PROT_READ due to
+        // being at PROT_NONE
+        let _val = mem[0];
+        assert_eq!(snapshot_protect_log().len(), 1);
+        assert_prot(base_addr, libc::PROT_READ, 0);
+
+        // PROT_NONE was there and also on snapshot B, which is correct this time
+    }
+}
+
+#[cfg(test)]
+fn get_page_events_by_addr(base_addr: usize) -> Vec<ProtectCall> {
+    snapshot_protect_log()
+        .into_iter()
+        .filter(|call| call.addr == base_addr)
+        .collect()
+}
+
+#[cfg(test)]
+#[track_caller]
+fn assert_prot(base_addr: usize, expected_prot: c_int, pos: usize) {
+    let page_events = get_page_events_by_addr(base_addr);
+    assert_eq!(
+        page_events[pos].prot, expected_prot,
+        "prot at {} for {:x} != {}",
+        pos, base_addr, expected_prot
+    );
+}
+
+#[cfg(test)]
+#[track_caller]
+fn assert_prot_count(expected_prot: c_int, expected_count: usize) {
+    let count = snapshot_protect_log()
+        .iter()
+        .filter(|call| call.prot == expected_prot)
+        .count();
+    assert_eq!(
+        count, expected_count,
+        "Expected {} PROT_NONE call",
+        expected_count
+    );
+}
+
+/// Tiny wrapper around libc-mprotect used in production + tests.
+///
+/// In tests, we also log each call; in non-test builds, this is inlined away
+#[inline]
+unsafe fn libc_mprotect(addr: *mut u8, len: usize, prot: c_int) -> c_int {
+    #[cfg(test)]
+    {
+        let tid = std::thread::current().id();
+        let mut map = protect_log_map().lock().unwrap();
+        map.entry(tid).or_default().push(ProtectCall {
+            addr: addr as usize,
+            len,
+            prot,
+        });
+    }
+
+    libc::mprotect(addr.cast(), len, prot)
+}
+
+#[cfg(test)]
+#[derive(Clone, Debug)]
+pub struct ProtectCall {
+    pub addr: usize,
+    pub len: usize,
+    pub prot: c_int,
+}
+
+#[cfg(test)]
+use std::{collections::HashMap, sync::Mutex, thread::ThreadId};
+
+#[cfg(test)]
+static PROTECT_LOG: OnceLock<Mutex<HashMap<ThreadId, Vec<ProtectCall>>>> =
+    OnceLock::new();
+
+#[cfg(test)]
+fn protect_log_map() -> &'static Mutex<HashMap<ThreadId, Vec<ProtectCall>>> {
+    PROTECT_LOG.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+#[cfg(test)]
+pub fn clear_protect_log() {
+    let tid = std::thread::current().id();
+    let mut map = protect_log_map().lock().unwrap();
+    map.insert(tid, Vec::new());
+}
+
+/// Get a snapshot of all recorded mprotect calls for the current thread
+#[cfg(test)]
+pub fn snapshot_protect_log() -> Vec<ProtectCall> {
+    let tid = std::thread::current().id();
+    let map = protect_log_map().lock().unwrap();
+    map.get(&tid).cloned().unwrap_or_default()
 }
