@@ -10,14 +10,16 @@ use crate::store::commit_store::CommitStore;
 use crate::store::hasher::Hash;
 use crate::store::session::ContractDataEntry;
 use crate::store::{
-    BASE_FILE, BYTECODE_DIR, ELEMENT_FILE, LEAF_DIR, MAIN_DIR, MEMORY_DIR,
-    METADATA_EXTENSION, OBJECTCODE_EXTENSION,
+    Bytecode, Module, BASE_FILE, BYTECODE_DIR, ELEMENT_FILE, LEAF_DIR,
+    MAIN_DIR, MEMORY_DIR, METADATA_EXTENSION, OBJECTCODE_EXTENSION,
 };
+use dusk_wasmtime::Engine;
 use piecrust_uplink::ContractId;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::{fs, io};
+use tracing::debug;
 
 pub struct CommitWriter;
 
@@ -217,5 +219,62 @@ impl CommitWriter {
         let dir = main_dir.as_ref().join(commit_id);
         fs::create_dir_all(&dir)?;
         Ok(dir.join(BASE_FILE))
+    }
+
+    /// Remove the compiled module file for a given contract.
+    ///
+    /// This removes the object code file from disk, which will force
+    /// recompilation when the contract is next loaded.
+    pub fn remove_module<P: AsRef<Path>>(
+        root_dir: P,
+        contract_id: ContractId,
+    ) -> io::Result<()> {
+        let contract_hex = hex::encode(contract_id);
+        let main_dir = root_dir.as_ref().join(MAIN_DIR);
+        let bytecode_main_dir = main_dir.join(BYTECODE_DIR);
+        let module_path = bytecode_main_dir
+            .join(&contract_hex)
+            .with_extension(OBJECTCODE_EXTENSION);
+
+        if module_path.exists() {
+            fs::remove_file(module_path)?;
+        }
+
+        Ok(())
+    }
+
+    /// Recompile a module from its bytecode (overwrites the existing module).
+    ///
+    /// This reads the WASM bytecode from disk, recompiles it using the
+    /// provided engine, and writes the compiled module back to disk.
+    pub fn recompile_module<P: AsRef<Path>>(
+        root_dir: P,
+        engine: &Engine,
+        contract_id: ContractId,
+    ) -> io::Result<()> {
+        let contract_hex = hex::encode(contract_id);
+        let main_dir = root_dir.as_ref().join(MAIN_DIR);
+        let bytecode_main_dir = main_dir.join(BYTECODE_DIR);
+
+        let bytecode_path = bytecode_main_dir.join(&contract_hex);
+        let module_path = bytecode_path.with_extension(OBJECTCODE_EXTENSION);
+
+        // Check that bytecode exists
+        if !bytecode_path.is_file() {
+            return Err(io::Error::new(
+                io::ErrorKind::NotFound,
+                format!("Bytecode not found for contract: {contract_hex}"),
+            ));
+        }
+
+        // Load bytecode and recompile
+        let bytecode = Bytecode::from_file(&bytecode_path)?;
+        let module = Module::from_bytecode(engine, bytecode.as_ref())
+            .map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))?;
+
+        // Write the recompiled module
+        fs::write(module_path, module.serialize())?;
+        debug!("Saved module for contract: {}", contract_hex);
+        Ok(())
     }
 }
