@@ -208,21 +208,18 @@ impl ContractInstance for WrappedInstance {
 
     // Write argument into instance
     fn write_argument(&mut self, arg: &[u8]) {
-        InstanceUtil::with_arg_buf_mut(
-            self.get_memory_mut(),
-            self.get_arg_buf_ofs(),
-            |buf| {
-                // Using `ptr::copy` instead of `[T].copy_from_slice` because
-                // it's possible for `arg` and `buf` to point to
-                // the same location, in the case of an
-                // inter-contract call to the same contract and
-                // `[T].copy_from_slice` requires that
-                // the two slices must be non-overlapping.
-                unsafe {
-                    core::ptr::copy(arg.as_ptr(), buf.as_mut_ptr(), arg.len());
-                }
-            },
-        )
+        let buf_ofs = self.get_arg_buf_ofs();
+        InstanceUtil::with_arg_buf_mut(self.get_memory_mut(), buf_ofs, |buf| {
+            // Using `ptr::copy` instead of `[T].copy_from_slice` because
+            // it's possible for `arg` and `buf` to point to
+            // the same location, in the case of an
+            // inter-contract call to the same contract and
+            // `[T].copy_from_slice` requires that
+            // the two slices must be non-overlapping.
+            unsafe {
+                core::ptr::copy(arg.as_ptr(), buf.as_mut_ptr(), arg.len());
+            }
+        })
     }
 
     // Read argument from instance
@@ -295,9 +292,10 @@ impl ContractInstance for WrappedInstance {
     // }
 
     fn write_bytes_to_arg_buffer(&mut self, buf: &[u8]) -> Result<u32, Error> {
+        let buf_ofs = self.get_arg_buf_ofs();
         InstanceUtil::with_arg_buf_mut(
             self.get_memory_mut(),
-            self.get_arg_buf_ofs(),
+            buf_ofs,
             |arg_buffer| {
                 if buf.len() > arg_buffer.len() {
                     return Err(Error::MemoryAccessOutOfBounds {

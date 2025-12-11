@@ -179,15 +179,13 @@ pub(crate) fn hq(
     let mut arg: Box<dyn Any> = Box::new(());
 
     // Price the query, allowing for an early exit if the gas is insufficient.
-    let query_cost = InstanceUtil::with_arg_buf(
-        instance.get_memory(),
-        instance.get_arg_buf_ofs(),
-        |arg_buf| {
+    let buf_ofs = instance.get_arg_buf_ofs();
+    let query_cost =
+        InstanceUtil::with_arg_buf(instance.get_memory(), buf_ofs, |arg_buf| {
             let arg_len = arg_len as usize;
             let arg_buf = &arg_buf[..arg_len];
             host_query.deserialize_and_price(arg_buf, &mut arg)
-        },
-    );
+        });
 
     // If the gas is insufficient, return an error.
     let gas_remaining = instance.get_remaining_gas();
@@ -273,8 +271,6 @@ pub(crate) fn c(
         AfterPush(Error),
     }
 
-    let session = &mut *env;
-
     let with_memory = |memory: &mut [u8]| -> Result<_, WithMemoryError> {
         let arg_buf = &memory[argbuf_ofs..][..ARGBUF_LEN];
 
@@ -284,7 +280,7 @@ pub(crate) fn c(
         );
         let callee_id = ContractId::from_bytes(callee_bytes);
 
-        let callee_stack_element = session
+        let callee_stack_element = env
             .push_callstack(callee_id, callee_limit)
             .map_err(WithMemoryError::BeforePush)?;
         let callee = env
@@ -339,9 +335,10 @@ pub(crate) fn c(
         }
         Err(WithMemoryError::BeforePush(err)) => {
             let c_err = ContractError::from(err);
+            let buf_ofs = instance.get_arg_buf_ofs();
             InstanceUtil::with_arg_buf_mut(
                 instance.get_memory_mut(),
-                instance.get_arg_buf_ofs(),
+                buf_ofs,
                 |buf| {
                     c_err.to_parts(buf);
                 },
@@ -359,9 +356,10 @@ pub(crate) fn c(
             instance.set_remaining_gas(caller_remaining - callee_limit);
 
             let c_err = ContractError::from(err);
+            let buf_ofs = instance.get_arg_buf_ofs();
             InstanceUtil::with_arg_buf_mut(
                 instance.get_memory_mut(),
-                instance.get_arg_buf_ofs(),
+                buf_ofs,
                 |buf| {
                     c_err.to_parts(buf);
                 },
@@ -397,14 +395,12 @@ pub(crate) fn emit(
     }
     instance.set_remaining_gas(gas_remaining - gas_cost);
 
-    let data = InstanceUtil::with_arg_buf(
-        instance.get_memory(),
-        instance.get_arg_buf_ofs(),
-        |buf| {
+    let buf_ofs = instance.get_arg_buf_ofs();
+    let data =
+        InstanceUtil::with_arg_buf(instance.get_memory(), buf_ofs, |buf| {
             let arg_len = arg_len as usize;
             Vec::from(&buf[..arg_len])
-        },
-    );
+        });
 
     let topic = InstanceUtil::with_memory(instance.get_memory(), |buf| {
         // performance: use a dedicated buffer here?
@@ -423,9 +419,10 @@ fn caller(env: Caller<Env>) -> i32 {
     match env.nth_from_top(1) {
         Some(call_tree_elem) => {
             let instance = env.self_instance();
+            let buf_ofs = instance.get_arg_buf_ofs();
             InstanceUtil::with_arg_buf_mut(
                 instance.get_memory_mut(),
-                instance.get_arg_buf_ofs(),
+                buf_ofs,
                 |buf| {
                     let caller = call_tree_elem.contract_id;
                     buf[..CONTRACT_ID_BYTES].copy_from_slice(caller.as_bytes());
@@ -443,9 +440,10 @@ fn callstack(env: Caller<Env>) -> i32 {
 
     let mut i = 0usize;
     for contract_id in env.call_ids().iter().skip(1) {
+        let buf_ofs = instance.get_arg_buf_ofs();
         InstanceUtil::with_arg_buf_mut(
             instance.get_memory_mut(),
-            instance.get_arg_buf_ofs(),
+            buf_ofs,
             |buf| {
                 buf[i * CONTRACT_ID_BYTES..(i + 1) * CONTRACT_ID_BYTES]
                     .copy_from_slice(contract_id.as_bytes());
@@ -462,14 +460,12 @@ fn feed(mut fenv: Caller<Env>, arg_len: u32) -> WasmtimeResult<()> {
 
     check_arg(*instance, arg_len)?;
 
-    let data = InstanceUtil::with_arg_buf(
-        instance.get_memory(),
-        instance.get_arg_buf_ofs(),
-        |buf| {
+    let buf_ofs = instance.get_arg_buf_ofs();
+    let data =
+        InstanceUtil::with_arg_buf(instance.get_memory(), buf_ofs, |buf| {
             let arg_len = arg_len as usize;
             Vec::from(&buf[..arg_len])
-        },
-    );
+        });
 
     Ok(env.push_feed(data)?)
 }
@@ -481,9 +477,10 @@ fn hdebug(mut fenv: Caller<Env>, msg_len: u32) -> WasmtimeResult<()> {
 
     check_arg(*instance, msg_len)?;
 
+    let buf_ofs = instance.get_arg_buf_ofs();
     Ok(InstanceUtil::with_arg_buf(
         instance.get_memory(),
-        instance.get_arg_buf_ofs(),
+        buf_ofs,
         |buf| {
             let slice = &buf[..msg_len as usize];
 
@@ -520,9 +517,10 @@ fn panic(fenv: Caller<Env>, arg_len: u32) -> WasmtimeResult<()> {
 
     check_arg(*instance, arg_len)?;
 
+    let buf_ofs = instance.get_arg_buf_ofs();
     Ok(InstanceUtil::with_arg_buf(
         instance.get_memory(),
-        instance.get_arg_buf_ofs(),
+        buf_ofs,
         |buf| {
             let slice = &buf[..arg_len as usize];
 
@@ -575,9 +573,10 @@ fn owner(mut fenv: Caller<Env>, mod_id_ofs: usize) -> WasmtimeResult<i32> {
         Some(metadata) => {
             let owner = metadata.owner.as_slice();
 
+            let buf_ofs = instance.get_arg_buf_ofs();
             InstanceUtil::with_arg_buf_mut(
                 instance.get_memory_mut(),
-                instance.get_arg_buf_ofs(),
+                buf_ofs,
                 |arg| arg[..owner.len()].copy_from_slice(owner),
             );
 
@@ -595,9 +594,8 @@ fn self_id(mut fenv: Caller<Env>) {
     let slice = contract_metadata.contract_id.to_bytes();
     let len = slice.len();
     let instance = env.self_instance();
-    InstanceUtil::with_arg_buf_mut(
-        instance.get_memory_mut(),
-        instance.get_arg_buf_ofs(),
-        |arg| arg[..len].copy_from_slice(&slice),
-    );
+    let buf_ofs = instance.get_arg_buf_ofs();
+    InstanceUtil::with_arg_buf_mut(instance.get_memory_mut(), buf_ofs, |arg| {
+        arg[..len].copy_from_slice(&slice)
+    });
 }

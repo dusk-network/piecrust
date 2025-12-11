@@ -552,7 +552,7 @@ impl Session {
     }
 
     pub(crate) fn instance<'a>(
-        &self,
+        &mut self,
         contract_id: &ContractId,
     ) -> Option<&mut Box<dyn ContractInstance>> {
         self.inner.instances.get_mut(contract_id)
