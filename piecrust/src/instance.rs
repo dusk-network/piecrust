@@ -45,7 +45,7 @@ impl DerefMut for Env {
 }
 
 impl Env {
-    pub fn self_instance<'b>(&self) -> &mut Box<dyn ContractInstance> {
+    pub fn self_instance<'b>(&mut self) -> &mut Box<dyn ContractInstance> {
         let stack_element = self
             .session
             .nth_from_top(0)
@@ -55,7 +55,7 @@ impl Env {
     }
 
     pub fn instance<'b>(
-        &self,
+        &mut self,
         contract_id: &ContractId,
     ) -> Option<&mut Box<dyn ContractInstance>> {
         self.session.instance(contract_id)

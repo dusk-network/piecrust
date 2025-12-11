@@ -556,11 +556,6 @@ impl Session {
         contract_id: &ContractId,
     ) -> Option<&mut Box<dyn ContractInstance>> {
         self.inner.instances.get_mut(contract_id)
-        // .map(|instance| {
-        // SAFETY: We guarantee that the instance exists since we're in
-        // control over if it is dropped with the session.
-        // unsafe { &mut **instance }
-        // })
     }
 
     fn clear_stack_and_instances(&mut self) {
@@ -750,10 +745,15 @@ impl Session {
 
         let spent = limit - instance.get_remaining_gas();
 
-        for elem in self.inner.call_tree.iter() {
-            let instance = self
-                .instance(&elem.contract_id)
-                .expect("instance should exist");
+        let ids: Vec<_> = self
+            .inner
+            .call_tree
+            .iter()
+            .map(|elem| elem.contract_id)
+            .collect();
+
+        for id in &ids {
+            let instance = self.instance(id).expect("instance should exist");
             instance
                 .apply()
                 .map_err(|err| Error::MemorySnapshotFailure {
@@ -790,15 +790,15 @@ impl SessionEnv for Session {
         contract_id: ContractId,
         limit: u64,
     ) -> Result<CallTreeElem, Error> {
-        let instance = self.instance(&contract_id);
+        let mem_len_opt = self.instance(&contract_id).map(|i| i.mem_len());
 
-        match instance {
-            Some(instance) => {
+        match mem_len_opt {
+            Some(mem_len) => {
                 self.inner.call_tree.push(CallTreeElem {
                     contract_id,
                     limit,
                     spent: 0,
-                    mem_len: instance.mem_len(),
+                    mem_len,
                 });
             }
             None => {
@@ -830,14 +830,19 @@ impl SessionEnv for Session {
     }
 
     fn revert_callstack(&mut self) -> Result<(), std::io::Error> {
-        for elem in self.inner.call_tree.iter() {
-            let instance = self
-                .instance(&elem.contract_id)
-                .expect("instance should exist");
-            instance.revert()?;
-            instance.set_len(elem.mem_len);
-        }
+        let items: Vec<_> = self
+            .inner
+            .call_tree
+            .iter()
+            .map(|elem| (elem.contract_id.clone(), elem.mem_len))
+            .collect();
 
+        // Process with mutable borrow
+        for (id, mem_len) in items {
+            let instance = self.instance(&id).expect("instance should exist");
+            instance.revert()?;
+            instance.set_len(mem_len);
+        }
         Ok(())
     }
 

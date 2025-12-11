@@ -382,8 +382,8 @@ pub(crate) fn emit(
 
     let topic_len = topic_len as usize;
 
-    check_ptr(*instance, topic_ofs, topic_len)?;
-    check_arg(*instance, arg_len)?;
+    check_ptr(&mut *instance, topic_ofs, topic_len)?;
+    check_arg(&mut *instance, arg_len)?;
 
     // charge for each byte emitted in an event
     let gas_remaining = instance.get_remaining_gas();
@@ -413,8 +413,8 @@ pub(crate) fn emit(
     Ok(())
 }
 
-fn caller(env: Caller<Env>) -> i32 {
-    let env = env.data();
+fn caller(mut fenv: Caller<Env>) -> i32 {
+    let env = fenv.data_mut();
 
     match env.nth_from_top(1) {
         Some(call_tree_elem) => {
@@ -434,8 +434,8 @@ fn caller(env: Caller<Env>) -> i32 {
     }
 }
 
-fn callstack(env: Caller<Env>) -> i32 {
-    let env = env.data();
+fn callstack(mut fenv: Caller<Env>) -> i32 {
+    let env = fenv.data_mut();
     let instance = env.self_instance();
 
     let mut i = 0usize;
@@ -458,7 +458,7 @@ fn feed(mut fenv: Caller<Env>, arg_len: u32) -> WasmtimeResult<()> {
     let env = fenv.data_mut();
     let instance = env.self_instance();
 
-    check_arg(*instance, arg_len)?;
+    check_arg(&mut *instance, arg_len)?;
 
     let buf_ofs = instance.get_arg_buf_ofs();
     let data =
@@ -566,7 +566,7 @@ fn get_metadata(
 
 fn owner(mut fenv: Caller<Env>, mod_id_ofs: usize) -> WasmtimeResult<i32> {
     let instance = fenv.data().self_instance();
-    check_ptr(*instance, mod_id_ofs, CONTRACT_ID_BYTES)?;
+    check_ptr(&mut *instance, mod_id_ofs, CONTRACT_ID_BYTES)?;
     let env = fenv.data_mut();
     match get_metadata(env, mod_id_ofs) {
         None => Ok(0),
