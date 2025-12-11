@@ -7,14 +7,14 @@
 use std::io;
 use std::ops::{Deref, DerefMut};
 
-use crate::contract::contract_instance::ContractInstance;
+use crate::contract::contract_instance::{ContractInstance, InstanceUtil};
 use dusk_wasmtime::{Instance, Module, Mutability, Store, ValType};
 use piecrust_uplink::{ContractId, Event, ARGBUF_LEN};
-use ContractInstanceWrapper::{Mock, WT};
 
 use crate::contract::WrappedContract;
 use crate::imports::Imports;
 use crate::session::Session;
+use crate::session_env::SessionEnv;
 use crate::store::Memory;
 use crate::Error;
 
@@ -22,10 +22,6 @@ pub struct WrappedInstance {
     instance: Instance,
     arg_buf_ofs: usize,
     store: Store<Env>,
-    memory: Memory,
-}
-
-pub struct MockWrappedInstance {
     memory: Memory,
 }
 
@@ -49,7 +45,7 @@ impl DerefMut for Env {
 }
 
 impl Env {
-    pub fn self_instance<'b>(&self) -> &'b mut ContractInstanceWrapper {
+    pub fn self_instance<'b>(&self) -> &mut Box<dyn ContractInstance> {
         let stack_element = self
             .session
             .nth_from_top(0)
@@ -61,7 +57,7 @@ impl Env {
     pub fn instance<'b>(
         &self,
         contract_id: &ContractId,
-    ) -> Option<&'b mut ContractInstanceWrapper> {
+    ) -> Option<&mut Box<dyn ContractInstance>> {
         self.session.instance(contract_id)
     }
 
@@ -85,11 +81,6 @@ impl Env {
     pub fn self_contract_id(&self) -> &ContractId {
         &self.self_id
     }
-}
-
-pub enum ContractInstanceWrapper {
-    WT(WrappedInstance),
-    Mock(MockWrappedInstance),
 }
 
 impl WrappedInstance {
@@ -199,259 +190,181 @@ impl WrappedInstance {
     }
 }
 
-impl MockWrappedInstance {
-    pub fn new(memory: Memory) -> Result<Self, Error> {
-        let mut memory = memory;
-        // A memory is no longer new after one instantiation
-        memory.is_new = false;
-
-        let wrapped = MockWrappedInstance { memory };
-
-        Ok(wrapped)
-    }
-}
-
-impl ContractInstance for ContractInstanceWrapper {
+impl ContractInstance for WrappedInstance {
     fn snap(&mut self) -> io::Result<()> {
-        match self {
-            Mock(slf) => {
-                slf.memory.snap()?;
-                Ok(())
-            }
-            WT(slf) => {
-                slf.memory.snap()?;
-                Ok(())
-            }
-        }
+        self.memory.snap()?;
+        Ok(())
     }
 
     fn revert(&mut self) -> io::Result<()> {
-        match self {
-            Mock(slf) => {
-                slf.memory.revert()?;
-                Ok(())
-            }
-            WT(slf) => {
-                slf.memory.revert()?;
-                Ok(())
-            }
-        }
+        self.memory.revert()?;
+        Ok(())
     }
 
     fn apply(&mut self) -> io::Result<()> {
-        match self {
-            Mock(slf) => {
-                slf.memory.apply()?;
-                Ok(())
-            }
-            WT(slf) => {
-                slf.memory.apply()?;
-                Ok(())
-            }
-        }
+        self.memory.apply()?;
+        Ok(())
     }
 
     // Write argument into instance
     fn write_argument(&mut self, arg: &[u8]) {
-        self.with_arg_buf_mut(|buf| {
-            // Using `ptr::copy` instead of `[T].copy_from_slice` because it's
-            // possible for `arg` and `buf` to point to the same
-            // location, in the case of an inter-contract
-            // call to the same contract and `[T].copy_from_slice` requires that
-            // the two slices must be non-overlapping.
-            unsafe {
-                core::ptr::copy(arg.as_ptr(), buf.as_mut_ptr(), arg.len());
-            }
-        })
+        InstanceUtil::with_arg_buf_mut(
+            self.get_memory_mut(),
+            self.get_arg_buf_ofs(),
+            |buf| {
+                // Using `ptr::copy` instead of `[T].copy_from_slice` because
+                // it's possible for `arg` and `buf` to point to
+                // the same location, in the case of an
+                // inter-contract call to the same contract and
+                // `[T].copy_from_slice` requires that
+                // the two slices must be non-overlapping.
+                unsafe {
+                    core::ptr::copy(arg.as_ptr(), buf.as_mut_ptr(), arg.len());
+                }
+            },
+        )
     }
 
     // Read argument from instance
     fn read_argument(&mut self, arg: &mut [u8]) {
-        self.with_arg_buf(|buf| {
-            // Using `ptr::copy` for the same reason as in `write_argument`.
-            unsafe {
-                core::ptr::copy(buf.as_ptr(), arg.as_mut_ptr(), arg.len());
-            }
-        })
+        InstanceUtil::with_arg_buf(
+            self.get_memory(),
+            self.get_arg_buf_ofs(),
+            |buf| {
+                // Using `ptr::copy` for the same reason as in `write_argument`.
+                unsafe {
+                    core::ptr::copy(buf.as_ptr(), arg.as_mut_ptr(), arg.len());
+                }
+            },
+        )
     }
 
     fn read_bytes_from_arg_buffer(&self, arg_len: u32) -> Vec<u8> {
-        self.with_arg_buf(|abuf| {
-            let slice = &abuf[..arg_len as usize];
-            slice.to_vec()
-        })
+        InstanceUtil::with_arg_buf(
+            self.get_memory(),
+            self.get_arg_buf_ofs(),
+            |abuf| {
+                let slice = &abuf[..arg_len as usize];
+                slice.to_vec()
+            },
+        )
     }
 
-    fn with_memory<F, R>(&self, f: F) -> R
-    where
-        F: FnOnce(&[u8]) -> R,
-    {
-        match self {
-            Mock(slf) => f(&slf.memory),
-            WT(slf) => f(&slf.memory),
-        }
-    }
+    // fn with_memory<F, R>(&self, f: F) -> R
+    // where
+    //     F: FnOnce(&[u8]) -> R,
+    // {
+    //     f(&self.memory)
+    // }
 
-    fn with_memory_mut<F, R>(&mut self, f: F) -> R
-    where
-        F: FnOnce(&mut [u8]) -> R,
-    {
-        match self {
-            Mock(slf) => f(&mut slf.memory),
-            WT(slf) => f(&mut slf.memory),
-        }
-    }
+    // fn with_memory_mut<F, R>(&mut self, f: F) -> R
+    // where
+    //     F: FnOnce(&mut [u8]) -> R,
+    // {
+    //     f(&mut self.memory)
+    // }
 
     /// Returns the current length of the memory.
     fn mem_len(&self) -> usize {
-        match self {
-            Mock(slf) => slf.memory.current_len,
-            WT(slf) => slf.memory.current_len,
-        }
+        self.memory.current_len
     }
 
     /// Sets the length of the memory.
     fn set_len(&mut self, len: usize) {
-        match self {
-            Mock(slf) => {
-                slf.memory.current_len = len;
-            }
-            WT(slf) => {
-                slf.memory.current_len = len;
-            }
-        }
+        self.memory.current_len = len;
     }
 
-    fn with_arg_buf<F, R>(&self, f: F) -> R
-    where
-        F: FnOnce(&[u8]) -> R,
-    {
-        match self {
-            Mock(_slf) => {
-                let offset = 0; // this won't be used so zero is ok
-                self.with_memory(|memory_bytes| {
-                    f(&memory_bytes[offset..][..ARGBUF_LEN])
-                })
-            }
-            WT(slf) => {
-                let offset = slf.arg_buf_ofs;
-                self.with_memory(|memory_bytes| {
-                    f(&memory_bytes[offset..][..ARGBUF_LEN])
-                })
-            }
-        }
-    }
+    // fn with_arg_buf<F, R>(&self, f: F) -> R
+    // where
+    //     F: FnOnce(&[u8]) -> R,
+    // {
+    //     let offset = self.arg_buf_ofs;
+    //     self.with_memory(|memory_bytes| {
+    //         f(&memory_bytes[offset..][..ARGBUF_LEN])
+    //     })
+    // }
 
-    fn with_arg_buf_mut<F, R>(&mut self, f: F) -> R
-    where
-        F: FnOnce(&mut [u8]) -> R,
-    {
-        match self {
-            Mock(_slf) => {
-                let offset = 0; // this won't be used so zero is ok
-                self.with_memory_mut(|memory_bytes| {
-                    f(&mut memory_bytes[offset..][..ARGBUF_LEN])
-                })
-            }
-            WT(slf) => {
-                let offset = slf.arg_buf_ofs;
-                self.with_memory_mut(|memory_bytes| {
-                    f(&mut memory_bytes[offset..][..ARGBUF_LEN])
-                })
-            }
-        }
-    }
+    // fn with_arg_buf_mut<F, R>(&mut self, f: F) -> R
+    // where
+    //     F: FnOnce(&mut [u8]) -> R,
+    // {
+    //     let offset = self.arg_buf_ofs;
+    //     self.with_memory_mut(|memory_bytes| {
+    //         f(&mut memory_bytes[offset..][..ARGBUF_LEN])
+    //     })
+    // }
 
     fn write_bytes_to_arg_buffer(&mut self, buf: &[u8]) -> Result<u32, Error> {
-        self.with_arg_buf_mut(|arg_buffer| {
-            if buf.len() > arg_buffer.len() {
-                return Err(Error::MemoryAccessOutOfBounds {
-                    offset: 0,
-                    len: buf.len(),
-                    mem_len: ARGBUF_LEN,
-                });
-            }
+        InstanceUtil::with_arg_buf_mut(
+            self.get_memory_mut(),
+            self.get_arg_buf_ofs(),
+            |arg_buffer| {
+                if buf.len() > arg_buffer.len() {
+                    return Err(Error::MemoryAccessOutOfBounds {
+                        offset: 0,
+                        len: buf.len(),
+                        mem_len: ARGBUF_LEN,
+                    });
+                }
 
-            arg_buffer[..buf.len()].copy_from_slice(buf);
-            // It is safe to cast to u32 because the length of the buffer is
-            // guaranteed to be less than 4GiB.
-            Ok(buf.len() as u32)
-        })
+                arg_buffer[..buf.len()].copy_from_slice(buf);
+                // It is safe to cast to u32 because the length of the buffer is
+                // guaranteed to be less than 4GiB.
+                Ok(buf.len() as u32)
+            },
+        )
     }
 
     fn set_remaining_gas(&mut self, limit: u64) {
-        match self {
-            Mock(_slf) => (),
-            WT(slf) => {
-                slf.store.set_fuel(limit).expect("Fuel is enabled");
-            }
-        }
+        self.store.set_fuel(limit).expect("Fuel is enabled");
     }
 
     fn get_remaining_gas(&mut self) -> u64 {
-        match self {
-            Mock(_slf) => 0,
-            WT(slf) => slf.store.get_fuel().expect("Fuel is enabled"),
-        }
+        self.store.get_fuel().expect("Fuel is enabled")
     }
 
-    fn is_function_exported<N: AsRef<str>>(&mut self, name: N) -> bool {
-        match self {
-            Mock(_slf) => false,
-            WT(slf) => slf
-                .instance
-                .get_func(&mut slf.store, name.as_ref())
-                .is_some(),
-        }
+    fn is_function_exported(&mut self, name: &str) -> bool {
+        self.instance.get_func(&mut self.store, name).is_some()
     }
 
     #[allow(unused)]
     fn print_state(&self) {
-        match self {
-            WT(slf) => {
-                self.with_memory(|mem| {
-                    const CSZ: usize = 128;
-                    const RSZ: usize = 16;
+        InstanceUtil::with_memory(self.get_memory(), |mem| {
+            const CSZ: usize = 128;
+            const RSZ: usize = 16;
 
-                    for (chunk_nr, chunk) in mem.chunks(CSZ).enumerate() {
-                        if chunk[..] != [0; CSZ][..] {
-                            for (row_nr, row) in chunk.chunks(RSZ).enumerate() {
-                                let ofs = chunk_nr * CSZ + row_nr * RSZ;
+            for (chunk_nr, chunk) in mem.chunks(CSZ).enumerate() {
+                if chunk[..] != [0; CSZ][..] {
+                    for (row_nr, row) in chunk.chunks(RSZ).enumerate() {
+                        let ofs = chunk_nr * CSZ + row_nr * RSZ;
 
-                                print!("{ofs:08x}:");
+                        print!("{ofs:08x}:");
 
-                                for (i, byte) in row.iter().enumerate() {
-                                    if i % 4 == 0 {
-                                        print!(" ");
-                                    }
+                        for (i, byte) in row.iter().enumerate() {
+                            if i % 4 == 0 {
+                                print!(" ");
+                            }
 
-                                    let buf_start = slf.arg_buf_ofs;
-                                    let buf_end = buf_start + ARGBUF_LEN;
+                            let buf_start = self.arg_buf_ofs;
+                            let buf_end = buf_start + ARGBUF_LEN;
 
-                                    if ofs + i >= buf_start && ofs + i < buf_end
-                                    {
-                                        print!("{byte:02x}");
-                                        print!(" ");
-                                    } else {
-                                        print!("{byte:02x} ")
-                                    }
-                                }
-
-                                println!();
+                            if ofs + i >= buf_start && ofs + i < buf_end {
+                                print!("{byte:02x}");
+                                print!(" ");
+                            } else {
+                                print!("{byte:02x} ")
                             }
                         }
+
+                        println!();
                     }
-                });
+                }
             }
-            _ => (),
-        }
+        });
     }
 
     fn arg_buffer_offset(&self) -> usize {
-        match self {
-            Mock(_slf) => 0,
-            WT(slf) => slf.arg_buf_ofs,
-        }
+        self.arg_buf_ofs
     }
 
     fn map_call_err(&mut self, err: dusk_wasmtime::Error) -> Error {
@@ -468,19 +381,26 @@ impl ContractInstance for ContractInstanceWrapper {
         arg_len: u32,
         limit: u64,
     ) -> Result<i32, Error> {
-        match self {
-            WT(slf) => {
-                let fun = slf
-                    .instance
-                    .get_typed_func::<u32, i32>(&mut slf.store, method_name)?;
+        let fun = self
+            .instance
+            .get_typed_func::<u32, i32>(&mut self.store, method_name)?;
 
-                // self.set_remaining_gas(limit);
-                slf.store.set_fuel(limit).expect("Fuel is enabled");
+        // self.set_remaining_gas(limit);
+        self.store.set_fuel(limit).expect("Fuel is enabled");
 
-                fun.call(&mut slf.store, arg_len)
-                    .map_err(|e| self.map_call_err(e))
-            }
-            Mock(_) => Ok(8),
-        }
+        fun.call(&mut self.store, arg_len)
+            .map_err(|e| self.map_call_err(e))
+    }
+
+    fn get_memory(&self) -> &[u8] {
+        &***self.memory
+    }
+
+    fn get_memory_mut(&mut self) -> &mut [u8] {
+        &mut ***self.memory
+    }
+
+    fn get_arg_buf_ofs(&self) -> usize {
+        self.arg_buf_ofs
     }
 }

@@ -5,6 +5,7 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 use crate::Error;
+use std::fmt;
 use std::io;
 
 pub trait ContractInstance: Send {
@@ -22,27 +23,11 @@ pub trait ContractInstance: Send {
 
     fn read_bytes_from_arg_buffer(&self, arg_len: u32) -> Vec<u8>;
 
-    fn with_memory<F, R>(&self, f: F) -> R
-    where
-        F: FnOnce(&[u8]) -> R;
-
-    fn with_memory_mut<F, R>(&mut self, f: F) -> R
-    where
-        F: FnOnce(&mut [u8]) -> R;
-
     /// Returns the current length of the memory.
     fn mem_len(&self) -> usize;
 
     /// Sets the length of the memory.
     fn set_len(&mut self, len: usize);
-
-    fn with_arg_buf<F, R>(&self, f: F) -> R
-    where
-        F: FnOnce(&[u8]) -> R;
-
-    fn with_arg_buf_mut<F, R>(&mut self, f: F) -> R
-    where
-        F: FnOnce(&mut [u8]) -> R;
 
     fn write_bytes_to_arg_buffer(&mut self, buf: &[u8]) -> Result<u32, Error>;
 
@@ -50,7 +35,7 @@ pub trait ContractInstance: Send {
 
     fn get_remaining_gas(&mut self) -> u64;
 
-    fn is_function_exported<N: AsRef<str>>(&mut self, name: N) -> bool;
+    fn is_function_exported(&mut self, name: &str) -> bool;
 
     #[allow(dead_code)]
     fn print_state(&self);
@@ -64,4 +49,58 @@ pub trait ContractInstance: Send {
         arg_len: u32,
         limit: u64,
     ) -> Result<i32, Error>;
+
+    fn get_memory(&self) -> &[u8];
+    fn get_memory_mut(&mut self) -> &mut [u8];
+    fn get_arg_buf_ofs(&self) -> usize;
+}
+
+impl fmt::Debug for dyn ContractInstance {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ContractInstance")
+            .field("memory_len", &self.mem_len())
+            // .field("remaining_gas", &self.get_remaining_gas())
+            // todo: more fields
+            .finish()
+    }
+}
+
+pub struct InstanceUtil;
+
+impl InstanceUtil {
+    // PROB
+    pub fn with_memory<F, R>(mem: &[u8], f: F) -> R
+    where
+        F: FnOnce(&[u8]) -> R,
+    {
+        f(mem)
+    }
+
+    // PROB
+    pub fn with_memory_mut<F, R>(mem: &mut [u8], f: F) -> R
+    where
+        F: FnOnce(&mut [u8]) -> R,
+    {
+        f(mem)
+    }
+
+    // PROB
+    pub fn with_arg_buf<F, R>(mem: &[u8], arg_buf_ofs: usize, f: F) -> R
+    where
+        F: FnOnce(&[u8]) -> R,
+    {
+        InstanceUtil::with_memory(mem, |memory_bytes| {
+            f(&memory_bytes[arg_buf_ofs..][..piecrust_uplink::ARGBUF_LEN])
+        })
+    }
+
+    // PROB
+    pub fn with_arg_buf_mut<F, R>(mem: &mut [u8], arg_buf_ofs: usize, f: F) -> R
+    where
+        F: FnOnce(&mut [u8]) -> R,
+    {
+        InstanceUtil::with_memory_mut(mem, |memory_bytes| {
+            f(&mut memory_bytes[arg_buf_ofs..][..piecrust_uplink::ARGBUF_LEN])
+        })
+    }
 }

@@ -19,9 +19,10 @@ use piecrust_uplink::{
 };
 
 use crate::config::BYTE_STORE_COST;
-use crate::contract::contract_instance::ContractInstance;
-use crate::instance::{ContractInstanceWrapper, Env};
+use crate::contract::contract_instance::{ContractInstance, InstanceUtil};
+use crate::instance::Env;
 use crate::session::INIT_METHOD;
+use crate::session_env::SessionEnv;
 use crate::Error;
 
 pub const GAS_PASS_PCT: u64 = 93;
@@ -91,11 +92,15 @@ impl Imports {
 }
 
 pub fn check_ptr(
-    instance: &ContractInstanceWrapper,
+    instance: impl AsRef<dyn ContractInstance>,
     offset: usize,
     len: usize,
 ) -> Result<(), Error> {
-    let mem_len = instance.with_memory(|mem| mem.len());
+    // let mem_len = instance.with_memory(|mem| mem.len());
+    let mem_len =
+        InstanceUtil::with_memory(instance.as_ref().get_memory(), |mem| {
+            mem.len()
+        });
 
     let end =
         offset
@@ -118,10 +123,12 @@ pub fn check_ptr(
 }
 
 pub fn check_arg(
-    instance: &ContractInstanceWrapper,
+    instance: impl AsRef<dyn ContractInstance>,
     arg_len: u32,
 ) -> Result<(), Error> {
-    let mem_len = instance.with_memory(|mem| mem.len());
+    let instance = instance.as_ref();
+    let mem_len =
+        InstanceUtil::with_memory(instance.get_memory(), |mem| mem.len());
 
     let arg_ofs = instance.arg_buffer_offset();
     let arg_len = arg_len as usize;
@@ -157,10 +164,10 @@ pub(crate) fn hq(
 
     let name_len = name_len as usize;
 
-    check_ptr(instance, name_ofs, name_len)?;
-    check_arg(instance, arg_len)?;
+    check_ptr(&mut *instance, name_ofs, name_len)?;
+    check_arg(&mut *instance, arg_len)?;
 
-    let name = instance.with_memory(|buf| {
+    let name = InstanceUtil::with_memory(instance.get_memory(), |buf| {
         // performance: use a dedicated buffer here?
         core::str::from_utf8(&buf[name_ofs..][..name_len])
             .map(ToOwned::to_owned)
@@ -172,11 +179,15 @@ pub(crate) fn hq(
     let mut arg: Box<dyn Any> = Box::new(());
 
     // Price the query, allowing for an early exit if the gas is insufficient.
-    let query_cost = instance.with_arg_buf(|arg_buf| {
-        let arg_len = arg_len as usize;
-        let arg_buf = &arg_buf[..arg_len];
-        host_query.deserialize_and_price(arg_buf, &mut arg)
-    });
+    let query_cost = InstanceUtil::with_arg_buf(
+        instance.get_memory(),
+        instance.get_arg_buf_ofs(),
+        |arg_buf| {
+            let arg_len = arg_len as usize;
+            let arg_buf = &arg_buf[..arg_len];
+            host_query.deserialize_and_price(arg_buf, &mut arg)
+        },
+    );
 
     // If the gas is insufficient, return an error.
     let gas_remaining = instance.get_remaining_gas();
@@ -186,8 +197,13 @@ pub(crate) fn hq(
     }
     instance.set_remaining_gas(gas_remaining - query_cost);
 
+    let buf_ofs = instance.get_arg_buf_ofs();
     // Execute the query and return the result.
-    Ok(instance.with_arg_buf_mut(|arg_buf| host_query.execute(&arg, arg_buf)))
+    Ok(InstanceUtil::with_arg_buf_mut(
+        instance.get_memory_mut(),
+        buf_ofs,
+        |arg_buf| host_query.execute(&arg, arg_buf),
+    ))
 }
 
 pub(crate) fn hd(
@@ -201,9 +217,9 @@ pub(crate) fn hd(
 
     let name_len = name_len as usize;
 
-    check_ptr(instance, name_ofs, name_len)?;
+    check_ptr(&mut *instance, name_ofs, name_len)?;
 
-    let name = instance.with_memory(|buf| {
+    let name = InstanceUtil::with_memory(instance.get_memory(), |buf| {
         // performance: use a dedicated buffer here?
         core::str::from_utf8(&buf[name_ofs..][..name_len])
             .map(ToOwned::to_owned)
@@ -211,7 +227,8 @@ pub(crate) fn hd(
 
     let data = env.meta(&name).unwrap_or_default();
 
-    instance.with_arg_buf_mut(|buf| {
+    let buf_ofs = instance.get_arg_buf_ofs();
+    InstanceUtil::with_arg_buf_mut(instance.get_memory_mut(), buf_ofs, |buf| {
         buf[..data.len()].copy_from_slice(&data);
     });
 
@@ -228,30 +245,35 @@ pub(crate) fn c(
 ) -> WasmtimeResult<i32> {
     let env = fenv.data_mut();
 
-    let instance = env.self_instance();
+    let (argbuf_ofs, callee_limit, caller_remaining, name_len) = {
+        let instance = env.self_instance();
 
-    let name_len = name_len as usize;
+        let name_len = name_len as usize;
 
-    check_ptr(instance, callee_ofs, CONTRACT_ID_BYTES)?;
-    check_ptr(instance, name_ofs, name_len)?;
-    check_arg(instance, arg_len)?;
+        check_ptr(&mut *instance, callee_ofs, CONTRACT_ID_BYTES)?;
+        check_ptr(&mut *instance, name_ofs, name_len)?;
+        check_arg(&mut *instance, arg_len)?;
 
-    let argbuf_ofs = instance.arg_buffer_offset();
+        let argbuf_ofs = instance.arg_buffer_offset();
 
-    let caller_remaining = instance.get_remaining_gas();
+        let caller_remaining = instance.get_remaining_gas();
 
-    let callee_limit = if gas_limit > 0 && gas_limit < caller_remaining {
-        gas_limit
-    } else {
-        let div = caller_remaining / 100 * GAS_PASS_PCT;
-        let rem = caller_remaining % 100 * GAS_PASS_PCT / 100;
-        div + rem
+        let callee_limit = if gas_limit > 0 && gas_limit < caller_remaining {
+            gas_limit
+        } else {
+            let div = caller_remaining / 100 * GAS_PASS_PCT;
+            let rem = caller_remaining % 100 * GAS_PASS_PCT / 100;
+            div + rem
+        };
+        (argbuf_ofs, callee_limit, caller_remaining, name_len)
     };
 
     enum WithMemoryError {
         BeforePush(Error),
         AfterPush(Error),
     }
+
+    let session = &mut *env;
 
     let with_memory = |memory: &mut [u8]| -> Result<_, WithMemoryError> {
         let arg_buf = &memory[argbuf_ofs..][..ARGBUF_LEN];
@@ -262,7 +284,7 @@ pub(crate) fn c(
         );
         let callee_id = ContractId::from_bytes(callee_bytes);
 
-        let callee_stack_element = env
+        let callee_stack_element = session
             .push_callstack(callee_id, callee_limit)
             .map_err(WithMemoryError::BeforePush)?;
         let callee = env
@@ -292,7 +314,7 @@ pub(crate) fn c(
             .call(name, arg.len() as u32, callee_limit)
             .map_err(Error::normalize)
             .map_err(WithMemoryError::AfterPush)?;
-        check_arg(callee, ret_len as u32)
+        check_arg(&mut *callee, ret_len as u32)
             .map_err(WithMemoryError::AfterPush)?;
 
         // copy back result
@@ -304,7 +326,12 @@ pub(crate) fn c(
         Ok((ret_len, callee_spent))
     };
 
-    let ret = match instance.with_memory_mut(with_memory) {
+    let instance = env.self_instance();
+
+    let ret = match InstanceUtil::with_memory_mut(
+        instance.get_memory_mut(),
+        with_memory,
+    ) {
         Ok((ret_len, callee_spent)) => {
             env.move_up_call_tree(callee_spent);
             instance.set_remaining_gas(caller_remaining - callee_spent);
@@ -312,9 +339,13 @@ pub(crate) fn c(
         }
         Err(WithMemoryError::BeforePush(err)) => {
             let c_err = ContractError::from(err);
-            instance.with_arg_buf_mut(|buf| {
-                c_err.to_parts(buf);
-            });
+            InstanceUtil::with_arg_buf_mut(
+                instance.get_memory_mut(),
+                instance.get_arg_buf_ofs(),
+                |buf| {
+                    c_err.to_parts(buf);
+                },
+            );
             c_err.into()
         }
         Err(WithMemoryError::AfterPush(mut err)) => {
@@ -328,9 +359,13 @@ pub(crate) fn c(
             instance.set_remaining_gas(caller_remaining - callee_limit);
 
             let c_err = ContractError::from(err);
-            instance.with_arg_buf_mut(|buf| {
-                c_err.to_parts(buf);
-            });
+            InstanceUtil::with_arg_buf_mut(
+                instance.get_memory_mut(),
+                instance.get_arg_buf_ofs(),
+                |buf| {
+                    c_err.to_parts(buf);
+                },
+            );
             c_err.into()
         }
     };
@@ -349,8 +384,8 @@ pub(crate) fn emit(
 
     let topic_len = topic_len as usize;
 
-    check_ptr(instance, topic_ofs, topic_len)?;
-    check_arg(instance, arg_len)?;
+    check_ptr(*instance, topic_ofs, topic_len)?;
+    check_arg(*instance, arg_len)?;
 
     // charge for each byte emitted in an event
     let gas_remaining = instance.get_remaining_gas();
@@ -362,12 +397,16 @@ pub(crate) fn emit(
     }
     instance.set_remaining_gas(gas_remaining - gas_cost);
 
-    let data = instance.with_arg_buf(|buf| {
-        let arg_len = arg_len as usize;
-        Vec::from(&buf[..arg_len])
-    });
+    let data = InstanceUtil::with_arg_buf(
+        instance.get_memory(),
+        instance.get_arg_buf_ofs(),
+        |buf| {
+            let arg_len = arg_len as usize;
+            Vec::from(&buf[..arg_len])
+        },
+    );
 
-    let topic = instance.with_memory(|buf| {
+    let topic = InstanceUtil::with_memory(instance.get_memory(), |buf| {
         // performance: use a dedicated buffer here?
         core::str::from_utf8(&buf[topic_ofs..][..topic_len])
             .map(ToOwned::to_owned)
@@ -384,10 +423,14 @@ fn caller(env: Caller<Env>) -> i32 {
     match env.nth_from_top(1) {
         Some(call_tree_elem) => {
             let instance = env.self_instance();
-            instance.with_arg_buf_mut(|buf| {
-                let caller = call_tree_elem.contract_id;
-                buf[..CONTRACT_ID_BYTES].copy_from_slice(caller.as_bytes());
-            });
+            InstanceUtil::with_arg_buf_mut(
+                instance.get_memory_mut(),
+                instance.get_arg_buf_ofs(),
+                |buf| {
+                    let caller = call_tree_elem.contract_id;
+                    buf[..CONTRACT_ID_BYTES].copy_from_slice(caller.as_bytes());
+                },
+            );
             1
         }
         None => 0,
@@ -400,10 +443,14 @@ fn callstack(env: Caller<Env>) -> i32 {
 
     let mut i = 0usize;
     for contract_id in env.call_ids().iter().skip(1) {
-        instance.with_arg_buf_mut(|buf| {
-            buf[i * CONTRACT_ID_BYTES..(i + 1) * CONTRACT_ID_BYTES]
-                .copy_from_slice(contract_id.as_bytes());
-        });
+        InstanceUtil::with_arg_buf_mut(
+            instance.get_memory_mut(),
+            instance.get_arg_buf_ofs(),
+            |buf| {
+                buf[i * CONTRACT_ID_BYTES..(i + 1) * CONTRACT_ID_BYTES]
+                    .copy_from_slice(contract_id.as_bytes());
+            },
+        );
         i += 1;
     }
     i as i32
@@ -413,12 +460,16 @@ fn feed(mut fenv: Caller<Env>, arg_len: u32) -> WasmtimeResult<()> {
     let env = fenv.data_mut();
     let instance = env.self_instance();
 
-    check_arg(instance, arg_len)?;
+    check_arg(*instance, arg_len)?;
 
-    let data = instance.with_arg_buf(|buf| {
-        let arg_len = arg_len as usize;
-        Vec::from(&buf[..arg_len])
-    });
+    let data = InstanceUtil::with_arg_buf(
+        instance.get_memory(),
+        instance.get_arg_buf_ofs(),
+        |buf| {
+            let arg_len = arg_len as usize;
+            Vec::from(&buf[..arg_len])
+        },
+    );
 
     Ok(env.push_feed(data)?)
 }
@@ -428,21 +479,25 @@ fn hdebug(mut fenv: Caller<Env>, msg_len: u32) -> WasmtimeResult<()> {
     let env = fenv.data_mut();
     let instance = env.self_instance();
 
-    check_arg(instance, msg_len)?;
+    check_arg(*instance, msg_len)?;
 
-    Ok(instance.with_arg_buf(|buf| {
-        let slice = &buf[..msg_len as usize];
+    Ok(InstanceUtil::with_arg_buf(
+        instance.get_memory(),
+        instance.get_arg_buf_ofs(),
+        |buf| {
+            let slice = &buf[..msg_len as usize];
 
-        let msg = match std::str::from_utf8(slice) {
-            Ok(msg) => msg,
-            Err(err) => return Err(Error::Utf8(err)),
-        };
+            let msg = match std::str::from_utf8(slice) {
+                Ok(msg) => msg,
+                Err(err) => return Err(Error::Utf8(err)),
+            };
 
-        env.register_debug(msg);
-        println!("CONTRACT DEBUG {msg}");
+            env.register_debug(msg);
+            println!("CONTRACT DEBUG {msg}");
 
-        Ok(())
-    })?)
+            Ok(())
+        },
+    )?)
 }
 
 fn limit(fenv: Caller<Env>) -> u64 {
@@ -463,18 +518,22 @@ fn panic(fenv: Caller<Env>, arg_len: u32) -> WasmtimeResult<()> {
     let env = fenv.data();
     let instance = env.self_instance();
 
-    check_arg(instance, arg_len)?;
+    check_arg(*instance, arg_len)?;
 
-    Ok(instance.with_arg_buf(|buf| {
-        let slice = &buf[..arg_len as usize];
+    Ok(InstanceUtil::with_arg_buf(
+        instance.get_memory(),
+        instance.get_arg_buf_ofs(),
+        |buf| {
+            let slice = &buf[..arg_len as usize];
 
-        let msg = match std::str::from_utf8(slice) {
-            Ok(msg) => msg,
-            Err(err) => return Err(Error::Utf8(err)),
-        };
+            let msg = match std::str::from_utf8(slice) {
+                Ok(msg) => msg,
+                Err(err) => return Err(Error::Utf8(err)),
+            };
 
-        Err(Error::Panic(msg.to_owned()))
-    })?)
+            Err(Error::Panic(msg.to_owned()))
+        },
+    )?)
 }
 
 fn get_metadata(
@@ -494,13 +553,14 @@ fn get_metadata(
     } else {
         let instance = env.self_instance();
 
-        let contract_id = instance.with_memory(|memory| {
-            let mut contract_id_bytes = [0u8; CONTRACT_ID_BYTES];
-            contract_id_bytes.copy_from_slice(
-                &memory[contract_id_ofs..][..CONTRACT_ID_BYTES],
-            );
-            ContractId::from_bytes(contract_id_bytes)
-        });
+        let contract_id =
+            InstanceUtil::with_memory(instance.get_memory(), |memory| {
+                let mut contract_id_bytes = [0u8; CONTRACT_ID_BYTES];
+                contract_id_bytes.copy_from_slice(
+                    &memory[contract_id_ofs..][..CONTRACT_ID_BYTES],
+                );
+                ContractId::from_bytes(contract_id_bytes)
+            });
 
         env.contract_metadata(&contract_id)
     }
@@ -508,16 +568,18 @@ fn get_metadata(
 
 fn owner(mut fenv: Caller<Env>, mod_id_ofs: usize) -> WasmtimeResult<i32> {
     let instance = fenv.data().self_instance();
-    check_ptr(instance, mod_id_ofs, CONTRACT_ID_BYTES)?;
+    check_ptr(*instance, mod_id_ofs, CONTRACT_ID_BYTES)?;
     let env = fenv.data_mut();
     match get_metadata(env, mod_id_ofs) {
         None => Ok(0),
         Some(metadata) => {
             let owner = metadata.owner.as_slice();
 
-            instance.with_arg_buf_mut(|arg| {
-                arg[..owner.len()].copy_from_slice(owner)
-            });
+            InstanceUtil::with_arg_buf_mut(
+                instance.get_memory_mut(),
+                instance.get_arg_buf_ofs(),
+                |arg| arg[..owner.len()].copy_from_slice(owner),
+            );
 
             Ok(1)
         }
@@ -532,6 +594,10 @@ fn self_id(mut fenv: Caller<Env>) {
         .expect("contract metadata should exist");
     let slice = contract_metadata.contract_id.to_bytes();
     let len = slice.len();
-    env.self_instance()
-        .with_arg_buf_mut(|arg| arg[..len].copy_from_slice(&slice));
+    let instance = env.self_instance();
+    InstanceUtil::with_arg_buf_mut(
+        instance.get_memory_mut(),
+        instance.get_arg_buf_ofs(),
+        |arg| arg[..len].copy_from_slice(&slice),
+    );
 }

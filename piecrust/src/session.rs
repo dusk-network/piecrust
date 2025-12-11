@@ -29,9 +29,8 @@ use crate::call_tree::{CallTree, CallTreeElem};
 use crate::contract::contract_instance::ContractInstance;
 use crate::contract::{ContractData, ContractMetadata, WrappedContract};
 use crate::error::Error::{self, InitalizationError, PersistenceError};
-use crate::instance::{
-    ContractInstanceWrapper, MockWrappedInstance, WrappedInstance,
-};
+use crate::instance::WrappedInstance;
+use crate::session_env::SessionEnv;
 use crate::store::{ContractSession, PageOpening, PAGE_SIZE};
 use crate::types::StandardBufSerializer;
 use crate::vm::{HostQueries, HostQuery};
@@ -58,13 +57,12 @@ pub struct Session {
     engine: Engine,
     inner: &'static mut SessionInner,
     original: bool,
-    is_mock: bool,
 }
 
 impl Debug for Session {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Session")
-            .field("inner", &self.inner)
+            // .field("inner", &self.inner)// todo
             .field("original", &self.original)
             .finish()
     }
@@ -93,7 +91,7 @@ struct SessionInner {
     current: ContractId,
 
     call_tree: CallTree,
-    instances: BTreeMap<ContractId, *mut ContractInstanceWrapper>,
+    instances: BTreeMap<ContractId, Box<dyn ContractInstance>>,
     debug: Vec<String>,
     data: SessionData,
 
@@ -144,7 +142,6 @@ impl Session {
         host_queries: HostQueries,
         data: SessionData,
     ) -> Self {
-        let is_mock = data.get("mock").is_some();
         let inner = SessionInner {
             current: ContractId::from_bytes([0; CONTRACT_ID_BYTES]),
             call_tree: CallTree::new(),
@@ -165,7 +162,6 @@ impl Session {
             engine: engine.clone(),
             inner,
             original: true,
-            is_mock,
         };
 
         let mut config = engine.config().clone();
@@ -192,7 +188,6 @@ impl Session {
             engine: self.engine.clone(),
             inner: unsafe { &mut *inner },
             original: false,
-            is_mock: self.is_mock,
         }
     }
 
@@ -559,23 +554,24 @@ impl Session {
     pub(crate) fn instance<'a>(
         &self,
         contract_id: &ContractId,
-    ) -> Option<&'a mut ContractInstanceWrapper> {
-        self.inner.instances.get(contract_id).map(|instance| {
-            // SAFETY: We guarantee that the instance exists since we're in
-            // control over if it is dropped with the session.
-            unsafe { &mut **instance }
-        })
+    ) -> Option<&mut Box<dyn ContractInstance>> {
+        self.inner.instances.get_mut(contract_id)
+        // .map(|instance| {
+        // SAFETY: We guarantee that the instance exists since we're in
+        // control over if it is dropped with the session.
+        // unsafe { &mut **instance }
+        // })
     }
 
     fn clear_stack_and_instances(&mut self) {
         self.inner.call_tree.clear();
 
-        while !self.inner.instances.is_empty() {
-            let (_, instance) = self.inner.instances.pop_first().unwrap();
-            unsafe {
-                let _ = Box::from_raw(instance);
-            };
-        }
+        // while !self.inner.instances.is_empty() {
+        //     let (_, instance) = self.inner.instances.pop_first().unwrap();
+        //     unsafe {
+        //         let _ = Box::from_raw(instance);
+        //     };
+        // }
     }
 
     /// Return the state root of the current state of the session.
@@ -604,19 +600,10 @@ impl Session {
         self.inner.contract_session.memory_pages(contract)
     }
 
-    pub(crate) fn push_event(&mut self, event: Event) {
-        self.inner.events.push(event);
-    }
-
-    pub(crate) fn push_feed(&mut self, data: Vec<u8>) -> Result<(), Error> {
-        let feed = self.inner.feeder.as_ref().ok_or(Error::MissingFeed)?;
-        feed.send(data).map_err(Error::FeedPulled)
-    }
-
     fn new_instance(
         &mut self,
         contract_id: ContractId,
-    ) -> Result<ContractInstanceWrapper, Error> {
+    ) -> Result<Box<dyn ContractInstance>, Error> {
         let store_data = self
             .inner
             .contract_session
@@ -632,31 +619,14 @@ impl Session {
 
         self.inner.current = contract_id;
 
-        Ok(if self.is_mock {
-            let mock_wrapped_instance =
-                MockWrappedInstance::new(store_data.memory)?;
-            ContractInstanceWrapper::Mock(mock_wrapped_instance)
-        } else {
-            let wrapped_instance = WrappedInstance::new(
-                self.clone(),
-                contract_id,
-                &contract,
-                store_data.memory,
-            )?;
-            ContractInstanceWrapper::WT(wrapped_instance)
-        })
-    }
+        let instance = WrappedInstance::new(
+            self.clone(),
+            contract_id,
+            &contract,
+            store_data.memory,
+        )?;
 
-    pub(crate) fn host_query(&self, name: &str) -> Option<&dyn HostQuery> {
-        self.inner.host_queries.get(name)
-    }
-
-    pub(crate) fn nth_from_top(&self, n: usize) -> Option<CallTreeElem> {
-        self.inner.call_tree.nth_parent(n)
-    }
-
-    pub(crate) fn call_ids(&self) -> Vec<&ContractId> {
-        self.inner.call_tree.call_ids()
+        Ok(Box::new(instance))
     }
 
     /// Creates a new instance of the given contract, returning its memory
@@ -671,68 +641,8 @@ impl Session {
         }
 
         let mem_len = instance.mem_len();
-
-        let instance = Box::new(instance);
-        let instance = Box::leak(instance) as *mut ContractInstanceWrapper;
-
         self.inner.instances.insert(contract, instance);
         Ok(mem_len)
-    }
-
-    pub(crate) fn push_callstack(
-        &mut self,
-        contract_id: ContractId,
-        limit: u64,
-    ) -> Result<CallTreeElem, Error> {
-        let instance = self.instance(&contract_id);
-
-        match instance {
-            Some(instance) => {
-                self.inner.call_tree.push(CallTreeElem {
-                    contract_id,
-                    limit,
-                    spent: 0,
-                    mem_len: instance.mem_len(),
-                });
-            }
-            None => {
-                let mem_len = self.create_instance(contract_id)?;
-                self.inner.call_tree.push(CallTreeElem {
-                    contract_id,
-                    limit,
-                    spent: 0,
-                    mem_len,
-                });
-            }
-        }
-
-        println!("call_tree={:?}", self.inner.call_tree);
-
-        Ok(self
-            .inner
-            .call_tree
-            .nth_parent(0)
-            .expect("We just pushed an element to the stack"))
-    }
-
-    pub(crate) fn move_up_call_tree(&mut self, spent: u64) {
-        self.inner.call_tree.move_up(spent);
-    }
-
-    pub(crate) fn move_up_prune_call_tree(&mut self) {
-        self.inner.call_tree.move_up_prune();
-    }
-
-    pub(crate) fn revert_callstack(&mut self) -> Result<(), std::io::Error> {
-        for elem in self.inner.call_tree.iter() {
-            let instance = self
-                .instance(&elem.contract_id)
-                .expect("instance should exist");
-            instance.revert()?;
-            instance.set_len(elem.mem_len);
-        }
-
-        Ok(())
     }
 
     /// Commits the given session to disk, consuming the session and returning
@@ -755,11 +665,6 @@ impl Session {
         C: FnOnce(&[String]) -> R,
     {
         c(&self.inner.debug)
-    }
-
-    /// Returns the value of a metadata item.
-    pub fn meta(&self, name: &str) -> Option<Vec<u8>> {
-        self.inner.data.get(name)
     }
 
     /// Set the value of a metadata item.
@@ -864,12 +769,96 @@ impl Session {
 
         Ok((ret, spent, call_tree))
     }
+}
 
-    pub fn contract_metadata(
+impl SessionEnv for Session {
+    fn push_event(&mut self, event: Event) {
+        self.inner.events.push(event);
+    }
+
+    fn push_feed(&mut self, data: Vec<u8>) -> Result<(), Error> {
+        let feed = self.inner.feeder.as_ref().ok_or(Error::MissingFeed)?;
+        feed.send(data).map_err(Error::FeedPulled)
+    }
+
+    fn nth_from_top(&self, n: usize) -> Option<CallTreeElem> {
+        self.inner.call_tree.nth_parent(n)
+    }
+
+    fn push_callstack(
+        &mut self,
+        contract_id: ContractId,
+        limit: u64,
+    ) -> Result<CallTreeElem, Error> {
+        let instance = self.instance(&contract_id);
+
+        match instance {
+            Some(instance) => {
+                self.inner.call_tree.push(CallTreeElem {
+                    contract_id,
+                    limit,
+                    spent: 0,
+                    mem_len: instance.mem_len(),
+                });
+            }
+            None => {
+                let mem_len = self.create_instance(contract_id)?;
+                self.inner.call_tree.push(CallTreeElem {
+                    contract_id,
+                    limit,
+                    spent: 0,
+                    mem_len,
+                });
+            }
+        }
+
+        println!("call_tree={:?}", self.inner.call_tree);
+
+        Ok(self
+            .inner
+            .call_tree
+            .nth_parent(0)
+            .expect("We just pushed an element to the stack"))
+    }
+
+    fn move_up_call_tree(&mut self, spent: u64) {
+        self.inner.call_tree.move_up(spent);
+    }
+
+    fn move_up_prune_call_tree(&mut self) {
+        self.inner.call_tree.move_up_prune();
+    }
+
+    fn revert_callstack(&mut self) -> Result<(), std::io::Error> {
+        for elem in self.inner.call_tree.iter() {
+            let instance = self
+                .instance(&elem.contract_id)
+                .expect("instance should exist");
+            instance.revert()?;
+            instance.set_len(elem.mem_len);
+        }
+
+        Ok(())
+    }
+
+    fn call_ids(&self) -> Vec<&ContractId> {
+        self.inner.call_tree.call_ids()
+    }
+
+    /// Returns the value of a metadata item.
+    fn meta(&self, name: &str) -> Option<Vec<u8>> {
+        self.inner.data.get(name)
+    }
+
+    fn contract_metadata(
         &mut self,
         contract_id: &ContractId,
     ) -> Option<&ContractMetadata> {
         self.inner.contract_session.contract_metadata(contract_id)
+    }
+
+    fn host_query(&self, name: &str) -> Option<&dyn HostQuery> {
+        self.inner.host_queries.get(name)
     }
 }
 
