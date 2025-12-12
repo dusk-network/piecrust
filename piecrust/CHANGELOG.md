@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Add functionality to remove & recompile WASM modules [#459]
+- Add pretty Debug to CallTree [#455]
+- Add docs & simple unit tests to CallTree [#453]
+
 ### Changed
 
 - Update rust toolchain to nightly 2024-07-30 (1.82.0) [#rusk_3470]
@@ -514,6 +520,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- PULLS -->
 
+[#459]: https://github.com/dusk-network/piecrust/pull/459
+[#455]: https://github.com/dusk-network/piecrust/pull/455
+[#453]: https://github.com/dusk-network/piecrust/pull/453
 [#234]: https://github.com/dusk-network/piecrust/pull/234
 
 <!-- ISSUES -->
