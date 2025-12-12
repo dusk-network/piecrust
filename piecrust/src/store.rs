@@ -223,6 +223,26 @@ impl ContractStore {
             self.commit_store.clone(),
         )
     }
+
+    /// Remove a compiled module file for a given contract.
+    ///
+    /// This removes the object code file from disk, which then
+    /// needs recompilation when the contract is used again.
+    pub fn remove_module(&self, contract_id: ContractId) -> io::Result<()> {
+        CommitWriter::remove_module(&self.root_dir, contract_id)
+    }
+
+    /// Recompile a module from its bytecode.
+    ///
+    /// This reads the WASM bytecode from disk, recompiles it using the
+    /// store's engine, and writes the compiled module back to disk.
+    pub fn recompile_module(&self, contract_id: ContractId) -> io::Result<()> {
+        CommitWriter::recompile_module(
+            &self.root_dir,
+            &self.engine,
+            contract_id,
+        )
+    }
 }
 
 pub(crate) enum Call {

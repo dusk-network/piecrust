@@ -16,6 +16,7 @@ use dusk_wasmtime::{
     Config, Engine, ModuleVersionStrategy, OperatorCost, OptLevel, Strategy,
     WasmBacktraceDetails,
 };
+use piecrust_uplink::ContractId;
 use tempfile::tempdir;
 
 use crate::config::BYTE_STORE_COST;
@@ -273,6 +274,29 @@ impl VM {
     /// Returns a reference to the synchronization thread.
     pub fn sync_thread(&self) -> &thread::Thread {
         self.store.sync_loop()
+    }
+
+    /// Remove a compiled module file for a given contract.
+    ///
+    /// This removes the object code file from disk, which then
+    /// needs recompilation when the contract is used again.
+    pub fn remove_module(&self, contract_id: ContractId) -> Result<(), Error> {
+        self.store
+            .remove_module(contract_id)
+            .map_err(|err| PersistenceError(Arc::new(err)))
+    }
+
+    /// Recompile a module from its bytecode.
+    ///
+    /// This reads the WASM bytecode from disk, recompiles it using the
+    /// VM's engine, and writes the compiled module back to disk.
+    pub fn recompile_module(
+        &self,
+        contract_id: ContractId,
+    ) -> Result<(), Error> {
+        self.store
+            .recompile_module(contract_id)
+            .map_err(|err| PersistenceError(Arc::new(err)))
     }
 }
 
