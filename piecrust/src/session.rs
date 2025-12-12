@@ -554,8 +554,8 @@ impl Session {
     pub(crate) fn instance<'a>(
         &mut self,
         contract_id: &ContractId,
-    ) -> Option<&mut Box<dyn ContractInstance>> {
-        self.inner.instances.get_mut(contract_id)
+    ) -> Option<&mut dyn ContractInstance> {
+        self.inner.instances.get_mut(contract_id).map(|b| &mut **b)
     }
 
     fn clear_stack_and_instances(&mut self) {
@@ -768,6 +768,10 @@ impl Session {
         call_tree.update_spent(spent);
 
         Ok((ret, spent, call_tree))
+    }
+
+    pub fn host_queries(&self) -> &HostQueries {
+        &self.inner.host_queries
     }
 }
 

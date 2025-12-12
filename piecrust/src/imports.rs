@@ -92,15 +92,13 @@ impl Imports {
 }
 
 pub fn check_ptr(
-    instance: impl AsRef<dyn ContractInstance>,
+    instance: &mut dyn ContractInstance,
     offset: usize,
     len: usize,
 ) -> Result<(), Error> {
     // let mem_len = instance.with_memory(|mem| mem.len());
     let mem_len =
-        InstanceUtil::with_memory(instance.as_ref().get_memory(), |mem| {
-            mem.len()
-        });
+        InstanceUtil::with_memory(instance.get_memory(), |mem| mem.len());
 
     let end =
         offset
@@ -123,10 +121,9 @@ pub fn check_ptr(
 }
 
 pub fn check_arg(
-    instance: impl AsRef<dyn ContractInstance>,
+    instance: &mut dyn ContractInstance,
     arg_len: u32,
 ) -> Result<(), Error> {
-    let instance = instance.as_ref();
     let mem_len =
         InstanceUtil::with_memory(instance.get_memory(), |mem| mem.len());
 
@@ -159,49 +156,60 @@ pub(crate) fn hq(
     arg_len: u32,
 ) -> WasmtimeResult<u32> {
     let env = fenv.data_mut();
-
-    let instance = env.self_instance();
-
     let name_len = name_len as usize;
 
-    check_ptr(&mut *instance, name_ofs, name_len)?;
-    check_arg(&mut *instance, arg_len)?;
+    let (instance, name, host_queries) = {
+        let instance = env.self_instance();
+        let host_queries = env.host_queries();
 
-    let name = InstanceUtil::with_memory(instance.get_memory(), |buf| {
-        // performance: use a dedicated buffer here?
-        core::str::from_utf8(&buf[name_ofs..][..name_len])
-            .map(ToOwned::to_owned)
-    })?;
+        check_ptr(instance, name_ofs, name_len)?;
+        check_arg(instance, arg_len)?;
+
+        let name = InstanceUtil::with_memory(instance.get_memory(), |buf| {
+            // performance: use a dedicated buffer here?
+            core::str::from_utf8(&buf[name_ofs..][..name_len])
+                .map(ToOwned::to_owned)
+        })?;
+        (instance, name, host_queries)
+    };
 
     // Get the host query if it exists.
-    let host_query =
-        env.host_query(&name).ok_or(Error::MissingHostQuery(name))?;
+    let host_query = host_queries
+        .get(&name)
+        .ok_or(Error::MissingHostQuery(name))?;
     let mut arg: Box<dyn Any> = Box::new(());
 
     // Price the query, allowing for an early exit if the gas is insufficient.
-    let buf_ofs = instance.get_arg_buf_ofs();
-    let query_cost =
+    let query_cost = {
+        let buf_ofs = instance.get_arg_buf_ofs();
         InstanceUtil::with_arg_buf(instance.get_memory(), buf_ofs, |arg_buf| {
             let arg_len = arg_len as usize;
             let arg_buf = &arg_buf[..arg_len];
             host_query.deserialize_and_price(arg_buf, &mut arg)
-        });
+        })
+    };
 
     // If the gas is insufficient, return an error.
-    let gas_remaining = instance.get_remaining_gas();
-    if gas_remaining < query_cost {
-        instance.set_remaining_gas(0);
-        Err(Error::OutOfGas)?;
+    {
+        let gas_remaining = instance.get_remaining_gas();
+        if gas_remaining < query_cost {
+            instance.set_remaining_gas(0);
+            Err(Error::OutOfGas)?;
+        }
+        instance.set_remaining_gas(gas_remaining - query_cost);
     }
-    instance.set_remaining_gas(gas_remaining - query_cost);
 
-    let buf_ofs = instance.get_arg_buf_ofs();
-    // Execute the query and return the result.
-    Ok(InstanceUtil::with_arg_buf_mut(
-        instance.get_memory_mut(),
-        buf_ofs,
-        |arg_buf| host_query.execute(&arg, arg_buf),
-    ))
+    let result = {
+        let buf_ofs = instance.get_arg_buf_ofs();
+        // Execute the query and return the result.
+        InstanceUtil::with_arg_buf_mut(
+            instance.get_memory_mut(),
+            buf_ofs,
+            |arg_buf| host_query.execute(&arg, arg_buf),
+        )
+    };
+
+    Ok(result)
 }
 
 pub(crate) fn hd(
@@ -211,20 +219,23 @@ pub(crate) fn hd(
 ) -> WasmtimeResult<u32> {
     let env = fenv.data_mut();
 
-    let instance = env.self_instance();
+    let name = {
+        let instance = env.self_instance();
 
-    let name_len = name_len as usize;
+        let name_len = name_len as usize;
 
-    check_ptr(&mut *instance, name_ofs, name_len)?;
+        check_ptr(&mut *instance, name_ofs, name_len)?;
 
-    let name = InstanceUtil::with_memory(instance.get_memory(), |buf| {
-        // performance: use a dedicated buffer here?
-        core::str::from_utf8(&buf[name_ofs..][..name_len])
-            .map(ToOwned::to_owned)
-    })?;
+        InstanceUtil::with_memory(instance.get_memory(), |buf| {
+            // performance: use a dedicated buffer here?
+            core::str::from_utf8(&buf[name_ofs..][..name_len])
+                .map(ToOwned::to_owned)
+        })?
+    };
 
     let data = env.meta(&name).unwrap_or_default();
 
+    let instance = env.self_instance();
     let buf_ofs = instance.get_arg_buf_ofs();
     InstanceUtil::with_arg_buf_mut(instance.get_memory_mut(), buf_ofs, |buf| {
         buf[..data.len()].copy_from_slice(&data);
@@ -515,7 +526,7 @@ fn panic(fenv: Caller<Env>, arg_len: u32) -> WasmtimeResult<()> {
     let env = fenv.data();
     let instance = env.self_instance();
 
-    check_arg(*instance, arg_len)?;
+    check_arg(instance, arg_len)?;
 
     let buf_ofs = instance.get_arg_buf_ofs();
     Ok(InstanceUtil::with_arg_buf(
