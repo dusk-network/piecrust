@@ -64,10 +64,6 @@ impl Env {
         let stack_element = session
             .nth_from_top(0)
             .expect("there should be at least one element in the call stack");
-        // (Self::instance_mut2(session, &stack_element.contract_id)
-        //     .expect("instance should exist"),
-        //     session.get_contract_session()
-        // )
         session.instance_contract_session(&stack_element.contract_id)
     }
 
@@ -278,20 +274,6 @@ impl ContractInstance for WrappedInstance {
         )
     }
 
-    // fn with_memory<F, R>(&self, f: F) -> R
-    // where
-    //     F: FnOnce(&[u8]) -> R,
-    // {
-    //     f(&self.memory)
-    // }
-
-    // fn with_memory_mut<F, R>(&mut self, f: F) -> R
-    // where
-    //     F: FnOnce(&mut [u8]) -> R,
-    // {
-    //     f(&mut self.memory)
-    // }
-
     /// Returns the current length of the memory.
     fn mem_len(&self) -> usize {
         self.memory.current_len
@@ -301,26 +283,6 @@ impl ContractInstance for WrappedInstance {
     fn set_len(&mut self, len: usize) {
         self.memory.current_len = len;
     }
-
-    // fn with_arg_buf<F, R>(&self, f: F) -> R
-    // where
-    //     F: FnOnce(&[u8]) -> R,
-    // {
-    //     let offset = self.arg_buf_ofs;
-    //     self.with_memory(|memory_bytes| {
-    //         f(&memory_bytes[offset..][..ARGBUF_LEN])
-    //     })
-    // }
-
-    // fn with_arg_buf_mut<F, R>(&mut self, f: F) -> R
-    // where
-    //     F: FnOnce(&mut [u8]) -> R,
-    // {
-    //     let offset = self.arg_buf_ofs;
-    //     self.with_memory_mut(|memory_bytes| {
-    //         f(&mut memory_bytes[offset..][..ARGBUF_LEN])
-    //     })
-    // }
 
     fn write_bytes_to_arg_buffer(&mut self, buf: &[u8]) -> Result<u32, Error> {
         let buf_ofs = self.get_arg_buf_ofs();
