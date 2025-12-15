@@ -13,9 +13,7 @@ const LIMIT: u64 = 1_000_000;
 fn counter_read_simple() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 
-    let data = SessionData::builder().insert("mock", true)?;
-
-    let mut session = vm.session(data)?;
+    let mut session = vm.session(SessionData::builder())?;
 
     let id = session.deploy(
         contract_bytecode!("counter"),

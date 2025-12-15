@@ -445,11 +445,11 @@ impl ContractInstance for WrappedInstance {
     }
 
     fn get_memory(&self) -> &[u8] {
-        &***self.memory
+        &self.memory
     }
 
     fn get_memory_mut(&mut self) -> &mut [u8] {
-        &mut ***self.memory
+        &mut self.memory
     }
 
     fn get_arg_buf_ofs(&self) -> usize {

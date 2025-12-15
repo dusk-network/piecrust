@@ -594,12 +594,12 @@ impl Session {
     fn clear_stack_and_instances(&mut self) {
         self.inner.call_tree.clear();
 
-        // while !self.inner.instances.is_empty() {
-        //     let (_, instance) = self.inner.instances.pop_first().unwrap();
-        //     unsafe {
-        //         let _ = Box::from_raw(instance);
-        //     };
-        // }
+        while !self.inner.instances.is_empty() {
+            let (_, instance) = self.inner.instances.pop_first().unwrap();
+            unsafe {
+                let _ = Box::from_raw(instance);
+            };
+        }
     }
 
     /// Return the state root of the current state of the session.
