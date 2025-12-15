@@ -13,30 +13,26 @@ use crate::Session;
 use piecrust_uplink::ContractId;
 
 pub trait InstanceFactory: Send + Sync {
-    type Instance: ContractInstance;
-
-    #[allow(dead_code)]
     fn create_instance(
         &self,
         session: Session,
         contract_id: ContractId,
         contract: &WrappedContract,
         memory: Memory,
-    ) -> Result<Self::Instance, Error>;
+    ) -> Result<Box<dyn ContractInstance>, Error>;
 }
 
 pub struct WasmtimeInstanceFactory;
 
 impl InstanceFactory for WasmtimeInstanceFactory {
-    type Instance = WrappedInstance;
-
     fn create_instance(
         &self,
         session: Session,
         contract_id: ContractId,
         contract: &WrappedContract,
         memory: Memory,
-    ) -> Result<Self::Instance, Error> {
+    ) -> Result<Box<dyn ContractInstance>, Error> {
         WrappedInstance::new(session, contract_id, contract, memory)
+            .map(|i| Box::new(i) as Box<dyn ContractInstance>)
     }
 }

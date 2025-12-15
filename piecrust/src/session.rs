@@ -29,7 +29,7 @@ use crate::call_tree::{CallTree, CallTreeElem};
 use crate::contract::contract_instance::ContractInstance;
 use crate::contract::{ContractData, ContractMetadata, WrappedContract};
 use crate::error::Error::{self, InitalizationError, PersistenceError};
-use crate::instance::WrappedInstance;
+use crate::instance_factory::{InstanceFactory, WasmtimeInstanceFactory};
 use crate::session_env::SessionEnv;
 use crate::store::{ContractSession, PageOpening, PAGE_SIZE};
 use crate::types::StandardBufSerializer;
@@ -57,6 +57,7 @@ pub struct Session {
     engine: Engine,
     inner: &'static mut SessionInner,
     original: bool,
+    instance_factory: Arc<dyn InstanceFactory>,
 }
 
 impl Debug for Session {
@@ -162,6 +163,7 @@ impl Session {
             engine: engine.clone(),
             inner,
             original: true,
+            instance_factory: Arc::new(WasmtimeInstanceFactory),
         };
 
         let mut config = engine.config().clone();
@@ -188,6 +190,7 @@ impl Session {
             engine: self.engine.clone(),
             inner: unsafe { &mut *inner },
             original: false,
+            instance_factory: self.instance_factory.clone(),
         }
     }
 
@@ -647,14 +650,14 @@ impl Session {
 
         self.inner.current = contract_id;
 
-        let instance = WrappedInstance::new(
+        let instance = self.instance_factory.create_instance(
             self.clone(),
             contract_id,
             &contract,
             store_data.memory,
         )?;
 
-        Ok(Box::new(instance))
+        Ok(instance)
     }
 
     /// Creates a new instance of the given contract, returning its memory
