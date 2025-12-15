@@ -115,6 +115,8 @@
 //! [runtime docs]: dusk_wasmtime::Config::consume_fuel
 //! [`deletions`]: VM::delete_commit
 
+extern crate core;
+
 #[macro_use]
 mod bytecode_macro;
 mod call_tree;

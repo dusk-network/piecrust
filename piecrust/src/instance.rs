@@ -15,7 +15,7 @@ use crate::contract::WrappedContract;
 use crate::imports::Imports;
 use crate::session::Session;
 use crate::session_env::SessionEnv;
-use crate::store::Memory;
+use crate::store::{ContractSession, Memory};
 use crate::Error;
 
 pub struct WrappedInstance {
@@ -45,7 +45,11 @@ impl DerefMut for Env {
 }
 
 impl Env {
-    pub fn self_instance<'b>(&mut self) -> &mut dyn ContractInstance {
+    pub fn get_self_id(&self) -> ContractId {
+        self.self_id
+    }
+
+    pub fn self_instance<'b>(&self) -> &mut dyn ContractInstance {
         let stack_element = self
             .session
             .nth_from_top(0)
@@ -54,11 +58,61 @@ impl Env {
             .expect("instance should exist")
     }
 
-    pub fn instance<'b>(
+    pub fn self_instance_mut<'b>(&mut self) -> &mut dyn ContractInstance {
+        let stack_element = self
+            .session
+            .nth_from_top(0)
+            .expect("there should be at least one element in the call stack");
+        self.instance_mut(&stack_element.contract_id)
+            .expect("instance should exist")
+    }
+
+    pub fn self_instance_contract_session<'b>(
+        session: &'b mut Session,
+    ) -> (&mut dyn ContractInstance, &'b mut ContractSession) {
+        let stack_element = session
+            .nth_from_top(0)
+            .expect("there should be at least one element in the call stack");
+        // (Self::instance_mut2(session, &stack_element.contract_id)
+        //     .expect("instance should exist"),
+        //     session.get_contract_session()
+        // )
+        session.instance_contract_session(&stack_element.contract_id)
+    }
+
+    pub fn self_instance_session(
         &mut self,
+    ) -> (&mut dyn ContractInstance, &mut Session) {
+        let i = {
+            let stack_element = self.session.nth_from_top(0).expect(
+                "there should be at least one element in the call stack",
+            );
+            self.session
+                .instance_mut(&stack_element.contract_id)
+                .expect("instance should exist")
+        };
+        (i, &mut self.session)
+    }
+
+    pub fn instance<'b>(
+        &self,
         contract_id: &ContractId,
     ) -> Option<&mut dyn ContractInstance> {
         self.session.instance(contract_id)
+    }
+
+    pub fn instance_mut<'b>(
+        &mut self,
+        contract_id: &ContractId,
+    ) -> Option<&mut dyn ContractInstance> {
+        self.session.instance_mut(contract_id)
+    }
+
+    pub fn instance_mut2<'b>(
+        session: &'b mut Session,
+        contract_id: &ContractId,
+    ) -> Option<&'b mut dyn ContractInstance> {
+        session.instance_mut(contract_id)
     }
 
     pub fn limit(&self) -> u64 {

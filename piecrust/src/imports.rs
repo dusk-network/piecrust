@@ -23,7 +23,8 @@ use crate::contract::contract_instance::{ContractInstance, InstanceUtil};
 use crate::instance::Env;
 use crate::session::INIT_METHOD;
 use crate::session_env::SessionEnv;
-use crate::Error;
+use crate::store::ContractSession;
+use crate::{Error, Session};
 
 pub const GAS_PASS_PCT: u64 = 93;
 
@@ -160,7 +161,6 @@ pub(crate) fn hq(
 
     let (instance, name, host_queries) = {
         let instance = env.self_instance();
-        let host_queries = env.host_queries();
 
         check_ptr(instance, name_ofs, name_len)?;
         check_arg(instance, arg_len)?;
@@ -170,6 +170,7 @@ pub(crate) fn hq(
             core::str::from_utf8(&buf[name_ofs..][..name_len])
                 .map(ToOwned::to_owned)
         })?;
+        let host_queries = env.host_queries();
         (instance, name, host_queries)
     };
 
@@ -253,28 +254,25 @@ pub(crate) fn c(
     gas_limit: u64,
 ) -> WasmtimeResult<i32> {
     let env = fenv.data_mut();
+    // let session: &mut Session = &mut *env;
+    let (instance, session) = env.self_instance_session();
 
-    let (argbuf_ofs, callee_limit, caller_remaining, name_len) = {
-        let instance = env.self_instance();
+    let name_len = name_len as usize;
 
-        let name_len = name_len as usize;
+    check_ptr(instance, callee_ofs, CONTRACT_ID_BYTES)?;
+    check_ptr(instance, name_ofs, name_len)?;
+    check_arg(instance, arg_len)?;
 
-        check_ptr(&mut *instance, callee_ofs, CONTRACT_ID_BYTES)?;
-        check_ptr(&mut *instance, name_ofs, name_len)?;
-        check_arg(&mut *instance, arg_len)?;
+    let argbuf_ofs = instance.arg_buffer_offset();
 
-        let argbuf_ofs = instance.arg_buffer_offset();
+    let caller_remaining = instance.get_remaining_gas();
 
-        let caller_remaining = instance.get_remaining_gas();
-
-        let callee_limit = if gas_limit > 0 && gas_limit < caller_remaining {
-            gas_limit
-        } else {
-            let div = caller_remaining / 100 * GAS_PASS_PCT;
-            let rem = caller_remaining % 100 * GAS_PASS_PCT / 100;
-            div + rem
-        };
-        (argbuf_ofs, callee_limit, caller_remaining, name_len)
+    let callee_limit = if gas_limit > 0 && gas_limit < caller_remaining {
+        gas_limit
+    } else {
+        let div = caller_remaining / 100 * GAS_PASS_PCT;
+        let rem = caller_remaining % 100 * GAS_PASS_PCT / 100;
+        div + rem
     };
 
     enum WithMemoryError {
@@ -291,10 +289,10 @@ pub(crate) fn c(
         );
         let callee_id = ContractId::from_bytes(callee_bytes);
 
-        let callee_stack_element = env
+        let callee_stack_element = session
             .push_callstack(callee_id, callee_limit)
             .map_err(WithMemoryError::BeforePush)?;
-        let callee = env
+        let callee = session
             .instance(&callee_stack_element.contract_id)
             .expect("callee instance should exist");
 
@@ -333,14 +331,12 @@ pub(crate) fn c(
         Ok((ret_len, callee_spent))
     };
 
-    let instance = env.self_instance();
-
     let ret = match InstanceUtil::with_memory_mut(
         instance.get_memory_mut(),
         with_memory,
     ) {
         Ok((ret_len, callee_spent)) => {
-            env.move_up_call_tree(callee_spent);
+            session.move_up_call_tree(callee_spent);
             instance.set_remaining_gas(caller_remaining - callee_spent);
             ret_len
         }
@@ -357,13 +353,13 @@ pub(crate) fn c(
             c_err.into()
         }
         Err(WithMemoryError::AfterPush(mut err)) => {
-            if let Err(io_err) = env.revert_callstack() {
+            if let Err(io_err) = session.revert_callstack() {
                 err = Error::MemorySnapshotFailure {
                     reason: Some(Arc::new(err)),
                     io: Arc::new(io_err),
                 };
             }
-            env.move_up_prune_call_tree();
+            session.move_up_prune_call_tree();
             instance.set_remaining_gas(caller_remaining - callee_limit);
 
             let c_err = ContractError::from(err);
@@ -484,9 +480,9 @@ fn feed(mut fenv: Caller<Env>, arg_len: u32) -> WasmtimeResult<()> {
 #[cfg(feature = "debug")]
 fn hdebug(mut fenv: Caller<Env>, msg_len: u32) -> WasmtimeResult<()> {
     let env = fenv.data_mut();
-    let instance = env.self_instance();
+    let (instance, session) = env.self_instance_session();
 
-    check_arg(*instance, msg_len)?;
+    check_arg(instance, msg_len)?;
 
     let buf_ofs = instance.get_arg_buf_ofs();
     Ok(InstanceUtil::with_arg_buf(
@@ -500,7 +496,7 @@ fn hdebug(mut fenv: Caller<Env>, msg_len: u32) -> WasmtimeResult<()> {
                 Err(err) => return Err(Error::Utf8(err)),
             };
 
-            env.register_debug(msg);
+            session.register_debug(msg);
             println!("CONTRACT DEBUG {msg}");
 
             Ok(())
@@ -522,8 +518,8 @@ fn spent(fenv: Caller<Env>) -> u64 {
     limit - remaining
 }
 
-fn panic(fenv: Caller<Env>, arg_len: u32) -> WasmtimeResult<()> {
-    let env = fenv.data();
+fn panic(mut fenv: Caller<Env>, arg_len: u32) -> WasmtimeResult<()> {
+    let env = fenv.data_mut();
     let instance = env.self_instance();
 
     check_arg(instance, arg_len)?;
@@ -545,23 +541,23 @@ fn panic(fenv: Caller<Env>, arg_len: u32) -> WasmtimeResult<()> {
     )?)
 }
 
-fn get_metadata(
-    env: &mut Env,
+fn get_metadata<'a>(
+    instance: &mut dyn ContractInstance,
+    contract_session: &'a mut ContractSession,
+    self_id: &ContractId,
     contract_id_ofs: usize,
-) -> Option<&ContractMetadata> {
+) -> Option<&'a ContractMetadata> {
     // The null pointer is always zero, so we can use this to check if the
     // caller wants their own ID.
     if contract_id_ofs == 0 {
-        let self_id = env.self_contract_id().to_owned();
+        let self_id = self_id.to_owned();
 
-        let contract_metadata = env
+        let contract_metadata = contract_session
             .contract_metadata(&self_id)
             .expect("contract metadata should exist");
 
         Some(contract_metadata)
     } else {
-        let instance = env.self_instance();
-
         let contract_id =
             InstanceUtil::with_memory(instance.get_memory(), |memory| {
                 let mut contract_id_bytes = [0u8; CONTRACT_ID_BYTES];
@@ -571,20 +567,29 @@ fn get_metadata(
                 ContractId::from_bytes(contract_id_bytes)
             });
 
-        env.contract_metadata(&contract_id)
+        contract_session.contract_metadata(&contract_id)
     }
 }
 
 fn owner(mut fenv: Caller<Env>, mod_id_ofs: usize) -> WasmtimeResult<i32> {
-    let instance = fenv.data().self_instance();
-    check_ptr(&mut *instance, mod_id_ofs, CONTRACT_ID_BYTES)?;
+    let self_id = {
+        let env = fenv.data();
+        env.get_self_id()
+    };
+
     let env = fenv.data_mut();
-    match get_metadata(env, mod_id_ofs) {
+    let session: &mut Session = &mut *env;
+    let (instance, contract_session) =
+        Env::self_instance_contract_session(session);
+    check_ptr(instance, mod_id_ofs, CONTRACT_ID_BYTES)?;
+    let buf_ofs = instance.get_arg_buf_ofs();
+
+    match get_metadata(instance, contract_session, &self_id, mod_id_ofs).clone()
+    {
         None => Ok(0),
         Some(metadata) => {
             let owner = metadata.owner.as_slice();
 
-            let buf_ofs = instance.get_arg_buf_ofs();
             InstanceUtil::with_arg_buf_mut(
                 instance.get_memory_mut(),
                 buf_ofs,

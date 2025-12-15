@@ -91,7 +91,7 @@ struct SessionInner {
     current: ContractId,
 
     call_tree: CallTree,
-    instances: BTreeMap<ContractId, Box<dyn ContractInstance>>,
+    instances: BTreeMap<ContractId, *mut dyn ContractInstance>,
     debug: Vec<String>,
     data: SessionData,
 
@@ -552,10 +552,43 @@ impl Session {
     }
 
     pub(crate) fn instance<'a>(
+        &self,
+        contract_id: &ContractId,
+    ) -> Option<&'a mut dyn ContractInstance> {
+        self.inner.instances.get(contract_id).map(|instance| {
+            // SAFETY: We guarantee that the instance exists since we're in
+            // control over if it is dropped with the session.
+            unsafe { &mut **instance }
+        })
+    }
+
+    pub(crate) fn instance_mut<'a>(
         &mut self,
         contract_id: &ContractId,
-    ) -> Option<&mut dyn ContractInstance> {
-        self.inner.instances.get_mut(contract_id).map(|b| &mut **b)
+    ) -> Option<&'a mut dyn ContractInstance> {
+        self.inner.instances.get(contract_id).map(|instance| {
+            // SAFETY: We guarantee that the instance exists since we're in
+            // control over if it is dropped with the session.
+            unsafe { &mut **instance }
+        })
+    }
+
+    pub(crate) fn instance_contract_session<'a>(
+        &mut self,
+        contract_id: &ContractId,
+    ) -> (&'a mut dyn ContractInstance, &mut ContractSession) {
+        let i = self
+            .inner
+            .instances
+            .get(contract_id)
+            .map(|instance| {
+                // SAFETY: We guarantee that the instance exists since we're in
+                // control over if it is dropped with the session.
+                unsafe { &mut **instance }
+            })
+            .expect("instance should exist");
+        let c = &mut self.inner.contract_session;
+        (i, c)
     }
 
     fn clear_stack_and_instances(&mut self) {
@@ -636,6 +669,8 @@ impl Session {
         }
 
         let mem_len = instance.mem_len();
+        let instance = Box::leak(instance) as *mut dyn ContractInstance;
+
         self.inner.instances.insert(contract, instance);
         Ok(mem_len)
     }
@@ -868,6 +903,10 @@ impl SessionEnv for Session {
 
     fn host_query(&self, name: &str) -> Option<&dyn HostQuery> {
         self.inner.host_queries.get(name)
+    }
+
+    fn get_contract_session(&mut self) -> &mut ContractSession {
+        &mut self.inner.contract_session
     }
 }
 
