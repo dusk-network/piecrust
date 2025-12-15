@@ -5,8 +5,7 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 use crate::contract::ContractMetadata;
-use crate::store::ContractSession;
-use crate::{CallTreeElem, Error, HostQuery};
+use crate::{CallTreeElem, Error};
 use piecrust_uplink::{ContractId, Event};
 use std::any::Any;
 
@@ -32,6 +31,4 @@ pub trait SessionEnv: Send + Sync + Any {
         &mut self,
         contract_id: &ContractId,
     ) -> Option<&ContractMetadata>;
-    fn host_query(&self, name: &str) -> Option<&dyn HostQuery>;
-    fn get_contract_session(&mut self) -> &mut ContractSession;
 }

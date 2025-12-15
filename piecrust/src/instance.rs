@@ -58,15 +58,6 @@ impl Env {
             .expect("instance should exist")
     }
 
-    pub fn self_instance_mut<'b>(&mut self) -> &mut dyn ContractInstance {
-        let stack_element = self
-            .session
-            .nth_from_top(0)
-            .expect("there should be at least one element in the call stack");
-        self.instance_mut(&stack_element.contract_id)
-            .expect("instance should exist")
-    }
-
     pub fn self_instance_contract_session<'b>(
         session: &'b mut Session,
     ) -> (&mut dyn ContractInstance, &'b mut ContractSession) {
@@ -99,20 +90,6 @@ impl Env {
         contract_id: &ContractId,
     ) -> Option<&mut dyn ContractInstance> {
         self.session.instance(contract_id)
-    }
-
-    pub fn instance_mut<'b>(
-        &mut self,
-        contract_id: &ContractId,
-    ) -> Option<&mut dyn ContractInstance> {
-        self.session.instance_mut(contract_id)
-    }
-
-    pub fn instance_mut2<'b>(
-        session: &'b mut Session,
-        contract_id: &ContractId,
-    ) -> Option<&'b mut dyn ContractInstance> {
-        session.instance_mut(contract_id)
     }
 
     pub fn limit(&self) -> u64 {

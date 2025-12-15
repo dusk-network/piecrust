@@ -33,7 +33,7 @@ use crate::instance::WrappedInstance;
 use crate::session_env::SessionEnv;
 use crate::store::{ContractSession, PageOpening, PAGE_SIZE};
 use crate::types::StandardBufSerializer;
-use crate::vm::{HostQueries, HostQuery};
+use crate::vm::HostQueries;
 
 const MAX_META_SIZE: usize = ARGBUF_LEN;
 pub const INIT_METHOD: &str = "init";
@@ -899,14 +899,6 @@ impl SessionEnv for Session {
         contract_id: &ContractId,
     ) -> Option<&ContractMetadata> {
         self.inner.contract_session.contract_metadata(contract_id)
-    }
-
-    fn host_query(&self, name: &str) -> Option<&dyn HostQuery> {
-        self.inner.host_queries.get(name)
-    }
-
-    fn get_contract_session(&mut self) -> &mut ContractSession {
-        &mut self.inner.contract_session
     }
 }
 
