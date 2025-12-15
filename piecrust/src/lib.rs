@@ -125,6 +125,7 @@ mod contract;
 mod error;
 mod imports;
 mod instance;
+mod instance_factory;
 mod session;
 mod session_env;
 mod store;
