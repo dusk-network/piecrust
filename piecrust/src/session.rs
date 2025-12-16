@@ -30,7 +30,6 @@ use crate::contract::contract_instance::ContractInstance;
 use crate::contract::{ContractData, ContractMetadata, WrappedContract};
 use crate::error::Error::{self, InitalizationError, PersistenceError};
 use crate::instance_factory::{InstanceFactory, WasmtimeInstanceFactory};
-use crate::session_env::SessionEnv;
 use crate::store::{ContractSession, PageOpening, PAGE_SIZE};
 use crate::types::StandardBufSerializer;
 use crate::vm::HostQueries;
@@ -811,23 +810,21 @@ impl Session {
     pub fn host_queries(&self) -> &HostQueries {
         &self.inner.host_queries
     }
-}
 
-impl SessionEnv for Session {
-    fn push_event(&mut self, event: Event) {
+    pub fn push_event(&mut self, event: Event) {
         self.inner.events.push(event);
     }
 
-    fn push_feed(&mut self, data: Vec<u8>) -> Result<(), Error> {
+    pub fn push_feed(&mut self, data: Vec<u8>) -> Result<(), Error> {
         let feed = self.inner.feeder.as_ref().ok_or(Error::MissingFeed)?;
         feed.send(data).map_err(Error::FeedPulled)
     }
 
-    fn nth_from_top(&self, n: usize) -> Option<CallTreeElem> {
+    pub fn nth_from_top(&self, n: usize) -> Option<CallTreeElem> {
         self.inner.call_tree.nth_parent(n)
     }
 
-    fn push_callstack(
+    pub fn push_callstack(
         &mut self,
         contract_id: ContractId,
         limit: u64,
@@ -863,15 +860,15 @@ impl SessionEnv for Session {
             .expect("We just pushed an element to the stack"))
     }
 
-    fn move_up_call_tree(&mut self, spent: u64) {
+    pub fn move_up_call_tree(&mut self, spent: u64) {
         self.inner.call_tree.move_up(spent);
     }
 
-    fn move_up_prune_call_tree(&mut self) {
+    pub fn move_up_prune_call_tree(&mut self) {
         self.inner.call_tree.move_up_prune();
     }
 
-    fn revert_callstack(&mut self) -> Result<(), std::io::Error> {
+    pub fn revert_callstack(&mut self) -> Result<(), std::io::Error> {
         let items: Vec<_> = self
             .inner
             .call_tree
@@ -888,16 +885,16 @@ impl SessionEnv for Session {
         Ok(())
     }
 
-    fn call_ids(&self) -> Vec<&ContractId> {
+    pub fn call_ids(&self) -> Vec<&ContractId> {
         self.inner.call_tree.call_ids()
     }
 
     /// Returns the value of a metadata item.
-    fn meta(&self, name: &str) -> Option<Vec<u8>> {
+    pub fn meta(&self, name: &str) -> Option<Vec<u8>> {
         self.inner.data.get(name)
     }
 
-    fn contract_metadata(
+    pub fn contract_metadata(
         &mut self,
         contract_id: &ContractId,
     ) -> Option<&ContractMetadata> {

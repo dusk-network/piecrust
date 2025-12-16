@@ -22,7 +22,6 @@ use crate::config::BYTE_STORE_COST;
 use crate::contract::contract_instance::{ContractInstance, InstanceUtil};
 use crate::instance::Env;
 use crate::session::INIT_METHOD;
-use crate::session_env::SessionEnv;
 use crate::store::ContractSession;
 use crate::{Error, Session};
 

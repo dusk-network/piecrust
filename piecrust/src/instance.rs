@@ -14,7 +14,6 @@ use piecrust_uplink::{ContractId, Event, ARGBUF_LEN};
 use crate::contract::WrappedContract;
 use crate::imports::Imports;
 use crate::session::Session;
-use crate::session_env::SessionEnv;
 use crate::store::{ContractSession, Memory};
 use crate::Error;
 

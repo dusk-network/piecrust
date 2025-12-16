@@ -9,11 +9,9 @@ use crate::{CallTreeElem, Error};
 use piecrust_uplink::{ContractId, Event};
 use std::any::Any;
 
+// note: this trait is for future use, remove in prod
+#[allow(dead_code)]
 pub trait SessionEnv: Send + Sync + Any {
-    // fn instance(
-    //     &self,
-    //     contract_id: &ContractId,
-    // ) -> Option<WrappedInstance>;
     fn push_event(&mut self, event: Event);
     fn push_feed(&mut self, data: Vec<u8>) -> Result<(), Error>;
     fn nth_from_top(&self, n: usize) -> Option<CallTreeElem>;
