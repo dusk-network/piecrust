@@ -136,6 +136,7 @@ pub use call_tree::{CallTree, CallTreeElem};
 pub use contract::{ContractData, ContractDataBuilder};
 pub use error::Error;
 pub use session::{CallReceipt, Session, SessionData};
+pub use session_env::SessionEnv;
 pub use store::PageOpening;
 pub use vm::{HostQuery, VM};
 
