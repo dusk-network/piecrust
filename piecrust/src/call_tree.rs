@@ -170,7 +170,7 @@ impl fmt::Debug for CallTree {
 
 impl CallTree {
     /// Creates a new empty call tree, starting with the given contract.
-    pub(crate) const fn new() -> Self {
+    pub const fn new() -> Self {
         Self(None)
     }
 
