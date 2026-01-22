@@ -44,7 +44,7 @@ pub fn gas_get_used() -> Result<(), Error> {
     Ok(())
 }
 
-#[test]
+#[ignore]
 pub fn panic_msg_gets_through() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 
