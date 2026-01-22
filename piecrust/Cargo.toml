@@ -29,7 +29,6 @@ dusk-merkle = { version = "0.5", features = ["rkyv-impl"] }
 const-decoder = "0.3"
 tracing = "0.1.40"
 indexmap = "=2.11" # 2.12 requires rustc edition 2024
-constant_time_eq = "=0.3.1"
 
 
 [dev-dependencies]

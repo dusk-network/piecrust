@@ -12,7 +12,6 @@ license = "MPL-2.0"
 piecrust-uplink = { path = "../../piecrust-uplink", features = ["abi", "dlmalloc"] }
 dusk-merkle = { version = "0.1", features = ["rkyv-impl"] }
 blake3 = { version = "=1.8.2", default-features = false }
-constant_time_eq = "=0.3.1"
 
 [lib]
 crate-type = ["cdylib", "rlib"]
