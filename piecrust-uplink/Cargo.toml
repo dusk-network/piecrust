@@ -18,6 +18,7 @@ bytecheck = { version = "0.6", default-features = false }
 dlmalloc = { version = "0.2", optional = true, features = ["global"] }
 serde = { version = "1.0", default-features = false, features = ["alloc"], optional = true }
 hex = { version = "0.4", default-features = false, features = ["alloc"]}
+constant_time_eq = "=0.3.1"
 
 [dev-dependencies]
 rand = "0.8"
