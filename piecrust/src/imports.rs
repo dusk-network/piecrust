@@ -8,7 +8,6 @@ mod wasm32;
 mod wasm64;
 
 use std::any::Any;
-use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
 use crate::contract::ContractMetadata;
@@ -287,39 +286,48 @@ pub(crate) fn c(
         }
         let arg = &arg_buf[..arg_len as usize];
         println!(
-            "piecrust imports: calling function '{}' in contract {}",
-            &name, &callee_stack_element.contract_id
+            "piecrust imports: calling function '{}' in contract {} callee is: {}",
+            &name, &callee_stack_element.contract_id, env.self_contract_id()
         );
         const TRANSFER_CONTRACT: ContractId = {
             let mut bytes = [0u8; 32];
             bytes[0] = 1;
             ContractId::from_bytes(bytes)
         };
-        if callee_stack_element.contract_id == TRANSFER_CONTRACT {
+        if callee_stack_element.contract_id == TRANSFER_CONTRACT
+            && name == "deposit"
+        {
             // SAFETY: Assuming single-threaded access
-            unsafe {
+            let result = unsafe {
                 if let Some(callback) = &GLOBAL_STATE.callback {
                     let mut cb = callback.borrow_mut();
-                    let _result = cb(name.to_string(), arg.to_vec());
+                    cb(
+                        env.self_contract_id().to_bytes(),
+                        name.to_string(),
+                        arg.to_vec(),
+                    )
+                } else {
+                    [0u8; 0].to_vec()
                 }
-            }
+            };
+            Ok((result.len() as i32, 0u64))
+        } else {
+            callee.write_argument(arg);
+            let ret_len = callee
+                .call(name, arg.len() as u32, callee_limit)
+                .map_err(Error::normalize)
+                .map_err(WithMemoryError::AfterPush)?;
+            check_arg(callee, ret_len as u32)
+                .map_err(WithMemoryError::AfterPush)?;
+
+            // copy back result
+            callee.read_argument(&mut memory[argbuf_ofs..][..ret_len as usize]);
+
+            let callee_remaining = callee.get_remaining_gas();
+            let callee_spent = callee_limit - callee_remaining;
+
+            Ok((ret_len, callee_spent))
         }
-
-        callee.write_argument(arg);
-        let ret_len = callee
-            .call(name, arg.len() as u32, callee_limit)
-            .map_err(Error::normalize)
-            .map_err(WithMemoryError::AfterPush)?;
-        check_arg(callee, ret_len as u32)
-            .map_err(WithMemoryError::AfterPush)?;
-
-        // copy back result
-        callee.read_argument(&mut memory[argbuf_ofs..][..ret_len as usize]);
-
-        let callee_remaining = callee.get_remaining_gas();
-        let callee_spent = callee_limit - callee_remaining;
-
-        Ok((ret_len, callee_spent))
     };
 
     let ret = match instance.with_memory_mut(with_memory) {

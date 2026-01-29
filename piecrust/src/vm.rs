@@ -11,7 +11,7 @@ use std::collections::BTreeMap;
 use std::fmt::{self, Debug, Formatter};
 use std::path::Path;
 use std::rc::Rc;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::thread;
 
 use dusk_wasmtime::{
@@ -122,17 +122,11 @@ pub struct VM {
 }
 
 pub type GenesisCallback =
-    Option<Rc<RefCell<dyn FnMut(String, Vec<u8>) -> Vec<u8>>>>;
+    Option<Rc<RefCell<dyn FnMut([u8; 32], String, Vec<u8>) -> Vec<u8>>>>;
 
 pub struct GlobalState {
     pub(crate) callback:
-        Option<Rc<RefCell<dyn FnMut(String, Vec<u8>) -> Vec<u8>>>>,
-}
-
-impl GlobalState {
-    fn new() -> Self {
-        Self { callback: None }
-    }
+        Option<Rc<RefCell<dyn FnMut([u8; 32], String, Vec<u8>) -> Vec<u8>>>>,
 }
 
 pub static mut GLOBAL_STATE: GlobalState = GlobalState { callback: None };
