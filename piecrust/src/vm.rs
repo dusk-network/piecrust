@@ -9,8 +9,11 @@ use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::fmt::{self, Debug, Formatter};
 use std::path::Path;
-use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 use std::thread;
+
+use lazy_static::lazy_static;
 
 use dusk_wasmtime::{
     Config, Engine, ModuleVersionStrategy, OperatorCost, OptLevel, Strategy,
@@ -119,6 +122,16 @@ pub struct VM {
     store: ContractStore,
 }
 
+pub type GenesisCallback =
+    Arc<dyn Fn(String, Vec<u8>) -> Vec<u8> + Send + Sync>;
+
+lazy_static! {
+    pub static ref GENESIS_CALLBACK: Mutex<Option<GenesisCallback>> =
+        Mutex::new(None);
+    pub static ref GENESIS_CALLBACK_REGISTERED: AtomicBool =
+        AtomicBool::new(false);
+}
+
 impl Debug for VM {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         f.debug_struct("VM")
@@ -209,6 +222,13 @@ impl VM {
     /// Return a list of all registered host queries.
     pub fn host_queries(&self) -> &HostQueries {
         &self.host_queries
+    }
+
+    /// Register TRANSFER and STAKE callback
+    pub fn register_genesis_callback(callback: GenesisCallback) {
+        let mut global = GENESIS_CALLBACK.lock().unwrap();
+        *global = Some(Arc::clone(&callback));
+        GENESIS_CALLBACK_REGISTERED.store(true, Ordering::Release);
     }
 
     /// Spawn a [`Session`].

@@ -8,6 +8,7 @@ mod wasm32;
 mod wasm64;
 
 use std::any::Any;
+use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
 use crate::contract::ContractMetadata;
@@ -21,6 +22,7 @@ use piecrust_uplink::{
 use crate::config::BYTE_STORE_COST;
 use crate::instance::{Env, WrappedInstance};
 use crate::session::INIT_METHOD;
+use crate::vm::{GENESIS_CALLBACK, GENESIS_CALLBACK_REGISTERED};
 use crate::Error;
 
 pub const GAS_PASS_PCT: u64 = 93;
@@ -283,8 +285,24 @@ pub(crate) fn c(
                 "init call not allowed".into(),
             )));
         }
-
         let arg = &arg_buf[..arg_len as usize];
+        println!(
+            "piecrust imports: calling function '{}' in contract {}",
+            &name, &callee_stack_element.contract_id
+        );
+        const TRANSFER_CONTRACT: ContractId = {
+            let mut bytes = [0u8; 32];
+            bytes[0] = 1;
+            ContractId::from_bytes(bytes)
+        };
+        if callee_stack_element.contract_id == TRANSFER_CONTRACT
+            && GENESIS_CALLBACK_REGISTERED.load(Ordering::Acquire)
+        {
+            let callback_guard = GENESIS_CALLBACK.lock().unwrap();
+            if let Some(callback) = callback_guard.as_ref() {
+                let _result = callback(name.to_string(), arg.to_vec());
+            }
+        }
 
         callee.write_argument(arg);
         let ret_len = callee
