@@ -6,14 +6,13 @@
 
 use std::any::Any;
 use std::borrow::Cow;
+use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::fmt::{self, Debug, Formatter};
 use std::path::Path;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 use std::thread;
-
-use lazy_static::lazy_static;
 
 use dusk_wasmtime::{
     Config, Engine, ModuleVersionStrategy, OperatorCost, OptLevel, Strategy,
@@ -123,14 +122,20 @@ pub struct VM {
 }
 
 pub type GenesisCallback =
-    Arc<dyn Fn(String, Vec<u8>) -> Vec<u8> + Send + Sync>;
+    Option<Rc<RefCell<dyn FnMut(String, Vec<u8>) -> Vec<u8>>>>;
 
-lazy_static! {
-    pub static ref GENESIS_CALLBACK: Mutex<Option<GenesisCallback>> =
-        Mutex::new(None);
-    pub static ref GENESIS_CALLBACK_REGISTERED: AtomicBool =
-        AtomicBool::new(false);
+pub struct GlobalState {
+    pub(crate) callback:
+        Option<Rc<RefCell<dyn FnMut(String, Vec<u8>) -> Vec<u8>>>>,
 }
+
+impl GlobalState {
+    fn new() -> Self {
+        Self { callback: None }
+    }
+}
+
+pub static mut GLOBAL_STATE: GlobalState = GlobalState { callback: None };
 
 impl Debug for VM {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
@@ -226,9 +231,10 @@ impl VM {
 
     /// Register TRANSFER and STAKE callback
     pub fn register_genesis_callback(callback: GenesisCallback) {
-        let mut global = GENESIS_CALLBACK.lock().unwrap();
-        *global = Some(Arc::clone(&callback));
-        GENESIS_CALLBACK_REGISTERED.store(true, Ordering::Release);
+        // SAFETY: Assuming single-threaded initialization
+        unsafe {
+            GLOBAL_STATE.callback = callback;
+        }
     }
 
     /// Spawn a [`Session`].

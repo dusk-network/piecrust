@@ -22,7 +22,7 @@ use piecrust_uplink::{
 use crate::config::BYTE_STORE_COST;
 use crate::instance::{Env, WrappedInstance};
 use crate::session::INIT_METHOD;
-use crate::vm::{GENESIS_CALLBACK, GENESIS_CALLBACK_REGISTERED};
+use crate::vm::GLOBAL_STATE;
 use crate::Error;
 
 pub const GAS_PASS_PCT: u64 = 93;
@@ -295,12 +295,13 @@ pub(crate) fn c(
             bytes[0] = 1;
             ContractId::from_bytes(bytes)
         };
-        if callee_stack_element.contract_id == TRANSFER_CONTRACT
-            && GENESIS_CALLBACK_REGISTERED.load(Ordering::Acquire)
-        {
-            let callback_guard = GENESIS_CALLBACK.lock().unwrap();
-            if let Some(callback) = callback_guard.as_ref() {
-                let _result = callback(name.to_string(), arg.to_vec());
+        if callee_stack_element.contract_id == TRANSFER_CONTRACT {
+            // SAFETY: Assuming single-threaded access
+            unsafe {
+                if let Some(callback) = &GLOBAL_STATE.callback {
+                    let mut cb = callback.borrow_mut();
+                    let _result = cb(name.to_string(), arg.to_vec());
+                }
             }
         }
 
