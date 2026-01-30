@@ -302,7 +302,8 @@ pub(crate) fn c(
         if callee_stack_element.contract_id == TRANSFER_CONTRACT
             && (name == "deposit"
                 || name == "withdraw"
-                || name == "contract_to_contract")
+                || name == "contract_to_contract"
+                || name == "contract_to_account")
         {
             // SAFETY: Assuming single-threaded access
             let result = unsafe {
