@@ -122,11 +122,12 @@ pub struct VM {
 }
 
 pub type GenesisCallback =
-    Option<Rc<RefCell<dyn FnMut([u8; 32], String, Vec<u8>) -> Vec<u8>>>>;
+    Option<Rc<RefCell<dyn FnMut([u8; 32], String, Vec<u8>, u64) -> Vec<u8>>>>;
 
 pub struct GlobalState {
-    pub(crate) callback:
-        Option<Rc<RefCell<dyn FnMut([u8; 32], String, Vec<u8>) -> Vec<u8>>>>,
+    pub(crate) callback: Option<
+        Rc<RefCell<dyn FnMut([u8; 32], String, Vec<u8>, u64) -> Vec<u8>>>,
+    >,
 }
 
 pub static mut GLOBAL_STATE: GlobalState = GlobalState { callback: None };

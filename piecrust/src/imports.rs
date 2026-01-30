@@ -230,6 +230,11 @@ pub(crate) fn c(
 
     let instance = env.self_instance();
 
+    let block_height = env
+        .meta("block_height")
+        .map(|v| rkyv::from_bytes(&v).unwrap_or(0u64))
+        .unwrap_or(0u64);
+
     let name_len = name_len as usize;
 
     check_ptr(instance, callee_ofs, CONTRACT_ID_BYTES)?;
@@ -295,7 +300,7 @@ pub(crate) fn c(
             ContractId::from_bytes(bytes)
         };
         if callee_stack_element.contract_id == TRANSFER_CONTRACT
-            && name == "deposit"
+            && (name == "deposit" || name == "withdraw")
         {
             // SAFETY: Assuming single-threaded access
             let result = unsafe {
@@ -305,6 +310,7 @@ pub(crate) fn c(
                         env.self_contract_id().to_bytes(),
                         name.to_string(),
                         arg.to_vec(),
+                        block_height,
                     )
                 } else {
                     [0u8; 0].to_vec()
