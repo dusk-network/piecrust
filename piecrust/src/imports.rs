@@ -300,7 +300,9 @@ pub(crate) fn c(
             ContractId::from_bytes(bytes)
         };
         if callee_stack_element.contract_id == TRANSFER_CONTRACT
-            && (name == "deposit" || name == "withdraw")
+            && (name == "deposit"
+                || name == "withdraw"
+                || name == "contract_to_contract")
         {
             // SAFETY: Assuming single-threaded access
             let result = unsafe {
