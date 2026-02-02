@@ -258,6 +258,12 @@ pub(crate) fn c(
         AfterPush(Error),
     }
 
+    const TRANSFER_CONTRACT: ContractId = {
+        let mut bytes = [0u8; 32];
+        bytes[0] = 1;
+        ContractId::from_bytes(bytes)
+    };
+
     let with_memory = |memory: &mut [u8]| -> Result<_, WithMemoryError> {
         let arg_buf = &memory[argbuf_ofs..][..ARGBUF_LEN];
 
@@ -294,31 +300,23 @@ pub(crate) fn c(
             "piecrust imports: calling function '{}' in contract {} callee is: {}",
             &name, &callee_stack_element.contract_id, env.self_contract_id()
         );
-        const TRANSFER_CONTRACT: ContractId = {
-            let mut bytes = [0u8; 32];
-            bytes[0] = 1;
-            ContractId::from_bytes(bytes)
-        };
-        if unsafe {GLOBAL_STATE.callback.is_some()} && callee_stack_element.contract_id == TRANSFER_CONTRACT
+        let callback_option = unsafe { &GLOBAL_STATE.callback };
+        let should_call_callback = callee_stack_element.contract_id
+            == TRANSFER_CONTRACT
             && (name == "deposit"
                 || name == "withdraw"
                 || name == "contract_to_contract"
-                || name == "contract_to_account")
-        {
-            // SAFETY: Assuming single-threaded access
-            let result = unsafe {
-                if let Some(callback) = &GLOBAL_STATE.callback {
-                    let mut cb = callback.borrow_mut();
-                    cb(
-                        env.self_contract_id().to_bytes(),
-                        name.to_string(),
-                        arg.to_vec(),
-                        block_height,
-                    )
-                } else {
-                    [0u8; 0].to_vec()
-                }
-            };
+                || name == "contract_to_account");
+
+        if callback_option.is_some() && should_call_callback {
+            let callback = callback_option.as_ref().unwrap();
+            let mut cb = callback.borrow_mut();
+            let result = cb(
+                env.self_contract_id().to_bytes(),
+                name.to_string(),
+                arg.to_vec(),
+                block_height,
+            );
             Ok((result.len() as i32, 0u64))
         } else {
             callee.write_argument(arg);
