@@ -299,7 +299,7 @@ pub(crate) fn c(
             bytes[0] = 1;
             ContractId::from_bytes(bytes)
         };
-        if callee_stack_element.contract_id == TRANSFER_CONTRACT
+        if unsafe {GLOBAL_STATE.callback.is_some()} && callee_stack_element.contract_id == TRANSFER_CONTRACT
             && (name == "deposit"
                 || name == "withdraw"
                 || name == "contract_to_contract"
