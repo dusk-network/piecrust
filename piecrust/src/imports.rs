@@ -311,13 +311,26 @@ pub(crate) fn c(
         if callback_option.is_some() && should_call_callback {
             let callback = callback_option.as_ref().unwrap();
             let mut cb = callback.borrow_mut();
-            let result = cb(
+            let (code, out_v) = cb(
                 env.self_contract_id().to_bytes(),
                 name.to_string(),
                 arg.to_vec(),
                 block_height,
             );
-            Ok((result.len() as i32, 0u64))
+
+            if code < 0 {
+                let msg_len = out_v.len();
+                let msg_len_bytes = (msg_len as u32).to_le_bytes();
+                memory[argbuf_ofs..argbuf_ofs + 4]
+                    .copy_from_slice(&msg_len_bytes);
+                memory[argbuf_ofs + 4..argbuf_ofs + 4 + msg_len]
+                    .copy_from_slice(&out_v[..]);
+            } else {
+                memory[argbuf_ofs..argbuf_ofs + out_v.len()]
+                    .copy_from_slice(&out_v);
+            }
+
+            Ok((code as i32, 0u64))
         } else {
             callee.write_argument(arg);
             let ret_len = callee

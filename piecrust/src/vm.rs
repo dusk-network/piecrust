@@ -121,12 +121,17 @@ pub struct VM {
     store: ContractStore,
 }
 
-pub type GenesisCallback =
-    Option<Rc<RefCell<dyn FnMut([u8; 32], String, Vec<u8>, u64) -> Vec<u8>>>>;
+pub type GenesisCallback = Option<
+    Rc<RefCell<dyn FnMut([u8; 32], String, Vec<u8>, u64) -> (i32, Vec<u8>)>>,
+>;
 
 pub struct GlobalState {
     pub(crate) callback: Option<
-        Rc<RefCell<dyn FnMut([u8; 32], String, Vec<u8>, u64) -> Vec<u8>>>,
+        Rc<
+            RefCell<
+                dyn FnMut([u8; 32], String, Vec<u8>, u64) -> (i32, Vec<u8>),
+            >,
+        >,
     >,
 }
 
