@@ -9,6 +9,7 @@ use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::fmt::{self, Debug, Formatter};
+use std::hash::{DefaultHasher, Hash, Hasher};
 use std::path::Path;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -126,16 +127,20 @@ pub type GenesisCallback = Option<
 >;
 
 pub struct GlobalState {
-    pub(crate) callback: Option<
-        Rc<
-            RefCell<
-                dyn FnMut([u8; 32], String, Vec<u8>, u64) -> (i32, Vec<u8>),
-            >,
-        >,
-    >,
+    pub(crate) callbacks: BTreeMap<u64, GenesisCallback>
 }
 
-pub static mut GLOBAL_STATE: GlobalState = GlobalState { callback: None };
+impl GlobalState {
+    pub fn get_callback(&self, unique_id: u64) -> &GenesisCallback {
+        const N: GenesisCallback = None;
+        match self.callbacks.get(&unique_id){
+            Some(c) => c,
+            _ => &N,
+        }
+    }
+}
+
+pub static mut GLOBAL_STATE: GlobalState = GlobalState { callbacks: BTreeMap::new() };
 
 impl Debug for VM {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
@@ -145,6 +150,30 @@ impl Debug for VM {
             .field("store", &self.store)
             .finish()
     }
+}
+
+pub struct UniqueIdHolder(pub u64);
+
+impl HostQuery for UniqueIdHolder {
+    fn deserialize_and_price(
+        &self,
+        _arg_buf: &[u8],
+        _arg: &mut Box<dyn Any>,
+    ) -> u64 {
+        0u64
+    }
+
+    fn execute(&self, _arg: &Box<dyn Any>, arg_buf: &mut [u8]) -> u32 {
+        arg_buf[..8].copy_from_slice(&self.0.to_le_bytes());
+        8
+    }
+}
+
+fn thread_id_as_number() -> u64 {
+    let thread_id = thread::current().id();
+    let mut hasher = DefaultHasher::new();
+    thread_id.hash(&mut hasher);
+    hasher.finish()
 }
 
 impl VM {
@@ -165,7 +194,7 @@ impl VM {
         );
 
         tracing::trace!("before ContractStore::new");
-        let mut store = ContractStore::new(engine.clone(), root_dir)
+        let mut store = ContractStore::new(engine.clone(), &root_dir)
             .map_err(|err| PersistenceError(Arc::new(err)))?;
         tracing::trace!("before ContractStore::finish_new");
         store
@@ -173,9 +202,12 @@ impl VM {
             .map_err(|err| PersistenceError(Arc::new(err)))?;
         tracing::trace!("after ContractStore::finish_new");
 
+        let mut host_queries = HostQueries::default();
+        host_queries.insert("unique_id", UniqueIdHolder(thread_id_as_number()));
+
         Ok(Self {
             engine,
-            host_queries: HostQueries::default(),
+            host_queries,
             store,
         })
     }
@@ -197,15 +229,18 @@ impl VM {
             "Configuration should be valid since its set at compile time",
         );
 
-        let mut store = ContractStore::new(engine.clone(), tmp)
+        let mut store = ContractStore::new(engine.clone(), &tmp)
             .map_err(|err| PersistenceError(Arc::new(err)))?;
         store
             .finish_new()
             .map_err(|err| PersistenceError(Arc::new(err)))?;
 
+        let mut host_queries = HostQueries::default();
+        host_queries.insert("unique_id", UniqueIdHolder(thread_id_as_number()));
+
         Ok(Self {
             engine,
-            host_queries: HostQueries::default(),
+            host_queries,
             store,
         })
     }
@@ -233,7 +268,7 @@ impl VM {
     pub fn register_genesis_callback(callback: GenesisCallback) {
         // SAFETY: Assuming single-threaded initialization
         unsafe {
-            GLOBAL_STATE.callback = callback;
+            GLOBAL_STATE.callbacks.insert(thread_id_as_number(), callback);
         }
     }
 

@@ -235,6 +235,19 @@ pub(crate) fn c(
         .map(|v| rkyv::from_bytes(&v).unwrap_or(0u64))
         .unwrap_or(0u64);
 
+    let unique_id = {
+        let arg: Box<dyn Any> = Box::new(());
+        let hq = env.host_query("unique_id");
+        let mut bytes = [0u8; 8];
+        match hq {
+            Some(q) => {
+                q.execute(&arg, &mut bytes);
+                u64::from_le_bytes(bytes)
+            },
+            _ => 0u64
+        }
+    };
+
     let name_len = name_len as usize;
 
     check_ptr(instance, callee_ofs, CONTRACT_ID_BYTES)?;
@@ -300,7 +313,7 @@ pub(crate) fn c(
             "piecrust imports: calling function '{}' in contract {} callee is: {}",
             &name, &callee_stack_element.contract_id, env.self_contract_id()
         );
-        let callback_option = unsafe { &GLOBAL_STATE.callback };
+        let callback_option = unsafe { &GLOBAL_STATE.get_callback(unique_id) };
         let should_call_callback = callee_stack_element.contract_id
             == TRANSFER_CONTRACT
             && (name == "deposit"
