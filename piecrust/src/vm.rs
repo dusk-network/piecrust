@@ -127,20 +127,22 @@ pub type GenesisCallback = Option<
 >;
 
 pub struct GlobalState {
-    pub(crate) callbacks: BTreeMap<u64, GenesisCallback>
+    pub(crate) callbacks: BTreeMap<u64, GenesisCallback>,
 }
 
 impl GlobalState {
     pub fn get_callback(&self, unique_id: u64) -> &GenesisCallback {
         const N: GenesisCallback = None;
-        match self.callbacks.get(&unique_id){
+        match self.callbacks.get(&unique_id) {
             Some(c) => c,
             _ => &N,
         }
     }
 }
 
-pub static mut GLOBAL_STATE: GlobalState = GlobalState { callbacks: BTreeMap::new() };
+pub static mut GLOBAL_STATE: GlobalState = GlobalState {
+    callbacks: BTreeMap::new(),
+};
 
 impl Debug for VM {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
@@ -268,7 +270,9 @@ impl VM {
     pub fn register_genesis_callback(callback: GenesisCallback) {
         // SAFETY: Assuming single-threaded initialization
         unsafe {
-            GLOBAL_STATE.callbacks.insert(thread_id_as_number(), callback);
+            GLOBAL_STATE
+                .callbacks
+                .insert(thread_id_as_number(), callback);
         }
     }
 

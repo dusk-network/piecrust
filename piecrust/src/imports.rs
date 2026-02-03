@@ -243,8 +243,8 @@ pub(crate) fn c(
             Some(q) => {
                 q.execute(&arg, &mut bytes);
                 u64::from_le_bytes(bytes)
-            },
-            _ => 0u64
+            }
+            _ => 0u64,
         }
     };
 
