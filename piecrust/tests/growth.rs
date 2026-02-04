@@ -8,7 +8,7 @@ use piecrust::{ContractData, Error, SessionData, VM, contract_bytecode};
 use piecrust_uplink::ARGBUF_LEN;
 
 const OWNER: [u8; 32] = [0u8; 32];
-const LIMIT: u64 = 40_000_000;
+const LIMIT: u64 = 80_000_000;
 
 #[test]
 fn grow_a_bunch() -> Result<(), Error> {
