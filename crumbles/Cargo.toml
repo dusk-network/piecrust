@@ -9,7 +9,7 @@ keywords = ["memory", "snapshots", "page", "dirty"]
 repository = "https://github.com/dusk-network/piecrust"
 version = "0.3.2-rc.0"
 
-edition = "2021"
+edition.workspace = true
 license = "MPL-2.0"
 
 [dependencies]
