@@ -26,6 +26,3 @@ unsafe fn handle_panic(info: &PanicInfo) -> ! {
     panic(w.ofs() as u32);
     unreachable!()
 }
-
-#[lang = "eh_personality"]
-extern "C" fn eh_personality() {}
