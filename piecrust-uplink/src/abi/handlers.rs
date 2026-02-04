@@ -7,7 +7,7 @@
 use core::fmt::Write;
 use core::panic::PanicInfo;
 
-extern "C" {
+unsafe extern "C" {
     pub fn panic(arg_len: u32);
 }
 
