@@ -4,6 +4,10 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
+// Allow unsafe_op_in_unsafe_fn from bytecheck/rkyv derive macros until
+// we can update to rkyv 0.8 / bytecheck 0.8 which have breaking API changes.
+#![allow(unsafe_op_in_unsafe_fn)]
+
 //! Piecrust VM for WASM smart contract execution.
 //!
 //! A [`VM`] is instantiated by calling [`VM::new`] using a directory for

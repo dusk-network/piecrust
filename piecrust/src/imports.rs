@@ -42,7 +42,9 @@ impl Imports {
 
             match Self::import(store, import_name, is_64) {
                 None => {
-                    return Err(Error::InvalidFunction(import_name.to_string()));
+                    return Err(Error::InvalidFunction(
+                        import_name.to_string(),
+                    ));
                 }
                 Some(func) => {
                     imports.push(func.into());

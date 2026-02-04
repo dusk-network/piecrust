@@ -8,15 +8,14 @@ use alloc::vec::Vec;
 use core::ptr;
 
 use rkyv::{
-    archived_root,
-    ser::serializers::{BufferScratch, BufferSerializer, CompositeSerializer},
+    Archive, Deserialize, Infallible, Serialize, archived_root,
     ser::Serializer,
-    Archive, Deserialize, Infallible, Serialize,
+    ser::serializers::{BufferScratch, BufferSerializer, CompositeSerializer},
 };
 
 use crate::{
-    ContractError, ContractId, StandardBufSerializer, CONTRACT_ID_BYTES,
-    SCRATCH_BUF_BYTES,
+    CONTRACT_ID_BYTES, ContractError, ContractId, SCRATCH_BUF_BYTES,
+    StandardBufSerializer,
 };
 
 pub mod arg_buf {

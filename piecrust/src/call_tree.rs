@@ -103,47 +103,55 @@ impl fmt::Debug for CallTree {
             is_root: bool,
             is_last: bool,
         ) -> fmt::Result {
-            let node_ref = &*node;
-            let is_cursor = node == cursor;
+            // SAFETY: The node pointer is valid as it comes from our tree structure.
+            // Recursive calls use children pointers which are also valid.
+            unsafe {
+                let node_ref = &*node;
+                let is_cursor = node == cursor;
 
-            // Format contract ID (first 4 bytes only)
-            let id_bytes = node_ref.elem.contract_id.to_bytes();
-            let short_id = format!(
-                "{:02x}{:02x}{:02x}{:02x}",
-                id_bytes[0], id_bytes[1], id_bytes[2], id_bytes[3]
-            );
+                // Format contract ID (first 4 bytes only)
+                let id_bytes = node_ref.elem.contract_id.to_bytes();
+                let short_id = format!(
+                    "{:02x}{:02x}{:02x}{:02x}",
+                    id_bytes[0], id_bytes[1], id_bytes[2], id_bytes[3]
+                );
 
-            if !is_root {
-                write!(f, "{}", prefix)?;
-                write!(f, "{}", if is_last { "└── " } else { "├── " })?;
-            }
+                if !is_root {
+                    write!(f, "{}", prefix)?;
+                    write!(f, "{}", if is_last { "└── " } else { "├── " })?;
+                }
 
-            if is_cursor {
-                writeln!(f, "*0x{}", short_id)?;
-            } else {
-                writeln!(f, "0x{}", short_id)?;
-            }
-
-            // Format children
-            let child_count = node_ref.children.len();
-            for (i, &child) in node_ref.children.iter().enumerate() {
-                let is_last_child = i == child_count - 1;
-                let new_prefix = if is_root {
-                    String::new()
+                if is_cursor {
+                    writeln!(f, "*0x{}", short_id)?;
                 } else {
-                    format!("{}{}    ", prefix, if is_last { " " } else { "│" })
-                };
-                format_node_pretty(
-                    f,
-                    child,
-                    cursor,
-                    &new_prefix,
-                    false,
-                    is_last_child,
-                )?;
-            }
+                    writeln!(f, "0x{}", short_id)?;
+                }
 
-            Ok(())
+                // Format children
+                let child_count = node_ref.children.len();
+                for (i, &child) in node_ref.children.iter().enumerate() {
+                    let is_last_child = i == child_count - 1;
+                    let new_prefix = if is_root {
+                        String::new()
+                    } else {
+                        format!(
+                            "{}{}    ",
+                            prefix,
+                            if is_last { " " } else { "│" }
+                        )
+                    };
+                    format_node_pretty(
+                        f,
+                        child,
+                        cursor,
+                        &new_prefix,
+                        false,
+                        is_last_child,
+                    )?;
+                }
+
+                Ok(())
+            }
         }
 
         // Use pretty printing for {:#?}, default pointer format for {:?}
@@ -471,14 +479,17 @@ impl Drop for CallTree {
 /// Assumes `node` is a valid pointer to a CallTreeNode. The caller must ensure
 /// the pointer remains valid for the duration of this call.
 unsafe fn update_spent(node: *mut CallTreeNode) {
-    let node = &mut *node;
-    node.children.iter_mut().for_each(|&mut child| unsafe {
-        // It should be impossible for this to underflow since the amount spent
-        // in all child nodes is always less than or equal to the amount spent
-        // in the parent node.
-        node.elem.spent -= (*child).elem.spent;
-        update_spent(child);
-    });
+    // SAFETY: Caller guarantees node is a valid pointer to a CallTreeNode.
+    unsafe {
+        let node = &mut *node;
+        node.children.iter_mut().for_each(|&mut child| {
+            // It should be impossible for this to underflow since the amount spent
+            // in all child nodes is always less than or equal to the amount spent
+            // in the parent node.
+            node.elem.spent -= (*child).elem.spent;
+            update_spent(child);
+        });
+    }
 }
 
 /// Recursively deallocates a tree node and all its descendants.
@@ -492,13 +503,17 @@ unsafe fn update_spent(node: *mut CallTreeNode) {
 /// - `root` and all descendants must not be accessed after this call
 /// - Each node should only be freed once
 unsafe fn free_tree(root: *mut CallTreeNode) {
-    let mut node = Box::from_raw(root);
+    // SAFETY: Caller guarantees root is a valid pointer from Box::leak().
+    // We take ownership back via from_raw and recursively free children.
+    unsafe {
+        let mut node = Box::from_raw(root);
 
-    let mut children = Vec::new();
-    mem::swap(&mut node.children, &mut children);
+        let mut children = Vec::new();
+        mem::swap(&mut node.children, &mut children);
 
-    for child in children {
-        free_tree(child);
+        for child in children {
+            free_tree(child);
+        }
     }
 }
 

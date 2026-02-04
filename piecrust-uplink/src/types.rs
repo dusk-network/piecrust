@@ -9,8 +9,8 @@ use alloc::vec::Vec;
 
 use bytecheck::CheckBytes;
 use rkyv::{
-    ser::serializers::{BufferScratch, BufferSerializer, CompositeSerializer},
     Archive, Deserialize, Serialize,
+    ser::serializers::{BufferScratch, BufferSerializer, CompositeSerializer},
 };
 
 use crate::SCRATCH_BUF_BYTES;
