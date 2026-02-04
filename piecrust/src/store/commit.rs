@@ -67,7 +67,7 @@ impl Commit {
     pub fn inclusion_proofs(
         mut self,
         contract_id: &ContractId,
-    ) -> Option<impl Iterator<Item = (usize, PageOpening)>> {
+    ) -> Option<impl Iterator<Item = (usize, PageOpening)> + use<>> {
         let contract = self.index.remove_contract_index(contract_id)?;
 
         let pos = position_from_contract(contract_id);
