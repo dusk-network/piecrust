@@ -434,7 +434,7 @@ impl CallTree {
 
                 while !(*node).children.is_empty() {
                     let last_index = (*node).children.len() - 1;
-                    node = (*node).children[last_index];
+                    node = (&(*node).children)[last_index];
                 }
 
                 Subtree { root, node }
@@ -591,11 +591,11 @@ impl<'a> Iterator for CallTreeIter<'a> {
                     parent
                 } else {
                     let sibling_index = node_index - 1;
-                    let mut next_node = (*parent).children[sibling_index];
+                    let mut next_node = (&(*parent).children)[sibling_index];
 
                     while !(*next_node).children.is_empty() {
                         let last_index = (*next_node).children.len() - 1;
-                        next_node = (*next_node).children[last_index];
+                        next_node = (&(*next_node).children)[last_index];
                     }
 
                     next_node
