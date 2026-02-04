@@ -1033,7 +1033,7 @@ mod tests {
 
         for _ in 0..N_WRITES {
             let i = rng.gen_range(0..N_PAGES);
-            let byte = rng.gen();
+            let byte = rng.r#gen();
 
             mem[i] = byte;
             mem_alt[i] = byte;
@@ -1046,7 +1046,7 @@ mod tests {
         mem.snap().expect("Snapshotting should succeed");
         for _ in 0..N_WRITES {
             let i = rng.gen_range(0..N_PAGES);
-            let byte = rng.gen();
+            let byte = rng.r#gen();
             mem[i] = byte;
         }
         mem.revert().expect("Reverting should succeed");
@@ -1057,7 +1057,7 @@ mod tests {
 
         for _ in 0..N_WRITES {
             let i = rng.gen_range(0..N_PAGES);
-            let byte = rng.gen();
+            let byte = rng.r#gen();
 
             mem[i] = byte;
             mem_alt[i] = byte;
