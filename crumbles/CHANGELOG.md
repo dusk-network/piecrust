@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Update to Rust edition 2024 [#466]
+- Add explicit `unsafe` blocks inside `unsafe fn` bodies for Rust 2024 [#466]
+- Escape `gen` keyword with `r#gen` for Rust 2024 [#466]
+
 ## [0.3.1] - 2025-10-11
 
 ### Fixed
@@ -69,6 +75,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Initial release
 
 <!-- ISSUES -->
+[#466]: https://github.com/dusk-network/piecrust/issues/466
 
 <!-- VERSIONS -->
 [Unreleased]: https://github.com/dusk-network/piecrust/compare/crumbles-0.3.1...HEAD
