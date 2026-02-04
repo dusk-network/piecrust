@@ -16,9 +16,13 @@ use piecrust_uplink;
 static mut A: u32 = 42;
 
 /// Change the number in the state and return the previous value
-#[no_mangle]
+#[unsafe(no_mangle)]
 unsafe fn change(to: u32) -> u32 {
-    let r = A;
-    A = to;
-    r
+    // SAFETY: WASM smart contracts are single-threaded, so accessing mutable
+    // static via raw pointer is safe - there's no risk of data races.
+    unsafe {
+        let r = *&raw const A;
+        *&raw mut A = to;
+        r
+    }
 }

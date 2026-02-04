@@ -11,6 +11,7 @@
 extern crate alloc;
 
 use alloc::vec::Vec;
+
 use piecrust_uplink as uplink;
 
 /// Struct that describes the state of the vector contract
@@ -34,13 +35,19 @@ impl Vector {
 }
 
 /// Expose `Vector::push()` to the host
-#[no_mangle]
+#[unsafe(no_mangle)]
 unsafe fn push(arg_len: u32) -> u32 {
-    uplink::wrap_call(arg_len, |arg| STATE.push(arg))
+    // SAFETY: WASM smart contracts are single-threaded, so accessing mutable
+    // static via raw pointer is safe - there's no risk of data races.
+    unsafe {
+        uplink::wrap_call(arg_len, |arg| (*&raw mut STATE).push(arg))
+    }
 }
 
 /// Expose `Vector::pop()` to the host
-#[no_mangle]
+#[unsafe(no_mangle)]
 unsafe fn pop(arg_len: u32) -> u32 {
-    uplink::wrap_call(arg_len, |_arg: ()| STATE.pop())
+    // SAFETY: WASM smart contracts are single-threaded, so accessing mutable
+    // static via raw pointer is safe - there's no risk of data races.
+    unsafe { uplink::wrap_call(arg_len, |_arg: ()| (*&raw mut STATE).pop()) }
 }

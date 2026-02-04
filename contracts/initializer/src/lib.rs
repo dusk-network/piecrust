@@ -6,7 +6,7 @@
 
 //! Contract that provides an example use of the init method.
 //! The init method provides a way to initialize the state of the contract and execute other logic only once at the time of deployment.
-//! 
+//!
 //! The init method can be partially compared to the functionality of a constructor in other languages.
 
 #![no_std]
@@ -40,19 +40,27 @@ impl Initializer {
 }
 
 /// Expose `Initializer::read_value()` to the host
-#[no_mangle]
+#[unsafe(no_mangle)]
 unsafe fn read_value(arg_len: u32) -> u32 {
-    uplink::wrap_call(arg_len, |_: ()| STATE.read_value())
+    // SAFETY: WASM smart contracts are single-threaded, so accessing mutable
+    // static via raw pointer is safe - there's no risk of data races.
+    unsafe {
+        uplink::wrap_call(arg_len, |_: ()| (*(&raw const STATE)).read_value())
+    }
 }
 
 /// Expose `Initializer::increment()` to the host
-#[no_mangle]
+#[unsafe(no_mangle)]
 unsafe fn increment(arg_len: u32) -> u32 {
-    uplink::wrap_call(arg_len, |_: ()| STATE.increment())
+    unsafe {
+        uplink::wrap_call(arg_len, |_: ()| (*(&raw mut STATE)).increment())
+    }
 }
 
 /// Expose `Initializer::init()` to the host
-#[no_mangle]
+#[unsafe(no_mangle)]
 unsafe fn init(arg_len: u32) -> u32 {
-    uplink::wrap_call(arg_len, |arg: u8| STATE.init(arg))
+    unsafe {
+        uplink::wrap_call(arg_len, |arg: u8| (*(&raw mut STATE)).init(arg))
+    }
 }

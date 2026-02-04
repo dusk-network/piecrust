@@ -71,13 +71,21 @@ impl Merkle {
 }
 
 /// Expose `Merkle::insert()` to the host
-#[no_mangle]
+#[unsafe(no_mangle)]
 unsafe fn insert(a: u32) -> u32 {
-    uplink::wrap_call(a, |(pos, int)| STATE.insert_u64(pos, int))
+    // SAFETY: WASM smart contracts are single-threaded, so accessing mutable
+    // static via raw pointer is safe - there's no risk of data races.
+    unsafe {
+        uplink::wrap_call(a, |(pos, int)| {
+            (*(&raw mut STATE)).insert_u64(pos, int)
+        })
+    }
 }
 
 /// Expose `Merkle::root()` to the host
-#[no_mangle]
+#[unsafe(no_mangle)]
 unsafe fn root(a: u32) -> u32 {
-    uplink::wrap_call(a, |_: ()| STATE.root())
+    // SAFETY: WASM smart contracts are single-threaded, so accessing mutable
+    // static via raw pointer is safe - there's no risk of data races.
+    unsafe { uplink::wrap_call(a, |_: ()| (*(&raw const STATE)).root()) }
 }

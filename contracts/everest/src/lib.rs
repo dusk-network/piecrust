@@ -24,7 +24,11 @@ impl Height {
 }
 
 /// Expose `Height::get_height()` to the host
-#[no_mangle]
+#[unsafe(no_mangle)]
 unsafe fn get_height(a: u32) -> u32 {
-    uplink::wrap_call(a, |_: ()| STATE.get_height())
+    // SAFETY: WASM smart contracts are single-threaded, so accessing mutable
+    // static via raw pointer is safe - there's no risk of data races.
+    unsafe {
+        uplink::wrap_call(a, |_: ()| (*&raw const STATE).get_height())
+    }
 }

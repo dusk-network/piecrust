@@ -33,13 +33,25 @@ impl Counter {
 }
 
 /// Expose `Counter::read_value()` to the host
-#[no_mangle]
+#[unsafe(no_mangle)]
 unsafe fn read_value(arg_len: u32) -> u32 {
-    uplink::wrap_call_unchecked(arg_len, |_: ()| STATE.read_value())
+    // SAFETY: WASM smart contracts are single-threaded, so accessing mutable
+    // static via raw pointer is safe - there's no risk of data races.
+    unsafe {
+        uplink::wrap_call_unchecked(arg_len, |_: ()| {
+            (*(&raw const STATE)).read_value()
+        })
+    }
 }
 
 /// Expose `Counter::increment()` to the host
-#[no_mangle]
+#[unsafe(no_mangle)]
 unsafe fn increment(arg_len: u32) -> u32 {
-    uplink::wrap_call_unchecked(arg_len, |_: ()| STATE.increment())
+    // SAFETY: WASM smart contracts are single-threaded, so accessing mutable
+    // static via raw pointer is safe - there's no risk of data races.
+    unsafe {
+        uplink::wrap_call_unchecked(arg_len, |_: ()| {
+            (*(&raw mut STATE)).increment()
+        })
+    }
 }

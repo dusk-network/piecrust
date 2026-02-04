@@ -5,7 +5,7 @@ authors = [
     "Kristoffer Ström <kristoffer@dusk.network>",
     "Miłosz Muszyński <milosz@dusk.network>"
 ]
-edition = "2018"
+edition.workspace = true
 
 [lib]
 crate-type = ["cdylib", "rlib"]

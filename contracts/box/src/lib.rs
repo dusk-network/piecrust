@@ -41,13 +41,17 @@ impl Boxen {
 }
 
 /// Expose `Boxen::set()` to the host
-#[no_mangle]
+#[unsafe(no_mangle)]
 unsafe fn set(arg_len: u32) -> u32 {
-    uplink::wrap_call(arg_len, |to| STATE.set(to))
+    // SAFETY: WASM smart contracts are single-threaded, so accessing mutable
+    // static via raw pointer is safe - there's no risk of data races.
+    unsafe { uplink::wrap_call(arg_len, |to| (*&raw mut STATE).set(to)) }
 }
 
 /// Expose `Boxen::get()` to the host
-#[no_mangle]
+#[unsafe(no_mangle)]
 unsafe fn get(arg_len: u32) -> u32 {
-    uplink::wrap_call(arg_len, |_: ()| STATE.get())
+    // SAFETY: WASM smart contracts are single-threaded, so accessing mutable
+    // static via raw pointer is safe - there's no risk of data races.
+    unsafe { uplink::wrap_call(arg_len, |_: ()| (*(&raw const STATE)).get()) }
 }

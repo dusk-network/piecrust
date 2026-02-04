@@ -58,27 +58,39 @@ impl DoubleCounter {
 }
 
 /// Expose `Counter::read_value()` to the host
-#[no_mangle]
+#[unsafe(no_mangle)]
 unsafe fn read_values(arg_len: u32) -> u32 {
-    uplink::wrap_call(arg_len, |_: ()| STATE.read_values())
+    // SAFETY: WASM smart contracts are single-threaded, so accessing mutable
+    // static via raw pointer is safe - there's no risk of data races.
+    unsafe {
+        uplink::wrap_call(arg_len, |_: ()| (*(&raw const STATE)).read_values())
+    }
 }
 
 /// Expose `Counter::increment_left()` to the host
-#[no_mangle]
+#[unsafe(no_mangle)]
 unsafe fn increment_left(arg_len: u32) -> u32 {
-    uplink::wrap_call(arg_len, |_: ()| STATE.increment_left())
+    unsafe {
+        uplink::wrap_call(arg_len, |_: ()| (*(&raw mut STATE)).increment_left())
+    }
 }
 
 /// Expose `Counter::increment_right()` to the host
-#[no_mangle]
+#[unsafe(no_mangle)]
 unsafe fn increment_right(arg_len: u32) -> u32 {
-    uplink::wrap_call(arg_len, |_: ()| STATE.increment_right())
+    unsafe {
+        uplink::wrap_call(arg_len, |_: ()| {
+            (*(&raw mut STATE)).increment_right()
+        })
+    }
 }
 
 /// Expose `Counter::increment_and_call()` to the host
-#[no_mangle]
+#[unsafe(no_mangle)]
 unsafe fn increment_left_and_call(arg_len: u32) -> u32 {
-    uplink::wrap_call_unchecked(arg_len, |arg| {
-        STATE.increment_left_and_call(arg)
-    })
+    unsafe {
+        uplink::wrap_call_unchecked(arg_len, |arg| {
+            (*(&raw mut STATE)).increment_left_and_call(arg)
+        })
+    }
 }

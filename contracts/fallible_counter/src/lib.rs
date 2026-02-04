@@ -35,13 +35,21 @@ impl FallibleCounter {
 }
 
 /// Expose `FallibleCounter::read_value()` to the host
-#[no_mangle]
+#[unsafe(no_mangle)]
 unsafe fn read_value(arg_len: u32) -> u32 {
-    uplink::wrap_call(arg_len, |_: ()| STATE.read_value())
+    // SAFETY: WASM smart contracts are single-threaded, so accessing mutable
+    // static via raw pointer is safe - there's no risk of data races.
+    unsafe {
+        uplink::wrap_call(arg_len, |_: ()| (*(&raw const STATE)).read_value())
+    }
 }
 
 /// Expose `FallibleCounter::increment()` to the host
-#[no_mangle]
+#[unsafe(no_mangle)]
 unsafe fn increment(arg_len: u32) -> u32 {
-    uplink::wrap_call(arg_len, |panic: bool| STATE.increment(panic))
+    unsafe {
+        uplink::wrap_call(arg_len, |panic: bool| {
+            (*(&raw mut STATE)).increment(panic)
+        })
+    }
 }

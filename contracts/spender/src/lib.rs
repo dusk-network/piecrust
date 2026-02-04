@@ -57,13 +57,19 @@ impl Spender {
 }
 
 /// Expose `Spender::get_limit_and_spent()` to the host
-#[no_mangle]
+#[unsafe(no_mangle)]
 unsafe fn get_limit_and_spent(a: u32) -> u32 {
-    uplink::wrap_call(a, |_: ()| STATE.get_limit_and_spent())
+    // SAFETY: WASM smart contracts are single-threaded, so accessing mutable
+    // static via raw pointer is safe - there's no risk of data races.
+    unsafe {
+        uplink::wrap_call(a, |_: ()| (*&raw const STATE).get_limit_and_spent())
+    }
 }
 
 /// Expose `Spender::spend()` to the host
-#[no_mangle]
+#[unsafe(no_mangle)]
 unsafe fn spend(a: u32) -> u32 {
-    uplink::wrap_call(a, |_: ()| STATE.spend())
+    // SAFETY: WASM smart contracts are single-threaded, so accessing mutable
+    // static via raw pointer is safe - there's no risk of data races.
+    unsafe { uplink::wrap_call(a, |_: ()| (*&raw const STATE).spend()) }
 }

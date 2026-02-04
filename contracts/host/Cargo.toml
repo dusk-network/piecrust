@@ -4,13 +4,13 @@ version = "0.1.0"
 authors = [
     "Eduardo Leegwater Simões <eduardo@dusk.network>",
 ]
-edition = "2021"
+edition.workspace = true
 
 license = "MPL-2.0"
 
 [dependencies]
 piecrust-uplink = { path = "../../piecrust-uplink", features = ["abi", "dlmalloc"] }
-dusk-plonk = { version = "0.14", default-features = false, features = ["alloc", "rkyv-impl"] }
+dusk-plonk = { version = "0.22.0-rc.0", default-features = false, features = ["alloc", "rkyv-impl"] }
 
 [lib]
 crate-type = ["cdylib", "rlib"]

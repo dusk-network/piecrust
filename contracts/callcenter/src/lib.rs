@@ -130,95 +130,126 @@ impl Callcenter {
 }
 
 /// Expose `Callcenter::query_counter()` to the host
-#[no_mangle]
+#[unsafe(no_mangle)]
 unsafe fn query_counter(arg_len: u32) -> u32 {
-    wrap_call(arg_len, |counter_id| STATE.query_counter(counter_id))
+    // SAFETY: WASM smart contracts are single-threaded, so accessing mutable
+    // static via raw pointer is safe - there's no risk of data races.
+    // This rationale applies to all exported functions below.
+    unsafe {
+        wrap_call(arg_len, |counter_id| {
+            (*(&raw const STATE)).query_counter(counter_id)
+        })
+    }
 }
 
 /// Expose `Callcenter::increment_counter()` to the host
-#[no_mangle]
+#[unsafe(no_mangle)]
 unsafe fn increment_counter(arg_len: u32) -> u32 {
-    wrap_call(arg_len, |counter_id| STATE.increment_counter(counter_id))
+    unsafe {
+        wrap_call(arg_len, |counter_id| {
+            (*(&raw mut STATE)).increment_counter(counter_id)
+        })
+    }
 }
 
 /// Expose `Callcenter::call_init()` to the host
-#[no_mangle]
+#[unsafe(no_mangle)]
 unsafe fn call_init(arg_len: u32) -> u32 {
-    wrap_call(arg_len, |contract_id| {
-        STATE.call_init(contract_id)
-    })
+    unsafe {
+        wrap_call(arg_len, |contract_id| {
+            (*(&raw mut STATE)).call_init(contract_id)
+        })
+    }
 }
 
 /// Expose `Callcenter::calling_self()` to the host
-#[no_mangle]
+#[unsafe(no_mangle)]
 unsafe fn calling_self(arg_len: u32) -> u32 {
-    wrap_call(arg_len, |self_id| STATE.calling_self(self_id))
+    unsafe {
+        wrap_call(arg_len, |self_id| {
+            (*(&raw const STATE)).calling_self(self_id)
+        })
+    }
 }
 
 /// Expose `Callcenter::call_self()` to the host
-#[no_mangle]
+#[unsafe(no_mangle)]
 unsafe fn call_self(arg_len: u32) -> u32 {
-    wrap_call(arg_len, |_: ()| STATE.call_self())
+    unsafe { wrap_call(arg_len, |_: ()| (*(&raw const STATE)).call_self()) }
 }
 
 /// Expose `Callcenter::call_self_n_times()` to the host
-#[no_mangle]
+#[unsafe(no_mangle)]
 unsafe fn call_self_n_times(arg_len: u32) -> u32 {
-    wrap_call(arg_len, |n: u32| STATE.call_self_n_times(n))
+    unsafe {
+        wrap_call(arg_len, |n: u32| {
+            (*(&raw const STATE)).call_self_n_times(n)
+        })
+    }
 }
 
 /// Expose `Callcenter::call_spend_with_limit` to the host
-#[no_mangle]
+#[unsafe(no_mangle)]
 unsafe fn call_spend_with_limit(arg_len: u32) -> u32 {
-    wrap_call(arg_len, |(contract, gas_limit)| {
-        STATE.call_spend_with_limit(contract, gas_limit)
-    })
+    unsafe {
+        wrap_call(arg_len, |(contract, gas_limit)| {
+            (*(&raw const STATE)).call_spend_with_limit(contract, gas_limit)
+        })
+    }
 }
 
 /// Expose `Callcenter::return_self_id()` to the host
-#[no_mangle]
+#[unsafe(no_mangle)]
 unsafe fn return_self_id(arg_len: u32) -> u32 {
-    wrap_call(arg_len, |_: ()| STATE.return_self_id())
+    unsafe { wrap_call(arg_len, |_: ()| (*(&raw const STATE)).return_self_id()) }
 }
 
 /// Expose `Callcenter::return_caller()` to the host
-#[no_mangle]
+#[unsafe(no_mangle)]
 unsafe fn return_caller(arg_len: u32) -> u32 {
-    wrap_call(arg_len, |_: ()| STATE.return_caller())
+    unsafe { wrap_call(arg_len, |_: ()| (*(&raw const STATE)).return_caller()) }
 }
 
 /// Expose `Callcenter::return_callstack()` to the host
-#[no_mangle]
+#[unsafe(no_mangle)]
 unsafe fn return_callstack(arg_len: u32) -> u32 {
-    wrap_call(arg_len, |_: ()| STATE.return_callstack())
+    unsafe {
+        wrap_call(arg_len, |_: ()| (*(&raw const STATE)).return_callstack())
+    }
 }
 
 /// Expose `Callcenter::delegate_query()` to the host
-#[no_mangle]
+#[unsafe(no_mangle)]
 unsafe fn delegate_query(arg_len: u32) -> u32 {
-    wrap_call(arg_len, |(mod_id, fn_name, fn_arg)| {
-        STATE.delegate_query(mod_id, fn_name, fn_arg)
-    })
+    unsafe {
+        wrap_call(arg_len, |(mod_id, fn_name, fn_arg)| {
+            (*(&raw const STATE)).delegate_query(mod_id, fn_name, fn_arg)
+        })
+    }
 }
 
 /// Expose `Callcenter::query_passthrough()` to the host
-#[no_mangle]
+#[unsafe(no_mangle)]
 unsafe fn query_passthrough(arg_len: u32) -> u32 {
-    wrap_call(arg_len, |(fn_name, fn_arg)| {
-        STATE.query_passthrough(fn_name, fn_arg)
-    })
+    unsafe {
+        wrap_call(arg_len, |(fn_name, fn_arg)| {
+            (*(&raw mut STATE)).query_passthrough(fn_name, fn_arg)
+        })
+    }
 }
 
 /// Expose `Callcenter::delegate_transaction()` to the host
-#[no_mangle]
+#[unsafe(no_mangle)]
 unsafe fn delegate_transaction(arg_len: u32) -> u32 {
-    wrap_call(arg_len, |(mod_id, fn_name, fn_arg)| {
-        STATE.delegate_transaction(mod_id, fn_name, fn_arg)
-    })
+    unsafe {
+        wrap_call(arg_len, |(mod_id, fn_name, fn_arg)| {
+            (*(&raw mut STATE)).delegate_transaction(mod_id, fn_name, fn_arg)
+        })
+    }
 }
 
 /// Expose `Callcenter::panik()` to the host
-#[no_mangle]
+#[unsafe(no_mangle)]
 unsafe fn panik(arg_len: u32) -> u32 {
-    wrap_call(arg_len, |()| STATE.panik())
+    unsafe { wrap_call(arg_len, |()| (*(&raw const STATE)).panik()) }
 }

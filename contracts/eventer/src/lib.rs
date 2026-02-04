@@ -9,6 +9,7 @@
 #![no_std]
 
 extern crate alloc;
+
 use alloc::vec::Vec;
 
 use piecrust_uplink as uplink;
@@ -43,19 +44,27 @@ impl Eventer {
 }
 
 /// Expose `Eventer::emit_num()` to the host
-#[no_mangle]
+#[unsafe(no_mangle)]
 unsafe fn emit_events(arg_len: u32) -> u32 {
-    uplink::wrap_call(arg_len, |num| STATE.emit_num(num))
+    // SAFETY: WASM smart contracts are single-threaded, so accessing mutable
+    // static via raw pointer is safe - there's no risk of data races.
+    unsafe {
+        uplink::wrap_call(arg_len, |num| (*&raw mut STATE).emit_num(num))
+    }
 }
 
 /// Expose `Eventer::emit_num_raw()` to the host
-#[no_mangle]
+#[unsafe(no_mangle)]
 unsafe fn emit_events_raw(arg_len: u32) -> u32 {
-    uplink::wrap_call(arg_len, |num| STATE.emit_num_raw(num))
+    unsafe {
+        uplink::wrap_call(arg_len, |num| (*&raw mut STATE).emit_num_raw(num))
+    }
 }
 
 /// Expose `Eventer::emit_input()` to the host
-#[no_mangle]
+#[unsafe(no_mangle)]
 unsafe fn emit_input(arg_len: u32) -> u32 {
-    uplink::wrap_call(arg_len, |input| STATE.emit_input(input))
+    unsafe {
+        uplink::wrap_call(arg_len, |input| (*&raw mut STATE).emit_input(input))
+    }
 }
