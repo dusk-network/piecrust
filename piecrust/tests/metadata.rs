@@ -4,7 +4,7 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use piecrust::{contract_bytecode, ContractData, Error, SessionData, VM};
+use piecrust::{ContractData, Error, SessionData, VM, contract_bytecode};
 use piecrust_uplink::ContractId;
 
 const LIMIT: u64 = 1_000_000;
@@ -116,8 +116,7 @@ fn owner_of() -> Result<(), Error> {
         .data;
 
     assert_eq!(
-        owner,
-        None,
+        owner, None,
         "The first contract should think that the owner of a non-existing contract is None"
     );
 

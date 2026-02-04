@@ -4,7 +4,7 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use piecrust::{contract_bytecode, ContractData, Error, SessionData, VM};
+use piecrust::{ContractData, Error, SessionData, VM, contract_bytecode};
 use piecrust_uplink::ContractId;
 
 const OWNER: [u8; 32] = [0u8; 32];
@@ -63,7 +63,9 @@ fn crossover() -> Result<(), Error> {
     )?;
 
     assert_eq!(
-        session.call::<_, i32>(CROSSOVER_ONE, "crossover", &(), LIMIT)?.data,
+        session
+            .call::<_, i32>(CROSSOVER_ONE, "crossover", &(), LIMIT)?
+            .data,
         CROSSOVER_TO_SET,
         "The crossover should still be set even though the other contract panicked"
     );
@@ -102,7 +104,9 @@ fn iccs_dont_rollback() -> Result<(), Error> {
     )?;
 
     assert_eq!(
-        session.call::<_, i32>(CROSSOVER_ONE, "crossover", &(), LIMIT)?.data,
+        session
+            .call::<_, i32>(CROSSOVER_ONE, "crossover", &(), LIMIT)?
+            .data,
         CROSSOVER_TO_SET,
         "The crossover should still be set even though the other contract panicked"
     );

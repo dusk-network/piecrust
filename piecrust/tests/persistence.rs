@@ -5,7 +5,7 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 use piecrust::{
-    contract_bytecode, ContractData, ContractId, Error, SessionData, VM,
+    ContractData, ContractId, Error, SessionData, VM, contract_bytecode,
 };
 
 const OWNER: [u8; 32] = [0u8; 32];

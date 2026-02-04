@@ -15,13 +15,13 @@ use dusk_wasmtime::{
     Caller, Extern, Func, Module, Result as WasmtimeResult, Store,
 };
 use piecrust_uplink::{
-    ContractError, ContractId, ARGBUF_LEN, CONTRACT_ID_BYTES,
+    ARGBUF_LEN, CONTRACT_ID_BYTES, ContractError, ContractId,
 };
 
+use crate::Error;
 use crate::config::BYTE_STORE_COST;
 use crate::instance::{Env, WrappedInstance};
 use crate::session::INIT_METHOD;
-use crate::Error;
 
 pub const GAS_PASS_PCT: u64 = 93;
 
@@ -42,7 +42,7 @@ impl Imports {
 
             match Self::import(store, import_name, is_64) {
                 None => {
-                    return Err(Error::InvalidFunction(import_name.to_string()))
+                    return Err(Error::InvalidFunction(import_name.to_string()));
                 }
                 Some(func) => {
                     imports.push(func.into());

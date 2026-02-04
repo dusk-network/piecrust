@@ -6,7 +6,7 @@
 
 #![cfg(feature = "serde")]
 
-use piecrust_uplink::{ContractId, Event, CONTRACT_ID_BYTES};
+use piecrust_uplink::{CONTRACT_ID_BYTES, ContractId, Event};
 use rand::rngs::StdRng;
 use rand::{RngCore, SeedableRng};
 use serde::Serialize;

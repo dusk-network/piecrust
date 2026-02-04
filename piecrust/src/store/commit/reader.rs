@@ -9,12 +9,11 @@ use crate::store::commit::Commit;
 use crate::store::commit_store::CommitStore;
 use crate::store::hasher::Hash;
 use crate::store::index::{ContractIndexElement, NewContractIndex};
-use crate::store::tree::{position_from_contract, ContractsMerkle};
+use crate::store::tree::{ContractsMerkle, position_from_contract};
 use crate::store::treepos::TreePos;
 use crate::store::{
-    Bytecode, ContractSession, Module, BASE_FILE, BYTECODE_DIR, LEAF_DIR,
-    MAIN_DIR, MEMORY_DIR, OBJECTCODE_EXTENSION, TREE_POS_FILE,
-    TREE_POS_OPT_FILE,
+    BASE_FILE, BYTECODE_DIR, Bytecode, ContractSession, LEAF_DIR, MAIN_DIR,
+    MEMORY_DIR, Module, OBJECTCODE_EXTENSION, TREE_POS_FILE, TREE_POS_OPT_FILE,
 };
 use dusk_wasmtime::Engine;
 use piecrust_uplink::ContractId;
@@ -252,7 +251,9 @@ impl CommitReader {
                         if !bytecode_path.is_file() {
                             return Err(io::Error::new(
                                 io::ErrorKind::InvalidData,
-                                format!("Non-existing bytecode for contract: {contract_id_hex}"),
+                                format!(
+                                    "Non-existing bytecode for contract: {contract_id_hex}"
+                                ),
                             ));
                         }
 

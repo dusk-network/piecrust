@@ -9,27 +9,27 @@ use std::collections::btree_set::Iter;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{Debug, Formatter};
 use std::mem;
-use std::sync::{mpsc, Arc};
+use std::sync::{Arc, mpsc};
 
 use bytecheck::CheckBytes;
 use dusk_wasmtime::{Engine, LinearMemory, MemoryCreator, MemoryType};
 use piecrust_uplink::{
-    ContractId, Event, ARGBUF_LEN, CONTRACT_ID_BYTES, SCRATCH_BUF_BYTES,
+    ARGBUF_LEN, CONTRACT_ID_BYTES, ContractId, Event, SCRATCH_BUF_BYTES,
 };
+use rkyv::ser::Serializer;
 use rkyv::ser::serializers::{
     BufferScratch, BufferSerializer, CompositeSerializer,
 };
-use rkyv::ser::Serializer;
 use rkyv::{
-    check_archived_root, validation::validators::DefaultValidator, Archive,
-    Deserialize, Infallible, Serialize,
+    Archive, Deserialize, Infallible, Serialize, check_archived_root,
+    validation::validators::DefaultValidator,
 };
 
 use crate::call_tree::{CallTree, CallTreeElem};
 use crate::contract::{ContractData, ContractMetadata, WrappedContract};
 use crate::error::Error::{self, InitalizationError, PersistenceError};
 use crate::instance::WrappedInstance;
-use crate::store::{ContractSession, PageOpening, PAGE_SIZE};
+use crate::store::{ContractSession, PAGE_SIZE, PageOpening};
 use crate::types::StandardBufSerializer;
 use crate::vm::{HostQueries, HostQuery};
 

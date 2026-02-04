@@ -10,8 +10,8 @@ use crate::store::commit_store::CommitStore;
 use crate::store::hasher::Hash;
 use crate::store::session::ContractDataEntry;
 use crate::store::{
-    Bytecode, Module, BASE_FILE, BYTECODE_DIR, ELEMENT_FILE, LEAF_DIR,
-    MAIN_DIR, MEMORY_DIR, METADATA_EXTENSION, OBJECTCODE_EXTENSION,
+    BASE_FILE, BYTECODE_DIR, Bytecode, ELEMENT_FILE, LEAF_DIR, MAIN_DIR,
+    MEMORY_DIR, METADATA_EXTENSION, Module, OBJECTCODE_EXTENSION,
 };
 use dusk_wasmtime::Engine;
 use piecrust_uplink::ContractId;

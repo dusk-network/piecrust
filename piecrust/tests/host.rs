@@ -7,7 +7,7 @@
 use dusk_plonk::prelude::*;
 use once_cell::sync::Lazy;
 use piecrust::{
-    contract_bytecode, ContractData, Error, HostQuery, SessionData, VM,
+    ContractData, Error, HostQuery, SessionData, VM, contract_bytecode,
 };
 use rand::rngs::OsRng;
 use rkyv::Deserialize;

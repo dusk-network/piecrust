@@ -19,10 +19,10 @@ use dusk_wasmtime::{
 use piecrust_uplink::ContractId;
 use tempfile::tempdir;
 
+use crate::Error::{self, PersistenceError};
 use crate::config::BYTE_STORE_COST;
 use crate::session::{Session, SessionData};
 use crate::store::ContractStore;
-use crate::Error::{self, PersistenceError};
 
 fn config() -> Config {
     let mut config = Config::new();
