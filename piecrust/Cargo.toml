@@ -69,6 +69,16 @@ name = "spender"
 path = "tests/spender.rs"
 required-features = ["debug"]
 
+[[test]]
+name = "initializer"
+path = "tests/initializer.rs"
+required-features = ["debug"]
+
+[[test]]
+name = "validation"
+path = "tests/validation.rs"
+required-features = ["debug"]
+
 [[bench]]
 name = "stack"
 harness = false
