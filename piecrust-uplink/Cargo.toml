@@ -7,17 +7,23 @@ categories = ["wasm", "no-std", "cryptography::cryptocurrencies"]
 keywords = ["virtual", "machine", "smart", "contract", "wasm"]
 
 repository = "https://github.com/dusk-network/piecrust"
-version = "0.19.0-rc.1"
+version = "0.20.0-rc.0"
 
 edition.workspace = true
 license = "MPL-2.0"
 
 [dependencies]
-rkyv = { version = "0.7", default-features = false, features = ["size_32", "alloc", "validation"] }
+rkyv = { version = "0.7", default-features = false, features = [
+    "size_32",
+    "alloc",
+    "validation",
+] }
 bytecheck = { version = "0.6", default-features = false }
 dlmalloc = { version = "0.2", optional = true, features = ["global"] }
-serde = { version = "1.0", default-features = false, features = ["alloc"], optional = true }
-hex = { version = "0.4", default-features = false, features = ["alloc"]}
+serde = { version = "1.0", default-features = false, features = [
+    "alloc",
+], optional = true }
+hex = { version = "0.4", default-features = false, features = ["alloc"] }
 
 [dev-dependencies]
 rand = "0.8"
