@@ -277,6 +277,12 @@ pub(crate) fn c(
         ContractId::from_bytes(bytes)
     };
 
+    const STAKE_CONTRACT: ContractId = {
+        let mut bytes = [0u8; 32];
+        bytes[0] = 2;
+        ContractId::from_bytes(bytes)
+    };
+
     let with_memory = |memory: &mut [u8]| -> Result<_, WithMemoryError> {
         let arg_buf = &memory[argbuf_ofs..][..ARGBUF_LEN];
 
@@ -314,12 +320,14 @@ pub(crate) fn c(
             &name, &callee_stack_element.contract_id, env.self_contract_id()
         );
         let callback_option = unsafe { &GLOBAL_STATE.get_callback(unique_id) };
-        let should_call_callback = callee_stack_element.contract_id
+        let should_call_callback = (callee_stack_element.contract_id
             == TRANSFER_CONTRACT
             && (name == "deposit"
                 || name == "withdraw"
                 || name == "contract_to_contract"
-                || name == "contract_to_account");
+                || name == "contract_to_account"))
+            || (callee_stack_element.contract_id == STAKE_CONTRACT
+                && name == "stake_from_contract");
 
         if callback_option.is_some() && should_call_callback {
             let callback = callback_option.as_ref().unwrap();
