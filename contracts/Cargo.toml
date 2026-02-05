@@ -1,7 +1,6 @@
 [workspace]
 members = [
     "box",
-    "c-example",
     "callcenter",
     "callstack",
     "initializer",
