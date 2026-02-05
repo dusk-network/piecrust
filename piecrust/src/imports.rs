@@ -315,21 +315,19 @@ pub(crate) fn c(
             )));
         }
         let arg = &arg_buf[..arg_len as usize];
-        println!(
-            "piecrust imports: calling function '{}' in contract {} callee is: {}",
-            &name, &callee_stack_element.contract_id, env.self_contract_id()
-        );
         let callback_option = unsafe { &GLOBAL_STATE.get_callback(unique_id) };
-        let should_call_callback = callee_stack_element.contract_id
+        let should_call_callback = (callee_stack_element.contract_id
             == TRANSFER_CONTRACT
             && (name == "deposit"
                 || name == "withdraw"
                 || name == "contract_to_contract"
-                || name == "contract_to_account");
-        || {
-            (callee_stack_element.contract_id == STAKE_CONTRACT
-                && name == "unstake_from_contract")
-        };
+                || name == "contract_to_account"))
+            || (callee_stack_element.contract_id == STAKE_CONTRACT
+                && name == "unstake_from_contract");
+        println!(
+            "piecrust imports: calling function '{}' in contract {} callee is: {} should_call={} callback option={}",
+            &name, &callee_stack_element.contract_id, env.self_contract_id(), should_call_callback, callback_option.is_some()
+        );
 
         if callback_option.is_some() && should_call_callback {
             let callback = callback_option.as_ref().unwrap();
