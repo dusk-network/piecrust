@@ -29,6 +29,27 @@ fn out_of_bounds() -> Result<(), Error> {
 }
 
 #[test]
+fn not_out_of_bounds() -> Result<(), Error> {
+    let vm = VM::ephemeral()?;
+
+    let mut session = vm.session(SessionData::builder())?;
+
+    let c_example_id = session.deploy(
+        contract_bytecode!("c_example"),
+        ContractData::builder().owner(OWNER),
+        LIMIT,
+    )?;
+
+    // 0xFFFF_FFFF + 2 would overflow in wasm32, but in wasm64 it's
+    // 0x1_0000_0001 which is well within the 4TB memory map.
+    session
+        .call::<_, ()>(c_example_id, "not_out_of_bounds", &(), LIMIT)
+        .expect("A wasm64 access within 4TB should succeed");
+
+    Ok(())
+}
+
+#[test]
 fn bad_contract() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 
