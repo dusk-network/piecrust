@@ -4,10 +4,13 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use dusk_plonk::prelude::*;
+use dusk_plonk::prelude::{
+    BlsScalar, Circuit, Compiler, Composer, Constraint, Error as PlonkError,
+    Proof, Prover, PublicParameters, Verifier,
+};
 use once_cell::sync::Lazy;
 use piecrust::{
-    contract_bytecode, ContractData, Error, HostQuery, SessionData, VM,
+    ContractData, Error, HostQuery, SessionData, VM, contract_bytecode,
 };
 use rand::rngs::OsRng;
 use rkyv::Deserialize;
@@ -137,33 +140,11 @@ struct TestCircuit {
 }
 
 impl Circuit for TestCircuit {
-    fn circuit<C>(
-        &self,
-        composer: &mut C,
-    ) -> Result<(), dusk_plonk::error::Error>
-    where
-        C: Composer,
-    {
+    fn circuit(&self, composer: &mut Composer) -> Result<(), PlonkError> {
         let a_w = composer.append_witness(self.a);
         let b_w = composer.append_witness(self.b);
 
-        // q_m · a · b  + q_l · a + q_r · b + q_o · o + q_4 · d + q_c + PI = 0
-        //
-        // q_m = 0
-        // q_l = 1
-        // q_r = 1
-        // q_o = 0
-        // q_4 = 0
-        // q_c = 0
-        //
-        // a + b + PI = 0
-        //
-        // PI = -c
-        //
-        // a + b = c
-        //
-        // PI = -c
-        // a + b - c = 0
+        // a + b - c = 0, where c is a public input
         let constraint = Constraint::new()
             .left(1)
             .a(a_w)

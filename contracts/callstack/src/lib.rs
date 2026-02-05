@@ -10,8 +10,9 @@
 
 extern crate alloc;
 
-use piecrust_uplink as uplink;
 use alloc::vec::Vec;
+
+use piecrust_uplink as uplink;
 use uplink::ContractId;
 
 /// Struct that describes the state of the contract
@@ -28,7 +29,13 @@ impl CallStack {
 }
 
 /// Expose `CallStack::read_callstack()` to the host
-#[no_mangle]
+#[unsafe(no_mangle)]
 unsafe fn return_callstack(arg_len: u32) -> u32 {
-    uplink::wrap_call_unchecked(arg_len, |_: ()| STATE.return_callstack())
+    // SAFETY: WASM smart contracts are single-threaded, so accessing mutable
+    // static via raw pointer is safe - there's no risk of data races.
+    unsafe {
+        uplink::wrap_call_unchecked(arg_len, |_: ()| {
+            (*&raw const STATE).return_callstack()
+        })
+    }
 }

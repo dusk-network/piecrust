@@ -8,15 +8,14 @@ use alloc::vec::Vec;
 use core::ptr;
 
 use rkyv::{
-    archived_root,
-    ser::serializers::{BufferScratch, BufferSerializer, CompositeSerializer},
+    Archive, Deserialize, Infallible, Serialize, archived_root,
     ser::Serializer,
-    Archive, Deserialize, Infallible, Serialize,
+    ser::serializers::{BufferScratch, BufferSerializer, CompositeSerializer},
 };
 
 use crate::{
-    ContractError, ContractId, StandardBufSerializer, CONTRACT_ID_BYTES,
-    SCRATCH_BUF_BYTES,
+    CONTRACT_ID_BYTES, ContractError, ContractId, SCRATCH_BUF_BYTES,
+    StandardBufSerializer,
 };
 
 pub mod arg_buf {
@@ -24,7 +23,7 @@ pub mod arg_buf {
     use core::ptr;
     use core::slice;
 
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     static mut A: [u64; ARGBUF_LEN / 8] = [0; ARGBUF_LEN / 8];
 
     pub fn with_arg_buf<F, R>(f: F) -> R
@@ -42,7 +41,7 @@ pub mod arg_buf {
 pub(crate) use arg_buf::with_arg_buf;
 
 mod ext {
-    extern "C" {
+    unsafe extern "C" {
         pub fn hq(name: *const u8, name_len: u32, arg_len: u32) -> u32;
         pub fn hd(name: *const u8, name_len: u32) -> u32;
 

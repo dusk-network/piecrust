@@ -19,11 +19,11 @@ mod session;
 mod tree;
 mod treepos;
 
-use std::collections::btree_map::Entry::*;
 use std::collections::BTreeMap;
+use std::collections::btree_map::Entry::*;
 use std::fmt::{Debug, Formatter};
 use std::path::{Path, PathBuf};
-use std::sync::{mpsc, Arc, Mutex};
+use std::sync::{Arc, Mutex, mpsc};
 use std::{fs, io, thread};
 
 use dusk_wasmtime::Engine;
@@ -31,8 +31,8 @@ use piecrust_uplink::ContractId;
 use session::ContractDataEntry;
 
 use crate::store::commit::{
-    finalizer::CommitFinalizer, reader::CommitReader, remover::CommitRemover,
-    writer::CommitWriter, Commit,
+    Commit, finalizer::CommitFinalizer, reader::CommitReader,
+    remover::CommitRemover, writer::CommitWriter,
 };
 use crate::store::commit_store::CommitStore;
 use crate::store::hasher::Hash;
@@ -411,7 +411,9 @@ fn sync_loop<P: AsRef<Path>>(
             Call::SessionDrop(base) => {
                 tracing::trace!("session drop started");
                 match sessions.entry(base) {
-                    Vacant(_) => unreachable!("If a session is dropped there must be a session hold entry"),
+                    Vacant(_) => unreachable!(
+                        "If a session is dropped there must be a session hold entry"
+                    ),
                     Occupied(mut entry) => {
                         *entry.get_mut() -= 1;
 
@@ -423,9 +425,13 @@ fn sync_loop<P: AsRef<Path>>(
                                 Vacant(_) => {}
                                 Occupied(entry) => {
                                     for replier in entry.remove() {
-                                        let io_result =
-                                            CommitRemover::remove(root_dir, base);
-                                        commit_store.lock().unwrap().remove_commit(&base, false);
+                                        let io_result = CommitRemover::remove(
+                                            root_dir, base,
+                                        );
+                                        commit_store
+                                            .lock()
+                                            .unwrap()
+                                            .remove_commit(&base, false);
                                         let _ = replier.send(io_result);
                                     }
                                 }

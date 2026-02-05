@@ -3,23 +3,35 @@ help: ## Display this help screen
 
 COMPILER_VERSION=v0.3.0-rc
 
-setup-compiler: ## Setup the Dusk Contract Compiler
+setup-compiler: ## Setup the dusk compiler
 	@./scripts/setup-compiler.sh $(COMPILER_VERSION)
 
-contracts: setup-compiler ## Build example contracts
+contracts: ## Build example contracts
 	@RUSTFLAGS="-C link-args=-zstack-size=65536" \
-	cargo +dusk build \
+	cargo build \
 	  --release \
 	  --manifest-path=contracts/Cargo.toml \
+	  --color=always \
+	  --target wasm32-unknown-unknown
+	@mkdir -p target/stripped
+	@find target/wasm32-unknown-unknown/release -maxdepth 1 -name "*.wasm" \
+	    | xargs -I % basename % \
+	    | xargs -I % ./scripts/strip.sh \
+	 	          target/wasm32-unknown-unknown/release/% \
+	 	          target/stripped/%
+	@$(MAKE) contracts-wasm64
+
+contracts-wasm64: setup-compiler ## Build wasm64 contracts
+	@cargo +dusk build \
+	  --release \
+	  --manifest-path=contracts/c-example/Cargo.toml \
 	  --color=always \
 	  -Z build-std=core,alloc \
 	  --target wasm64-unknown-unknown
 	@mkdir -p target/stripped
-	@find target/wasm64-unknown-unknown/release -maxdepth 1 -name "*.wasm" \
-	    | xargs -I % basename % \
-	    | xargs -I % ./scripts/strip.sh \
-	 	          target/wasm64-unknown-unknown/release/% \
-	 	          target/stripped/%
+	@./scripts/strip.sh \
+	  target/wasm64-unknown-unknown/release/c_example.wasm \
+	  target/stripped/c_example.wasm
 
 test: contracts cold-reboot assert-counter-contract-small ## Run all tests
 	@cargo test \
@@ -40,7 +52,7 @@ cold-reboot: contracts ## Run the cold reboot test
 	@./target/debug/cold_reboot /tmp/piecrust-cold-reboot confirm
 	@rm -r /tmp/piecrust-cold-reboot
 
-.PHONY: test contracts cold-reboot assert-counter-contract-small
+.PHONY: test contracts contracts-wasm64 setup-compiler cold-reboot assert-counter-contract-small
 
 MAX_COUNTER_CONTRACT_SIZE = 8192
 

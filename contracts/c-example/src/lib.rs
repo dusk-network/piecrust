@@ -80,10 +80,21 @@ unsafe fn increment_and_read(_: i32) -> i32 {
     8
 }
 
-// Calls the "hd" extern with an (almost) certainly out of bounds pointer, in an
-// effort to trigger an error.
+// Calls the "hd" extern with an out of bounds pointer to trigger an error.
+// With wasm64, memory is mapped up to 4TB (0x3FF_FFFF_FFFF). Using a pointer
+// at 0x3FF_FFFF_FFFF + 2 exceeds the 4TB mmap, triggering
+// MemoryAccessOutOfBounds.
 #[no_mangle]
 unsafe fn out_of_bounds(_: i32) -> i32 {
     ext::hd(4398046511103 as *const u8, 2);
+    0
+}
+
+// Calls the "hd" extern with a pointer that would be out of bounds in wasm32
+// (0xFFFF_FFFF + 2 overflows 4GB) but is valid in wasm64 (0x1_0000_0001 is
+// well within 4TB).
+#[no_mangle]
+unsafe fn not_out_of_bounds(_: i32) -> i32 {
+    ext::hd(0xFFFF_FFFF_usize as *const u8, 2);
     0
 }

@@ -4,8 +4,8 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use piecrust::{contract_bytecode, ContractData, Error, SessionData, VM};
-use rkyv::{check_archived_root, Deserialize, Infallible};
+use piecrust::{ContractData, Error, SessionData, VM, contract_bytecode};
+use rkyv::{Deserialize, Infallible, check_archived_root};
 
 const OWNER: [u8; 32] = [0u8; 32];
 const LIMIT: u64 = 1_000_000;

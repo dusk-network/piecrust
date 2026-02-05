@@ -42,19 +42,27 @@ impl Stack {
 }
 
 /// Expose `Stack::push()` to the host
-#[no_mangle]
+#[unsafe(no_mangle)]
 unsafe fn push(arg_len: u32) -> u32 {
-    uplink::wrap_call(arg_len, |elem: i32| STATE.push(elem))
+    // SAFETY: WASM smart contracts are single-threaded, so accessing mutable
+    // static via raw pointer is safe - there's no risk of data races.
+    unsafe {
+        uplink::wrap_call(arg_len, |elem: i32| (*(&raw mut STATE)).push(elem))
+    }
 }
 
 /// Expose `Stack::pop()` to the host
-#[no_mangle]
+#[unsafe(no_mangle)]
 unsafe fn pop(arg_len: u32) -> u32 {
-    uplink::wrap_call(arg_len, |_arg: ()| STATE.pop())
+    // SAFETY: WASM smart contracts are single-threaded, so accessing mutable
+    // static via raw pointer is safe - there's no risk of data races.
+    unsafe { uplink::wrap_call(arg_len, |_arg: ()| (*(&raw mut STATE)).pop()) }
 }
 
 /// Expose `Stack::len()` to the host
-#[no_mangle]
+#[unsafe(no_mangle)]
 unsafe fn len(arg_len: u32) -> u32 {
-    uplink::wrap_call(arg_len, |_arg: ()| STATE.len())
+    // SAFETY: WASM smart contracts are single-threaded, so accessing mutable
+    // static via raw pointer is safe - there's no risk of data races.
+    unsafe { uplink::wrap_call(arg_len, |_arg: ()| (*(&raw const STATE)).len()) }
 }

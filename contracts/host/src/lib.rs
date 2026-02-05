@@ -14,7 +14,6 @@ use alloc::string::String;
 use alloc::vec::Vec;
 
 use piecrust_uplink as uplink;
-
 use dusk_plonk::prelude::*;
 
 /// Struct that describes the state of the host contract
@@ -53,21 +52,31 @@ impl Hoster {
 }
 
 /// Expose `Hoster::host_hash()` to the host
-#[no_mangle]
+#[unsafe(no_mangle)]
 unsafe fn host_hash(arg_len: u32) -> u32 {
-    uplink::wrap_call(arg_len, |num| STATE.host_hash(num))
+    // SAFETY: WASM smart contracts are single-threaded, so accessing mutable
+    // static via raw pointer is safe - there's no risk of data races.
+    unsafe {
+        uplink::wrap_call(arg_len, |num| (*&raw const STATE).host_hash(num))
+    }
 }
 
 /// Expose `Hoster::host_verify()` to the host
-#[no_mangle]
+#[unsafe(no_mangle)]
 unsafe fn host_verify(arg_len: u32) -> u32 {
-    uplink::wrap_call(arg_len, |(proof, public_inputs)| {
-        STATE.host_verify(proof, public_inputs)
-    })
+    unsafe {
+        uplink::wrap_call(arg_len, |(proof, public_inputs)| {
+            (*&raw const STATE).host_verify(proof, public_inputs)
+        })
+    }
 }
 
 /// Expose `Hoster::host_very_expensive()` to the host
-#[no_mangle]
+#[unsafe(no_mangle)]
 unsafe fn host_very_expensive(arg_len: u32) -> u32 {
-    uplink::wrap_call(arg_len, |_: ()| STATE.host_very_expensive())
+    unsafe {
+        uplink::wrap_call(arg_len, |_: ()| {
+            (*&raw const STATE).host_very_expensive()
+        })
+    }
 }

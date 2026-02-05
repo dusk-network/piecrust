@@ -4,16 +4,17 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use std::collections::btree_map::Entry::{Occupied, Vacant};
 use std::collections::BTreeMap;
+use std::collections::btree_map::Entry::{Occupied, Vacant};
 use std::fmt::Debug;
 use std::path::{Path, PathBuf};
-use std::sync::{mpsc, Arc, Mutex};
+use std::sync::{Arc, Mutex, mpsc};
 use std::{io, mem};
 
 use dusk_wasmtime::Engine;
 use piecrust_uplink::ContractId;
 
+use crate::Error;
 use crate::contract::ContractMetadata;
 use crate::store::baseinfo::BaseInfo;
 use crate::store::commit::Commit;
@@ -21,11 +22,10 @@ use crate::store::commit_store::CommitStore;
 use crate::store::hasher::Hash;
 use crate::store::tree::PageOpening;
 use crate::store::{
-    Bytecode, Call, Memory, Metadata, Module, BASE_FILE, BYTECODE_DIR,
-    ELEMENT_FILE, MAIN_DIR, MEMORY_DIR, METADATA_EXTENSION,
+    BASE_FILE, BYTECODE_DIR, Bytecode, Call, ELEMENT_FILE, MAIN_DIR,
+    MEMORY_DIR, METADATA_EXTENSION, Memory, Metadata, Module,
     OBJECTCODE_EXTENSION, PAGE_SIZE,
 };
-use crate::Error;
 
 #[derive(Debug, Clone)]
 pub struct ContractDataEntry {
@@ -187,11 +187,7 @@ impl ContractSession {
         match commit {
             None => {
                 let path = memory_path.as_ref().join(format!("{page_index}"));
-                if path.is_file() {
-                    Some(path)
-                } else {
-                    None
-                }
+                if path.is_file() { Some(path) } else { None }
             }
             Some(hash) => {
                 let hash_hex = hex::encode(hash.as_bytes());

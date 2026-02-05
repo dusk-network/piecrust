@@ -59,6 +59,9 @@
 //! [contracts/]: https://github.com/dusk-network/piecrust/tree/main/contracts
 //! [externs]: https://github.com/dusk-network/piecrust/blob/c2dadaa8dec210bdbbc72619a687eb8c6f693877/piecrust-uplink/src/abi/state.rs#L42-L64
 
+// Allow unsafe_op_in_unsafe_fn from bytecheck/rkyv derive macros until
+// we can update to rkyv 0.8 / bytecheck 0.8 which have breaking API changes.
+#![allow(unsafe_op_in_unsafe_fn)]
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![no_std]
 

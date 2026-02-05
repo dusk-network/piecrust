@@ -4,15 +4,14 @@ version = "0.1.0"
 authors = [
     "Eduardo Leegwater Simões <eduardo@dusk.network>",
 ]
-edition = "2021"
+edition.workspace = true
 
 license = "MPL-2.0"
 
 [dependencies]
 piecrust-uplink = { path = "../../piecrust-uplink", features = ["abi", "dlmalloc"] }
 dusk-merkle = { version = "0.1", features = ["rkyv-impl"] }
-blake3 = { version = "1,<1.8.3", default-features = false } # 1.8.3+ requires edition 2024
-constant_time_eq = "0.3" # 0.4+ requires edition 2024 (dusk toolchain compat)
+blake3 = { version = "1", default-features = false }
 
 [lib]
 crate-type = ["cdylib", "rlib"]

@@ -1,7 +1,6 @@
 [workspace]
 members = [
     "box",
-    "c-example",
     "callcenter",
     "callstack",
     "initializer",
@@ -27,3 +26,6 @@ members = [
     "vector",
 ]
 resolver = "2"
+
+[workspace.package]
+edition = "2024"

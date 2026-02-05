@@ -35,13 +35,19 @@ impl Feeder {
 }
 
 /// Expose `Feeder::feed_num()` to the host
-#[no_mangle]
+#[unsafe(no_mangle)]
 unsafe fn feed_num(arg_len: u32) -> u32 {
-    uplink::wrap_call(arg_len, |num| STATE.feed_num(num))
+    // SAFETY: WASM smart contracts are single-threaded, so accessing mutable
+    // static via raw pointer is safe - there's no risk of data races.
+    unsafe {
+        uplink::wrap_call(arg_len, |num| (*&raw const STATE).feed_num(num))
+    }
 }
 
 /// Expose `Feeder::feed_num_raw()` to the host
-#[no_mangle]
+#[unsafe(no_mangle)]
 unsafe fn feed_num_raw(arg_len: u32) -> u32 {
-    uplink::wrap_call(arg_len, |num| STATE.feed_num_raw(num))
+    unsafe {
+        uplink::wrap_call(arg_len, |num| (*&raw const STATE).feed_num_raw(num))
+    }
 }

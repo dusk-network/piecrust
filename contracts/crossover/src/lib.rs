@@ -127,35 +127,59 @@ impl Crossover {
 }
 
 /// Expose `Crossover::crossover()` to the host
-#[no_mangle]
+#[unsafe(no_mangle)]
 unsafe fn crossover(arg_len: u32) -> u32 {
-    uplink::wrap_call(arg_len, |_: ()| STATE.crossover())
+    // SAFETY: WASM smart contracts are single-threaded, so accessing mutable
+    // static via raw pointer is safe - there's no risk of data races.
+    unsafe {
+        uplink::wrap_call(arg_len, |_: ()| (*(&raw const STATE)).crossover())
+    }
 }
 
 /// Expose `Crossover::set_crossover()` to the host
-#[no_mangle]
+#[unsafe(no_mangle)]
 unsafe fn set_crossover(arg_len: u32) -> u32 {
-    uplink::wrap_call(arg_len, |arg: i32| STATE.set_crossover(arg))
+    // SAFETY: WASM smart contracts are single-threaded, so accessing mutable
+    // static via raw pointer is safe - there's no risk of data races.
+    unsafe {
+        uplink::wrap_call(arg_len, |arg: i32| {
+            (*(&raw mut STATE)).set_crossover(arg)
+        })
+    }
 }
 
 /// Expose `Crossover::check_consistent_state_on_errors()` to the host
-#[no_mangle]
+#[unsafe(no_mangle)]
 unsafe fn check_consistent_state_on_errors(arg_len: u32) -> u32 {
-    uplink::wrap_call(arg_len, |(contract, s, sf, sb)| {
-        STATE.check_consistent_state_on_errors(contract, s, sf, sb)
-    })
+    // SAFETY: WASM smart contracts are single-threaded, so accessing mutable
+    // static via raw pointer is safe - there's no risk of data races.
+    unsafe {
+        uplink::wrap_call(arg_len, |(contract, s, sf, sb)| {
+            (*(&raw mut STATE)).check_consistent_state_on_errors(contract, s, sf, sb)
+        })
+    }
 }
 
 /// Expose `Crossover::check_iccs_dont_rollback()` to the host
-#[no_mangle]
+#[unsafe(no_mangle)]
 unsafe fn check_iccs_dont_rollback(arg_len: u32) -> u32 {
-    uplink::wrap_call(arg_len, |(contract, s)| {
-        STATE.check_iccs_dont_rollback(contract, s)
-    })
+    // SAFETY: WASM smart contracts are single-threaded, so accessing mutable
+    // static via raw pointer is safe - there's no risk of data races.
+    unsafe {
+        uplink::wrap_call(arg_len, |(contract, s)| {
+            (*(&raw mut STATE)).check_iccs_dont_rollback(contract, s)
+        })
+    }
 }
 
 /// Expose `Crossover::set_back_and_panic()` to the host
-#[no_mangle]
+#[unsafe(no_mangle)]
 unsafe fn set_back_and_panic(arg_len: u32) -> u32 {
-    uplink::wrap_call(arg_len, |(v, vb)| STATE.set_back_and_panic(v, vb))
+    // SAFETY: WASM smart contracts are single-threaded, so accessing mutable
+    // static via raw pointer is safe - there's no risk of data races.
+    unsafe {
+        uplink::wrap_call(arg_len, |(v, vb)| {
+            (*(&raw mut STATE)).set_back_and_panic(v, vb)
+        })
+    }
 }

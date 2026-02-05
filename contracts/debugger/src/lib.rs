@@ -31,7 +31,13 @@ impl Debug {
 }
 
 /// Expose `Debug::debug()` to the host
-#[no_mangle]
+#[unsafe(no_mangle)]
 unsafe fn debug(arg_len: u32) -> u32 {
-    uplink::wrap_call(arg_len, |s: alloc::string::String| STATE.debug(s))
+    // SAFETY: WASM smart contracts are single-threaded, so accessing mutable
+    // static via raw pointer is safe - there's no risk of data races.
+    unsafe {
+        uplink::wrap_call(arg_len, |s: alloc::string::String| {
+            (*&raw const STATE).debug(s)
+        })
+    }
 }

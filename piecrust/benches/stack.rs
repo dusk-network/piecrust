@@ -4,8 +4,8 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use piecrust::{contract_bytecode, VM};
+use criterion::{Criterion, black_box, criterion_group, criterion_main};
+use piecrust::{VM, contract_bytecode};
 
 const SAMPLE_SIZE: usize = 10240;
 

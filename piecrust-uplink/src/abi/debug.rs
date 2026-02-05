@@ -4,7 +4,7 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-extern "C" {
+unsafe extern "C" {
     pub fn hdebug(arg_len: u32);
 }
 

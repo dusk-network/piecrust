@@ -12,12 +12,12 @@ pub mod writer;
 use std::cell::Ref;
 use std::sync::{Arc, Mutex};
 
+use crate::PageOpening;
+use crate::store::Memory;
 use crate::store::commit_store::CommitStore;
 use crate::store::hasher::Hash;
 use crate::store::index::{ContractIndexElement, NewContractIndex};
-use crate::store::tree::{position_from_contract, ContractsMerkle};
-use crate::store::Memory;
-use crate::PageOpening;
+use crate::store::tree::{ContractsMerkle, position_from_contract};
 use piecrust_uplink::ContractId;
 use tracing::debug;
 
@@ -67,7 +67,7 @@ impl Commit {
     pub fn inclusion_proofs(
         mut self,
         contract_id: &ContractId,
-    ) -> Option<impl Iterator<Item = (usize, PageOpening)>> {
+    ) -> Option<impl Iterator<Item = (usize, PageOpening)> + use<>> {
         let contract = self.index.remove_contract_index(contract_id)?;
 
         let pos = position_from_contract(contract_id);

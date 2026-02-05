@@ -5,7 +5,7 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 use std::borrow::Cow;
-use std::sync::{mpsc, Arc};
+use std::sync::{Arc, mpsc};
 use thiserror::Error;
 
 use piecrust_uplink::{ContractError, ContractId};
@@ -44,7 +44,9 @@ pub enum Error {
     InvalidFunction(String),
     #[error("Invalid memory")]
     InvalidMemory,
-    #[error("Memory access out of bounds: offset {offset}, length {len}, memory length {mem_len}")]
+    #[error(
+        "Memory access out of bounds: offset {offset}, length {len}, memory length {mem_len}"
+    )]
     MemoryAccessOutOfBounds {
         offset: usize,
         len: usize,

@@ -72,27 +72,39 @@ impl Grower {
 }
 
 /// Expose `Grower::append()` to the host
-#[no_mangle]
+#[unsafe(no_mangle)]
 unsafe fn append(arg_len: u32) -> u32 {
-    STATE.append(arg_len as usize);
-    0
+    // SAFETY: WASM smart contracts are single-threaded, so accessing mutable
+    // static via raw pointer is safe - there's no risk of data races.
+    unsafe {
+        (*(&raw mut STATE)).append(arg_len as usize);
+        0
+    }
 }
 
 /// Expose `Grower::append()` to the host, but panic afterwards.
-#[no_mangle]
+#[unsafe(no_mangle)]
 unsafe fn append_and_panic(arg_len: u32) -> u32 {
-    STATE.append(arg_len as usize);
-    panic!("isded");
+    // SAFETY: WASM smart contracts are single-threaded, so accessing mutable
+    // static via raw pointer is safe - there's no risk of data races.
+    unsafe {
+        (*(&raw mut STATE)).append(arg_len as usize);
+        panic!("isded");
+    }
 }
 
 /// Expose `Grower::view()` to the host
-#[no_mangle]
+#[unsafe(no_mangle)]
 unsafe fn view(arg_len: u32) -> u32 {
-    STATE.view(arg_len as usize) as u32
+    // SAFETY: WASM smart contracts are single-threaded, so accessing mutable
+    // static via raw pointer is safe - there's no risk of data races.
+    unsafe { (*(&raw const STATE)).view(arg_len as usize) as u32 }
 }
 
 /// Expose `Grower::len()` to the host
-#[no_mangle]
+#[unsafe(no_mangle)]
 unsafe fn len(_arg_len: u32) -> u32 {
-    STATE.len() as u32
+    // SAFETY: WASM smart contracts are single-threaded, so accessing mutable
+    // static via raw pointer is safe - there's no risk of data races.
+    unsafe { (*(&raw const STATE)).len() as u32 }
 }

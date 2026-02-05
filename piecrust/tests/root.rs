@@ -5,7 +5,7 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 use piecrust::{
-    contract_bytecode, ContractData, Error, PageOpening, SessionData, VM,
+    ContractData, Error, PageOpening, SessionData, VM, contract_bytecode,
 };
 
 const OWNER: [u8; 32] = [0u8; 32];
@@ -55,7 +55,10 @@ pub fn state_root_calculation() -> Result<(), Error> {
     let session = vm.session(SessionData::builder().base(commit_2))?;
     let root_3 = session.root();
 
-    assert_eq!(root_2, root_3, "The root of a session should be the same if no modifications were made");
+    assert_eq!(
+        root_2, root_3,
+        "The root of a session should be the same if no modifications were made"
+    );
     Ok(())
 }
 

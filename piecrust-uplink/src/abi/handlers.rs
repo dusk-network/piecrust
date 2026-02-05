@@ -7,22 +7,27 @@
 use core::fmt::Write;
 use core::panic::PanicInfo;
 
-extern "C" {
+unsafe extern "C" {
     pub fn panic(arg_len: u32);
 }
 
 #[panic_handler]
 unsafe fn handle_panic(info: &PanicInfo) -> ! {
-    let mut w = crate::ArgbufWriter::default();
+    // SAFETY: This is a panic handler that calls the host's panic function.
+    // The ArgbufWriter writes to a known valid buffer, and the panic function
+    // is provided by the host runtime.
+    unsafe {
+        let mut w = crate::ArgbufWriter::default();
 
-    // If we fail in writing to the argument buffer, we just call `panic` after
-    // writing a standard message instead.
+        // If we fail in writing to the argument buffer, we just call `panic` after
+        // writing a standard message instead.
 
-    if w.write_fmt(format_args!("{}", info.message())).is_err() {
-        w = crate::ArgbufWriter::default();
-        let _ = write!(w, "PANIC INFO TOO LONG");
+        if w.write_fmt(format_args!("{}", info.message())).is_err() {
+            w = crate::ArgbufWriter::default();
+            let _ = write!(w, "PANIC INFO TOO LONG");
+        }
+
+        panic(w.ofs() as u32);
+        unreachable!()
     }
-
-    panic(w.ofs() as u32);
-    unreachable!()
 }

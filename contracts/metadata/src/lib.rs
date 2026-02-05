@@ -35,19 +35,31 @@ impl Metadata {
 }
 
 /// Expose `Metadata::read_owner()` to the host
-#[no_mangle]
+#[unsafe(no_mangle)]
 unsafe fn read_owner(arg_len: u32) -> u32 {
-    uplink::wrap_call(arg_len, |_: ()| STATE.read_owner())
+    // SAFETY: WASM smart contracts are single-threaded, so accessing mutable
+    // static via raw pointer is safe - there's no risk of data races.
+    unsafe {
+        uplink::wrap_call(arg_len, |_: ()| (*&raw const STATE).read_owner())
+    }
 }
 
 /// Expose `Metadata::read_id()` to the host
-#[no_mangle]
+#[unsafe(no_mangle)]
 unsafe fn read_id(arg_len: u32) -> u32 {
-    uplink::wrap_call(arg_len, |_: ()| STATE.read_id())
+    // SAFETY: WASM smart contracts are single-threaded, so accessing mutable
+    // static via raw pointer is safe - there's no risk of data races.
+    unsafe {
+        uplink::wrap_call(arg_len, |_: ()| (*&raw const STATE).read_id())
+    }
 }
 
 /// Expose `Metadata::read_owner_of()` to the host
-#[no_mangle]
+#[unsafe(no_mangle)]
 unsafe fn read_owner_of(arg_len: u32) -> u32 {
-    uplink::wrap_call(arg_len, |id| STATE.read_owner_of(id))
+    // SAFETY: WASM smart contracts are single-threaded, so accessing mutable
+    // static via raw pointer is safe - there's no risk of data races.
+    unsafe {
+        uplink::wrap_call(arg_len, |id| (*&raw const STATE).read_owner_of(id))
+    }
 }

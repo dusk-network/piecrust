@@ -8,13 +8,13 @@ use std::io;
 use std::ops::{Deref, DerefMut};
 
 use dusk_wasmtime::{Instance, Module, Mutability, Store, ValType};
-use piecrust_uplink::{ContractId, Event, ARGBUF_LEN};
+use piecrust_uplink::{ARGBUF_LEN, ContractId, Event};
 
+use crate::Error;
 use crate::contract::WrappedContract;
 use crate::imports::Imports;
 use crate::session::Session;
 use crate::store::Memory;
-use crate::Error;
 
 pub struct WrappedInstance {
     instance: Instance,

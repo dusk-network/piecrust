@@ -37,7 +37,7 @@
 #![deny(clippy::pedantic)]
 
 use std::{
-    collections::{btree_map::Entry, BTreeMap},
+    collections::{BTreeMap, btree_map::Entry},
     fs::OpenOptions,
     mem::{self, MaybeUninit},
     ops::{Deref, DerefMut},
@@ -48,9 +48,9 @@ use std::{
 };
 
 use libc::{
-    c_int, sigaction, sigemptyset, siginfo_t, sigset_t, ucontext_t,
     MAP_ANONYMOUS, MAP_FAILED, MAP_FIXED, MAP_NORESERVE, MAP_PRIVATE,
-    PROT_NONE, PROT_READ, PROT_WRITE, SA_SIGINFO,
+    PROT_NONE, PROT_READ, PROT_WRITE, SA_SIGINFO, c_int, sigaction,
+    sigemptyset, siginfo_t, sigset_t, ucontext_t,
 };
 
 /// A handle to a copy-on-write memory-mapped region that keeps track of which
@@ -160,20 +160,25 @@ impl Mmap {
     where
         FL: 'static + LocateFile,
     {
-        let inner = MmapInner::new(page_number, page_size, file_locator)?;
+        // SAFETY: The caller guarantees that files returned by `file_locator`
+        // are not modified while mapped, as required by this function's safety
+        // contract.
+        unsafe {
+            let inner = MmapInner::new(page_number, page_size, file_locator)?;
 
-        with_global_map_mut(|global_map| {
-            let inner = Box::leak(Box::new(inner));
+            with_global_map_mut(|global_map| {
+                let inner = Box::leak(Box::new(inner));
 
-            let start_addr = inner.bytes.as_mut_ptr() as usize;
-            let end_addr = start_addr + inner.bytes.len();
+                let start_addr = inner.bytes.as_mut_ptr() as usize;
+                let end_addr = start_addr + inner.bytes.len();
 
-            let inner_ptr = inner as *mut _;
+                let inner_ptr = inner as *mut _;
 
-            global_map.insert(start_addr..end_addr, inner_ptr as _);
+                global_map.insert(start_addr..end_addr, inner_ptr as _);
 
-            Ok(Self(inner))
-        })
+                Ok(Self(inner))
+            })
+        }
     }
 
     /// Snapshot the current state of the memory.
@@ -535,50 +540,55 @@ impl MmapInner {
     where
         FL: 'static + LocateFile,
     {
-        setup_action();
+        // SAFETY: We set up the signal handler for SIGSEGV, allocate memory
+        // via mmap with PROT_NONE, and create a valid slice from the mapped
+        // region. The memory is valid for the lifetime of this struct.
+        unsafe {
+            setup_action();
 
-        let system_page_size = system_page_size();
-        if page_size % system_page_size != 0 {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                format!(
-                    "Page size {page_size} must be a multiple \
-                     of the system page size {system_page_size}"
-                ),
-            ));
-        }
-
-        let mapped_pages = PageBits::new(page_number)?;
-        let snapshot = Snapshot::new(page_number)?;
-
-        let bytes = {
-            let len = page_number * page_size;
-
-            let ptr = libc::mmap(
-                ptr::null_mut(),
-                len,
-                PROT_NONE,
-                MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE,
-                -1,
-                0,
-            );
-
-            if ptr == MAP_FAILED {
-                return Err(io::Error::last_os_error());
+            let system_page_size = system_page_size();
+            if page_size % system_page_size != 0 {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    format!(
+                        "Page size {page_size} must be a multiple \
+                         of the system page size {system_page_size}"
+                    ),
+                ));
             }
 
-            slice::from_raw_parts_mut(ptr.cast(), len)
-        };
+            let mapped_pages = PageBits::new(page_number)?;
+            let snapshot = Snapshot::new(page_number)?;
 
-        Ok(Self {
-            bytes,
-            page_size,
-            page_number,
-            mapped_pages,
-            // There should always be at least one snapshot
-            snapshots: vec![snapshot],
-            file_locator: Box::new(file_locator),
-        })
+            let bytes = {
+                let len = page_number * page_size;
+
+                let ptr = libc::mmap(
+                    ptr::null_mut(),
+                    len,
+                    PROT_NONE,
+                    MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE,
+                    -1,
+                    0,
+                );
+
+                if ptr == MAP_FAILED {
+                    return Err(io::Error::last_os_error());
+                }
+
+                slice::from_raw_parts_mut(ptr.cast(), len)
+            };
+
+            Ok(Self {
+                bytes,
+                page_size,
+                page_number,
+                mapped_pages,
+                // There should always be at least one snapshot
+                snapshots: vec![snapshot],
+                file_locator: Box::new(file_locator),
+            })
+        }
     }
 
     /// Processes a segfault at the given address. The address must be
@@ -618,14 +628,18 @@ impl MmapInner {
                     let file =
                         OpenOptions::new().read(true).write(true).open(path)?;
 
-                    let ptr = libc::mmap(
-                        page_addr as _,
-                        page_size,
-                        PROT_NONE,
-                        MAP_PRIVATE | MAP_FIXED | MAP_NORESERVE,
-                        file.as_raw_fd(),
-                        0,
-                    );
+                    // SAFETY: We're mapping a file into memory at a known valid
+                    // address within our mmap region.
+                    let ptr = unsafe {
+                        libc::mmap(
+                            page_addr as _,
+                            page_size,
+                            PROT_NONE,
+                            MAP_PRIVATE | MAP_FIXED | MAP_NORESERVE,
+                            file.as_raw_fd(),
+                            0,
+                        )
+                    };
 
                     if ptr == MAP_FAILED {
                         return Err(io::Error::last_os_error());
@@ -658,7 +672,10 @@ impl MmapInner {
                     // Previous implementations didn't do this, but it's
                     // necessare because if the memory was
                     // previously reverted it's now PROT_NONE
-                    if libc::mprotect(page_addr as _, page_size, PROT_READ) != 0
+                    // SAFETY: page_addr points to valid memory in our mmap region.
+                    if unsafe {
+                        libc::mprotect(page_addr as _, page_size, PROT_READ)
+                    } != 0
                     {
                         return Err(io::Error::last_os_error());
                     }
@@ -671,7 +688,8 @@ impl MmapInner {
                 }
             }
 
-            if libc::mprotect(page_addr as _, page_size, prot) != 0 {
+            // SAFETY: page_addr points to valid memory in our mmap region.
+            if unsafe { libc::mprotect(page_addr as _, page_size, prot) } != 0 {
                 return Err(io::Error::last_os_error());
             }
 
@@ -682,91 +700,108 @@ impl MmapInner {
     }
 
     unsafe fn snap(&mut self) -> io::Result<()> {
-        let len = self.bytes.len();
+        // SAFETY: We're changing memory protection on our own mmap region.
+        unsafe {
+            let len = self.bytes.len();
 
-        if libc::mprotect(self.bytes.as_mut_ptr().cast(), len, PROT_NONE) != 0 {
-            return Err(io::Error::last_os_error());
-        }
-
-        self.snapshots.push(Snapshot::new(self.page_number)?);
-
-        Ok(())
-    }
-
-    unsafe fn apply(&mut self) -> io::Result<()> {
-        let len = self.bytes.len();
-
-        if libc::mprotect(self.bytes.as_mut_ptr().cast(), len, PROT_NONE) != 0 {
-            return Err(io::Error::last_os_error());
-        }
-
-        let popped_snapshot = self
-            .snapshots
-            .pop()
-            .expect("There should always be at least one snapshot");
-        if self.snapshots.is_empty() {
-            self.snapshots.push(Snapshot::new(self.page_number)?);
-        }
-        let snapshot = self.last_snapshot_mut();
-
-        for (page_index, clean_page) in popped_snapshot.clean_pages {
-            snapshot.clean_pages.entry(page_index).or_insert(clean_page);
-        }
-        // // Merge hit pages (TODO: Check if this should be done differently)
-        // for page_index in 0..page_number {
-        //     if popped_snapshot.hit_pages.is_page_hit(page_index) {
-        //         snapshot.hit_pages.set(page_index);
-        //     }
-        // }
-
-        Ok(())
-    }
-
-    unsafe fn revert(&mut self) -> io::Result<()> {
-        let popped_snapshot = self
-            .snapshots
-            .pop()
-            .expect("There should always be at least one snapshot");
-
-        if self.snapshots.is_empty() {
-            self.snapshots.push(Snapshot::new(self.page_number)?);
-        } else {
-            // This should not be reset, otherwise it overwrite the current
-            // snapped hit pages
-            // self.last_snapshot_mut().hit_pages =
-            //     PageBits::new(self.page_number)?;
-        }
-
-        let page_size = self.page_size;
-
-        for (page_index, clean_page) in popped_snapshot.clean_pages {
-            let page_offset = page_index * page_size;
-
-            // Ensure the memory is writable before copying the clean page back.
-            //
-            // Previous implementations didn't do this, but it's necessare
-            // because if the memory was previously reverted it's now PROT_NONE
-            let start_addr = self.bytes.as_mut_ptr() as usize;
-            let page_addr = start_addr + page_offset;
-            if libc::mprotect(page_addr as _, page_size, PROT_WRITE) != 0 {
+            if libc::mprotect(self.bytes.as_mut_ptr().cast(), len, PROT_NONE)
+                != 0
+            {
                 return Err(io::Error::last_os_error());
             }
 
-            self.bytes[page_offset..][..page_size]
-                .copy_from_slice(&clean_page[..]);
+            self.snapshots.push(Snapshot::new(self.page_number)?);
 
-            let prot =
-                match &self.last_snapshot().hit_pages.is_page_hit(page_index) {
+            Ok(())
+        }
+    }
+
+    unsafe fn apply(&mut self) -> io::Result<()> {
+        // SAFETY: We're changing memory protection on our own mmap region.
+        unsafe {
+            let len = self.bytes.len();
+
+            if libc::mprotect(self.bytes.as_mut_ptr().cast(), len, PROT_NONE)
+                != 0
+            {
+                return Err(io::Error::last_os_error());
+            }
+
+            let popped_snapshot = self
+                .snapshots
+                .pop()
+                .expect("There should always be at least one snapshot");
+            if self.snapshots.is_empty() {
+                self.snapshots.push(Snapshot::new(self.page_number)?);
+            }
+            let snapshot = self.last_snapshot_mut();
+
+            for (page_index, clean_page) in popped_snapshot.clean_pages {
+                snapshot.clean_pages.entry(page_index).or_insert(clean_page);
+            }
+            // // Merge hit pages (TODO: Check if this should be done differently)
+            // for page_index in 0..page_number {
+            //     if popped_snapshot.hit_pages.is_page_hit(page_index) {
+            //         snapshot.hit_pages.set(page_index);
+            //     }
+            // }
+
+            Ok(())
+        }
+    }
+
+    unsafe fn revert(&mut self) -> io::Result<()> {
+        // SAFETY: We're changing memory protection and copying data within
+        // our own mmap region.
+        unsafe {
+            let popped_snapshot = self
+                .snapshots
+                .pop()
+                .expect("There should always be at least one snapshot");
+
+            if self.snapshots.is_empty() {
+                self.snapshots.push(Snapshot::new(self.page_number)?);
+            } else {
+                // This should not be reset, otherwise it overwrite the current
+                // snapped hit pages
+                // self.last_snapshot_mut().hit_pages =
+                //     PageBits::new(self.page_number)?;
+            }
+
+            let page_size = self.page_size;
+
+            for (page_index, clean_page) in popped_snapshot.clean_pages {
+                let page_offset = page_index * page_size;
+
+                // Ensure the memory is writable before copying the clean page back.
+                //
+                // Previous implementations didn't do this, but it's necessare
+                // because if the memory was previously reverted it's now PROT_NONE
+                let start_addr = self.bytes.as_mut_ptr() as usize;
+                let page_addr = start_addr + page_offset;
+                if libc::mprotect(page_addr as _, page_size, PROT_WRITE) != 0 {
+                    return Err(io::Error::last_os_error());
+                }
+
+                self.bytes[page_offset..][..page_size]
+                    .copy_from_slice(&clean_page[..]);
+
+                let prot = match &self
+                    .last_snapshot()
+                    .hit_pages
+                    .is_page_hit(page_index)
+                {
                     false => PROT_NONE,
                     true => PROT_READ,
                 };
 
-            if libc::mprotect(page_addr as _, page_size, prot) != 0 {
-                return Err(io::Error::last_os_error());
+                if libc::mprotect(page_addr as _, page_size, prot) != 0 {
+                    return Err(io::Error::last_os_error());
+                }
             }
-        }
 
-        Ok(())
+            Ok(())
+        }
     }
 
     fn last_snapshot(&self) -> &Snapshot {
@@ -801,30 +836,34 @@ unsafe fn setup_action() -> sigaction {
     static OLD_ACTION: OnceLock<sigaction> = OnceLock::new();
 
     SIGNAL_HANDLER.call_once(|| {
-        let mut sa_mask = MaybeUninit::<sigset_t>::uninit();
-        sigemptyset(sa_mask.as_mut_ptr());
+        // SAFETY: We're setting up signal handlers using valid sigaction structs.
+        // The signal handler function pointer is valid for the lifetime of the program.
+        unsafe {
+            let mut sa_mask = MaybeUninit::<sigset_t>::uninit();
+            sigemptyset(sa_mask.as_mut_ptr());
 
-        let act = sigaction {
-            sa_sigaction: segfault_handler as _,
-            sa_mask: sa_mask.assume_init(),
-            sa_flags: SA_SIGINFO,
-            #[cfg(target_os = "linux")]
-            sa_restorer: None,
-        };
-        let mut old_act = MaybeUninit::<sigaction>::uninit();
+            let act = sigaction {
+                sa_sigaction: segfault_handler as _,
+                sa_mask: sa_mask.assume_init(),
+                sa_flags: SA_SIGINFO,
+                #[cfg(target_os = "linux")]
+                sa_restorer: None,
+            };
+            let mut old_act = MaybeUninit::<sigaction>::uninit();
 
-        if libc::sigaction(libc::SIGSEGV, &act, old_act.as_mut_ptr()) != 0 {
-            process::exit(1);
+            if libc::sigaction(libc::SIGSEGV, &act, old_act.as_mut_ptr()) != 0 {
+                process::exit(1);
+            }
+
+            // On Apple Silicon for some reason SIGBUS is thrown instead of SIGSEGV.
+            // TODO should investigate properly
+            #[cfg(target_os = "macos")]
+            if libc::sigaction(libc::SIGBUS, &act, old_act.as_mut_ptr()) != 0 {
+                process::exit(2);
+            }
+
+            OLD_ACTION.get_or_init(move || old_act.assume_init());
         }
-
-        // On Apple Silicon for some reason SIGBUS is thrown instead of SIGSEGV.
-        // TODO should investigate properly
-        #[cfg(target_os = "macos")]
-        if libc::sigaction(libc::SIGBUS, &act, old_act.as_mut_ptr()) != 0 {
-            process::exit(2);
-        }
-
-        OLD_ACTION.get_or_init(move || old_act.assume_init());
     });
 
     *OLD_ACTION.get().unwrap()
@@ -836,17 +875,22 @@ unsafe fn call_old_action(
     info: *mut siginfo_t,
     ctx: *mut ucontext_t,
 ) {
-    let old_act = setup_action();
+    // SAFETY: We're calling the previously registered signal handler with the
+    // same arguments we received. The function pointers are valid as they were
+    // obtained from the system's sigaction.
+    unsafe {
+        let old_act = setup_action();
 
-    // If SA_SIGINFO is set, the old action is a `fn(c_int, *mut siginfo_t, *mut
-    // ucontext_t)`. Otherwise, it's a `fn(c_int)`.
-    if old_act.sa_flags & SA_SIGINFO == 0 {
-        let act: fn(c_int) = mem::transmute(old_act.sa_sigaction);
-        act(sig);
-    } else {
-        let act: fn(c_int, *mut siginfo_t, *mut ucontext_t) =
-            mem::transmute(old_act.sa_sigaction);
-        act(sig, info, ctx);
+        // If SA_SIGINFO is set, the old action is a `fn(c_int, *mut siginfo_t, *mut
+        // ucontext_t)`. Otherwise, it's a `fn(c_int)`.
+        if old_act.sa_flags & SA_SIGINFO == 0 {
+            let act: fn(c_int) = mem::transmute(old_act.sa_sigaction);
+            act(sig);
+        } else {
+            let act: fn(c_int, *mut siginfo_t, *mut ucontext_t) =
+                mem::transmute(old_act.sa_sigaction);
+            act(sig, info, ctx);
+        }
     }
 }
 
@@ -856,19 +900,24 @@ unsafe fn segfault_handler(
     ctx: *mut ucontext_t,
 ) {
     with_global_map(move |global_map| {
-        let si_addr = (*info).si_addr() as usize;
+        // SAFETY: `info` is a valid pointer provided by the signal handler mechanism.
+        // We're dereferencing raw pointers that point to valid MmapInner instances
+        // tracked in our global map.
+        unsafe {
+            let si_addr = (*info).si_addr() as usize;
 
-        if let Some(inner_ptr) = global_map.get(&si_addr) {
-            let inner = &mut *(*inner_ptr as *mut MmapInner);
+            if let Some(inner_ptr) = global_map.get(&si_addr) {
+                let inner = &mut *(*inner_ptr as *mut MmapInner);
 
-            if inner.process_segv(si_addr).is_err() {
-                call_old_action(sig, info, ctx);
+                if inner.process_segv(si_addr).is_err() {
+                    call_old_action(sig, info, ctx);
+                }
+
+                return;
             }
 
-            return;
+            call_old_action(sig, info, ctx);
         }
-
-        call_old_action(sig, info, ctx);
     });
 }
 
@@ -1033,7 +1082,7 @@ mod tests {
 
         for _ in 0..N_WRITES {
             let i = rng.gen_range(0..N_PAGES);
-            let byte = rng.gen();
+            let byte = rng.r#gen();
 
             mem[i] = byte;
             mem_alt[i] = byte;
@@ -1046,7 +1095,7 @@ mod tests {
         mem.snap().expect("Snapshotting should succeed");
         for _ in 0..N_WRITES {
             let i = rng.gen_range(0..N_PAGES);
-            let byte = rng.gen();
+            let byte = rng.r#gen();
             mem[i] = byte;
         }
         mem.revert().expect("Reverting should succeed");
@@ -1057,7 +1106,7 @@ mod tests {
 
         for _ in 0..N_WRITES {
             let i = rng.gen_range(0..N_PAGES);
-            let byte = rng.gen();
+            let byte = rng.r#gen();
 
             mem[i] = byte;
             mem_alt[i] = byte;
@@ -1328,10 +1377,10 @@ mod tests {
 
         // 4. modify memory 2  (value 0x22)
         fill_region(&mut mem, OFFSET, len, 0x22); // TC: Start ICC
-                                                  // print_region(&mem, OFFSET, len, "After modify #2");
-                                                  // mem.apply().expect("Apply snapshot 2 should succeed");
-                                                  // mem.apply().expect("Apply snapshot 1 should succeed");
-                                                  // assert_region_eq(&mem, OFFSET, len, 0x22, "After modify #2");
+        // print_region(&mem, OFFSET, len, "After modify #2");
+        // mem.apply().expect("Apply snapshot 2 should succeed");
+        // mem.apply().expect("Apply snapshot 1 should succeed");
+        // assert_region_eq(&mem, OFFSET, len, 0x22, "After modify #2");
 
         print_region(&mem, OFFSET, len, "After modify #2");
 
@@ -1351,7 +1400,7 @@ mod tests {
 
         print_region(&mem, OFFSET, len, "After modify #5");
         mem.revert().expect("Revert from snapshot 4 should succeed"); // TC: StakeContract::stake panic
-                                                                      // assert_region_eq(&mem, OFFSET, len, 0x22, "After revert #3");
+        // assert_region_eq(&mem, OFFSET, len, 0x22, "After revert #3");
 
         print_region(&mem, OFFSET, len, "After revert #5");
         mem.revert().expect("Revert from snapshot 2 should succeed");
@@ -1366,8 +1415,8 @@ mod tests {
 
         // 8. revert 2  → back to memory1 (0x11)
         mem.apply().expect("Apply snapshot 1 should succeed"); // finish the spend_and_execute
-                                                               // 9. apply 1  → keep memory1 changes as dirty, state should stay 0x11
-                                                               // mem.apply().expect("Apply snapshot 1 should succeed");
+        // 9. apply 1  → keep memory1 changes as dirty, state should stay 0x11
+        // mem.apply().expect("Apply snapshot 1 should succeed");
         mem.dirty_pages().for_each(|(dirty, clean, page_index)| {
             println!(
                 "Dirty page index: {page_index} - dirty {} - clean {}",
@@ -1414,7 +1463,10 @@ mod tests {
 
         assert_eq!(page_index, 2);
         assert_eq!(dirty_page[0], 0x33);
-        assert_eq!(clean_page[0], 0x11, "or_insert keeps earliest state (0x11), not immediate pre-mod (0x22)");
+        assert_eq!(
+            clean_page[0], 0x11,
+            "or_insert keeps earliest state (0x11), not immediate pre-mod (0x22)"
+        );
 
         mem.revert().expect("Revert should succeed");
         assert_eq!(mem[2 * PAGE_SIZE], 0x11);
@@ -1468,7 +1520,7 @@ mod tests {
         mem.apply().unwrap(); // Call 5: snapshot with 5
 
         mem.apply().unwrap(); // Call 5: snapshot with 5
-                              // Unwind with reverts (simulates panics)
+        // Unwind with reverts (simulates panics)
 
         println!("----------- REVERT -----------");
         mem.revert().unwrap();

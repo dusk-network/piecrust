@@ -9,8 +9,8 @@ use alloc::vec::Vec;
 
 use bytecheck::CheckBytes;
 use rkyv::{
-    ser::serializers::{BufferScratch, BufferSerializer, CompositeSerializer},
     Archive, Deserialize, Serialize,
+    ser::serializers::{BufferScratch, BufferSerializer, CompositeSerializer},
 };
 
 use crate::SCRATCH_BUF_BYTES;
@@ -184,7 +184,7 @@ mod tests {
     #[test]
     fn contract_id_to_from_string() {
         let mut rng = StdRng::seed_from_u64(1618);
-        let contract_id = ContractId::from_bytes(rng.gen());
+        let contract_id = ContractId::from_bytes(rng.r#gen());
 
         let string = contract_id.to_string();
 

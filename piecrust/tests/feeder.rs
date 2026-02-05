@@ -6,7 +6,7 @@
 
 use std::sync::mpsc;
 
-use piecrust::{contract_bytecode, ContractData, Error, SessionData, VM};
+use piecrust::{ContractData, Error, SessionData, VM, contract_bytecode};
 
 const OWNER: [u8; 32] = [0u8; 32];
 const LIMIT: u64 = 1_000_000;

@@ -28,7 +28,7 @@ impl Fibonacci {
 }
 
 /// Expose `Fibonacci::nth()` to the host
-#[no_mangle]
+#[unsafe(no_mangle)]
 unsafe fn nth(arg_len: u32) -> u32 {
     uplink::wrap_call(arg_len, |n: u32| Fibonacci::nth(n))
 }

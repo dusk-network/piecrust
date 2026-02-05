@@ -4,17 +4,17 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use crate::abi::state::with_arg_buf;
 use crate::SCRATCH_BUF_BYTES;
+use crate::abi::state::with_arg_buf;
 
+use rkyv::ser::Serializer;
 use rkyv::ser::serializers::{
     BufferScratch, BufferSerializer, CompositeSerializer,
 };
-use rkyv::ser::Serializer;
 use rkyv::validation::validators::DefaultValidator;
 use rkyv::{
-    archived_root, check_archived_root, Archive, Deserialize, Infallible,
-    Serialize,
+    Archive, Deserialize, Infallible, Serialize, archived_root,
+    check_archived_root,
 };
 
 use crate::types::StandardBufSerializer;

@@ -9,7 +9,7 @@ use alloc::string::String;
 use serde::ser::SerializeStruct;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
-use crate::{ContractId, Event, CONTRACT_ID_BYTES};
+use crate::{CONTRACT_ID_BYTES, ContractId, Event};
 
 impl Serialize for ContractId {
     fn serialize<S: Serializer>(

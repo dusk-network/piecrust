@@ -5,7 +5,7 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 use piecrust::{
-    contract_bytecode, ContractData, Error, Session, SessionData, VM,
+    ContractData, Error, Session, SessionData, VM, contract_bytecode,
 };
 use piecrust_uplink::ContractId;
 use std::thread;
