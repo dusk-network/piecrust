@@ -12,10 +12,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add functionality to remove & recompile WASM modules [#459]
 - Add pretty Debug to CallTree [#455]
 - Add docs & simple unit tests to CallTree [#453]
+- Add `not_out_of_bounds` validation test for wasm64 memory [#466]
 
 ### Changed
 
-- Update rust toolchain to nightly 2024-07-30 (1.82.0) [#rusk_3470]
+- Update workspace and contracts to Rust edition 2024 [#466]
+- Update `dusk-plonk` dev-dependency to 0.22.0-rc.0 [#466]
+- Enable `gc` feature in `dusk-wasmtime` for reference-types support (required by Rust 1.82+) [#466]
+- Switch contract builds to wasm32 with standard toolchain, keeping c-example on wasm64 [#466]
 - Allow to exclude host queries when creating a session
 - Relax `tracing` dependency from "=0.1.40" to "0.1.40"
 
@@ -526,8 +530,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [#234]: https://github.com/dusk-network/piecrust/pull/234
 
 <!-- ISSUES -->
+[#466]: https://github.com/dusk-network/piecrust/issues/466
 
-[#rusk_3470]: https://github.com/dusk-network/rusk/issues/3470
 [#rusk_3341]: https://github.com/dusk-network/rusk/issues/3341
 [#440]: https://github.com/dusk-network/piecrust/issues/440
 [#433]: https://github.com/dusk-network/piecrust/issues/433
