@@ -326,8 +326,10 @@ pub(crate) fn c(
                 || name == "withdraw"
                 || name == "contract_to_contract"
                 || name == "contract_to_account");
-        // || (callee_stack_element.contract_id == STAKE_CONTRACT
-        //     && name == "stake_from_contract");
+        || {
+            (callee_stack_element.contract_id == STAKE_CONTRACT
+                && name == "unstake_from_contract")
+        };
 
         if callback_option.is_some() && should_call_callback {
             let callback = callback_option.as_ref().unwrap();
