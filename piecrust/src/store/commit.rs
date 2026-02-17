@@ -191,7 +191,7 @@ impl Commit {
         }
     }
 
-    pub fn root(&self) -> Ref<Hash> {
+    pub fn root(&self) -> Ref<'_, Hash> {
         tracing::trace!("calculating root started");
         let ret = self.contracts_merkle.root();
         tracing::trace!("calculating root finished");

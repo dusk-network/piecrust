@@ -51,7 +51,7 @@ impl PageTree {
         }
     }
 
-    pub fn root(&self) -> Ref<Hash> {
+    pub fn root(&self) -> Ref<'_, Hash> {
         match self {
             Self::Wasm32(tree) => tree.root(),
             Self::Wasm64(tree) => tree.root(),
@@ -118,7 +118,7 @@ impl ContractsMerkle {
         self.inner_tree.opening(*new_pos)
     }
 
-    pub fn root(&self) -> Ref<Hash> {
+    pub fn root(&self) -> Ref<'_, Hash> {
         self.inner_tree.root()
     }
 

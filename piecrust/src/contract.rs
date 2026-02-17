@@ -57,7 +57,7 @@ impl<'a, A> ContractDataBuilder<'a, A> {
     /// Set the initializer argument for deployment.
     /// This is the argument that will be passed to the contract's `init`
     /// function.
-    pub fn init_arg<B>(self, arg: &B) -> ContractDataBuilder<B> {
+    pub fn init_arg<B>(self, arg: &B) -> ContractDataBuilder<'_, B> {
         ContractDataBuilder {
             contract_id: self.contract_id,
             owner: self.owner,
@@ -67,7 +67,7 @@ impl<'a, A> ContractDataBuilder<'a, A> {
 
     /// Deprecated: Use `init_arg` instead.
     #[deprecated(note = "Use `init_arg` instead of `constructor_arg`")]
-    pub fn constructor_arg<B>(self, arg: &B) -> ContractDataBuilder<B> {
+    pub fn constructor_arg<B>(self, arg: &B) -> ContractDataBuilder<'_, B> {
         self.init_arg(arg)
     }
 

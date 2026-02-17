@@ -936,7 +936,7 @@ impl SessionData {
         self.data.remove(&name.into())
     }
 
-    pub fn excluded_host_queries(&self) -> Iter<String> {
+    pub fn excluded_host_queries(&self) -> Iter<'_, String> {
         self.excluded_host_queries.iter()
     }
 }

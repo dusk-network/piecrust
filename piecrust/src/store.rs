@@ -248,7 +248,7 @@ impl ContractStore {
 pub(crate) enum Call {
     Commit {
         contracts: BTreeMap<ContractId, ContractDataEntry>,
-        base: Option<Commit>,
+        base: Box<Option<Commit>>,
         replier: mpsc::SyncSender<io::Result<Hash>>,
     },
     GetCommits {
@@ -293,7 +293,7 @@ fn sync_loop<P: AsRef<Path>>(
                 let io_result = CommitWriter::create_and_write(
                     root_dir,
                     commit_store.clone(),
-                    base,
+                    *base,
                     contracts,
                 );
                 match &io_result {
