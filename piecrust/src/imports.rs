@@ -107,7 +107,7 @@ pub fn check_ptr(
                 mem_len,
             })?;
 
-    if end >= mem_len {
+    if end > mem_len {
         return Err(Error::MemoryAccessOutOfBounds {
             offset,
             len,
@@ -535,4 +535,52 @@ fn self_id(mut fenv: Caller<Env>) {
     let len = slice.len();
     env.self_instance()
         .with_arg_buf_mut(|arg| arg[..len].copy_from_slice(&slice));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{ContractData, SessionData, VM, contract_bytecode};
+
+    const OWNER: [u8; 32] = [0u8; 32];
+    const LIMIT: u64 = 1_000_000;
+
+    #[test]
+    fn check_ptr_boundary() {
+        let vm = VM::ephemeral().expect("ephemeral VM should be created");
+        let mut session = vm
+            .session(SessionData::builder())
+            .expect("session should be created");
+        let contract_id = session
+            .deploy(
+                contract_bytecode!("counter"),
+                ContractData::builder().owner(OWNER),
+                LIMIT,
+            )
+            .expect("contract should deploy");
+
+        session
+            .push_callstack(contract_id, LIMIT)
+            .expect("callstack push should instantiate contract");
+        let instance = session
+            .instance(&contract_id)
+            .expect("instance should exist after push_callstack");
+
+        // Accessing the full memory should be valid
+        let mem_len = instance.with_memory(|mem| mem.len());
+        let check_res = check_ptr(instance, 0, mem_len);
+        println!("{check_res:?}");
+        assert!(check_res.is_ok());
+
+        // Accessing 1 over the bound should be invalid
+        let check_res = check_ptr(instance, 0, mem_len + 1).unwrap_err();
+        assert!(matches!(
+            check_res,
+            Error::MemoryAccessOutOfBounds {
+                offset: 0,
+                len,
+                mem_len
+            } if len == mem_len + 1
+        ));
+    }
 }
