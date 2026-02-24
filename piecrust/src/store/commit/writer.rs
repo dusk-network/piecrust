@@ -156,7 +156,10 @@ impl CommitWriter {
             if contract_data.is_new {
                 // we write them to the main location
                 fs::write(bytecode_main_path, &contract_data.bytecode)?;
-                fs::write(module_main_path, contract_data.module.serialize())?;
+                contract_data.module.write_module_data(
+                    module_main_path,
+                    contract_data.bytecode.as_ref(),
+                )?;
                 fs::write(metadata_main_path, &contract_data.metadata)?;
                 dirty = true;
             }
@@ -236,9 +239,7 @@ impl CommitWriter {
             .join(&contract_hex)
             .with_extension(OBJECTCODE_EXTENSION);
 
-        if module_path.exists() {
-            fs::remove_file(module_path)?;
-        }
+        Module::remove_cache_files(module_path)?;
 
         Ok(())
     }
@@ -273,7 +274,7 @@ impl CommitWriter {
             .map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))?;
 
         // Write the recompiled module
-        fs::write(module_path, module.serialize())?;
+        module.write_module_data(module_path, bytecode.as_ref())?;
         debug!("Saved module for contract: {}", contract_hex);
         Ok(())
     }

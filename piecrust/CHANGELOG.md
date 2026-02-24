@@ -23,6 +23,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Allow to exclude host queries when creating a session
 - Relax `tracing` dependency from "=0.1.40" to "0.1.40"
 
+### Fixed
+
+- Harden module cache loading with sidecar metadata checks (bytecode hash, module hash and runtime context). Invalid or stale cache entries are discarded and safely recompiled from canonical bytecode.
+
 ## [0.28.1] - 2025-04-16
 
 ### Changed
