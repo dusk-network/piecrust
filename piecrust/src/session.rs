@@ -9,6 +9,7 @@ use std::collections::btree_set::Iter;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{Debug, Formatter};
 use std::mem;
+use std::ptr::NonNull;
 use std::sync::{Arc, mpsc};
 
 use bytecheck::CheckBytes;
@@ -36,10 +37,6 @@ use crate::vm::{HostQueries, HostQuery};
 const MAX_META_SIZE: usize = ARGBUF_LEN;
 pub const INIT_METHOD: &str = "init";
 
-unsafe impl Send for Session {}
-
-unsafe impl Sync for Session {}
-
 /// A running mutation to a state.
 ///
 /// `Session`s are spawned using a [`VM`] instance, and can be used to [`call`]
@@ -53,9 +50,11 @@ unsafe impl Sync for Session {}
 /// [`commit`]: Session::commit
 pub struct Session {
     engine: Engine,
-    inner: &'static mut SessionInner,
+    inner: NonNull<SessionInner>,
     original: bool,
 }
+
+unsafe impl Send for Session {}
 
 impl Debug for Session {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
@@ -78,7 +77,7 @@ impl Drop for Session {
             // SAFETY: this is safe since we guarantee that there is no aliasing
             // when a session drops.
             unsafe {
-                let _ = Box::from_raw(self.inner);
+                let _ = Box::from_raw(self.inner.as_ptr());
             }
         }
     }
@@ -114,7 +113,15 @@ impl Debug for SessionInner {
     }
 }
 
-unsafe impl MemoryCreator for Session {
+struct SessionMemoryCreator {
+    inner: NonNull<SessionInner>,
+}
+
+unsafe impl Send for SessionMemoryCreator {}
+
+unsafe impl Sync for SessionMemoryCreator {}
+
+unsafe impl MemoryCreator for SessionMemoryCreator {
     /// This new memory is created for the contract currently at the top of the
     /// call tree.
     fn new_memory(
@@ -125,21 +132,20 @@ unsafe impl MemoryCreator for Session {
         _reserved_size_in_bytes: Option<usize>,
         _guard_size_in_bytes: usize,
     ) -> Result<Box<dyn LinearMemory>, String> {
-        let contract = self.inner.current;
-
-        let session = self.clone();
+        let inner = unsafe { &mut *self.inner.as_ptr() };
+        let contract = inner.current;
 
         let contract_data =
-            session.inner.contract_session.contract(contract).map_err(
-                |err| format!("Failed to get contract from session: {err:?}"),
-            )?;
+            inner.contract_session.contract(contract).map_err(|err| {
+                format!("Failed to get contract from session: {err:?}")
+            })?;
 
         let mut memory = contract_data
             .expect("Contract data should exist at this point")
             .memory;
 
-        if memory.is_new {
-            memory.current_len = minimum;
+        if memory.is_new() {
+            memory.set_current_len(minimum);
         }
 
         Ok(Box::new(memory))
@@ -147,6 +153,14 @@ unsafe impl MemoryCreator for Session {
 }
 
 impl Session {
+    fn inner(&self) -> &SessionInner {
+        unsafe { self.inner.as_ref() }
+    }
+
+    fn inner_mut(&mut self) -> &mut SessionInner {
+        unsafe { self.inner.as_mut() }
+    }
+
     pub(crate) fn new(
         engine: Engine,
         contract_session: ContractSession,
@@ -171,12 +185,14 @@ impl Session {
 
         let mut session = Self {
             engine: engine.clone(),
-            inner,
+            inner: NonNull::from(inner),
             original: true,
         };
 
         let mut config = engine.config().clone();
-        config.with_host_memory(Arc::new(session.clone()));
+        config.with_host_memory(Arc::new(SessionMemoryCreator {
+            inner: session.inner,
+        }));
 
         session.engine = Engine::new(&config)
             .expect("Engine configuration is set at compile time");
@@ -191,13 +207,9 @@ impl Session {
     /// This is done to allow us to guarantee there is no aliasing of the
     /// reference to `&'static SessionInner`.
     pub(crate) fn clone(&self) -> Self {
-        let inner = self.inner as *const SessionInner;
-        let inner = inner as *mut SessionInner;
-        // SAFETY: we explicitly allow aliasing of the session for internal
-        // use.
         Self {
             engine: self.engine.clone(),
-            inner: unsafe { &mut *inner },
+            inner: self.inner,
             original: false,
         }
     }
@@ -244,13 +256,13 @@ impl Session {
         if let Some(arg) = deploy_data.init_arg {
             let mut sbuf = [0u8; SCRATCH_BUF_BYTES];
             let scratch = BufferScratch::new(&mut sbuf);
-            let ser = BufferSerializer::new(&mut self.inner.buffer[..]);
+            let ser = BufferSerializer::new(&mut self.inner_mut().buffer[..]);
             let mut ser = CompositeSerializer::new(ser, scratch, Infallible);
 
             ser.serialize_value(arg)?;
             let pos = ser.pos();
 
-            init_arg = Some(self.inner.buffer[0..pos].to_vec());
+            init_arg = Some(self.inner().buffer[0..pos].to_vec());
         }
 
         self.deploy_raw(
@@ -308,7 +320,11 @@ impl Session {
         owner: Vec<u8>,
         gas_limit: u64,
     ) -> Result<(), Error> {
-        if self.inner.contract_session.contract_deployed(contract_id) {
+        if self
+            .inner_mut()
+            .contract_session
+            .contract_deployed(contract_id)
+        {
             return Err(InitalizationError(
                 "Deployed error already exists".into(),
             ));
@@ -319,7 +335,7 @@ impl Session {
         let contract_metadata = ContractMetadata { contract_id, owner };
         let metadata_bytes = Self::serialize_data(&contract_metadata)?;
 
-        self.inner
+        self.inner_mut()
             .contract_session
             .deploy(
                 contract_id,
@@ -351,7 +367,9 @@ impl Session {
         };
 
         instantiate().inspect_err(|_| {
-            self.inner.contract_session.remove_contract(&contract_id);
+            self.inner_mut()
+                .contract_session
+                .remove_contract(&contract_id);
         })
     }
 
@@ -386,7 +404,7 @@ impl Session {
 
         let mut sbuf = [0u8; SCRATCH_BUF_BYTES];
         let scratch = BufferScratch::new(&mut sbuf);
-        let ser = BufferSerializer::new(&mut self.inner.buffer[..]);
+        let ser = BufferSerializer::new(&mut self.inner_mut().buffer[..]);
         let mut ser = CompositeSerializer::new(ser, scratch, Infallible);
 
         ser.serialize_value(fn_arg)?;
@@ -395,7 +413,7 @@ impl Session {
         let receipt = self.call_raw(
             contract,
             fn_name,
-            self.inner.buffer[..pos].to_vec(),
+            self.inner().buffer[..pos].to_vec(),
             gas_limit,
         )?;
 
@@ -424,7 +442,7 @@ impl Session {
 
         let (data, gas_spent, call_tree) =
             self.call_inner(contract, fn_name, fn_arg.into(), gas_limit)?;
-        let events = mem::take(&mut self.inner.events);
+        let events = mem::take(&mut self.inner_mut().events);
 
         Ok(CallReceipt {
             gas_limit,
@@ -477,7 +495,7 @@ impl Session {
         // If the contract being replaced exists, and the caller did not specify
         // an owner, set the owner to the owner of the contract being replaced.
         if let Some(old_contract_data) = self
-            .inner
+            .inner_mut()
             .contract_session
             .contract(contract)
             .map_err(|err| PersistenceError(Arc::new(err)))?
@@ -493,7 +511,7 @@ impl Session {
 
         closure(new_contract, &mut self)?;
 
-        self.inner
+        self.inner_mut()
             .contract_session
             .replace(contract, new_contract)?;
 
@@ -522,9 +540,9 @@ impl Session {
         R::Archived: Deserialize<R, Infallible>
             + for<'b> CheckBytes<DefaultValidator<'b>>,
     {
-        self.inner.feeder = Some(feeder);
+        self.inner_mut().feeder = Some(feeder);
         let r = self.call(contract, fn_name, fn_arg, gas_limit);
-        self.inner.feeder = None;
+        self.inner_mut().feeder = None;
         r
     }
 
@@ -543,9 +561,9 @@ impl Session {
         gas_limit: u64,
         feeder: mpsc::Sender<Vec<u8>>,
     ) -> Result<CallReceipt<Vec<u8>>, Error> {
-        self.inner.feeder = Some(feeder);
+        self.inner_mut().feeder = Some(feeder);
         let r = self.call_raw(contract, fn_name, fn_arg, gas_limit);
-        self.inner.feeder = None;
+        self.inner_mut().feeder = None;
         r
     }
 
@@ -557,23 +575,26 @@ impl Session {
         contract_id: ContractId,
     ) -> Result<Option<usize>, Error> {
         Ok(self
-            .inner
+            .inner_mut()
             .contract_session
             .contract(contract_id)
             .map_err(|err| PersistenceError(Arc::new(err)))?
-            .map(|data| data.memory.current_len))
+            .map(|data| data.memory.current_len()))
     }
 
     pub(crate) fn instance(
         &mut self,
         contract_id: &ContractId,
     ) -> Option<&mut WrappedInstance> {
-        self.inner.instances.get_mut(contract_id).map(Box::as_mut)
+        self.inner_mut()
+            .instances
+            .get_mut(contract_id)
+            .map(Box::as_mut)
     }
 
     fn clear_call_tree_and_instances(&mut self) {
-        self.inner.call_tree.clear();
-        self.inner.instances.clear();
+        self.inner_mut().call_tree.clear();
+        self.inner_mut().instances.clear();
     }
 
     /// Return the state root of the current state of the session.
@@ -583,7 +604,7 @@ impl Session {
     ///
     /// It also doubles as the ID of a commit - the commit root.
     pub fn root(&self) -> [u8; 32] {
-        self.inner.contract_session.root().into()
+        self.inner().contract_session.root().into()
     }
 
     /// Returns an iterator over the pages (and their indices) of a contract's
@@ -599,15 +620,15 @@ impl Session {
         &self,
         contract: ContractId,
     ) -> Option<impl Iterator<Item = (usize, &[u8], PageOpening)>> {
-        self.inner.contract_session.memory_pages(contract)
+        self.inner().contract_session.memory_pages(contract)
     }
 
     pub(crate) fn push_event(&mut self, event: Event) {
-        self.inner.events.push(event);
+        self.inner_mut().events.push(event);
     }
 
     pub(crate) fn push_feed(&mut self, data: Vec<u8>) -> Result<(), Error> {
-        let feed = self.inner.feeder.as_ref().ok_or(Error::MissingFeed)?;
+        let feed = self.inner().feeder.as_ref().ok_or(Error::MissingFeed)?;
         feed.send(data).map_err(Error::FeedPulled)
     }
 
@@ -616,7 +637,7 @@ impl Session {
         contract_id: ContractId,
     ) -> Result<WrappedInstance, Error> {
         let store_data = self
-            .inner
+            .inner_mut()
             .contract_session
             .contract(contract_id)
             .map_err(|err| PersistenceError(Arc::new(err)))?
@@ -628,7 +649,7 @@ impl Session {
             Some(store_data.module.serialize()),
         )?;
 
-        self.inner.current = contract_id;
+        self.inner_mut().current = contract_id;
 
         let instance = WrappedInstance::new(
             self.clone(),
@@ -644,15 +665,15 @@ impl Session {
         &self,
         name: &str,
     ) -> Option<Arc<dyn HostQuery>> {
-        self.inner.host_queries.get_arc(name)
+        self.inner().host_queries.get_arc(name)
     }
 
     pub(crate) fn nth_from_top(&self, n: usize) -> Option<CallTreeElem> {
-        self.inner.call_tree.nth_parent(n)
+        self.inner().call_tree.nth_parent(n)
     }
 
     pub(crate) fn call_ids(&self) -> Vec<&ContractId> {
-        self.inner.call_tree.call_ids()
+        self.inner().call_tree.call_ids()
     }
 
     /// Creates a new instance of the given contract, returning its memory
@@ -662,13 +683,15 @@ impl Session {
         contract: ContractId,
     ) -> Result<usize, Error> {
         let instance = self.new_instance(contract)?;
-        if self.inner.instances.contains_key(&contract) {
+        if self.inner().instances.contains_key(&contract) {
             panic!("Contract already in the stack: {contract:?}");
         }
 
         let mem_len = instance.mem_len();
 
-        self.inner.instances.insert(contract, Box::new(instance));
+        self.inner_mut()
+            .instances
+            .insert(contract, Box::new(instance));
         Ok(mem_len)
     }
 
@@ -678,13 +701,13 @@ impl Session {
         limit: u64,
     ) -> Result<CallTreeElem, Error> {
         let mem_len =
-            if let Some(instance) = self.inner.instances.get(&contract_id) {
+            if let Some(instance) = self.inner().instances.get(&contract_id) {
                 instance.mem_len()
             } else {
                 self.create_instance(contract_id)?
             };
 
-        self.inner.call_tree.push(CallTreeElem {
+        self.inner_mut().call_tree.push(CallTreeElem {
             contract_id,
             limit,
             spent: 0,
@@ -692,22 +715,23 @@ impl Session {
         });
 
         Ok(self
-            .inner
+            .inner()
             .call_tree
             .nth_parent(0)
             .expect("We just pushed an element to the stack"))
     }
 
     pub(crate) fn move_up_call_tree(&mut self, spent: u64) {
-        self.inner.call_tree.move_up(spent);
+        self.inner_mut().call_tree.move_up(spent);
     }
 
     pub(crate) fn move_up_prune_call_tree(&mut self) {
-        self.inner.call_tree.move_up_prune();
+        self.inner_mut().call_tree.move_up_prune();
     }
 
     pub(crate) fn revert_callstack(&mut self) -> Result<(), std::io::Error> {
-        let call_tree: Vec<_> = self.inner.call_tree.iter().copied().collect();
+        let call_tree: Vec<_> =
+            self.inner().call_tree.iter().copied().collect();
         for elem in call_tree {
             let instance = self
                 .instance(&elem.contract_id)
@@ -721,8 +745,8 @@ impl Session {
 
     /// Commits the given session to disk, consuming the session and returning
     /// its state root.
-    pub fn commit(self) -> Result<[u8; 32], Error> {
-        self.inner
+    pub fn commit(mut self) -> Result<[u8; 32], Error> {
+        self.inner_mut()
             .contract_session
             .commit()
             .map(Into::into)
@@ -731,19 +755,19 @@ impl Session {
 
     #[cfg(feature = "debug")]
     pub(crate) fn register_debug<M: Into<String>>(&mut self, msg: M) {
-        self.inner.debug.push(msg.into());
+        self.inner_mut().debug.push(msg.into());
     }
 
     pub fn with_debug<C, R>(&self, c: C) -> R
     where
         C: FnOnce(&[String]) -> R,
     {
-        c(&self.inner.debug)
+        c(&self.inner().debug)
     }
 
     /// Returns the value of a metadata item.
     pub fn meta(&self, name: &str) -> Option<Vec<u8>> {
-        self.inner.data.get(name)
+        self.inner().data.get(name)
     }
 
     /// Set the value of a metadata item.
@@ -759,7 +783,7 @@ impl Session {
         V: for<'a> Serialize<StandardBufSerializer<'a>>,
     {
         let data = Self::serialize_data(&value)?;
-        Ok(self.inner.data.set(name, data))
+        Ok(self.inner_mut().data.set(name, data))
     }
 
     /// Remove a metadata item.
@@ -769,7 +793,7 @@ impl Session {
     where
         S: Into<Cow<'static, str>>,
     {
-        self.inner.data.remove(name)
+        self.inner_mut().data.remove(name)
     }
 
     pub fn serialize_data<V>(value: &V) -> Result<Vec<u8>, Error>
@@ -847,7 +871,8 @@ impl Session {
             (ret, spent)
         };
 
-        let call_tree: Vec<_> = self.inner.call_tree.iter().copied().collect();
+        let call_tree: Vec<_> =
+            self.inner().call_tree.iter().copied().collect();
         for elem in call_tree {
             let instance = self
                 .instance(&elem.contract_id)
@@ -861,7 +886,7 @@ impl Session {
         }
 
         let mut call_tree = CallTree::new();
-        mem::swap(&mut self.inner.call_tree, &mut call_tree);
+        mem::swap(&mut self.inner_mut().call_tree, &mut call_tree);
         call_tree.update_spent(spent);
 
         self.clear_call_tree_and_instances();
@@ -873,7 +898,9 @@ impl Session {
         &mut self,
         contract_id: &ContractId,
     ) -> Option<&ContractMetadata> {
-        self.inner.contract_session.contract_metadata(contract_id)
+        self.inner_mut()
+            .contract_session
+            .contract_metadata(contract_id)
     }
 }
 

@@ -175,7 +175,7 @@ impl WrappedInstance {
         }
 
         // A memory is no longer new after one instantiation
-        memory.is_new = false;
+        memory.set_is_new(false);
 
         let wrapped = WrappedInstance {
             store,
@@ -237,24 +237,24 @@ impl WrappedInstance {
     where
         F: FnOnce(&[u8]) -> R,
     {
-        f(&self.memory)
+        self.memory.with_bytes(f)
     }
 
     pub(crate) fn with_memory_mut<F, R>(&mut self, f: F) -> R
     where
         F: FnOnce(&mut [u8]) -> R,
     {
-        f(&mut self.memory)
+        self.memory.with_bytes_mut(f)
     }
 
     /// Returns the current length of the memory.
     pub(crate) fn mem_len(&self) -> usize {
-        self.memory.current_len
+        self.memory.current_len()
     }
 
     /// Sets the length of the memory.
     pub(crate) fn set_len(&mut self, len: usize) {
-        self.memory.current_len = len;
+        self.memory.set_current_len(len);
     }
 
     pub(crate) fn with_arg_buf<F, R>(&self, f: F) -> R
