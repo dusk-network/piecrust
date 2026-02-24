@@ -73,7 +73,7 @@ impl Drop for Session {
         if self.original {
             // ensure the stack is cleared and all instances are removed and
             // reclaimed on the drop of a session.
-            self.clear_stack_and_instances();
+            self.clear_call_tree_and_instances();
 
             // SAFETY: this is safe since we guarantee that there is no aliasing
             // when a session drops.
@@ -560,7 +560,7 @@ impl Session {
         })
     }
 
-    fn clear_stack_and_instances(&mut self) {
+    fn clear_call_tree_and_instances(&mut self) {
         self.inner.call_tree.clear();
 
         while !self.inner.instances.is_empty() {
@@ -823,7 +823,7 @@ impl Session {
                     };
                 }
                 self.move_up_prune_call_tree();
-                self.clear_stack_and_instances();
+                self.clear_call_tree_and_instances();
                 err
             })
             .map_err(Error::normalize)?;
@@ -842,11 +842,12 @@ impl Session {
                     io: Arc::new(err),
                 })?;
         }
-        self.clear_stack_and_instances();
 
         let mut call_tree = CallTree::new();
         mem::swap(&mut self.inner.call_tree, &mut call_tree);
         call_tree.update_spent(spent);
+
+        self.clear_call_tree_and_instances();
 
         Ok((ret, spent, call_tree))
     }

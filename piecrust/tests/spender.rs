@@ -45,6 +45,41 @@ pub fn gas_get_used() -> Result<(), Error> {
 }
 
 #[test]
+pub fn call_receipt() -> Result<(), Error> {
+    let vm = VM::ephemeral()?;
+
+    let mut session = vm.session(SessionData::builder())?;
+
+    let counter_id = session.deploy(
+        contract_bytecode!("counter"),
+        ContractData::builder().owner(OWNER),
+        LIMIT,
+    )?;
+    let center_id = session.deploy(
+        contract_bytecode!("callcenter"),
+        ContractData::builder().owner(OWNER),
+        LIMIT,
+    )?;
+
+    let receipt = session.call::<_, i64>(
+        center_id,
+        "query_counter",
+        &counter_id,
+        LIMIT,
+    )?;
+
+    let called_contracts = receipt
+        .call_tree
+        .iter()
+        .map(|elem| elem.contract_id)
+        .collect::<Vec<_>>();
+
+    assert_eq!(called_contracts, vec![counter_id, center_id]);
+
+    Ok(())
+}
+
+#[test]
 pub fn panic_msg_gets_through() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 
