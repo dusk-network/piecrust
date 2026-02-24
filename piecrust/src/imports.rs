@@ -295,7 +295,7 @@ pub(crate) fn c(
         Err(err) => return Ok(write_contract_error(env, err)),
     };
 
-    let callee_result = {
+    let callee_result = (|| -> Result<(i32, Vec<u8>, u64), Error> {
         let callee = env
             .instance(&callee_stack_element.contract_id)
             .expect("callee instance should exist");
@@ -315,8 +315,8 @@ pub(crate) fn c(
         callee.read_argument(&mut ret_data);
         let callee_spent = callee_limit - callee.get_remaining_gas();
 
-        Ok::<_, Error>((ret_len, ret_data, callee_spent))
-    };
+        Ok((ret_len, ret_data, callee_spent))
+    })();
 
     match callee_result {
         Ok((ret_len, ret_data, callee_spent)) => {
