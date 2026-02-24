@@ -324,6 +324,10 @@ impl HostQueries {
         self.map.get(name).map(|q| q.as_ref())
     }
 
+    pub fn get_arc(&self, name: &str) -> Option<Arc<dyn HostQuery>> {
+        self.map.get(name).cloned()
+    }
+
     pub fn remove(&mut self, name: &str) {
         self.map.remove(name);
     }

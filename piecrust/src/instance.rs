@@ -43,7 +43,7 @@ impl DerefMut for Env {
 }
 
 impl Env {
-    pub fn self_instance<'b>(&self) -> &'b mut WrappedInstance {
+    pub fn self_instance(&mut self) -> &mut WrappedInstance {
         let stack_element = self
             .session
             .nth_from_top(0)
@@ -52,10 +52,10 @@ impl Env {
             .expect("instance should exist")
     }
 
-    pub fn instance<'b>(
-        &self,
+    pub fn instance(
+        &mut self,
         contract_id: &ContractId,
-    ) -> Option<&'b mut WrappedInstance> {
+    ) -> Option<&mut WrappedInstance> {
         self.session.instance(contract_id)
     }
 

@@ -84,12 +84,11 @@ impl Drop for Session {
     }
 }
 
-#[derive(Debug)]
 struct SessionInner {
     current: ContractId,
 
     call_tree: CallTree,
-    instances: BTreeMap<ContractId, *mut WrappedInstance>,
+    instances: BTreeMap<ContractId, Box<WrappedInstance>>,
     debug: Vec<String>,
     data: SessionData,
 
@@ -99,6 +98,20 @@ struct SessionInner {
 
     feeder: Option<mpsc::Sender<Vec<u8>>>,
     events: Vec<Event>,
+}
+
+impl Debug for SessionInner {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SessionInner")
+            .field("current", &self.current)
+            .field("call_tree", &self.call_tree)
+            .field("instances_len", &self.instances.len())
+            .field("debug_len", &self.debug.len())
+            .field("data", &self.data)
+            .field("buffer_len", &self.buffer.len())
+            .field("events_len", &self.events.len())
+            .finish()
+    }
 }
 
 unsafe impl MemoryCreator for Session {
@@ -319,10 +332,12 @@ impl Session {
 
         let instantiate = || {
             self.create_instance(contract_id)?;
-            let instance =
-                self.instance(&contract_id).expect("instance should exist");
+            let has_init = self
+                .instance(&contract_id)
+                .expect("instance should exist")
+                .is_function_exported(INIT_METHOD);
 
-            if instance.is_function_exported(INIT_METHOD) {
+            if has_init {
                 // If no argument was provided, we call the init method anyway,
                 // but with an empty argument. The alternative is to panic, but
                 // that assumes that the caller of `deploy` knows that the
@@ -549,26 +564,16 @@ impl Session {
             .map(|data| data.memory.current_len))
     }
 
-    pub(crate) fn instance<'a>(
-        &self,
+    pub(crate) fn instance(
+        &mut self,
         contract_id: &ContractId,
-    ) -> Option<&'a mut WrappedInstance> {
-        self.inner.instances.get(contract_id).map(|instance| {
-            // SAFETY: We guarantee that the instance exists since we're in
-            // control over if it is dropped with the session.
-            unsafe { &mut **instance }
-        })
+    ) -> Option<&mut WrappedInstance> {
+        self.inner.instances.get_mut(contract_id).map(Box::as_mut)
     }
 
     fn clear_call_tree_and_instances(&mut self) {
         self.inner.call_tree.clear();
-
-        while !self.inner.instances.is_empty() {
-            let (_, instance) = self.inner.instances.pop_first().unwrap();
-            unsafe {
-                let _ = Box::from_raw(instance);
-            };
-        }
+        self.inner.instances.clear();
     }
 
     /// Return the state root of the current state of the session.
@@ -635,8 +640,11 @@ impl Session {
         Ok(instance)
     }
 
-    pub(crate) fn host_query(&self, name: &str) -> Option<&dyn HostQuery> {
-        self.inner.host_queries.get(name)
+    pub(crate) fn host_query_arc(
+        &self,
+        name: &str,
+    ) -> Option<Arc<dyn HostQuery>> {
+        self.inner.host_queries.get_arc(name)
     }
 
     pub(crate) fn nth_from_top(&self, n: usize) -> Option<CallTreeElem> {
@@ -660,10 +668,7 @@ impl Session {
 
         let mem_len = instance.mem_len();
 
-        let instance = Box::new(instance);
-        let instance = Box::leak(instance) as *mut WrappedInstance;
-
-        self.inner.instances.insert(contract, instance);
+        self.inner.instances.insert(contract, Box::new(instance));
         Ok(mem_len)
     }
 
@@ -672,27 +677,19 @@ impl Session {
         contract_id: ContractId,
         limit: u64,
     ) -> Result<CallTreeElem, Error> {
-        let instance = self.instance(&contract_id);
+        let mem_len =
+            if let Some(instance) = self.inner.instances.get(&contract_id) {
+                instance.mem_len()
+            } else {
+                self.create_instance(contract_id)?
+            };
 
-        match instance {
-            Some(instance) => {
-                self.inner.call_tree.push(CallTreeElem {
-                    contract_id,
-                    limit,
-                    spent: 0,
-                    mem_len: instance.mem_len(),
-                });
-            }
-            None => {
-                let mem_len = self.create_instance(contract_id)?;
-                self.inner.call_tree.push(CallTreeElem {
-                    contract_id,
-                    limit,
-                    spent: 0,
-                    mem_len,
-                });
-            }
-        }
+        self.inner.call_tree.push(CallTreeElem {
+            contract_id,
+            limit,
+            spent: 0,
+            mem_len,
+        });
 
         Ok(self
             .inner
@@ -710,7 +707,8 @@ impl Session {
     }
 
     pub(crate) fn revert_callstack(&mut self) -> Result<(), std::io::Error> {
-        for elem in self.inner.call_tree.iter() {
+        let call_tree: Vec<_> = self.inner.call_tree.iter().copied().collect();
+        for elem in call_tree {
             let instance = self
                 .instance(&elem.contract_id)
                 .expect("instance should exist");
@@ -801,37 +799,56 @@ impl Session {
         limit: u64,
     ) -> Result<(Vec<u8>, u64, CallTree), Error> {
         let stack_element = self.push_callstack(contract, limit)?;
-        let instance = self
-            .instance(&stack_element.contract_id)
-            .expect("instance should exist");
+        {
+            let instance = self
+                .instance(&stack_element.contract_id)
+                .expect("instance should exist");
+            instance
+                .snap()
+                .map_err(|err| Error::MemorySnapshotFailure {
+                    reason: None,
+                    io: Arc::new(err),
+                })?;
+        }
 
-        instance
-            .snap()
-            .map_err(|err| Error::MemorySnapshotFailure {
-                reason: None,
-                io: Arc::new(err),
-            })?;
+        let ret_len = {
+            let instance = self
+                .instance(&stack_element.contract_id)
+                .expect("instance should exist");
+            let arg_len = instance.write_bytes_to_arg_buffer(&fdata)?;
+            instance
+                .call(fname, arg_len, limit)
+                .map_err(Error::normalize)
+        };
 
-        let arg_len = instance.write_bytes_to_arg_buffer(&fdata)?;
-        let ret_len = instance
-            .call(fname, arg_len, limit)
-            .map_err(|err| {
-                if let Err(io_err) = self.revert_callstack() {
-                    return Error::MemorySnapshotFailure {
+        let ret_len = match ret_len {
+            Ok(ret_len) => ret_len,
+            Err(err) => {
+                let err = if let Err(io_err) = self.revert_callstack() {
+                    Error::MemorySnapshotFailure {
                         reason: Some(Arc::new(err)),
                         io: Arc::new(io_err),
-                    };
-                }
+                    }
+                } else {
+                    err
+                };
                 self.move_up_prune_call_tree();
                 self.clear_call_tree_and_instances();
-                err
-            })
-            .map_err(Error::normalize)?;
-        let ret = instance.read_bytes_from_arg_buffer(ret_len as u32);
+                return Err(err);
+            }
+        };
 
-        let spent = limit - instance.get_remaining_gas();
+        let (ret, spent) = {
+            let instance = self
+                .instance(&stack_element.contract_id)
+                .expect("instance should exist");
+            let ret = instance.read_bytes_from_arg_buffer(ret_len as u32);
+            let spent = limit - instance.get_remaining_gas();
+            (ret, spent)
+        };
 
-        for elem in self.inner.call_tree.iter() {
+        let call_tree: Vec<_> = self.inner.call_tree.iter().copied().collect();
+        for elem in call_tree {
             let instance = self
                 .instance(&elem.contract_id)
                 .expect("instance should exist");
