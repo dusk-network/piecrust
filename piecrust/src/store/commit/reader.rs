@@ -23,7 +23,6 @@ use std::io::BufReader;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::{fs, io};
-use tracing::info;
 
 pub struct CommitReader;
 
@@ -135,17 +134,11 @@ impl CommitReader {
             let module_path =
                 bytecode_path.with_extension(OBJECTCODE_EXTENSION);
 
-            // SAFETY it is safe to deserialize the file here, since we don't
-            // use the module here. We just want to check if the
-            // file is valid.
-            if Module::from_file(engine, &module_path).is_err() {
-                let bytecode = Bytecode::from_file(bytecode_path)?;
-                let module = Module::from_bytecode(engine, bytecode.as_ref())
-                    .map_err(|err| {
+            let bytecode = Bytecode::from_file(&bytecode_path)?;
+            Module::load_or_recompile(engine, &module_path, bytecode.as_ref())
+                .map_err(|err| {
                     io::Error::new(io::ErrorKind::InvalidData, err)
                 })?;
-                fs::write(module_path, module.serialize())?;
-            }
 
             let contract_memory_dir = memory_dir.join(&contract_hex);
 
@@ -260,24 +253,15 @@ impl CommitReader {
                         let module_path =
                             bytecode_path.with_extension(OBJECTCODE_EXTENSION);
 
-                        // SAFETY it is safe to deserialize the file here, since
-                        // we don't use the module here.
-                        // We just want to check if the
-                        // file is valid.
-                        if Module::from_file(engine, &module_path).is_err() {
-                            let bytecode = Bytecode::from_file(bytecode_path)?;
-                            let module = Module::from_bytecode(
-                                engine,
-                                bytecode.as_ref(),
-                            )
-                            .map_err(|err| {
-                                io::Error::new(io::ErrorKind::InvalidData, err)
-                            })?;
-                            fs::write(module_path, module.serialize())?;
-                            info!("module {contract_id_hex} recompiled");
-                        } else {
-                            info!("module {contract_id_hex} loaded");
-                        }
+                        let bytecode = Bytecode::from_file(&bytecode_path)?;
+                        Module::load_or_recompile(
+                            engine,
+                            &module_path,
+                            bytecode.as_ref(),
+                        )
+                        .map_err(|err| {
+                            io::Error::new(io::ErrorKind::InvalidData, err)
+                        })?;
 
                         if element_depth != u32::MAX {
                             index.insert_contract_index(&contract_id, element);

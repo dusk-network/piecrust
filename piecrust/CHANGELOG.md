@@ -24,6 +24,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Relax `tracing` dependency from "=0.1.40" to "0.1.40"
 - Harden session/memory instance handling to remove unsafe aliasing patterns and make inter-contract call borrowing/revert paths sound under reentrancy
 
+### Fixed
+
+- Harden module cache loading with sidecar metadata checks (bytecode hash, module hash and runtime context). Invalid or stale cache entries are discarded and safely recompiled from canonical bytecode.
+
 ## [0.28.1] - 2025-04-16
 
 ### Changed

@@ -303,8 +303,11 @@ impl ContractSession {
                                 base_dir.join(MEMORY_DIR).join(&contract_hex);
 
                             let bytecode = Bytecode::from_file(bytecode_path)?;
-                            let module =
-                                Module::from_file(&self.engine, module_path)?;
+                            let module = Module::load_or_recompile(
+                                &self.engine,
+                                &module_path,
+                                bytecode.as_ref(),
+                            )?;
                             let metadata = Metadata::from_file(metadata_path)?;
 
                             let memory = match base_commit.index_get(&contract)

@@ -7,6 +7,7 @@
 use piecrust::{ContractData, Error, SessionData, VM, contract_bytecode};
 use piecrust_uplink::ContractId;
 use std::path::PathBuf;
+use std::sync::Arc;
 
 const OWNER: [u8; 32] = [0u8; 32];
 const LIMIT: u64 = 1_000_000;
@@ -18,6 +19,11 @@ fn module_path(vm: &VM, contract_id: ContractId) -> PathBuf {
         .join("bytecode") // BYTECODE_DIR
         .join(&contract_hex)
         .with_extension("a") // OBJECTCODE_EXTENSION
+}
+
+fn module_meta_path(vm: &VM, contract_id: ContractId) -> PathBuf {
+    let module = module_path(vm, contract_id);
+    module.with_extension("a.meta")
 }
 
 fn deploy_counter(vm: &VM) -> Result<(ContractId, [u8; 32]), Error> {
@@ -32,19 +38,27 @@ fn deploy_counter(vm: &VM) -> Result<(ContractId, [u8; 32]), Error> {
     Ok((counter_id, commit_id))
 }
 
+fn io_to_error(err: std::io::Error) -> Error {
+    Error::PersistenceError(Arc::new(err))
+}
+
 #[test]
 fn remove_module() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
     let (counter_id, commit_id) = deploy_counter(&vm)?;
 
     let module_file = module_path(&vm, counter_id);
+    let module_meta_file = module_meta_path(&vm, counter_id);
     assert!(module_file.exists());
+    assert!(module_meta_file.exists());
 
     vm.remove_module(counter_id)?;
     assert!(!module_file.exists());
+    assert!(!module_meta_file.exists());
 
     vm.recompile_module(counter_id)?;
     assert!(module_file.exists());
+    assert!(module_meta_file.exists());
 
     let mut session = vm.session(SessionData::builder().base(commit_id))?;
     assert_eq!(
@@ -96,6 +110,43 @@ fn recompile_module() -> Result<(), Error> {
             .data,
         0xfe
     );
+
+    Ok(())
+}
+
+#[test]
+fn module_cache_recovers_from_missing_or_corrupt_metadata() -> Result<(), Error>
+{
+    let vm = VM::ephemeral()?;
+    let (counter_id, commit_id) = deploy_counter(&vm)?;
+    let module_meta_file = module_meta_path(&vm, counter_id);
+
+    std::fs::remove_file(&module_meta_file).map_err(io_to_error)?;
+
+    let mut session = vm.session(SessionData::builder().base(commit_id))?;
+    assert_eq!(
+        session
+            .call::<_, i64>(counter_id, "read_value", &(), LIMIT)?
+            .data,
+        0xfd
+    );
+    drop(session);
+
+    assert!(module_meta_file.exists());
+    std::fs::write(&module_meta_file, b"broken-metadata")
+        .map_err(io_to_error)?;
+
+    let mut session = vm.session(SessionData::builder().base(commit_id))?;
+    assert_eq!(
+        session
+            .call::<_, i64>(counter_id, "read_value", &(), LIMIT)?
+            .data,
+        0xfd
+    );
+    drop(session);
+
+    let repaired = std::fs::read(module_meta_file).map_err(io_to_error)?;
+    assert_ne!(repaired, b"broken-metadata");
 
     Ok(())
 }
