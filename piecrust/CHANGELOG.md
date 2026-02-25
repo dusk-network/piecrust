@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Switch contract builds to wasm32 with standard toolchain, keeping c-example on wasm64 [#466]
 - Allow to exclude host queries when creating a session
 - Relax `tracing` dependency from "=0.1.40" to "0.1.40"
+- Harden session/memory instance handling to remove unsafe aliasing patterns and make inter-contract call borrowing/revert paths sound under reentrancy
 
 ## [0.28.1] - 2025-04-16
 

@@ -271,11 +271,6 @@ pub(crate) fn c(
 
                 let name =
                     core::str::from_utf8(&memory[name_ofs..][..name_len])?;
-                if name == INIT_METHOD {
-                    return Err(Error::InitalizationError(
-                        "init call not allowed".into(),
-                    ));
-                }
 
                 let arg = Vec::from(&memory[argbuf_ofs..][..arg_len as usize]);
                 Ok((callee_id, name.to_owned(), arg))
@@ -299,6 +294,12 @@ pub(crate) fn c(
         let callee = env
             .instance(&callee_stack_element.contract_id)
             .expect("callee instance should exist");
+
+        if name == INIT_METHOD {
+            return Err(Error::InitalizationError(
+                "init call not allowed".into(),
+            ));
+        }
 
         callee.snap().map_err(|err| Error::MemorySnapshotFailure {
             reason: None,
