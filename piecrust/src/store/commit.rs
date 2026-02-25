@@ -116,7 +116,7 @@ impl Commit {
             self.element_and_merkle_mut(&contract_id);
         let element = element.unwrap();
 
-        element.set_len(memory.current_len);
+        element.set_len(memory.current_len());
 
         debug!("Check dirty pages for {contract_id}");
         for (dirty_page, clean, page_index) in memory.dirty_pages() {

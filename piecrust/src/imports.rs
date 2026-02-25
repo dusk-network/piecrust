@@ -154,41 +154,45 @@ pub(crate) fn hq(
 ) -> WasmtimeResult<u32> {
     let env = fenv.data_mut();
 
-    let instance = env.self_instance();
-
     let name_len = name_len as usize;
 
-    check_ptr(instance, name_ofs, name_len)?;
-    check_arg(instance, arg_len)?;
+    let (name, arg, gas_remaining) = {
+        let instance = env.self_instance();
+        check_ptr(instance, name_ofs, name_len)?;
+        check_arg(instance, arg_len)?;
 
-    let name = instance.with_memory(|buf| {
-        // performance: use a dedicated buffer here?
-        core::str::from_utf8(&buf[name_ofs..][..name_len])
-            .map(ToOwned::to_owned)
-    })?;
+        let name = instance.with_memory(|buf| {
+            // performance: use a dedicated buffer here?
+            core::str::from_utf8(&buf[name_ofs..][..name_len])
+                .map(ToOwned::to_owned)
+        })?;
 
-    // Get the host query if it exists.
-    let host_query =
-        env.host_query(&name).ok_or(Error::MissingHostQuery(name))?;
-    let mut arg: Box<dyn Any> = Box::new(());
+        let arg = instance.with_arg_buf(|arg_buf| {
+            let arg_len = arg_len as usize;
+            Vec::from(&arg_buf[..arg_len])
+        });
 
-    // Price the query, allowing for an early exit if the gas is insufficient.
-    let query_cost = instance.with_arg_buf(|arg_buf| {
-        let arg_len = arg_len as usize;
-        let arg_buf = &arg_buf[..arg_len];
-        host_query.deserialize_and_price(arg_buf, &mut arg)
-    });
+        let gas_remaining = instance.get_remaining_gas();
 
-    // If the gas is insufficient, return an error.
-    let gas_remaining = instance.get_remaining_gas();
+        (name, arg, gas_remaining)
+    };
+
+    let host_query = env
+        .host_query_arc(&name)
+        .ok_or_else(move || Error::MissingHostQuery(name))?;
+    let mut query_arg: Box<dyn Any> = Box::new(());
+    let query_cost = host_query.deserialize_and_price(&arg, &mut query_arg);
+
     if gas_remaining < query_cost {
-        instance.set_remaining_gas(0);
+        env.self_instance().set_remaining_gas(0);
         Err(Error::OutOfGas)?;
     }
+
+    let instance = env.self_instance();
     instance.set_remaining_gas(gas_remaining - query_cost);
 
-    // Execute the query and return the result.
-    Ok(instance.with_arg_buf_mut(|arg_buf| host_query.execute(&arg, arg_buf)))
+    Ok(instance
+        .with_arg_buf_mut(|arg_buf| host_query.execute(&query_arg, arg_buf)))
 }
 
 pub(crate) fn hd(
@@ -198,20 +202,22 @@ pub(crate) fn hd(
 ) -> WasmtimeResult<u32> {
     let env = fenv.data_mut();
 
-    let instance = env.self_instance();
-
     let name_len = name_len as usize;
 
-    check_ptr(instance, name_ofs, name_len)?;
+    let name = {
+        let instance = env.self_instance();
+        check_ptr(instance, name_ofs, name_len)?;
 
-    let name = instance.with_memory(|buf| {
-        // performance: use a dedicated buffer here?
-        core::str::from_utf8(&buf[name_ofs..][..name_len])
-            .map(ToOwned::to_owned)
-    })?;
+        instance.with_memory(|buf| {
+            // performance: use a dedicated buffer here?
+            core::str::from_utf8(&buf[name_ofs..][..name_len])
+                .map(ToOwned::to_owned)
+        })?
+    };
 
     let data = env.meta(&name).unwrap_or_default();
 
+    let instance = env.self_instance();
     instance.with_arg_buf_mut(|buf| {
         buf[..data.len()].copy_from_slice(&data);
     });
@@ -228,97 +234,102 @@ pub(crate) fn c(
     gas_limit: u64,
 ) -> WasmtimeResult<i32> {
     let env = fenv.data_mut();
-
-    let instance = env.self_instance();
-
     let name_len = name_len as usize;
 
-    check_ptr(instance, callee_ofs, CONTRACT_ID_BYTES)?;
-    check_ptr(instance, name_ofs, name_len)?;
-    check_arg(instance, arg_len)?;
-
-    let argbuf_ofs = instance.arg_buffer_offset();
-
-    let caller_remaining = instance.get_remaining_gas();
-
-    let callee_limit = if gas_limit > 0 && gas_limit < caller_remaining {
-        gas_limit
-    } else {
-        let div = caller_remaining / 100 * GAS_PASS_PCT;
-        let rem = caller_remaining % 100 * GAS_PASS_PCT / 100;
-        div + rem
+    let write_contract_error = |env: &mut Env, err: Error| {
+        let c_err = ContractError::from(err);
+        env.self_instance().with_arg_buf_mut(|buf| {
+            c_err.to_parts(buf);
+        });
+        c_err.into()
     };
 
-    enum WithMemoryError {
-        BeforePush(Error),
-        AfterPush(Error),
-    }
+    let parsed = {
+        let instance = env.self_instance();
 
-    let with_memory = |memory: &mut [u8]| -> Result<_, WithMemoryError> {
-        let arg_buf = &memory[argbuf_ofs..][..ARGBUF_LEN];
+        check_ptr(instance, callee_ofs, CONTRACT_ID_BYTES)?;
+        check_ptr(instance, name_ofs, name_len)?;
+        check_arg(instance, arg_len)?;
 
-        let mut callee_bytes = [0; CONTRACT_ID_BYTES];
-        callee_bytes.copy_from_slice(
-            &memory[callee_ofs..callee_ofs + CONTRACT_ID_BYTES],
-        );
-        let callee_id = ContractId::from_bytes(callee_bytes);
+        let argbuf_ofs = instance.arg_buffer_offset();
+        let caller_remaining = instance.get_remaining_gas();
+        let callee_limit = if gas_limit > 0 && gas_limit < caller_remaining {
+            gas_limit
+        } else {
+            let div = caller_remaining / 100 * GAS_PASS_PCT;
+            let rem = caller_remaining % 100 * GAS_PASS_PCT / 100;
+            div + rem
+        };
 
-        let callee_stack_element = env
-            .push_callstack(callee_id, callee_limit)
-            .map_err(WithMemoryError::BeforePush)?;
+        let (callee_id, name, arg) =
+            instance.with_memory_mut(|memory| -> Result<_, Error> {
+                let mut callee_bytes = [0; CONTRACT_ID_BYTES];
+                callee_bytes.copy_from_slice(
+                    &memory[callee_ofs..callee_ofs + CONTRACT_ID_BYTES],
+                );
+                let callee_id = ContractId::from_bytes(callee_bytes);
+
+                let name =
+                    core::str::from_utf8(&memory[name_ofs..][..name_len])?;
+
+                let arg = Vec::from(&memory[argbuf_ofs..][..arg_len as usize]);
+                Ok((callee_id, name.to_owned(), arg))
+            })?;
+
+        Ok::<_, Error>((caller_remaining, callee_limit, callee_id, name, arg))
+    };
+
+    let (caller_remaining, callee_limit, callee_id, name, arg) = match parsed {
+        Ok(parsed) => parsed,
+        Err(err) => return Ok(write_contract_error(env, err)),
+    };
+
+    let callee_stack_element = match env.push_callstack(callee_id, callee_limit)
+    {
+        Ok(stack_element) => stack_element,
+        Err(err) => return Ok(write_contract_error(env, err)),
+    };
+
+    let callee_result = (|| -> Result<(i32, Vec<u8>, u64), Error> {
         let callee = env
             .instance(&callee_stack_element.contract_id)
             .expect("callee instance should exist");
 
-        callee
-            .snap()
-            .map_err(|err| Error::MemorySnapshotFailure {
-                reason: None,
-                io: Arc::new(err),
-            })
-            .map_err(WithMemoryError::AfterPush)?;
+        callee.snap().map_err(|err| Error::MemorySnapshotFailure {
+            reason: None,
+            io: Arc::new(err),
+        })?;
 
-        let name = core::str::from_utf8(&memory[name_ofs..][..name_len])
-            .map_err(|e| WithMemoryError::AfterPush(e.into()))?;
         if name == INIT_METHOD {
-            return Err(WithMemoryError::AfterPush(Error::InitalizationError(
+            return Err(Error::InitalizationError(
                 "init call not allowed".into(),
-            )));
+            ));
         }
 
-        let arg = &arg_buf[..arg_len as usize];
-
-        callee.write_argument(arg);
+        callee.write_argument(&arg);
         let ret_len = callee
-            .call(name, arg.len() as u32, callee_limit)
-            .map_err(Error::normalize)
-            .map_err(WithMemoryError::AfterPush)?;
-        check_arg(callee, ret_len as u32)
-            .map_err(WithMemoryError::AfterPush)?;
+            .call(&name, arg.len() as u32, callee_limit)
+            .map_err(Error::normalize)?;
+        check_arg(callee, ret_len as u32)?;
 
-        // copy back result
-        callee.read_argument(&mut memory[argbuf_ofs..][..ret_len as usize]);
+        let mut ret_data = vec![0u8; ret_len as usize];
+        callee.read_argument(&mut ret_data);
+        let callee_spent = callee_limit - callee.get_remaining_gas();
 
-        let callee_remaining = callee.get_remaining_gas();
-        let callee_spent = callee_limit - callee_remaining;
+        Ok((ret_len, ret_data, callee_spent))
+    })();
 
-        Ok((ret_len, callee_spent))
-    };
-
-    let ret = match instance.with_memory_mut(with_memory) {
-        Ok((ret_len, callee_spent)) => {
+    match callee_result {
+        Ok((ret_len, ret_data, callee_spent)) => {
             env.move_up_call_tree(callee_spent);
-            instance.set_remaining_gas(caller_remaining - callee_spent);
-            ret_len
-        }
-        Err(WithMemoryError::BeforePush(err)) => {
-            let c_err = ContractError::from(err);
-            instance.with_arg_buf_mut(|buf| {
-                c_err.to_parts(buf);
+            let caller = env.self_instance();
+            caller.with_arg_buf_mut(|buf| {
+                buf[..ret_len as usize].copy_from_slice(&ret_data);
             });
-            c_err.into()
+            caller.set_remaining_gas(caller_remaining - callee_spent);
+            Ok(ret_len)
         }
-        Err(WithMemoryError::AfterPush(mut err)) => {
+        Err(mut err) => {
             if let Err(io_err) = env.revert_callstack() {
                 err = Error::MemorySnapshotFailure {
                     reason: Some(Arc::new(err)),
@@ -326,17 +337,11 @@ pub(crate) fn c(
                 };
             }
             env.move_up_prune_call_tree();
-            instance.set_remaining_gas(caller_remaining - callee_limit);
-
-            let c_err = ContractError::from(err);
-            instance.with_arg_buf_mut(|buf| {
-                c_err.to_parts(buf);
-            });
-            c_err.into()
+            env.self_instance()
+                .set_remaining_gas(caller_remaining - callee_limit);
+            Ok(write_contract_error(env, err))
         }
-    };
-
-    Ok(ret)
+    }
 }
 
 pub(crate) fn emit(
@@ -379,8 +384,8 @@ pub(crate) fn emit(
     Ok(())
 }
 
-fn caller(env: Caller<Env>) -> i32 {
-    let env = env.data();
+fn caller(mut env: Caller<Env>) -> i32 {
+    let env = env.data_mut();
 
     match env.nth_from_top(1) {
         Some(call_tree_elem) => {
@@ -395,12 +400,14 @@ fn caller(env: Caller<Env>) -> i32 {
     }
 }
 
-fn callstack(env: Caller<Env>) -> i32 {
-    let env = env.data();
+fn callstack(mut env: Caller<Env>) -> i32 {
+    let env = env.data_mut();
+    let call_ids: Vec<_> =
+        env.call_ids().into_iter().skip(1).copied().collect();
     let instance = env.self_instance();
 
     let mut i = 0usize;
-    for contract_id in env.call_ids().iter().skip(1) {
+    for contract_id in call_ids {
         instance.with_arg_buf_mut(|buf| {
             buf[i * CONTRACT_ID_BYTES..(i + 1) * CONTRACT_ID_BYTES]
                 .copy_from_slice(contract_id.as_bytes());
@@ -427,41 +434,37 @@ fn feed(mut fenv: Caller<Env>, arg_len: u32) -> WasmtimeResult<()> {
 #[cfg(feature = "debug")]
 fn hdebug(mut fenv: Caller<Env>, msg_len: u32) -> WasmtimeResult<()> {
     let env = fenv.data_mut();
-    let instance = env.self_instance();
+    let msg = {
+        let instance = env.self_instance();
+        check_arg(instance, msg_len)?;
 
-    check_arg(instance, msg_len)?;
+        instance.with_arg_buf(|buf| {
+            let slice = &buf[..msg_len as usize];
+            let msg = std::str::from_utf8(slice).map_err(Error::Utf8)?;
+            Ok::<_, Error>(msg.to_owned())
+        })?
+    };
 
-    Ok(instance.with_arg_buf(|buf| {
-        let slice = &buf[..msg_len as usize];
+    env.register_debug(&msg);
+    println!("CONTRACT DEBUG {msg}");
 
-        let msg = match std::str::from_utf8(slice) {
-            Ok(msg) => msg,
-            Err(err) => return Err(Error::Utf8(err)),
-        };
-
-        env.register_debug(msg);
-        println!("CONTRACT DEBUG {msg}");
-
-        Ok(())
-    })?)
+    Ok(())
 }
 
 fn limit(fenv: Caller<Env>) -> u64 {
     fenv.data().limit()
 }
 
-fn spent(fenv: Caller<Env>) -> u64 {
-    let env = fenv.data();
-    let instance = env.self_instance();
-
+fn spent(mut fenv: Caller<Env>) -> u64 {
+    let env = fenv.data_mut();
     let limit = env.limit();
-    let remaining = instance.get_remaining_gas();
+    let remaining = env.self_instance().get_remaining_gas();
 
     limit - remaining
 }
 
-fn panic(fenv: Caller<Env>, arg_len: u32) -> WasmtimeResult<()> {
-    let env = fenv.data();
+fn panic(mut fenv: Caller<Env>, arg_len: u32) -> WasmtimeResult<()> {
+    let env = fenv.data_mut();
     let instance = env.self_instance();
 
     check_arg(instance, arg_len)?;
@@ -508,16 +511,20 @@ fn get_metadata(
 }
 
 fn owner(mut fenv: Caller<Env>, mod_id_ofs: usize) -> WasmtimeResult<i32> {
-    let instance = fenv.data().self_instance();
-    check_ptr(instance, mod_id_ofs, CONTRACT_ID_BYTES)?;
     let env = fenv.data_mut();
-    match get_metadata(env, mod_id_ofs) {
+
+    {
+        let instance = env.self_instance();
+        check_ptr(instance, mod_id_ofs, CONTRACT_ID_BYTES)?;
+    }
+
+    match get_metadata(env, mod_id_ofs).map(|metadata| metadata.owner.clone()) {
         None => Ok(0),
-        Some(metadata) => {
-            let owner = metadata.owner.as_slice();
+        Some(owner) => {
+            let instance = env.self_instance();
 
             instance.with_arg_buf_mut(|arg| {
-                arg[..owner.len()].copy_from_slice(owner)
+                arg[..owner.len()].copy_from_slice(&owner)
             });
 
             Ok(1)
