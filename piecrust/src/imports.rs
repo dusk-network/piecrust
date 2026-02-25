@@ -404,17 +404,16 @@ fn callstack(mut env: Caller<Env>) -> i32 {
     let env = env.data_mut();
     let call_ids: Vec<_> =
         env.call_ids().into_iter().skip(1).copied().collect();
+    let caller_count = call_ids.len();
     let instance = env.self_instance();
 
-    let mut i = 0usize;
-    for contract_id in call_ids {
+    for (i, contract_id) in call_ids.into_iter().enumerate() {
         instance.with_arg_buf_mut(|buf| {
             buf[i * CONTRACT_ID_BYTES..(i + 1) * CONTRACT_ID_BYTES]
                 .copy_from_slice(contract_id.as_bytes());
         });
-        i += 1;
     }
-    i as i32
+    caller_count as i32
 }
 
 fn feed(mut fenv: Caller<Env>, arg_len: u32) -> WasmtimeResult<()> {
@@ -547,6 +546,7 @@ fn self_id(mut fenv: Caller<Env>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::session::MAX_CALL_DEPTH;
     use crate::{ContractData, SessionData, VM, contract_bytecode};
 
     const OWNER: [u8; 32] = [0u8; 32];
@@ -589,5 +589,31 @@ mod tests {
                 mem_len
             } if len == mem_len + 1
         ));
+    }
+
+    #[test]
+    fn push_callstack_enforces_max_depth() {
+        let vm = VM::ephemeral().expect("ephemeral VM should be created");
+        let mut session = vm
+            .session(SessionData::builder())
+            .expect("session should be created");
+        let contract_id = session
+            .deploy(
+                contract_bytecode!("counter"),
+                ContractData::builder().owner(OWNER),
+                LIMIT,
+            )
+            .expect("contract should deploy");
+
+        for _ in 0..MAX_CALL_DEPTH {
+            session
+                .push_callstack(contract_id, LIMIT)
+                .expect("push within depth limit should succeed");
+        }
+
+        let err = session
+            .push_callstack(contract_id, LIMIT)
+            .expect_err("depth overflow should fail");
+        assert!(matches!(err, Error::SessionError(_)));
     }
 }
