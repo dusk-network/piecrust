@@ -4,14 +4,17 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
+use alloc::format;
 use alloc::vec::Vec;
 use core::ptr;
 
+use rkyv::validation::validators::DefaultValidator;
 use rkyv::{
-    Archive, Deserialize, Infallible, Serialize, archived_root,
+    Archive, Deserialize, Infallible, Serialize, check_archived_root,
     ser::Serializer,
     ser::serializers::{BufferScratch, BufferSerializer, CompositeSerializer},
 };
+use tracing::warn;
 
 use crate::{
     CONTRACT_ID_BYTES, ContractError, ContractId, SCRATCH_BUF_BYTES,
@@ -70,7 +73,8 @@ pub fn host_query<A, Ret>(name: &str, arg: A) -> Ret
 where
     A: for<'a> Serialize<StandardBufSerializer<'a>>,
     Ret: Archive,
-    Ret::Archived: Deserialize<Ret, Infallible>,
+    Ret::Archived: Deserialize<Ret, Infallible>
+        + for<'b> bytecheck::CheckBytes<DefaultValidator<'b>>,
 {
     let arg_len = with_arg_buf(|buf| {
         let mut sbuf = [0u8; SCRATCH_BUF_BYTES];
@@ -89,7 +93,13 @@ where
 
     with_arg_buf(|buf| {
         let slice = &buf[..ret_len as usize];
-        let ret = unsafe { archived_root::<Ret>(slice) };
+        // Invariant: not reachable by 3rd-party contracts.
+        // - Bytes written by the host's `HostQuery::execute` (trusted)
+        // - Only fails if the host query impl writes invalid rkyv
+        // - Host is a trusted component, panicking on invalid rkyv is acceptable as it indicates a
+        //   bug in the host query implementation.
+        let ret = check_archived_root::<Ret>(slice)
+            .expect("host query: return bytes are not a valid rkyv archive");
         ret.deserialize(&mut Infallible).expect("Infallible")
     })
 }
@@ -107,7 +117,8 @@ pub fn call<A, Ret>(
 where
     A: for<'a> Serialize<StandardBufSerializer<'a>>,
     Ret: Archive,
-    Ret::Archived: Deserialize<Ret, Infallible>,
+    Ret::Archived: Deserialize<Ret, Infallible>
+        + for<'b> bytecheck::CheckBytes<DefaultValidator<'b>>,
 {
     call_with_limit(contract, fn_name, fn_arg, 0)
 }
@@ -129,7 +140,8 @@ pub fn call_with_limit<A, Ret>(
 where
     A: for<'a> Serialize<StandardBufSerializer<'a>>,
     Ret: Archive,
-    Ret::Archived: Deserialize<Ret, Infallible>,
+    Ret::Archived: Deserialize<Ret, Infallible>
+        + for<'b> bytecheck::CheckBytes<DefaultValidator<'b>>,
 {
     let arg_len = with_arg_buf(|buf| {
         let mut sbuf = [0u8; SCRATCH_BUF_BYTES];
@@ -159,7 +171,15 @@ where
             Err(ContractError::from_parts(ret_len, buf))
         } else {
             let slice = &buf[..ret_len as usize];
-            let ret = unsafe { archived_root::<Ret>(slice) };
+            let ret = check_archived_root::<Ret>(slice).map_err(|e| {
+                warn!(
+                    "Deserialization failed for call return value from {:?}::{:?}: {e}",
+                    contract, fn_name
+                );
+                ContractError::Panic(format!(
+                    "Callee return value failed validation: {e}"
+                ))
+            })?;
             Ok(ret.deserialize(&mut Infallible).expect("Infallible"))
         }
     })
@@ -218,26 +238,40 @@ pub fn call_raw_with_limit(
     })
 }
 
-/// Returns data made available by the host under the given name. The type `D`
-/// must be correctly specified, otherwise undefined behavior will occur.
+/// Returns data made available by the host under the given name.
+///
+/// The type `D` must match the archived metadata payload. If the bytes fail
+/// rkyv validation (for example due to type mismatch or metadata corruption),
+/// this function returns `None`.
 pub fn meta_data<D>(name: &str) -> Option<D>
 where
     D: Archive,
-    D::Archived: Deserialize<D, Infallible>,
+    D::Archived: Deserialize<D, Infallible>
+        + for<'b> bytecheck::CheckBytes<DefaultValidator<'b>>,
 {
     let name_slice = name.as_bytes();
 
     let name = name_slice.as_ptr();
     let name_len = name_slice.len() as u32;
 
-    unsafe {
-        match ext::hd(name, name_len) as usize {
-            0 => None,
-            arg_pos => Some(with_arg_buf(|buf| {
-                let ret = archived_root::<D>(&buf[..arg_pos]);
-                ret.deserialize(&mut Infallible).expect("Infallible")
-            })),
-        }
+    match unsafe { ext::hd(name, name_len) } as usize {
+        0 => None,
+        arg_pos => with_arg_buf(|buf| {
+            // Invariant: not reachable by 3rd-party contracts.
+            // - Bytes produced by `Session::serialize_data` (trusted rkyv)
+            // - Only fails on type mismatch or metadata store corruption
+            let ret = check_archived_root::<D>(&buf[..arg_pos]);
+
+            match ret {
+                Err(e) => {
+                    warn!("Metadata deserialization failed for {name:?}: {e}");
+                    None
+                }
+                Ok(archived) => Some(
+                    archived.deserialize(&mut Infallible).expect("Infallible"),
+                ),
+            }
+        }),
     }
 }
 
@@ -245,14 +279,16 @@ where
 pub fn owner<const N: usize>(contract: ContractId) -> Option<[u8; N]> {
     let contract_id_ptr = contract.as_bytes().as_ptr();
 
-    unsafe {
-        match ext::owner(contract_id_ptr) {
-            0 => None,
-            _ => Some(with_arg_buf(|buf| {
-                let ret = archived_root::<[u8; N]>(&buf[..N]);
-                ret.deserialize(&mut Infallible).expect("Infallible")
-            })),
-        }
+    match unsafe { ext::owner(contract_id_ptr) } {
+        0 => None,
+        _ => Some(with_arg_buf(|buf| {
+            // Invariant: unreachable.
+            // - `[u8; N]` is identity-archived, any bit pattern is valid
+            // - Host writes raw owner bytes (trusted)
+            let ret = check_archived_root::<[u8; N]>(&buf[..N])
+                .expect("owner: unreachable for identity-archived [u8; N]");
+            ret.deserialize(&mut Infallible).expect("Infallible")
+        })),
     }
 }
 
@@ -261,7 +297,9 @@ pub fn self_owner<const N: usize>() -> [u8; N] {
     unsafe { ext::owner(ptr::null()) };
 
     with_arg_buf(|buf| {
-        let ret = unsafe { archived_root::<[u8; N]>(&buf[..N]) };
+        // Invariant: unreachable. Same as `owner()` above.
+        let ret = check_archived_root::<[u8; N]>(&buf[..N])
+            .expect("self_owner: unreachable for identity-archived [u8; N]");
         ret.deserialize(&mut Infallible).expect("Infallible")
     })
 }
