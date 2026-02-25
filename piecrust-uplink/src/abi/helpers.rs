@@ -52,6 +52,11 @@ where
 /// Wrap a call with its respective (de)serializers.
 /// Does not check the integrity of arguments.
 ///
+/// This function decodes `arg_buf` with `archived_root` and therefore assumes
+/// the input bytes are a valid archive of `A`. Passing malformed or
+/// bytes from an untrusted source can cause undefined behavior. Prefer [`wrap_call`]
+/// unless the caller input is fully trusted.
+///
 /// Returns the length of result written to the buffer.
 pub fn wrap_call_unchecked<A, R, F>(arg_len: u32, f: F) -> u32
 where
