@@ -89,7 +89,7 @@ pub struct CallTreeElem {
 /// Uses raw pointers with manual allocation (`Box::leak`) and deallocation
 /// (`free_tree`). The `Drop` implementation ensures proper cleanup.
 #[derive(Default)]
-pub struct CallTree(Option<*mut CallTreeNode>);
+pub struct CallTree(Option<*mut CallTreeNode>, usize);
 
 impl fmt::Debug for CallTree {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -179,7 +179,7 @@ impl fmt::Debug for CallTree {
 impl CallTree {
     /// Creates a new empty call tree, starting with the given contract.
     pub(crate) const fn new() -> Self {
-        Self(None)
+        Self(None, 0)
     }
 
     /// Pushes a new contract call as a child of the current node and moves to
@@ -200,7 +200,10 @@ impl CallTree {
     pub(crate) fn push(&mut self, elem: CallTreeElem) {
         match self.0 {
             // Tree is empty: create root node
-            None => self.0 = Some(CallTreeNode::new(elem)),
+            None => {
+                self.0 = Some(CallTreeNode::new(elem));
+                self.1 = 1;
+            }
             // Tree exists: add as child of current node
             Some(inner) => unsafe {
                 // Create new node with current as parent
@@ -208,7 +211,8 @@ impl CallTree {
                 // Add new node to current's children
                 (*inner).children.push(node);
                 // Move cursor down to new node
-                self.0 = Some(node)
+                self.0 = Some(node);
+                self.1 += 1;
             },
         }
     }
@@ -241,6 +245,9 @@ impl CallTree {
             // If at root, deallocate entire tree
             if parent.is_none() {
                 free_tree(inner);
+                self.1 = 0;
+            } else {
+                self.1 -= 1;
             }
             // Move cursor up to parent
             self.0 = parent;
@@ -279,6 +286,9 @@ impl CallTree {
             // Remove current node from parent's children
             if let Some(parent) = parent {
                 (*parent).children.pop();
+                self.1 -= 1;
+            } else {
+                self.1 = 0;
             }
             // Deallocate current node and entire subtree
             free_tree(inner);
@@ -340,15 +350,7 @@ impl CallTree {
 
     /// Returns the number of active frames from current position up to root.
     pub(crate) fn depth(&self) -> usize {
-        let mut depth = 0;
-        let mut current = self.0;
-
-        while let Some(node) = current {
-            depth += 1;
-            current = unsafe { (*node).parent };
-        }
-
-        depth
+        self.1
     }
 
     /// Returns the call stack path from current position to root.
@@ -391,6 +393,7 @@ impl CallTree {
                 }
 
                 self.0 = None;
+                self.1 = 0;
                 free_tree(root);
             }
         }
@@ -660,12 +663,14 @@ mod tests {
     fn test_basic_operations() {
         // Test empty tree
         let mut tree = CallTree::new();
+        assert_eq!(tree.depth(), 0);
         assert!(tree.nth_parent(0).is_none());
         assert!(tree.call_ids().is_empty());
         assert_eq!(tree.iter().count(), 0);
 
         // Test single element - verify all fields preserved
         tree.push(elem(1, 999999, 0, 8192));
+        assert_eq!(tree.depth(), 1);
         let current = tree.nth_parent(0).unwrap();
         assert_eq!(current.contract_id, contract_id(1));
         assert_eq!(current.limit, 999999);
@@ -675,7 +680,32 @@ mod tests {
         // Test move_up updates spent
         let returned = tree.move_up(500).unwrap();
         assert_eq!(returned.spent, 500);
+        assert_eq!(tree.depth(), 0);
         assert!(tree.nth_parent(0).is_none());
+    }
+
+    #[test]
+    fn test_depth_tracking() {
+        let mut tree = CallTree::new();
+        assert_eq!(tree.depth(), 0);
+
+        tree.push(elem(1, 1000, 0, 100));
+        assert_eq!(tree.depth(), 1);
+
+        tree.push(elem(2, 900, 0, 200));
+        assert_eq!(tree.depth(), 2);
+
+        tree.push(elem(3, 800, 0, 300));
+        assert_eq!(tree.depth(), 3);
+
+        tree.move_up(30);
+        assert_eq!(tree.depth(), 2);
+
+        tree.move_up_prune();
+        assert_eq!(tree.depth(), 1);
+
+        tree.clear();
+        assert_eq!(tree.depth(), 0);
     }
 
     #[test]
