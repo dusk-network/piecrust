@@ -132,6 +132,8 @@ unsafe impl MemoryCreator for SessionMemoryCreator {
         _reserved_size_in_bytes: Option<usize>,
         _guard_size_in_bytes: usize,
     ) -> Result<Box<dyn LinearMemory>, String> {
+        // SAFETY: wasmtime calls this synchronously during instance creation.
+        // No other path concurrently accesses `SessionInner` in this callback.
         let inner = unsafe { &mut *self.inner.as_ptr() };
         let contract = inner.current;
 
@@ -204,8 +206,8 @@ impl Session {
     /// [`Clone`] trait here, since we don't want allow the user to clone a
     /// session.
     ///
-    /// This is done to allow us to guarantee there is no aliasing of the
-    /// reference to `&'static SessionInner`.
+    /// This keeps cloning internal and preserves ownership/drop invariants
+    /// around the shared `SessionInner` pointer.
     pub(crate) fn clone(&self) -> Self {
         Self {
             engine: self.engine.clone(),

@@ -60,8 +60,12 @@ pub struct Memory {
     inner: NonNull<MemoryInner>,
 }
 
+// SAFETY: `Memory` is moved across threads but accesses happen within
+// wasmtime's single-threaded store execution model.
 unsafe impl Send for Memory {}
 
+// SAFETY: Clones share a `NonNull<MemoryInner>`, but execution guarantees
+// no concurrent mutable access across clones.
 unsafe impl Sync for Memory {}
 
 impl Memory {
@@ -169,14 +173,9 @@ impl Memory {
     }
 }
 
-/// This implementation of clone is dangerous, and must be accompanied by the
-/// underneath implementation of `Drop`.
-///
-/// We do this to avoid locking the memory in any way when recursively offering
-/// it to a session.
-///
-/// It is safe since we guarantee that there is no access contention - read or
-/// write.
+/// SAFETY: Cloning copies the shared `NonNull<MemoryInner>` and increments
+/// the refcount. This relies on single-threaded store execution to prevent
+/// concurrent mutable access through separate clones.
 impl Clone for Memory {
     fn clone(&self) -> Self {
         self.inner().ref_count.fetch_add(1, Ordering::SeqCst);

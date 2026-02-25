@@ -179,7 +179,7 @@ pub(crate) fn hq(
 
     let host_query = env
         .host_query_arc(&name)
-        .ok_or_else(|| Error::MissingHostQuery(name.clone()))?;
+        .ok_or_else(move || Error::MissingHostQuery(name))?;
     let mut query_arg: Box<dyn Any> = Box::new(());
     let query_cost = host_query.deserialize_and_price(&arg, &mut query_arg);
 
@@ -295,16 +295,16 @@ pub(crate) fn c(
             .instance(&callee_stack_element.contract_id)
             .expect("callee instance should exist");
 
+        callee.snap().map_err(|err| Error::MemorySnapshotFailure {
+            reason: None,
+            io: Arc::new(err),
+        })?;
+
         if name == INIT_METHOD {
             return Err(Error::InitalizationError(
                 "init call not allowed".into(),
             ));
         }
-
-        callee.snap().map_err(|err| Error::MemorySnapshotFailure {
-            reason: None,
-            io: Arc::new(err),
-        })?;
 
         callee.write_argument(&arg);
         let ret_len = callee
