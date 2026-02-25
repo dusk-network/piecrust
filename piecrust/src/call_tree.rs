@@ -338,6 +338,19 @@ impl CallTree {
         current.map(|inner| unsafe { (*inner).elem })
     }
 
+    /// Returns the number of active frames from current position up to root.
+    pub(crate) fn depth(&self) -> usize {
+        let mut depth = 0;
+        let mut current = self.0;
+
+        while let Some(node) = current {
+            depth += 1;
+            current = unsafe { (*node).parent };
+        }
+
+        depth
+    }
+
     /// Returns the call stack path from current position to root.
     ///
     /// Traverses parent pointers from the current node up to the root,

@@ -35,6 +35,11 @@ use crate::types::StandardBufSerializer;
 use crate::vm::{HostQueries, HostQuery};
 
 const MAX_META_SIZE: usize = ARGBUF_LEN;
+// Host stack limits in our current runtime effectively allow around 64 nested
+// inter-contract calls; we cap at 48 to keep safety margin. Observed mainnet
+// depth is currently <= 6.
+pub(crate) const MAX_CALL_DEPTH: usize = 48;
+const _: () = assert!(MAX_CALL_DEPTH <= ARGBUF_LEN / CONTRACT_ID_BYTES);
 pub const INIT_METHOD: &str = "init";
 
 /// A running mutation to a state.
@@ -702,6 +707,14 @@ impl Session {
         contract_id: ContractId,
         limit: u64,
     ) -> Result<CallTreeElem, Error> {
+        let current_depth = self.inner().call_tree.depth();
+        if current_depth >= MAX_CALL_DEPTH {
+            return Err(Error::SessionError(
+                format!("Maximum call depth exceeded ({MAX_CALL_DEPTH})")
+                    .into(),
+            ));
+        }
+
         let mem_len =
             if let Some(instance) = self.inner().instances.get(&contract_id) {
                 instance.mem_len()
