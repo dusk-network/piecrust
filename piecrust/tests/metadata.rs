@@ -122,3 +122,55 @@ fn owner_of() -> Result<(), Error> {
 
     Ok(())
 }
+
+/// Calling `self_owner::<N>()` or `owner::<N>()` with  N that does not match
+/// the actual owner byte length must cause a panic inside the contract.
+#[test]
+fn owner_wrong_n_panics() -> Result<(), Error> {
+    const OWNER_33: [u8; 33] = [5u8; 33];
+
+    let vm = VM::ephemeral()?;
+    let mut session = vm.session(SessionData::builder())?;
+
+    let id = session.deploy(
+        contract_bytecode!("metadata"),
+        ContractData::builder().owner(OWNER_33),
+        LIMIT,
+    )?;
+
+    // self_owner with wrong N should panic
+    let result =
+        session.call::<_, [u8; 32]>(id, "read_owner_wrong_n", &(), LIMIT);
+
+    let err = result
+        .expect_err("self_owner with wrong N should panic inside the contract");
+    let msg = match &err {
+        Error::Panic(msg) => msg,
+        _ => panic!("Expected Error::Panic, got: {err:?}"),
+    };
+    assert!(
+        msg.contains("does not match host owner length"),
+        "Panic message should mention length mismatch, got: {msg}"
+    );
+
+    // owner(<other>) with wrong N should also panic
+    let result = session.call::<_, Option<[u8; 32]>>(
+        id,
+        "read_owner_of_wrong_n",
+        &id,
+        LIMIT,
+    );
+
+    let err = result
+        .expect_err("owner with wrong N should panic inside the contract");
+    let msg = match &err {
+        Error::Panic(msg) => msg,
+        _ => panic!("Expected Error::Panic, got: {err:?}"),
+    };
+    assert!(
+        msg.contains("does not match host owner length"),
+        "Panic message should mention length mismatch, got: {msg}"
+    );
+
+    Ok(())
+}

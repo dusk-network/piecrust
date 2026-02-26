@@ -281,23 +281,35 @@ pub fn owner<const N: usize>(contract: ContractId) -> Option<[u8; N]> {
 
     match unsafe { ext::owner(contract_id_ptr) } {
         0 => None,
-        _ => Some(with_arg_buf(|buf| {
-            // Invariant: unreachable.
-            // - `[u8; N]` is identity-archived, any bit pattern is valid
-            // - Host writes raw owner bytes (trusted)
-            let ret = check_archived_root::<[u8; N]>(&buf[..N])
-                .expect("owner: unreachable for identity-archived [u8; N]");
-            ret.deserialize(&mut Infallible).expect("Infallible")
-        })),
+        len => {
+            assert_eq!(
+                len as usize, N,
+                "owner: N ({N}) does not match host owner length ({len})"
+            );
+            Some(with_arg_buf(|buf| {
+                // Invariant: unreachable after the length check above.
+                // - `[u8; N]` is identity-archived, any bit pattern is valid
+                // - Host writes raw owner bytes (trusted)
+                let ret = check_archived_root::<[u8; N]>(&buf[..N])
+                    .expect("owner: unreachable for identity-archived [u8; N]");
+                ret.deserialize(&mut Infallible).expect("Infallible")
+            }))
+        }
     }
 }
 
 /// Returns the current contract's owner.
 pub fn self_owner<const N: usize>() -> [u8; N] {
-    unsafe { ext::owner(ptr::null()) };
+    let len = unsafe { ext::owner(ptr::null()) };
+    assert_eq!(
+        len as usize, N,
+        "self_owner: N ({N}) does not match host owner length ({len})"
+    );
 
     with_arg_buf(|buf| {
-        // Invariant: unreachable. Same as `owner()` above.
+        // Invariant: unreachable after the length check above.
+        // - `[u8; N]` is identity-archived, any bit pattern is valid
+        // - Host writes raw owner bytes (trusted)
         let ret = check_archived_root::<[u8; N]>(&buf[..N])
             .expect("self_owner: unreachable for identity-archived [u8; N]");
         ret.deserialize(&mut Infallible).expect("Infallible")

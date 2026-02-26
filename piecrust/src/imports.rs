@@ -520,7 +520,7 @@ fn owner(mut fenv: Caller<Env>, mod_id_ofs: usize) -> WasmtimeResult<i32> {
                 arg[..owner.len()].copy_from_slice(owner)
             });
 
-            Ok(1)
+            Ok(owner.len() as i32)
         }
     }
 }
