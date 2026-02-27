@@ -7,7 +7,7 @@ categories = ["data-structures", "memory-management"]
 keywords = ["memory", "snapshots", "page", "dirty"]
 
 repository = "https://github.com/dusk-network/piecrust"
-version = "0.4.0-rc.0"
+version = "0.4.0"
 
 edition.workspace = true
 license = "MPL-2.0"

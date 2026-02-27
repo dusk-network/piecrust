@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.20.0] - 2026-02-27
+
 ### Changed
 
 - Update to Rust edition 2024 [#466]
@@ -277,7 +279,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [#136]: https://github.com/dusk-network/piecrust/issues/136
 
 <!-- VERSIONS -->
-[Unreleased]: https://github.com/dusk-network/piecrust/compare/uplink-0.18.0...HEAD
+[Unreleased]: https://github.com/dusk-network/piecrust/compare/uplink-0.20.0...HEAD
+[0.20.0]: https://github.com/dusk-network/piecrust/compare/uplink-0.18.0...uplink-0.20.0
 [0.18.0]: https://github.com/dusk-network/piecrust/compare/uplink-0.17.3...uplink-0.18.0
 [0.17.3]: https://github.com/dusk-network/piecrust/compare/uplink-0.17.2...uplink-0.17.3
 [0.17.2]: https://github.com/dusk-network/piecrust/compare/uplink-0.17.1...uplink-0.17.2
