@@ -84,6 +84,11 @@ name = "validation"
 path = "tests/validation.rs"
 required-features = ["debug"]
 
+[[test]]
+name = "deserialization"
+path = "tests/deserialization.rs"
+required-features = ["debug"]
+
 [[bench]]
 name = "stack"
 harness = false

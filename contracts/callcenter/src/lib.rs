@@ -127,6 +127,20 @@ impl Callcenter {
     pub fn panik(&self) {
         panic!("panik");
     }
+
+    /// Call another contract's function expecting a `bool` return, and
+    /// propagate the result (including deserialization errors) instead of
+    /// unwrapping. 
+    /// 
+    /// Uses `bool` because it has validation constraints (only 0 or 1 are
+    /// valid), unlike primitive integers which accept any bit pattern.
+    pub fn try_query_bool(
+        &self,
+        contract_id: ContractId,
+        fn_name: String,
+    ) -> Result<bool, ContractError> {
+        uplink::call(contract_id, &fn_name, &())
+    }
 }
 
 /// Expose `Callcenter::query_counter()` to the host
@@ -252,4 +266,14 @@ unsafe fn delegate_transaction(arg_len: u32) -> u32 {
 #[unsafe(no_mangle)]
 unsafe fn panik(arg_len: u32) -> u32 {
     unsafe { wrap_call(arg_len, |()| (*(&raw const STATE)).panik()) }
+}
+
+/// Expose `Callcenter::try_query_bool()` to the host
+#[unsafe(no_mangle)]
+unsafe fn try_query_bool(arg_len: u32) -> u32 {
+    unsafe {
+        wrap_call(arg_len, |(contract_id, fn_name)| {
+            (*(&raw const STATE)).try_query_bool(contract_id, fn_name)
+        })
+    }
 }

@@ -24,6 +24,7 @@ serde = { version = "1.0", default-features = false, features = [
     "alloc",
 ], optional = true }
 hex = { version = "0.4", default-features = false, features = ["alloc"] }
+tracing = { version = "0.1.40", default-features = false, features = ["log"] }
 
 [dev-dependencies]
 rand = "0.8"
