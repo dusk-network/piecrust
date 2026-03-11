@@ -284,6 +284,9 @@ pub(crate) fn c(
         Err(err) => return Ok(write_contract_error(env, err)),
     };
 
+    #[cfg(feature = "call-hook")]
+    env.call_hook(&callee_id, &name, &arg);
+
     let callee_stack_element = match env.push_callstack(callee_id, callee_limit)
     {
         Ok(stack_element) => stack_element,

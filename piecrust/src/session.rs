@@ -88,6 +88,13 @@ impl Drop for Session {
     }
 }
 
+/// A hook called before each inter-contract call.
+///
+/// Receives the callee contract ID, the function name, and the raw argument
+/// bytes.
+#[cfg(feature = "call-hook")]
+pub type CallHook = Box<dyn Fn(&ContractId, &str, &[u8]) + Send + Sync>;
+
 struct SessionInner {
     current: ContractId,
 
@@ -102,6 +109,9 @@ struct SessionInner {
 
     feeder: Option<mpsc::Sender<Vec<u8>>>,
     events: Vec<Event>,
+
+    #[cfg(feature = "call-hook")]
+    call_hook: Option<CallHook>,
 }
 
 impl Debug for SessionInner {
@@ -185,6 +195,8 @@ impl Session {
             buffer: vec![0; PAGE_SIZE],
             feeder: None,
             events: vec![],
+            #[cfg(feature = "call-hook")]
+            call_hook: None,
         };
 
         // This implementation purposefully boxes and leaks the `SessionInner`.
@@ -916,6 +928,28 @@ impl Session {
         self.inner_mut()
             .contract_session
             .contract_metadata(contract_id)
+    }
+
+    /// Set a hook that is called before each inter-contract call.
+    ///
+    /// The hook receives the callee contract ID, the function name, and the
+    /// raw argument bytes.
+    #[cfg(feature = "call-hook")]
+    pub fn set_call_hook(&mut self, hook: CallHook) {
+        self.inner_mut().call_hook = Some(hook);
+    }
+
+    /// Run the call hook, if one is set.
+    #[cfg(feature = "call-hook")]
+    pub(crate) fn call_hook(
+        &self,
+        callee: &ContractId,
+        fn_name: &str,
+        arg: &[u8],
+    ) {
+        if let Some(hook) = &self.inner().call_hook {
+            hook(callee, fn_name, arg);
+        }
     }
 }
 

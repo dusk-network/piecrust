@@ -135,6 +135,8 @@ mod vm;
 pub use call_tree::{CallTree, CallTreeElem};
 pub use contract::{ContractData, ContractDataBuilder};
 pub use error::Error;
+#[cfg(feature = "call-hook")]
+pub use session::CallHook;
 pub use session::{CallReceipt, Session, SessionData};
 pub use store::PageOpening;
 pub use vm::{HostQuery, VM};
