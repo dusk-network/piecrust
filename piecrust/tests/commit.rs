@@ -19,7 +19,7 @@ fn read_write_session() -> Result<(), Error> {
 
     {
         let mut session = vm.session(SessionData::builder())?;
-        let id = session.deploy(
+        let (id, _) = session.deploy::<_, (), _>(
             contract_bytecode!("counter"),
             ContractData::builder().owner(OWNER),
             LIMIT,
@@ -42,7 +42,7 @@ fn read_write_session() -> Result<(), Error> {
     // old counter value still accessible.
 
     let mut other_session = vm.session(SessionData::builder())?;
-    let id = other_session.deploy(
+    let (id, _) = other_session.deploy::<_, (), _>(
         contract_bytecode!("counter"),
         ContractData::builder().owner(OWNER),
         LIMIT,
@@ -74,7 +74,7 @@ fn read_write_session() -> Result<(), Error> {
 fn commit_restore() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
     let mut session_1 = vm.session(SessionData::builder())?;
-    let id = session_1.deploy(
+    let (id, _) = session_1.deploy::<_, (), _>(
         contract_bytecode!("counter"),
         ContractData::builder().owner(OWNER),
         LIMIT,
@@ -123,12 +123,12 @@ fn commit_restore_two_contracts_session() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 
     let mut session = vm.session(SessionData::builder())?;
-    let id_1 = session.deploy(
+    let (id_1, _) = session.deploy::<_, (), _>(
         contract_bytecode!("counter"),
         ContractData::builder().owner(OWNER),
         LIMIT,
     )?;
-    let id_2 = session.deploy(
+    let (id_2, _) = session.deploy::<_, (), _>(
         contract_bytecode!("box"),
         ContractData::builder().owner(OWNER),
         LIMIT,
@@ -188,7 +188,7 @@ fn multiple_commits() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 
     let mut session = vm.session(SessionData::builder())?;
-    let id = session.deploy(
+    let (id, _) = session.deploy::<_, (), _>(
         contract_bytecode!("counter"),
         ContractData::builder().owner(OWNER),
         LIMIT,
@@ -238,12 +238,12 @@ fn root_equal_on_err() -> Result<(), Error> {
 
     let mut session = vm.session(SessionData::builder())?;
 
-    let callcenter_id = session.deploy(
+    let (callcenter_id, _) = session.deploy::<_, (), _>(
         contract_bytecode!("callcenter"),
         ContractData::builder().owner(OWNER),
         LIMIT,
     )?;
-    let counter_id = session.deploy(
+    let (counter_id, _) = session.deploy::<_, (), _>(
         contract_bytecode!("counter"),
         ContractData::builder().owner(OWNER),
         LIMIT,
@@ -309,7 +309,7 @@ fn concurrent_sessions() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 
     let mut session = vm.session(SessionData::builder())?;
-    let counter = session.deploy(
+    let (counter, _) = session.deploy::<_, (), _>(
         contract_bytecode!("counter"),
         ContractData::builder().owner(OWNER),
         LIMIT,
@@ -403,7 +403,7 @@ fn make_session(vm: &VM) -> Result<(Session, ContractId), Error> {
     const HEIGHT: u64 = 29_000u64;
     let mut session =
         vm.session(SessionData::builder().insert("height", HEIGHT)?)?;
-    let contract_id = session.deploy(
+    let (contract_id, _) = session.deploy::<_, (), _>(
         contract_bytecode!("everest"),
         ContractData::builder().owner(OWNER),
         LIMIT,

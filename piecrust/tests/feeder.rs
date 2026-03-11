@@ -17,7 +17,7 @@ fn feed() -> Result<(), Error> {
 
     let mut session = vm.session(SessionData::builder())?;
 
-    let id = session.deploy(
+    let (id, _) = session.deploy::<_, (), _>(
         contract_bytecode!("feeder"),
         ContractData::builder().owner(OWNER),
         LIMIT,
@@ -89,7 +89,7 @@ fn feed_errors_when_normal_call() -> Result<(), Error> {
 
     let mut session = vm.session(SessionData::builder())?;
 
-    let id = session.deploy(
+    let (id, _) = session.deploy::<_, (), _>(
         contract_bytecode!("feeder"),
         ContractData::builder().owner(OWNER),
         LIMIT,
@@ -110,7 +110,7 @@ fn feed_out_of_gas() -> Result<(), Error> {
 
     let mut session = vm.session(SessionData::builder())?;
 
-    let id = session.deploy(
+    let (id, _) = session.deploy::<_, (), _>(
         contract_bytecode!("feeder"),
         ContractData::builder().owner(OWNER),
         LIMIT,

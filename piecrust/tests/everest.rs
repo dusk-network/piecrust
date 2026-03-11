@@ -17,7 +17,7 @@ pub fn height() -> Result<(), Error> {
     let mut session =
         vm.session(SessionData::builder().insert("height", HEIGHT)?)?;
 
-    let id = session.deploy(
+    let (id, _) = session.deploy::<_, (), _>(
         contract_bytecode!("everest"),
         ContractData::builder().owner(OWNER),
         LIMIT,
@@ -33,7 +33,7 @@ pub fn height() -> Result<(), Error> {
 pub fn meta_data_optionality() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
     let mut session = vm.session(SessionData::builder())?;
-    let id = session.deploy(
+    let (id, _) = session.deploy::<_, (), _>(
         contract_bytecode!("everest"),
         ContractData::builder().owner(OWNER),
         LIMIT,

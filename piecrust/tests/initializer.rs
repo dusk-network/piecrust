@@ -16,7 +16,7 @@ fn init() -> Result<(), Error> {
 
     let mut session = vm.session(SessionData::builder())?;
 
-    let id = session.deploy(
+    let (id, _) = session.deploy::<_, (), _>(
         contract_bytecode!("initializer"),
         ContractData::builder().owner(OWNER).init_arg(&0xabu8),
         LIMIT,
@@ -72,13 +72,13 @@ fn init_indirect_call_blocked() -> Result<(), Error> {
 
     let mut session = vm.session(SessionData::builder())?;
 
-    let empty_initializer_contract_id = session.deploy(
+    let (empty_initializer_contract_id, _) = session.deploy::<_, (), _>(
         contract_bytecode!("empty_initializer"),
         ContractData::builder().owner(OWNER),
         LIMIT,
     )?;
 
-    let callcenter_contract_id = session.deploy(
+    let (callcenter_contract_id, _) = session.deploy::<_, (), _>(
         contract_bytecode!("callcenter"),
         ContractData::builder().owner(OWNER),
         LIMIT,
@@ -105,7 +105,7 @@ fn empty_init_argument() -> Result<(), Error> {
 
     let mut session = vm.session(SessionData::builder())?;
 
-    let id = session.deploy(
+    let (id, _) = session.deploy::<_, (), _>(
         contract_bytecode!("empty_initializer"),
         ContractData::builder().owner(OWNER),
         LIMIT,

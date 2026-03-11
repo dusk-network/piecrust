@@ -15,7 +15,7 @@ const LIMIT: u64 = 1_000_000;
 pub fn state_root_calculation() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
     let mut session = vm.session(SessionData::builder())?;
-    let id_1 = session.deploy(
+    let (id_1, _) = session.deploy::<_, (), _>(
         contract_bytecode!("counter"),
         ContractData::builder().owner(OWNER),
         LIMIT,
@@ -32,7 +32,7 @@ pub fn state_root_calculation() -> Result<(), Error> {
     );
 
     let mut session = vm.session(SessionData::builder().base(commit_1))?;
-    let id_2 = session.deploy(
+    let (id_2, _) = session.deploy::<_, (), _>(
         contract_bytecode!("box"),
         ContractData::builder().owner(OWNER),
         LIMIT,
@@ -67,7 +67,7 @@ pub fn inclusion_proofs() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
     let mut session = vm.session(SessionData::builder())?;
 
-    let box_id = session.deploy(
+    let (box_id, _) = session.deploy::<_, (), _>(
         contract_bytecode!("box"),
         ContractData::builder().owner(OWNER),
         LIMIT,

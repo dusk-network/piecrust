@@ -15,7 +15,7 @@ pub fn vm_center_events() -> Result<(), Error> {
 
     let mut session = vm.session(SessionData::builder())?;
 
-    let eventer_id = session.deploy(
+    let (eventer_id, _) = session.deploy::<_, (), _>(
         contract_bytecode!("eventer"),
         ContractData::builder().owner(OWNER),
         LIMIT,
@@ -62,7 +62,7 @@ pub fn event_costs() -> Result<(), Error> {
 
     let mut session = vm.session(SessionData::builder())?;
 
-    let eventer_id = session.deploy(
+    let (eventer_id, _) = session.deploy::<_, (), _>(
         contract_bytecode!("eventer"),
         ContractData::builder().owner(OWNER),
         LIMIT,

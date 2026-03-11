@@ -16,7 +16,7 @@ fn grow_a_bunch() -> Result<(), Error> {
 
     let mut session = vm.session(SessionData::builder())?;
 
-    let id = session.deploy(
+    let (id, _) = session.deploy::<_, (), _>(
         contract_bytecode!("grower"),
         ContractData::builder().owner(OWNER),
         LIMIT,
@@ -59,12 +59,12 @@ fn error_reverts_growth() -> Result<(), Error> {
     let mut session = vm.session(SessionData::builder())?;
     let mut session_err = vm.session(SessionData::builder())?;
 
-    let id = session.deploy(
+    let (id, _) = session.deploy::<_, (), _>(
         contract_bytecode!("grower"),
         ContractData::builder().owner(OWNER),
         LIMIT,
     )?;
-    let _ = session_err.deploy(
+    let _ = session_err.deploy::<_, (), _>(
         contract_bytecode!("grower"),
         ContractData::builder().owner(OWNER),
         LIMIT,

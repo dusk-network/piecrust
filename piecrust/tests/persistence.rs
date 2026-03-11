@@ -21,12 +21,12 @@ fn session_commits_persistence() -> Result<(), Error> {
     let commit_1;
     {
         let mut session = vm.session(SessionData::builder())?;
-        id_1 = session.deploy(
+        (id_1, _) = session.deploy::<_, (), _>(
             contract_bytecode!("counter"),
             ContractData::builder().owner(OWNER),
             LIMIT,
         )?;
-        id_2 = session.deploy(
+        (id_2, _) = session.deploy::<_, (), _>(
             contract_bytecode!("box"),
             ContractData::builder().owner(OWNER),
             LIMIT,
@@ -106,12 +106,12 @@ fn session_commits_persistence() -> Result<(), Error> {
 fn contracts_persistence() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
     let mut session = vm.session(SessionData::builder())?;
-    let id_1 = session.deploy(
+    let (id_1, _) = session.deploy::<_, (), _>(
         contract_bytecode!("counter"),
         ContractData::builder().owner(OWNER),
         LIMIT,
     )?;
-    let id_2 = session.deploy(
+    let (id_2, _) = session.deploy::<_, (), _>(
         contract_bytecode!("box"),
         ContractData::builder().owner(OWNER),
         LIMIT,
@@ -156,7 +156,7 @@ fn migration() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
     let mut session = vm.session(SessionData::builder())?;
 
-    let contract = session.deploy(
+    let (contract, _) = session.deploy::<_, (), _>(
         contract_bytecode!("counter"),
         ContractData::builder().owner(OWNER),
         LIMIT,
@@ -219,7 +219,7 @@ fn migration_new_owner() -> Result<(), Error> {
     const OWNER: [u8; 33] = [1u8; 33];
     const NEW_OWNER: [u8; 33] = [2u8; 33];
 
-    let contract = session.deploy(
+    let (contract, _) = session.deploy::<_, (), _>(
         contract_bytecode!("counter"),
         ContractData::builder().owner(OWNER),
         LIMIT,
@@ -253,7 +253,7 @@ fn migration_old_owner() -> Result<(), Error> {
 
     const OWNER: [u8; 33] = [1u8; 33];
 
-    let contract = session.deploy(
+    let (contract, _) = session.deploy::<_, (), _>(
         contract_bytecode!("counter"),
         ContractData::builder().owner(OWNER),
         LIMIT,
@@ -287,7 +287,7 @@ fn migration_self_id_remains_same() -> Result<(), Error> {
 
     const OWNER: [u8; 33] = [1u8; 33];
 
-    let contract_id = session.deploy(
+    let (contract_id, _) = session.deploy::<_, (), _>(
         contract_bytecode!("counter"),
         ContractData::builder().owner(OWNER),
         LIMIT,

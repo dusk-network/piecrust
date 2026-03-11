@@ -20,7 +20,7 @@ pub fn deploy_with_id() -> Result<(), Error> {
     let some_id = [1u8; 32];
     let contract_id = ContractId::from(some_id);
     let mut session = vm.session(SessionData::builder())?;
-    session.deploy(
+    session.deploy::<_, (), _>(
         bytecode,
         ContractData::builder()
             .owner(OWNER)
@@ -54,7 +54,7 @@ fn call_non_deployed() -> Result<(), Error> {
     let bytecode = contract_bytecode!("double_counter");
     let counter_id = ContractId::from_bytes([1; 32]);
     let mut session = vm.session(SessionData::builder())?;
-    session.deploy(
+    session.deploy::<_, (), _>(
         bytecode,
         ContractData::builder().owner(OWNER).contract_id(counter_id),
         LIMIT,
