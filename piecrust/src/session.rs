@@ -238,13 +238,16 @@ impl Session {
         &self.engine
     }
 
-    /// Deploy a contract, returning its [`ContractId`]. The ID is computed
+    /// Deploy a contract, returning its [`ContractId`] and an optional
+    /// [`CallReceipt`] for the `init` function execution. The ID is computed
     /// using a `blake3` hash of the `bytecode`. Contracts using the `memory64`
     /// proposal are accepted in just the same way as 32-bit contracts, and
     /// their handling is totally transparent.
     ///
     /// Since a deployment may execute some contract initialization code, that
-    /// code will be metered and executed with the given `gas_limit`.
+    /// code will be metered and executed with the given `gas_limit`. If the
+    /// contract exports an `init` function, the returned receipt contains
+    /// the gas spent, events emitted, and call tree produced by that call.
     ///
     /// # Errors
     /// It is possible that a collision between contract IDs occurs, even for
@@ -255,18 +258,22 @@ impl Session {
     /// If such a collision occurs, [`PersistenceError`] will be returned.
     ///
     /// [`ContractId`]: ContractId
+    /// [`CallReceipt`]: CallReceipt
     /// [`PersistenceError`]: PersistenceError
     ///
     /// # Panics
     /// If `deploy_data` does not specify an owner, this will panic.
-    pub fn deploy<'a, A, D>(
+    pub fn deploy<'a, A, R, D>(
         &mut self,
         bytecode: &[u8],
         deploy_data: D,
         gas_limit: u64,
-    ) -> Result<ContractId, Error>
+    ) -> Result<(ContractId, Option<CallReceipt<R>>), Error>
     where
         A: 'a + for<'b> Serialize<StandardBufSerializer<'b>>,
+        R: Archive,
+        R::Archived: Deserialize<R, Infallible>
+            + for<'b> CheckBytes<DefaultValidator<'b>>,
         D: Into<ContractData<'a, A>>,
     {
         let deploy_data = deploy_data.into();
@@ -284,7 +291,7 @@ impl Session {
             init_arg = Some(self.inner().buffer[0..pos].to_vec());
         }
 
-        self.deploy_raw(
+        let (contract_id, receipt) = self.deploy_raw(
             deploy_data.contract_id,
             bytecode,
             init_arg,
@@ -292,16 +299,22 @@ impl Session {
                 .owner
                 .expect("Owner must be specified when deploying a contract"),
             gas_limit,
-        )
+        )?;
+
+        let receipt = receipt.map(|r| r.deserialize()).transpose()?;
+        Ok((contract_id, receipt))
     }
 
-    /// Deploy a contract, returning its [`ContractId`]. If ID is not provided,
-    /// it is computed using a `blake3` hash of the `bytecode`. Contracts using
-    /// the `memory64` proposal are accepted in just the same way as 32-bit
-    /// contracts, and their handling is totally transparent.
+    /// Deploy a contract, returning its [`ContractId`] and an optional
+    /// [`CallReceipt`] for the `init` function execution. If ID is not
+    /// provided, it is computed using a `blake3` hash of the `bytecode`.
+    /// Contracts using the `memory64` proposal are accepted in just the same
+    /// way as 32-bit contracts, and their handling is totally transparent.
     ///
     /// Since a deployment may execute some contract initialization code, that
-    /// code will be metered and executed with the given `gas_limit`.
+    /// code will be metered and executed with the given `gas_limit`. If the
+    /// contract exports an `init` function, the returned receipt contains
+    /// the gas spent, events emitted, and call tree produced by that call.
     ///
     /// # Errors
     /// It is possible that a collision between contract IDs occurs, even for
@@ -312,7 +325,9 @@ impl Session {
     /// If such a collision occurs, [`PersistenceError`] will be returned.
     ///
     /// [`ContractId`]: ContractId
+    /// [`CallReceipt`]: CallReceipt
     /// [`PersistenceError`]: PersistenceError
+    #[allow(clippy::type_complexity)]
     pub fn deploy_raw(
         &mut self,
         contract_id: Option<ContractId>,
@@ -320,14 +335,15 @@ impl Session {
         init_arg: Option<Vec<u8>>,
         owner: Vec<u8>,
         gas_limit: u64,
-    ) -> Result<ContractId, Error> {
+    ) -> Result<(ContractId, Option<CallReceipt<Vec<u8>>>), Error> {
         let contract_id = contract_id.unwrap_or({
             let hash = blake3::hash(bytecode);
             ContractId::from_bytes(hash.into())
         });
-        self.do_deploy(contract_id, bytecode, init_arg, owner, gas_limit)?;
+        let receipt =
+            self.do_deploy(contract_id, bytecode, init_arg, owner, gas_limit)?;
 
-        Ok(contract_id)
+        Ok((contract_id, receipt))
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -338,7 +354,7 @@ impl Session {
         arg: Option<Vec<u8>>,
         owner: Vec<u8>,
         gas_limit: u64,
-    ) -> Result<(), Error> {
+    ) -> Result<Option<CallReceipt<Vec<u8>>>, Error> {
         if self
             .inner_mut()
             .contract_session
@@ -379,10 +395,19 @@ impl Session {
                 // contract has an init method in the first place, which might
                 // not be the case, such as when ingesting untrusted bytecode.
                 let arg = arg.unwrap_or_default();
-                self.call_inner(contract_id, INIT_METHOD, arg, gas_limit)?;
+                let (data, gas_spent, call_tree) =
+                    self.call_inner(contract_id, INIT_METHOD, arg, gas_limit)?;
+                let events = mem::take(&mut self.inner_mut().events);
+                return Ok(Some(CallReceipt {
+                    gas_limit,
+                    gas_spent,
+                    events,
+                    call_tree,
+                    data,
+                }));
             }
 
-            Ok(())
+            Ok(None)
         };
 
         instantiate().inspect_err(|_| {
@@ -525,8 +550,11 @@ impl Session {
             }
         }
 
-        let new_contract =
-            self.deploy(bytecode, new_contract_data, deploy_gas_limit)?;
+        let (new_contract, _init_receipt) = self.deploy::<_, (), _>(
+            bytecode,
+            new_contract_data,
+            deploy_gas_limit,
+        )?;
 
         closure(new_contract, &mut self)?;
 
@@ -954,7 +982,8 @@ impl Session {
 }
 
 /// The receipt given for a call execution using one of either [`call`] or
-/// [`call_raw`].
+/// [`call_raw`]. This receipt is also returned within a tuple when
+/// a Contract is deployed and its `init` method is executed.
 ///
 /// [`call`]: [`Session::call`]
 /// [`call_raw`]: [`Session::call_raw`]

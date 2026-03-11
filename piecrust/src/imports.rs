@@ -561,8 +561,8 @@ mod tests {
         let mut session = vm
             .session(SessionData::builder())
             .expect("session should be created");
-        let contract_id = session
-            .deploy(
+        let (contract_id, _) = session
+            .deploy::<_, (), _>(
                 contract_bytecode!("counter"),
                 ContractData::builder().owner(OWNER),
                 LIMIT,
@@ -600,8 +600,8 @@ mod tests {
         let mut session = vm
             .session(SessionData::builder())
             .expect("session should be created");
-        let contract_id = session
-            .deploy(
+        let (contract_id, _) = session
+            .deploy::<_, (), _>(
                 contract_bytecode!("counter"),
                 ContractData::builder().owner(OWNER),
                 LIMIT,

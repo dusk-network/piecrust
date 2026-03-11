@@ -93,8 +93,8 @@
 //! const LIMIT: u64 = 1_000_000;
 //!
 //! let mut session = vm.session(SessionData::builder()).unwrap();
-//! let counter_id = session
-//!     .deploy(
+//! let (counter_id, _) = session
+//!     .deploy::<_, (), _>(
 //!         contract_bytecode!("counter"),
 //!         ContractData::builder().owner(OWNER),
 //!         LIMIT,
