@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Change `deploy` and `deploy_raw` to return `(ContractId, Option<CallReceipt>)`, exposing init gas spent, events, and call tree to callers
 - Update workspace and contracts to Rust edition 2024 [#466]
 - Update `dusk-plonk` dev-dependency to 0.22.0-rc.0 [#466]
 - Enable `gc` feature in `dusk-wasmtime` for reference-types support (required by Rust 1.82+) [#466]

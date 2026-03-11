@@ -4,7 +4,9 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use piecrust::{ContractData, Error, SessionData, VM, contract_bytecode};
+use piecrust::{
+    ContractData, Error, Session, SessionData, VM, contract_bytecode,
+};
 
 const CONTRACT_INIT_METHOD: &str = "init";
 const OWNER: [u8; 32] = [0u8; 32];
@@ -16,11 +18,18 @@ fn init() -> Result<(), Error> {
 
     let mut session = vm.session(SessionData::builder())?;
 
-    let (id, _) = session.deploy::<_, (), _>(
+    let (id, receipt) = session.deploy::<_, (), _>(
         contract_bytecode!("initializer"),
         ContractData::builder().owner(OWNER).init_arg(&0xabu8),
         LIMIT,
     )?;
+
+    let receipt = receipt.expect("deploy with init should return a receipt");
+    assert!(receipt.gas_spent > 0, "init should consume gas");
+    assert!(
+        receipt.gas_spent <= LIMIT,
+        "gas_spent must not exceed limit"
+    );
 
     assert_eq!(
         session.call::<_, u8>(id, "read_value", &(), LIMIT)?.data,
@@ -72,17 +81,25 @@ fn init_indirect_call_blocked() -> Result<(), Error> {
 
     let mut session = vm.session(SessionData::builder())?;
 
-    let (empty_initializer_contract_id, _) = session.deploy::<_, (), _>(
+    let (empty_initializer_contract_id, receipt) = session.deploy::<_, (), _>(
         contract_bytecode!("empty_initializer"),
         ContractData::builder().owner(OWNER),
         LIMIT,
     )?;
+    assert!(
+        receipt.is_some(),
+        "empty_initializer has init, should return a receipt"
+    );
 
-    let (callcenter_contract_id, _) = session.deploy::<_, (), _>(
+    let (callcenter_contract_id, receipt) = session.deploy::<_, (), _>(
         contract_bytecode!("callcenter"),
         ContractData::builder().owner(OWNER),
         LIMIT,
     )?;
+    assert!(
+        receipt.is_none(),
+        "callcenter has no init, should return None"
+    );
 
     let result = session.call::<_, ()>(
         callcenter_contract_id,
@@ -105,15 +122,51 @@ fn empty_init_argument() -> Result<(), Error> {
 
     let mut session = vm.session(SessionData::builder())?;
 
-    let (id, _) = session.deploy::<_, (), _>(
+    let (id, receipt) = session.deploy::<_, (), _>(
         contract_bytecode!("empty_initializer"),
         ContractData::builder().owner(OWNER),
         LIMIT,
     )?;
 
+    let receipt = receipt.expect("deploy with init should return a receipt");
+    assert!(receipt.gas_spent > 0, "init should consume gas");
+
     assert_eq!(
         session.call::<_, u8>(id, "read_value", &(), LIMIT)?.data,
         0x10
+    );
+
+    Ok(())
+}
+
+#[test]
+fn deploy_raw_with_init_returns_receipt() -> Result<(), Error> {
+    let vm = VM::ephemeral()?;
+    let mut session = vm.session(SessionData::builder())?;
+
+    let bytecode = contract_bytecode!("initializer");
+    let init_arg = Session::serialize_data(&0xabu8)?;
+
+    let (id, receipt) = session.deploy_raw(
+        None,
+        bytecode,
+        Some(init_arg),
+        OWNER.to_vec(),
+        LIMIT,
+    )?;
+
+    let receipt =
+        receipt.expect("deploy_raw with init should return a receipt");
+    assert!(receipt.gas_spent > 0, "init should consume gas");
+    assert!(
+        receipt.gas_spent <= LIMIT,
+        "gas_spent must not exceed limit"
+    );
+
+    // Verify the init ran
+    assert_eq!(
+        session.call::<_, u8>(id, "read_value", &(), LIMIT)?.data,
+        0xab
     );
 
     Ok(())
