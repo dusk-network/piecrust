@@ -285,7 +285,12 @@ pub(crate) fn c(
     };
 
     #[cfg(feature = "call-hook")]
-    env.call_hook(&callee_id, &name, &arg);
+    if !env.call_hook(&callee_id, &name, &arg) {
+        return Ok(write_contract_error(
+            env,
+            Error::Panic("call hook rejected".into()),
+        ));
+    }
 
     let callee_stack_element = match env.push_callstack(callee_id, callee_limit)
     {
