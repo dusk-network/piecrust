@@ -35,12 +35,12 @@ fn inter_contract_call_validates_return_bytes() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
     let mut session = vm.session(SessionData::builder())?;
 
-    let badreturn_id = session.deploy(
+    let (badreturn_id, _) = session.deploy::<_, (), _>(
         contract_bytecode!("badreturn"),
         ContractData::builder().owner(OWNER),
         LIMIT,
     )?;
-    let center_id = session.deploy(
+    let (center_id, _) = session.deploy::<_, (), _>(
         contract_bytecode!("callcenter"),
         ContractData::builder().owner(OWNER),
         LIMIT,
@@ -99,7 +99,7 @@ fn host_call_rejects_garbage_return() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
     let mut session = vm.session(SessionData::builder())?;
 
-    let badreturn_id = session.deploy(
+    let (badreturn_id, _) = session.deploy::<_, (), _>(
         contract_bytecode!("badreturn"),
         ContractData::builder().owner(OWNER),
         LIMIT,

@@ -15,7 +15,7 @@ fn out_of_bounds() -> Result<(), Error> {
 
     let mut session = vm.session(SessionData::builder())?;
 
-    let c_example_id = session.deploy(
+    let (c_example_id, _) = session.deploy::<_, (), _>(
         contract_bytecode!("c_example"),
         ContractData::builder().owner(OWNER),
         LIMIT,
@@ -34,7 +34,7 @@ fn not_out_of_bounds() -> Result<(), Error> {
 
     let mut session = vm.session(SessionData::builder())?;
 
-    let c_example_id = session.deploy(
+    let (c_example_id, _) = session.deploy::<_, (), _>(
         contract_bytecode!("c_example"),
         ContractData::builder().owner(OWNER),
         LIMIT,
@@ -56,7 +56,7 @@ fn bad_contract() -> Result<(), Error> {
     let mut session = vm.session(SessionData::builder())?;
 
     let _ = session
-        .deploy(
+        .deploy::<_, (), _>(
             contract_bytecode!("invalid"),
             ContractData::builder().owner(OWNER),
             LIMIT,

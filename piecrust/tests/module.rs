@@ -28,7 +28,7 @@ fn module_meta_path(vm: &VM, contract_id: ContractId) -> PathBuf {
 
 fn deploy_counter(vm: &VM) -> Result<(ContractId, [u8; 32]), Error> {
     let mut session = vm.session(SessionData::builder())?;
-    let counter_id = session.deploy(
+    let (counter_id, _) = session.deploy::<_, (), _>(
         contract_bytecode!("counter"),
         ContractData::builder().owner(OWNER),
         LIMIT,
@@ -156,12 +156,12 @@ fn remove_and_recompile_multiple_contracts() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
     let mut session = vm.session(SessionData::builder())?;
 
-    let counter_id = session.deploy(
+    let (counter_id, _) = session.deploy::<_, (), _>(
         contract_bytecode!("counter"),
         ContractData::builder().owner(OWNER),
         LIMIT,
     )?;
-    let box_id = session.deploy(
+    let (box_id, _) = session.deploy::<_, (), _>(
         contract_bytecode!("box"),
         ContractData::builder().owner(OWNER),
         LIMIT,

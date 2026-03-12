@@ -52,12 +52,12 @@ fn call_hook_observes_inter_contract_call() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
     let mut session = vm.session(SessionData::builder())?;
 
-    let counter_id = session.deploy(
+    let (counter_id, _) = session.deploy::<_, (), _>(
         contract_bytecode!("counter"),
         ContractData::builder().owner(OWNER),
         LIMIT,
     )?;
-    let center_id = session.deploy(
+    let (center_id, _) = session.deploy::<_, (), _>(
         contract_bytecode!("callcenter"),
         ContractData::builder().owner(OWNER),
         LIMIT,
@@ -85,7 +85,7 @@ fn call_hook_not_called_for_direct_calls() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
     let mut session = vm.session(SessionData::builder())?;
 
-    let counter_id = session.deploy(
+    let (counter_id, _) = session.deploy::<_, (), _>(
         contract_bytecode!("counter"),
         ContractData::builder().owner(OWNER),
         LIMIT,
@@ -108,12 +108,12 @@ fn call_hook_observes_multiple_iccs() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
     let mut session = vm.session(SessionData::builder())?;
 
-    let counter_id = session.deploy(
+    let (counter_id, _) = session.deploy::<_, (), _>(
         contract_bytecode!("counter"),
         ContractData::builder().owner(OWNER),
         LIMIT,
     )?;
-    let center_id = session.deploy(
+    let (center_id, _) = session.deploy::<_, (), _>(
         contract_bytecode!("callcenter"),
         ContractData::builder().owner(OWNER),
         LIMIT,
@@ -149,7 +149,7 @@ fn call_hook_can_deserialize_fn_args() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
     let mut session = vm.session(SessionData::builder())?;
 
-    let center_id = session.deploy(
+    let (center_id, _) = session.deploy::<_, (), _>(
         contract_bytecode!("callcenter"),
         ContractData::builder().owner(OWNER),
         LIMIT,
@@ -186,12 +186,12 @@ fn no_hook_set_works_normally() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
     let mut session = vm.session(SessionData::builder())?;
 
-    let counter_id = session.deploy(
+    let (counter_id, _) = session.deploy::<_, (), _>(
         contract_bytecode!("counter"),
         ContractData::builder().owner(OWNER),
         LIMIT,
     )?;
-    let center_id = session.deploy(
+    let (center_id, _) = session.deploy::<_, (), _>(
         contract_bytecode!("callcenter"),
         ContractData::builder().owner(OWNER),
         LIMIT,

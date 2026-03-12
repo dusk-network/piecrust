@@ -17,7 +17,7 @@ fn metadata() -> Result<(), Error> {
 
     let mut session = vm.session(SessionData::builder())?;
 
-    let id = session.deploy(
+    let (id, _) = session.deploy::<_, (), _>(
         contract_bytecode!("metadata"),
         ContractData::builder().owner(EXPECTED_OWNER),
         LIMIT,
@@ -61,14 +61,14 @@ fn owner_of() -> Result<(), Error> {
 
     let mut session = vm.session(SessionData::builder())?;
 
-    session.deploy(
+    session.deploy::<_, (), _>(
         contract_bytecode!("metadata"),
         ContractData::builder()
             .owner(EXPECTED_OWNER_0)
             .contract_id(CONTRACT_ID_0),
         LIMIT,
     )?;
-    session.deploy(
+    session.deploy::<_, (), _>(
         contract_bytecode!("metadata"),
         ContractData::builder()
             .owner(EXPECTED_OWNER_1)
@@ -132,7 +132,7 @@ fn owner_wrong_n_panics() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
     let mut session = vm.session(SessionData::builder())?;
 
-    let id = session.deploy(
+    let (id, _) = session.deploy::<_, (), _>(
         contract_bytecode!("metadata"),
         ContractData::builder().owner(OWNER_33),
         LIMIT,

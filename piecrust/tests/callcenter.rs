@@ -16,7 +16,7 @@ pub fn cc_read_counter() -> Result<(), Error> {
 
     let mut session = vm.session(SessionData::builder())?;
 
-    let counter_id = session.deploy(
+    let (counter_id, _) = session.deploy::<_, (), _>(
         contract_bytecode!("counter"),
         ContractData::builder().owner(OWNER),
         LIMIT,
@@ -27,7 +27,7 @@ pub fn cc_read_counter() -> Result<(), Error> {
     let value: i64 = session.call(counter_id, "read_value", &(), LIMIT)?.data;
     assert_eq!(value, 0xfc);
 
-    let center_id = session.deploy(
+    let (center_id, _) = session.deploy::<_, (), _>(
         contract_bytecode!("callcenter"),
         ContractData::builder().owner(OWNER),
         LIMIT,
@@ -48,7 +48,7 @@ pub fn cc_direct() -> Result<(), Error> {
 
     let mut session = vm.session(SessionData::builder())?;
 
-    let counter_id = session.deploy(
+    let (counter_id, _) = session.deploy::<_, (), _>(
         contract_bytecode!("counter"),
         ContractData::builder().owner(OWNER),
         LIMIT,
@@ -58,7 +58,7 @@ pub fn cc_direct() -> Result<(), Error> {
     let value: i64 = session.call(counter_id, "read_value", &(), LIMIT)?.data;
     assert_eq!(value, 0xfc);
 
-    let center_id = session.deploy(
+    let (center_id, _) = session.deploy::<_, (), _>(
         contract_bytecode!("callcenter"),
         ContractData::builder().owner(OWNER),
         LIMIT,
@@ -97,7 +97,7 @@ pub fn cc_passthrough() -> Result<(), Error> {
 
     let mut session = vm.session(SessionData::builder())?;
 
-    let center_id = session.deploy(
+    let (center_id, _) = session.deploy::<_, (), _>(
         contract_bytecode!("callcenter"),
         ContractData::builder().owner(OWNER),
         LIMIT,
@@ -120,12 +120,12 @@ pub fn cc_delegated_read() -> Result<(), Error> {
 
     let mut session = vm.session(SessionData::builder())?;
 
-    let counter_id = session.deploy(
+    let (counter_id, _) = session.deploy::<_, (), _>(
         contract_bytecode!("counter"),
         ContractData::builder().owner(OWNER),
         LIMIT,
     )?;
-    let center_id = session.deploy(
+    let (center_id, _) = session.deploy::<_, (), _>(
         contract_bytecode!("callcenter"),
         ContractData::builder().owner(OWNER),
         LIMIT,
@@ -157,12 +157,12 @@ pub fn cc_delegated_write() -> Result<(), Error> {
     // increment through delegated transaction
 
     let mut session = vm.session(SessionData::builder())?;
-    let counter_id = session.deploy(
+    let (counter_id, _) = session.deploy::<_, (), _>(
         contract_bytecode!("counter"),
         ContractData::builder().owner(OWNER),
         LIMIT,
     )?;
-    let center_id = session.deploy(
+    let (center_id, _) = session.deploy::<_, (), _>(
         contract_bytecode!("callcenter"),
         ContractData::builder().owner(OWNER),
         LIMIT,
@@ -188,7 +188,7 @@ pub fn cc_self() -> Result<(), Error> {
 
     let mut session = vm.session(SessionData::builder())?;
 
-    let center_id = session.deploy(
+    let (center_id, _) = session.deploy::<_, (), _>(
         contract_bytecode!("callcenter"),
         ContractData::builder().owner(OWNER),
         LIMIT,
@@ -209,7 +209,7 @@ pub fn cc_caller() -> Result<(), Error> {
 
     let mut session = vm.session(SessionData::builder())?;
 
-    let center_id = session.deploy(
+    let (center_id, _) = session.deploy::<_, (), _>(
         contract_bytecode!("callcenter"),
         ContractData::builder().owner(OWNER),
         LIMIT,
@@ -229,7 +229,7 @@ pub fn cc_caller_uninit() -> Result<(), Error> {
 
     let mut session = vm.session(SessionData::builder())?;
 
-    let center_id = session.deploy(
+    let (center_id, _) = session.deploy::<_, (), _>(
         contract_bytecode!("callcenter"),
         ContractData::builder().owner(OWNER),
         LIMIT,
@@ -248,13 +248,13 @@ pub fn cc_callstack() -> Result<(), Error> {
 
     let mut session = vm.session(SessionData::builder())?;
 
-    let center_id = session.deploy(
+    let (center_id, _) = session.deploy::<_, (), _>(
         contract_bytecode!("callcenter"),
         ContractData::builder().owner(OWNER),
         LIMIT,
     )?;
 
-    let callstack_id = session.deploy(
+    let (callstack_id, _) = session.deploy::<_, (), _>(
         contract_bytecode!("callstack"),
         ContractData::builder().owner(OWNER),
         LIMIT,
@@ -306,7 +306,7 @@ pub fn cc_self_id() -> Result<(), Error> {
 
     let mut session = vm.session(SessionData::builder())?;
 
-    let center_id = session.deploy(
+    let (center_id, _) = session.deploy::<_, (), _>(
         contract_bytecode!("callcenter"),
         ContractData::builder().owner(OWNER),
         LIMIT,
