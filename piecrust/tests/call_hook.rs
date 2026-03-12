@@ -39,6 +39,7 @@ impl CallRecorder {
                 fn_name: fn_name.to_owned(),
                 fn_args: fn_args.to_vec(),
             });
+            true
         })
     }
 
@@ -177,6 +178,48 @@ fn call_hook_can_deserialize_fn_args() -> Result<(), Error> {
             .expect("fn_args should deserialize as u32");
         assert_eq!(arg, 2 - i as u32);
     }
+
+    Ok(())
+}
+
+#[test]
+fn call_hook_can_reject_call() -> Result<(), Error> {
+    let vm = VM::ephemeral()?;
+    let mut session = vm.session(SessionData::builder())?;
+
+    let (counter_id, _) = session.deploy::<_, (), _>(
+        contract_bytecode!("counter"),
+        ContractData::builder().owner(OWNER),
+        LIMIT,
+    )?;
+    let (center_id, _) = session.deploy::<_, (), _>(
+        contract_bytecode!("callcenter"),
+        ContractData::builder().owner(OWNER),
+        LIMIT,
+    )?;
+
+    // Read the initial counter value
+    let value: i64 = session.call(counter_id, "read_value", &(), LIMIT)?.data;
+    assert_eq!(value, 0xfc);
+
+    // Set a hook that rejects calls to the counter's "increment" function
+    let reject_id = counter_id;
+    session.set_call_hook(Box::new(move |contract, fn_name, _| {
+        !(*contract == reject_id && fn_name == "increment")
+    }));
+
+    // Attempt to increment via callcenter — the hook should reject it
+    let result = session.call::<_, ()>(
+        center_id,
+        "increment_counter",
+        &counter_id,
+        LIMIT,
+    );
+    assert!(result.is_err(), "call should fail when hook rejects");
+
+    // Verify the counter value is unchanged
+    let value: i64 = session.call(counter_id, "read_value", &(), LIMIT)?.data;
+    assert_eq!(value, 0xfc);
 
     Ok(())
 }
