@@ -36,16 +36,15 @@
 #![deny(missing_docs)]
 #![deny(clippy::pedantic)]
 
-use std::{
-    collections::{BTreeMap, btree_map::Entry},
-    fs::OpenOptions,
-    mem::{self, MaybeUninit},
-    ops::{Deref, DerefMut},
-    os::fd::AsRawFd,
-    path::PathBuf,
-    sync::{Once, OnceLock, RwLock},
-    {io, process, ptr, slice},
-};
+use std::collections::BTreeMap;
+use std::collections::btree_map::Entry;
+use std::fs::OpenOptions;
+use std::mem::{self, MaybeUninit};
+use std::ops::{Deref, DerefMut};
+use std::os::fd::AsRawFd;
+use std::path::PathBuf;
+use std::sync::{Once, OnceLock, RwLock};
+use std::{io, process, ptr, slice};
 
 use libc::{
     MAP_ANONYMOUS, MAP_FAILED, MAP_FIXED, MAP_NORESERVE, MAP_PRIVATE,
@@ -672,7 +671,8 @@ impl MmapInner {
                     // Previous implementations didn't do this, but it's
                     // necessare because if the memory was
                     // previously reverted it's now PROT_NONE
-                    // SAFETY: page_addr points to valid memory in our mmap region.
+                    // SAFETY: page_addr points to valid memory in our mmap
+                    // region.
                     if unsafe {
                         libc::mprotect(page_addr as _, page_size, PROT_READ)
                     } != 0
@@ -739,8 +739,8 @@ impl MmapInner {
             for (page_index, clean_page) in popped_snapshot.clean_pages {
                 snapshot.clean_pages.entry(page_index).or_insert(clean_page);
             }
-            // // Merge hit pages (TODO: Check if this should be done differently)
-            // for page_index in 0..page_number {
+            // // Merge hit pages (TODO: Check if this should be done
+            // differently) for page_index in 0..page_number {
             //     if popped_snapshot.hit_pages.is_page_hit(page_index) {
             //         snapshot.hit_pages.set(page_index);
             //     }
@@ -773,10 +773,12 @@ impl MmapInner {
             for (page_index, clean_page) in popped_snapshot.clean_pages {
                 let page_offset = page_index * page_size;
 
-                // Ensure the memory is writable before copying the clean page back.
+                // Ensure the memory is writable before copying the clean page
+                // back.
                 //
                 // Previous implementations didn't do this, but it's necessare
-                // because if the memory was previously reverted it's now PROT_NONE
+                // because if the memory was previously reverted it's now
+                // PROT_NONE
                 let start_addr = self.bytes.as_mut_ptr() as usize;
                 let page_addr = start_addr + page_offset;
                 if libc::mprotect(page_addr as _, page_size, PROT_WRITE) != 0 {
@@ -836,8 +838,9 @@ unsafe fn setup_action() -> sigaction {
     static OLD_ACTION: OnceLock<sigaction> = OnceLock::new();
 
     SIGNAL_HANDLER.call_once(|| {
-        // SAFETY: We're setting up signal handlers using valid sigaction structs.
-        // The signal handler function pointer is valid for the lifetime of the program.
+        // SAFETY: We're setting up signal handlers using valid sigaction
+        // structs. The signal handler function pointer is valid for the
+        // lifetime of the program.
         unsafe {
             let mut sa_mask = MaybeUninit::<sigset_t>::uninit();
             sigemptyset(sa_mask.as_mut_ptr());
@@ -855,8 +858,8 @@ unsafe fn setup_action() -> sigaction {
                 process::exit(1);
             }
 
-            // On Apple Silicon for some reason SIGBUS is thrown instead of SIGSEGV.
-            // TODO should investigate properly
+            // On Apple Silicon for some reason SIGBUS is thrown instead of
+            // SIGSEGV. TODO should investigate properly
             #[cfg(target_os = "macos")]
             if libc::sigaction(libc::SIGBUS, &act, old_act.as_mut_ptr()) != 0 {
                 process::exit(2);
@@ -881,8 +884,8 @@ unsafe fn call_old_action(
     unsafe {
         let old_act = setup_action();
 
-        // If SA_SIGINFO is set, the old action is a `fn(c_int, *mut siginfo_t, *mut
-        // ucontext_t)`. Otherwise, it's a `fn(c_int)`.
+        // If SA_SIGINFO is set, the old action is a `fn(c_int, *mut siginfo_t,
+        // *mut ucontext_t)`. Otherwise, it's a `fn(c_int)`.
         if old_act.sa_flags & SA_SIGINFO == 0 {
             let act: fn(c_int) = mem::transmute(old_act.sa_sigaction);
             act(sig);
@@ -900,9 +903,9 @@ unsafe fn segfault_handler(
     ctx: *mut ucontext_t,
 ) {
     with_global_map(move |global_map| {
-        // SAFETY: `info` is a valid pointer provided by the signal handler mechanism.
-        // We're dereferencing raw pointers that point to valid MmapInner instances
-        // tracked in our global map.
+        // SAFETY: `info` is a valid pointer provided by the signal handler
+        // mechanism. We're dereferencing raw pointers that point to
+        // valid MmapInner instances tracked in our global map.
         unsafe {
             let si_addr = (*info).si_addr() as usize;
 
@@ -923,11 +926,12 @@ unsafe fn segfault_handler(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use std::thread;
 
     use rand::rngs::StdRng;
     use rand::{Rng, SeedableRng};
-    use std::thread;
+
+    use super::*;
 
     const N_PAGES: usize = 65536;
     const PAGE_SIZE: usize = 65536;
