@@ -4,10 +4,12 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
+use std::collections::HashMap;
 use std::fs;
 use std::io;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
+use std::sync::{LazyLock, RwLock};
 use std::{env, mem};
 
 use dusk_wasmtime::Engine;
@@ -30,6 +32,15 @@ const META_MODULE_HASH_OFFSET: usize =
 const META_RUNTIME_HASH_OFFSET: usize =
     META_MODULE_HASH_OFFSET + META_HASH_BYTES;
 
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+struct ModuleCacheKey {
+    path: PathBuf,
+    bytecode_hash: [u8; META_HASH_BYTES],
+}
+
+static MODULE_CACHE: LazyLock<RwLock<HashMap<ModuleCacheKey, Module>>> =
+    LazyLock::new(|| RwLock::new(HashMap::new()));
+
 fn check_single_memory(module: &dusk_wasmtime::Module) -> io::Result<()> {
     // Ensure the module only has one memory
     let n_memories = module
@@ -41,7 +52,7 @@ fn check_single_memory(module: &dusk_wasmtime::Module) -> io::Result<()> {
             io::ErrorKind::InvalidData,
             format!(
                 "module has {} memories, but only one is allowed",
-                n_memories
+                n_memories,
             ),
         ));
     }
@@ -61,6 +72,27 @@ fn cache_runtime_fingerprint() -> blake3::Hash {
     hasher.update(env::consts::ARCH.as_bytes());
     hasher.update(env::consts::OS.as_bytes());
     hasher.finalize()
+}
+
+fn module_cache_key(module_path: &Path, bytecode: &[u8]) -> ModuleCacheKey {
+    ModuleCacheKey {
+        path: module_path.to_path_buf(),
+        bytecode_hash: *blake3::hash(bytecode).as_bytes(),
+    }
+}
+
+fn insert_cached_module(module_path: &Path, bytecode: &[u8], module: &Module) {
+    MODULE_CACHE
+        .write()
+        .unwrap_or_else(|e| e.into_inner())
+        .insert(module_cache_key(module_path, bytecode), module.clone());
+}
+
+fn invalidate_cached_modules(module_path: &Path) {
+    MODULE_CACHE
+        .write()
+        .unwrap_or_else(|e| e.into_inner())
+        .retain(|key, _| key.path != module_path);
 }
 
 fn write_cache_meta(
@@ -220,7 +252,9 @@ impl Module {
         let module_path = module_path.as_ref();
         let module_bytes = self.serialize();
         fs::write(module_path, &module_bytes)?;
-        write_cache_meta(module_path, &module_bytes, bytecode)
+        write_cache_meta(module_path, &module_bytes, bytecode)?;
+        insert_cached_module(module_path, bytecode, self);
+        Ok(())
     }
 
     pub(crate) fn load_or_recompile<P: AsRef<Path>>(
@@ -229,18 +263,49 @@ impl Module {
         bytecode: &[u8],
     ) -> io::Result<Self> {
         let module_path = module_path.as_ref();
+        let cache_key = module_cache_key(module_path, bytecode);
 
-        match Self::from_cache_file(engine, module_path, bytecode) {
-            Ok(module) => Ok(module),
+        let cached_module = {
+            let cache = MODULE_CACHE.read().unwrap_or_else(|e| e.into_inner());
+            cache.get(&cache_key).cloned()
+        };
+
+        if let Some(module) = cached_module {
+            let mut module_bytes = None;
+            let cache_needs_repair = !module_path.exists()
+                || validate_cache_meta(
+                    module_path,
+                    module_bytes.get_or_insert_with(|| module.serialize()),
+                    bytecode,
+                )
+                .is_err();
+
+            if cache_needs_repair {
+                module.write_module_data(module_path, bytecode)?;
+            }
+
+            return Ok(module);
+        }
+
+        let module = match Self::from_cache_file(engine, module_path, bytecode)
+        {
+            Ok(module) => module,
             Err(err) => {
                 tracing::warn!(
                     "module cache {module_path:?} failed validation; recompiling from bytecode: {err}",
                 );
                 let module = Self::from_bytecode(engine, bytecode)?;
                 module.write_module_data(module_path, bytecode)?;
-                Ok(module)
+                module
             }
-        }
+        };
+
+        MODULE_CACHE
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(cache_key, module.clone());
+
+        Ok(module)
     }
 
     pub(crate) fn remove_cache_files<P: AsRef<Path>>(
@@ -248,6 +313,8 @@ impl Module {
     ) -> io::Result<()> {
         let module_path = module_path.as_ref();
         let meta_path = cache_meta_path(module_path);
+
+        invalidate_cached_modules(module_path);
 
         if module_path.exists() {
             fs::remove_file(module_path)?;
