@@ -8,12 +8,12 @@ use alloc::format;
 use alloc::vec::Vec;
 use core::ptr;
 
-use rkyv::validation::validators::DefaultValidator;
-use rkyv::{
-    Archive, Deserialize, Infallible, Serialize, check_archived_root,
-    ser::Serializer,
-    ser::serializers::{BufferScratch, BufferSerializer, CompositeSerializer},
+use rkyv::ser::Serializer;
+use rkyv::ser::serializers::{
+    BufferScratch, BufferSerializer, CompositeSerializer,
 };
+use rkyv::validation::validators::DefaultValidator;
+use rkyv::{Archive, Deserialize, Infallible, Serialize, check_archived_root};
 use tracing::warn;
 
 use crate::{
@@ -22,9 +22,9 @@ use crate::{
 };
 
 pub mod arg_buf {
+    use core::{ptr, slice};
+
     use crate::ARGBUF_LEN;
-    use core::ptr;
-    use core::slice;
 
     #[unsafe(no_mangle)]
     static mut A: [u64; ARGBUF_LEN / 8] = [0; ARGBUF_LEN / 8];
@@ -96,8 +96,8 @@ where
         // Invariant: not reachable by 3rd-party contracts.
         // - Bytes written by the host's `HostQuery::execute` (trusted)
         // - Only fails if the host query impl writes invalid rkyv
-        // - Host is a trusted component, panicking on invalid rkyv is acceptable as it indicates a
-        //   bug in the host query implementation.
+        // - Host is a trusted component, panicking on invalid rkyv is
+        //   acceptable as it indicates a bug in the host query implementation.
         let ret = check_archived_root::<Ret>(slice)
             .expect("host query: return bytes are not a valid rkyv archive");
         ret.deserialize(&mut Infallible).expect("Infallible")

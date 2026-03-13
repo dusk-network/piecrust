@@ -8,10 +8,10 @@ use alloc::string::String;
 use alloc::vec::Vec;
 
 use bytecheck::CheckBytes;
-use rkyv::{
-    Archive, Deserialize, Serialize,
-    ser::serializers::{BufferScratch, BufferSerializer, CompositeSerializer},
+use rkyv::ser::serializers::{
+    BufferScratch, BufferSerializer, CompositeSerializer,
 };
+use rkyv::{Archive, Deserialize, Serialize};
 
 use crate::SCRATCH_BUF_BYTES;
 
@@ -154,7 +154,8 @@ impl TryFrom<String> for ContractId {
 
 #[cfg(test)]
 mod tests {
-    use alloc::{format, string::ToString};
+    use alloc::format;
+    use alloc::string::ToString;
 
     use rand::rngs::StdRng;
     use rand::{Rng, SeedableRng};

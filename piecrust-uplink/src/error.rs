@@ -6,13 +6,12 @@
 
 extern crate alloc;
 
-use bytecheck::CheckBytes;
-use rkyv::{Archive, Deserialize, Serialize};
-
 use alloc::string::String;
-
 use core::fmt::{Display, Formatter};
 use core::str;
+
+use bytecheck::CheckBytes;
+use rkyv::{Archive, Deserialize, Serialize};
 
 /// The error possibly returned on an inter-contract-call.
 //
