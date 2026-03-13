@@ -303,7 +303,7 @@ impl ContractSession {
                                 base_dir.join(MEMORY_DIR).join(&contract_hex);
 
                             let bytecode = Bytecode::from_file(bytecode_path)?;
-                            let module = Module::load_or_recompile(
+                            let module = Module::load(
                                 &self.engine,
                                 &module_path,
                                 bytecode.as_ref(),

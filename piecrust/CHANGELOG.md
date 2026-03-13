@@ -33,9 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Cache compiled modules in memory and avoid redundant module reloads during commit-store reconstruction
 - Harden module cache loading with sidecar metadata checks (bytecode hash, module hash and runtime context). Invalid or stale cache entries are discarded and safely recompiled from canonical bytecode.
-
-### Fixed
-
+- Stop execution-path contract loads from silently recompiling missing modules; shaded modules now remain unavailable until explicitly recompiled.
 - Enforce explicit call depth and callstack argument-buffer bounds, returning VM errors instead of panicking on overflow
 
 ## [0.28.1] - 2025-04-16

@@ -123,6 +123,7 @@ fn module_cache_recovers_from_missing_or_corrupt_metadata() -> Result<(), Error>
 
     std::fs::remove_file(&module_meta_file).map_err(io_to_error)?;
 
+    let vm = VM::new(vm.root_dir())?;
     let mut session = vm.session(SessionData::builder().base(commit_id))?;
     assert_eq!(
         session
@@ -136,6 +137,7 @@ fn module_cache_recovers_from_missing_or_corrupt_metadata() -> Result<(), Error>
     std::fs::write(&module_meta_file, b"broken-metadata")
         .map_err(io_to_error)?;
 
+    let vm = VM::new(vm.root_dir())?;
     let mut session = vm.session(SessionData::builder().base(commit_id))?;
     assert_eq!(
         session
@@ -147,6 +149,66 @@ fn module_cache_recovers_from_missing_or_corrupt_metadata() -> Result<(), Error>
 
     let repaired = std::fs::read(module_meta_file).map_err(io_to_error)?;
     assert_ne!(repaired, b"broken-metadata");
+
+    Ok(())
+}
+
+#[test]
+fn module_cache_recovers_from_missing_objectcode_with_live_memory_cache()
+-> Result<(), Error> {
+    let vm = VM::ephemeral()?;
+    let (counter_id, commit_id) = deploy_counter(&vm)?;
+    let module_file = module_path(&vm, counter_id);
+    let module_meta_file = module_meta_path(&vm, counter_id);
+
+    std::fs::remove_file(&module_file).map_err(io_to_error)?;
+    assert!(!module_file.exists());
+    assert!(module_meta_file.exists());
+
+    let vm = VM::new(vm.root_dir())?;
+    assert!(module_file.exists());
+
+    let mut session = vm.session(SessionData::builder().base(commit_id))?;
+    assert_eq!(
+        session
+            .call::<_, i64>(counter_id, "read_value", &(), LIMIT)?
+            .data,
+        0xfd
+    );
+
+    Ok(())
+}
+
+#[test]
+fn removed_module_stays_unavailable_until_recompiled() -> Result<(), Error> {
+    let vm = VM::ephemeral()?;
+    let (counter_id, commit_id) = deploy_counter(&vm)?;
+
+    let module_file = module_path(&vm, counter_id);
+    let module_meta_file = module_meta_path(&vm, counter_id);
+
+    vm.remove_module(counter_id)?;
+    assert!(!module_file.exists());
+    assert!(!module_meta_file.exists());
+
+    let mut session = vm.session(SessionData::builder().base(commit_id))?;
+    assert!(
+        session
+            .call::<_, i64>(counter_id, "read_value", &(), LIMIT)
+            .is_err()
+    );
+    assert!(!module_file.exists());
+    assert!(!module_meta_file.exists());
+
+    vm.recompile_module(counter_id)?;
+
+    let mut session = vm.session(SessionData::builder().base(commit_id))?;
+    assert_eq!(
+        session
+            .call::<_, i64>(counter_id, "read_value", &(), LIMIT)?
+            .data,
+        0xfd
+    );
 
     Ok(())
 }
