@@ -10,7 +10,6 @@ mod wasm64;
 use std::any::Any;
 use std::sync::Arc;
 
-use crate::contract::ContractMetadata;
 use dusk_wasmtime::{
     Caller, Extern, Func, Module, Result as WasmtimeResult, Store,
 };
@@ -20,6 +19,7 @@ use piecrust_uplink::{
 
 use crate::Error;
 use crate::config::BYTE_STORE_COST;
+use crate::contract::ContractMetadata;
 use crate::instance::{Env, WrappedInstance};
 use crate::session::INIT_METHOD;
 

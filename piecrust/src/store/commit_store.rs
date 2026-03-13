@@ -4,12 +4,14 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
+use std::collections::BTreeMap;
+use std::collections::btree_map::Keys;
+
+use piecrust_uplink::ContractId;
+
 use crate::store::commit::Commit;
 use crate::store::hasher::Hash;
 use crate::store::index::{ContractIndexElement, NewContractIndex};
-use piecrust_uplink::ContractId;
-use std::collections::BTreeMap;
-use std::collections::btree_map::Keys;
 
 #[derive(Debug)]
 pub struct CommitStore {

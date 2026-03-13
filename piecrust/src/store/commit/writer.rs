@@ -4,6 +4,15 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
+use std::collections::{BTreeMap, BTreeSet};
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
+use std::{fs, io};
+
+use dusk_wasmtime::Engine;
+use piecrust_uplink::ContractId;
+use tracing::debug;
+
 use crate::store::baseinfo::BaseInfo;
 use crate::store::commit::Commit;
 use crate::store::commit_store::CommitStore;
@@ -13,13 +22,6 @@ use crate::store::{
     BASE_FILE, BYTECODE_DIR, Bytecode, ELEMENT_FILE, LEAF_DIR, MAIN_DIR,
     MEMORY_DIR, METADATA_EXTENSION, Module, OBJECTCODE_EXTENSION,
 };
-use dusk_wasmtime::Engine;
-use piecrust_uplink::ContractId;
-use std::collections::{BTreeMap, BTreeSet};
-use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
-use std::{fs, io};
-use tracing::debug;
 
 pub struct CommitWriter;
 

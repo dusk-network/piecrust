@@ -4,11 +4,12 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
+use std::thread;
+
 use piecrust::{
     ContractData, Error, Session, SessionData, VM, contract_bytecode,
 };
 use piecrust_uplink::ContractId;
-use std::thread;
 
 const OWNER: [u8; 32] = [0u8; 32];
 const LIMIT: u64 = 1_000_000;

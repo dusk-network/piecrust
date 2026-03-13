@@ -26,22 +26,23 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, mpsc};
 use std::{fs, io, thread};
 
-use dusk_wasmtime::Engine;
-use piecrust_uplink::ContractId;
-use session::ContractDataEntry;
-
-use crate::store::commit::{
-    Commit, finalizer::CommitFinalizer, reader::CommitReader,
-    remover::CommitRemover, writer::CommitWriter,
-};
-use crate::store::commit_store::CommitStore;
-use crate::store::hasher::Hash;
 pub use bytecode::Bytecode;
+use dusk_wasmtime::Engine;
 pub use memory::{Memory, PAGE_SIZE};
 pub use metadata::Metadata;
 pub use module::Module;
+use piecrust_uplink::ContractId;
+use session::ContractDataEntry;
 pub use session::ContractSession;
 pub use tree::PageOpening;
+
+use crate::store::commit::Commit;
+use crate::store::commit::finalizer::CommitFinalizer;
+use crate::store::commit::reader::CommitReader;
+use crate::store::commit::remover::CommitRemover;
+use crate::store::commit::writer::CommitWriter;
+use crate::store::commit_store::CommitStore;
+use crate::store::hasher::Hash;
 
 const BYTECODE_DIR: &str = "bytecode";
 const MEMORY_DIR: &str = "memory";

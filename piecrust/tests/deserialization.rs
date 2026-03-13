@@ -12,8 +12,8 @@
 //! everest, metadata).  
 //!
 //! These tests focus on the *rejection* path: a malicious or buggy callee
-//! writes garbage bytes into the argbuf, and the caller must receive `Err(ContractError)`
-//! instead of panicking or UB.
+//! writes garbage bytes into the argbuf, and the caller must receive
+//! `Err(ContractError)` instead of panicking or UB.
 
 use piecrust::{ContractData, Error, SessionData, VM, contract_bytecode};
 use piecrust_uplink::ContractError;

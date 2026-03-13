@@ -4,14 +4,15 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
+use std::path::Path;
+use std::{fs, io};
+
 use crate::store::baseinfo::BaseInfo;
 use crate::store::hasher::Hash;
 use crate::store::{
     BASE_FILE, ELEMENT_FILE, LEAF_DIR, MAIN_DIR, MEMORY_DIR, TREE_POS_FILE,
     TREE_POS_OPT_FILE,
 };
-use std::path::Path;
-use std::{fs, io};
 
 pub struct CommitFinalizer;
 
