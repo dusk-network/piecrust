@@ -131,15 +131,6 @@ impl CommitReader {
                 ));
             }
 
-            let module_path =
-                bytecode_path.with_extension(OBJECTCODE_EXTENSION);
-
-            let bytecode = Bytecode::from_file(&bytecode_path)?;
-            Module::load_or_recompile(engine, &module_path, bytecode.as_ref())
-                .map_err(|err| {
-                    io::Error::new(io::ErrorKind::InvalidData, err)
-                })?;
-
             let contract_memory_dir = memory_dir.join(&contract_hex);
 
             for page_index in contract_index.page_indices() {
