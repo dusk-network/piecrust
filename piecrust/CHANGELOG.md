@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Add `Session::clear_call_hook` to remove a previously set call hook
 - Add `call-hook` feature with `CallHook` type and `Session::set_call_hook` for observing inter-contract calls before execution
 - Add functionality to remove & recompile WASM modules [#459]
 - Add pretty Debug to CallTree [#455]

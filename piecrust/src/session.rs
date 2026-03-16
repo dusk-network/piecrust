@@ -967,6 +967,12 @@ impl Session {
         self.inner_mut().call_hook = Some(hook);
     }
 
+    /// Remove the call hook, if one is set.
+    #[cfg(feature = "call-hook")]
+    pub fn clear_call_hook(&mut self) {
+        self.inner_mut().call_hook = None;
+    }
+
     /// Run the call hook, if one is set.
     ///
     /// Returns `true` if the call is allowed, `false` if rejected.

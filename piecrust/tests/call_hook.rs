@@ -247,3 +247,39 @@ fn no_hook_set_works_normally() -> Result<(), Error> {
 
     Ok(())
 }
+
+#[test]
+fn clear_call_hook_allows_previously_rejected_call() -> Result<(), Error> {
+    let vm = VM::ephemeral()?;
+    let mut session = vm.session(SessionData::builder())?;
+
+    let (counter_id, _) = session.deploy::<_, (), _>(
+        contract_bytecode!("counter"),
+        ContractData::builder().owner(OWNER),
+        LIMIT,
+    )?;
+    let (center_id, _) = session.deploy::<_, (), _>(
+        contract_bytecode!("callcenter"),
+        ContractData::builder().owner(OWNER),
+        LIMIT,
+    )?;
+
+    // Set a hook that rejects all inter-contract calls
+    session.set_call_hook(Box::new(|_, _, _| false));
+
+    // Verify the hook rejects
+    let result =
+        session.call::<_, i64>(center_id, "query_counter", &counter_id, LIMIT);
+    assert!(result.is_err(), "call should fail when hook rejects");
+
+    // Clear the hook
+    session.clear_call_hook();
+
+    // The same inter-contract call should now succeed
+    let value: i64 = session
+        .call(center_id, "query_counter", &counter_id, LIMIT)?
+        .data;
+    assert_eq!(value, 0xfc);
+
+    Ok(())
+}
