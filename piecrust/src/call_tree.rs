@@ -54,9 +54,8 @@
 //! allocated via `Box::leak()` and freed via `free_tree()`. Memory is
 //! automatically cleaned up when `CallTree` is dropped.
 
-use std::fmt;
 use std::marker::PhantomData;
-use std::mem;
+use std::{fmt, mem};
 
 use piecrust_uplink::ContractId;
 
@@ -103,8 +102,9 @@ impl fmt::Debug for CallTree {
             is_root: bool,
             is_last: bool,
         ) -> fmt::Result {
-            // SAFETY: The node pointer is valid as it comes from our tree structure.
-            // Recursive calls use children pointers which are also valid.
+            // SAFETY: The node pointer is valid as it comes from our tree
+            // structure. Recursive calls use children pointers
+            // which are also valid.
             unsafe {
                 let node_ref = &*node;
                 let is_cursor = node == cursor;
@@ -499,9 +499,9 @@ unsafe fn update_spent(node: *mut CallTreeNode) {
     unsafe {
         let node = &mut *node;
         node.children.iter_mut().for_each(|&mut child| {
-            // It should be impossible for this to underflow since the amount spent
-            // in all child nodes is always less than or equal to the amount spent
-            // in the parent node.
+            // It should be impossible for this to underflow since the amount
+            // spent in all child nodes is always less than or equal
+            // to the amount spent in the parent node.
             node.elem.spent -= (*child).elem.spent;
             update_spent(child);
         });

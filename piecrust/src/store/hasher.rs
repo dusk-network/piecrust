@@ -4,9 +4,10 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use crate::store::tree::{C_ARITY, P32_ARITY};
 use bytecheck::CheckBytes;
 use rkyv::{Archive, Deserialize, Serialize};
+
+use crate::store::tree::{C_ARITY, P32_ARITY};
 
 #[derive(
     Debug,

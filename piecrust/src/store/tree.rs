@@ -4,13 +4,15 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use std::{cell::Ref, collections::BTreeMap};
+use std::cell::Ref;
+use std::collections::BTreeMap;
 
-use crate::store::hasher::Hash;
-use crate::store::treepos::TreePos;
 use bytecheck::CheckBytes;
 use piecrust_uplink::ContractId;
 use rkyv::{Archive, Deserialize, Serialize};
+
+use crate::store::hasher::Hash;
+use crate::store::treepos::TreePos;
 
 // There are max `2^16` pages in a 32-bit memory
 const P32_HEIGHT: usize = 8;

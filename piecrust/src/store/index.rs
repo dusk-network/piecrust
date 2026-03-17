@@ -4,12 +4,14 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use crate::store::hasher::Hash;
-use crate::store::tree::{PageTree, Tree};
+use std::collections::{BTreeMap, BTreeSet};
+
 use bytecheck::CheckBytes;
 use piecrust_uplink::ContractId;
 use rkyv::{Archive, Deserialize, Serialize};
-use std::collections::{BTreeMap, BTreeSet};
+
+use crate::store::hasher::Hash;
+use crate::store::tree::{PageTree, Tree};
 
 #[derive(Debug, Clone, Archive, Deserialize, Serialize)]
 #[archive_attr(derive(CheckBytes))]

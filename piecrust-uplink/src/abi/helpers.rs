@@ -4,9 +4,6 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use crate::SCRATCH_BUF_BYTES;
-use crate::abi::state::with_arg_buf;
-
 use rkyv::ser::Serializer;
 use rkyv::ser::serializers::{
     BufferScratch, BufferSerializer, CompositeSerializer,
@@ -17,6 +14,8 @@ use rkyv::{
     check_archived_root,
 };
 
+use crate::SCRATCH_BUF_BYTES;
+use crate::abi::state::with_arg_buf;
 use crate::types::StandardBufSerializer;
 
 /// Wrap a call with its respective (de)serializers.
@@ -54,8 +53,8 @@ where
 ///
 /// This function decodes `arg_buf` with `archived_root` and therefore assumes
 /// the input bytes are a valid archive of `A`. Passing malformed or
-/// bytes from an untrusted source can cause undefined behavior. Prefer [`wrap_call`]
-/// unless the caller input is fully trusted.
+/// bytes from an untrusted source can cause undefined behavior. Prefer
+/// [`wrap_call`] unless the caller input is fully trusted.
 ///
 /// Returns the length of result written to the buffer.
 pub fn wrap_call_unchecked<A, R, F>(arg_len: u32, f: F) -> u32

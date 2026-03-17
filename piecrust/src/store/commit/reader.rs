@@ -4,6 +4,16 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
+use std::collections::BTreeMap;
+use std::fs::OpenOptions;
+use std::io::BufReader;
+use std::path::Path;
+use std::sync::{Arc, Mutex};
+use std::{fs, io};
+
+use dusk_wasmtime::Engine;
+use piecrust_uplink::ContractId;
+
 use crate::store::baseinfo::BaseInfo;
 use crate::store::commit::Commit;
 use crate::store::commit_store::CommitStore;
@@ -15,14 +25,6 @@ use crate::store::{
     BASE_FILE, BYTECODE_DIR, Bytecode, ContractSession, LEAF_DIR, MAIN_DIR,
     MEMORY_DIR, Module, OBJECTCODE_EXTENSION, TREE_POS_FILE, TREE_POS_OPT_FILE,
 };
-use dusk_wasmtime::Engine;
-use piecrust_uplink::ContractId;
-use std::collections::BTreeMap;
-use std::fs::OpenOptions;
-use std::io::BufReader;
-use std::path::Path;
-use std::sync::{Arc, Mutex};
-use std::{fs, io};
 
 pub struct CommitReader;
 

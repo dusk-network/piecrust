@@ -21,10 +21,8 @@ use rkyv::ser::Serializer;
 use rkyv::ser::serializers::{
     BufferScratch, BufferSerializer, CompositeSerializer,
 };
-use rkyv::{
-    Archive, Deserialize, Infallible, Serialize, check_archived_root,
-    validation::validators::DefaultValidator,
-};
+use rkyv::validation::validators::DefaultValidator;
+use rkyv::{Archive, Deserialize, Infallible, Serialize, check_archived_root};
 
 use crate::call_tree::{CallTree, CallTreeElem};
 use crate::contract::{ContractData, ContractMetadata, WrappedContract};

@@ -4,14 +4,11 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use std::sync::atomic::Ordering;
-use std::{
-    fmt::{Debug, Formatter},
-    io,
-    ops::{Deref, DerefMut, Range},
-    ptr::NonNull,
-    sync::atomic::AtomicUsize,
-};
+use std::fmt::{Debug, Formatter};
+use std::io;
+use std::ops::{Deref, DerefMut, Range};
+use std::ptr::NonNull;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use crumbles::{LocateFile, Mmap};
 use dusk_wasmtime::LinearMemory;

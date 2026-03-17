@@ -4,12 +4,14 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use crate::store::hasher::Hash;
-use bytecheck::CheckBytes;
-use rkyv::{Archive, Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::io;
 use std::io::{ErrorKind, Read, Write};
+
+use bytecheck::CheckBytes;
+use rkyv::{Archive, Deserialize, Serialize};
+
+use crate::store::hasher::Hash;
 
 #[derive(Debug, Clone, Default, Archive, Deserialize, Serialize)]
 #[archive_attr(derive(CheckBytes))]
@@ -91,9 +93,10 @@ impl TreePos {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::io;
     use std::io::{BufReader, BufWriter};
+
+    use super::*;
 
     #[test]
     fn merkle_position_serialization() -> Result<(), io::Error> {

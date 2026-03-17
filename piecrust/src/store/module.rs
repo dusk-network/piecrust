@@ -5,12 +5,10 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 use std::collections::HashMap;
-use std::fs;
-use std::io;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::sync::{LazyLock, RwLock};
-use std::{env, mem};
+use std::{env, fs, io, mem};
 
 use dusk_wasmtime::Engine;
 

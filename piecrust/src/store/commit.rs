@@ -12,14 +12,15 @@ pub mod writer;
 use std::cell::Ref;
 use std::sync::{Arc, Mutex};
 
+use piecrust_uplink::ContractId;
+use tracing::debug;
+
 use crate::PageOpening;
 use crate::store::Memory;
 use crate::store::commit_store::CommitStore;
 use crate::store::hasher::Hash;
 use crate::store::index::{ContractIndexElement, NewContractIndex};
 use crate::store::tree::{ContractsMerkle, position_from_contract};
-use piecrust_uplink::ContractId;
-use tracing::debug;
 
 #[derive(Debug, Clone)]
 pub(crate) struct Commit {

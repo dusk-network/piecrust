@@ -4,10 +4,11 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use piecrust::{ContractData, Error, SessionData, VM, contract_bytecode};
-use piecrust_uplink::ContractId;
 use std::path::PathBuf;
 use std::sync::Arc;
+
+use piecrust::{ContractData, Error, SessionData, VM, contract_bytecode};
+use piecrust_uplink::ContractId;
 
 const OWNER: [u8; 32] = [0u8; 32];
 const LIMIT: u64 = 1_000_000;
