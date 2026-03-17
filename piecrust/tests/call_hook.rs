@@ -247,3 +247,63 @@ fn no_hook_set_works_normally() -> Result<(), Error> {
 
     Ok(())
 }
+
+#[test]
+fn set_and_clear_call_hook_return_previous_hook() -> Result<(), Error> {
+    let vm = VM::ephemeral()?;
+    let mut session = vm.session(SessionData::builder())?;
+
+    // No hook set initially — set_call_hook should return None
+    let prev = session.set_call_hook(Box::new(|_, _, _| true));
+    assert!(prev.is_none(), "first set should return None");
+
+    // Replacing the hook should return the previous one
+    let prev = session.set_call_hook(Box::new(|_, _, _| false));
+    assert!(prev.is_some(), "second set should return the previous hook");
+
+    // Clearing should return the current hook
+    let prev = session.clear_call_hook();
+    assert!(prev.is_some(), "clear should return the hook");
+
+    // Clearing again should return None
+    let prev = session.clear_call_hook();
+    assert!(prev.is_none(), "clear on empty should return None");
+
+    Ok(())
+}
+
+#[test]
+fn clear_call_hook_allows_previously_rejected_call() -> Result<(), Error> {
+    let vm = VM::ephemeral()?;
+    let mut session = vm.session(SessionData::builder())?;
+
+    let (counter_id, _) = session.deploy::<_, (), _>(
+        contract_bytecode!("counter"),
+        ContractData::builder().owner(OWNER),
+        LIMIT,
+    )?;
+    let (center_id, _) = session.deploy::<_, (), _>(
+        contract_bytecode!("callcenter"),
+        ContractData::builder().owner(OWNER),
+        LIMIT,
+    )?;
+
+    // Set a hook that rejects all inter-contract calls
+    session.set_call_hook(Box::new(|_, _, _| false));
+
+    // Verify the hook rejects
+    let result =
+        session.call::<_, i64>(center_id, "query_counter", &counter_id, LIMIT);
+    assert!(result.is_err(), "call should fail when hook rejects");
+
+    // Clear the hook
+    session.clear_call_hook();
+
+    // The same inter-contract call should now succeed
+    let value: i64 = session
+        .call(center_id, "query_counter", &counter_id, LIMIT)?
+        .data;
+    assert_eq!(value, 0xfc);
+
+    Ok(())
+}

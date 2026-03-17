@@ -963,8 +963,14 @@ impl Session {
     /// The hook receives the callee contract ID, the function name, and the
     /// raw argument bytes.
     #[cfg(feature = "call-hook")]
-    pub fn set_call_hook(&mut self, hook: CallHook) {
-        self.inner_mut().call_hook = Some(hook);
+    pub fn set_call_hook(&mut self, hook: CallHook) -> Option<CallHook> {
+        self.inner_mut().call_hook.replace(hook)
+    }
+
+    /// Remove the call hook, if one is set.
+    #[cfg(feature = "call-hook")]
+    pub fn clear_call_hook(&mut self) -> Option<CallHook> {
+        self.inner_mut().call_hook.take()
     }
 
     /// Run the call hook, if one is set.
