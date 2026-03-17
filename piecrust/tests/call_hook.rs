@@ -249,6 +249,30 @@ fn no_hook_set_works_normally() -> Result<(), Error> {
 }
 
 #[test]
+fn set_and_clear_call_hook_return_previous_hook() -> Result<(), Error> {
+    let vm = VM::ephemeral()?;
+    let mut session = vm.session(SessionData::builder())?;
+
+    // No hook set initially — set_call_hook should return None
+    let prev = session.set_call_hook(Box::new(|_, _, _| true));
+    assert!(prev.is_none(), "first set should return None");
+
+    // Replacing the hook should return the previous one
+    let prev = session.set_call_hook(Box::new(|_, _, _| false));
+    assert!(prev.is_some(), "second set should return the previous hook");
+
+    // Clearing should return the current hook
+    let prev = session.clear_call_hook();
+    assert!(prev.is_some(), "clear should return the hook");
+
+    // Clearing again should return None
+    let prev = session.clear_call_hook();
+    assert!(prev.is_none(), "clear on empty should return None");
+
+    Ok(())
+}
+
+#[test]
 fn clear_call_hook_allows_previously_rejected_call() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
     let mut session = vm.session(SessionData::builder())?;
