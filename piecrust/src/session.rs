@@ -89,9 +89,11 @@ impl Drop for Session {
 /// A hook called before each inter-contract call.
 ///
 /// Receives the callee contract ID, the function name, and the raw argument
-/// bytes.
+/// bytes. Returns `Ok(())` to allow the call, or `Err(reason)` to reject it
+/// with a descriptive message.
 #[cfg(feature = "call-hook")]
-pub type CallHook = Box<dyn Fn(&ContractId, &str, &[u8]) -> bool + Send + Sync>;
+pub type CallHook =
+    Box<dyn Fn(&ContractId, &str, &[u8]) -> Result<(), String> + Send + Sync>;
 
 struct SessionInner {
     current: ContractId,
@@ -973,18 +975,19 @@ impl Session {
 
     /// Run the call hook, if one is set.
     ///
-    /// Returns `true` if the call is allowed, `false` if rejected.
+    /// Returns `Ok(())` if the call is allowed (or no hook is set), or
+    /// `Err(reason)` if the hook rejects.
     #[cfg(feature = "call-hook")]
     pub(crate) fn call_hook(
         &self,
         callee: &ContractId,
         fn_name: &str,
         arg: &[u8],
-    ) -> bool {
+    ) -> Result<(), String> {
         if let Some(hook) = &self.inner().call_hook {
             hook(callee, fn_name, arg)
         } else {
-            true
+            Ok(())
         }
     }
 }

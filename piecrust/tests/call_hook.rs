@@ -39,7 +39,7 @@ impl CallRecorder {
                 fn_name: fn_name.to_owned(),
                 fn_args: fn_args.to_vec(),
             });
-            true
+            Ok(())
         })
     }
 
@@ -205,7 +205,11 @@ fn call_hook_can_reject_call() -> Result<(), Error> {
     // Set a hook that rejects calls to the counter's "increment" function
     let reject_id = counter_id;
     session.set_call_hook(Box::new(move |contract, fn_name, _| {
-        !(*contract == reject_id && fn_name == "increment")
+        if *contract == reject_id && fn_name == "increment" {
+            Err("increment rejected by test hook".into())
+        } else {
+            Ok(())
+        }
     }));
 
     // Attempt to increment via callcenter — the hook should reject it
@@ -215,7 +219,12 @@ fn call_hook_can_reject_call() -> Result<(), Error> {
         &counter_id,
         LIMIT,
     );
-    assert!(result.is_err(), "call should fail when hook rejects");
+    let err = result.expect_err("call should fail when hook rejects");
+    let msg = format!("{err}");
+    assert!(
+        msg.contains("increment rejected by test hook"),
+        "error should contain the hook's rejection reason, got: {msg}"
+    );
 
     // Verify the counter value is unchanged
     let value: i64 = session.call(counter_id, "read_value", &(), LIMIT)?.data;
@@ -254,11 +263,11 @@ fn set_and_clear_call_hook_return_previous_hook() -> Result<(), Error> {
     let mut session = vm.session(SessionData::builder())?;
 
     // No hook set initially — set_call_hook should return None
-    let prev = session.set_call_hook(Box::new(|_, _, _| true));
+    let prev = session.set_call_hook(Box::new(|_, _, _| Ok(())));
     assert!(prev.is_none(), "first set should return None");
 
     // Replacing the hook should return the previous one
-    let prev = session.set_call_hook(Box::new(|_, _, _| false));
+    let prev = session.set_call_hook(Box::new(|_, _, _| Err("reject".into())));
     assert!(prev.is_some(), "second set should return the previous hook");
 
     // Clearing should return the current hook
@@ -289,7 +298,7 @@ fn clear_call_hook_allows_previously_rejected_call() -> Result<(), Error> {
     )?;
 
     // Set a hook that rejects all inter-contract calls
-    session.set_call_hook(Box::new(|_, _, _| false));
+    session.set_call_hook(Box::new(|_, _, _| Err("rejected".into())));
 
     // Verify the hook rejects
     let result =
