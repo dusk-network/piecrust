@@ -255,7 +255,7 @@ impl Module {
         Ok(())
     }
 
-    pub(crate) fn load_or_recompile<P: AsRef<Path>>(
+    pub(crate) fn load<P: AsRef<Path>>(
         engine: &Engine,
         module_path: P,
         bytecode: &[u8],
@@ -270,38 +270,61 @@ impl Module {
 
         if let Some(module) = cached_module {
             let mut module_bytes = None;
-            let cache_needs_repair = !module_path.exists()
-                || validate_cache_meta(
-                    module_path,
-                    module_bytes.get_or_insert_with(|| module.serialize()),
-                    bytecode,
-                )
-                .is_err();
-
-            if cache_needs_repair {
-                module.write_module_data(module_path, bytecode)?;
-            }
-
+            validate_cache_meta(
+                module_path,
+                module_bytes.get_or_insert_with(|| module.serialize()),
+                bytecode,
+            )?;
             return Ok(module);
         }
 
-        let module = match Self::from_cache_file(engine, module_path, bytecode)
-        {
-            Ok(module) => module,
-            Err(err) => {
-                tracing::warn!(
-                    "module cache {module_path:?} failed validation; recompiling from bytecode: {err}",
-                );
-                let module = Self::from_bytecode(engine, bytecode)?;
-                module.write_module_data(module_path, bytecode)?;
-                module
-            }
+        let module = Self::from_cache_file(engine, module_path, bytecode)?;
+        insert_cached_module(module_path, bytecode, &module);
+        Ok(module)
+    }
+
+    pub(crate) fn load_or_recompile<P: AsRef<Path>>(
+        engine: &Engine,
+        module_path: P,
+        bytecode: &[u8],
+    ) -> io::Result<Self> {
+        let module_path = module_path.as_ref();
+        let cache_key = module_cache_key(module_path, bytecode);
+
+        let cached_module = {
+            let cache = MODULE_CACHE.read().unwrap_or_else(|e| e.into_inner());
+            cache.get(&cache_key).cloned()
         };
 
-        MODULE_CACHE
-            .write()
-            .unwrap_or_else(|e| e.into_inner())
-            .insert(cache_key, module.clone());
+        let module = match cached_module {
+            Some(module) => {
+                let mut module_bytes = None;
+                let cache_needs_repair = !module_path.exists()
+                    || validate_cache_meta(
+                        module_path,
+                        module_bytes.get_or_insert_with(|| module.serialize()),
+                        bytecode,
+                    )
+                    .is_err();
+
+                if cache_needs_repair {
+                    module.write_module_data(module_path, bytecode)?;
+                }
+
+                module
+            }
+            None => match Self::load(engine, module_path, bytecode) {
+                Ok(module) => module,
+                Err(err) => {
+                    tracing::warn!(
+                        "module cache {module_path:?} failed validation; recompiling from bytecode: {err}",
+                    );
+                    let module = Self::from_bytecode(engine, bytecode)?;
+                    module.write_module_data(module_path, bytecode)?;
+                    module
+                }
+            },
+        };
 
         Ok(module)
     }
