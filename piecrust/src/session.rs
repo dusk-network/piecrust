@@ -13,7 +13,9 @@ use std::ptr::NonNull;
 use std::sync::{Arc, mpsc};
 
 use bytecheck::CheckBytes;
-use dusk_wasmtime::{Engine, LinearMemory, MemoryCreator, MemoryType};
+use dusk_wasmtime::{
+    Engine, LinearMemory, MemoryCreator, MemoryType, Module as WasmtimeModule,
+};
 use piecrust_uplink::{
     ARGBUF_LEN, CONTRACT_ID_BYTES, ContractId, Event, SCRATCH_BUF_BYTES,
 };
@@ -98,6 +100,7 @@ struct SessionInner {
 
     call_tree: CallTree,
     instances: BTreeMap<ContractId, Box<WrappedInstance>>,
+    compiled_modules: BTreeMap<ContractId, WasmtimeModule>,
     debug: Vec<String>,
     data: SessionData,
 
@@ -118,6 +121,7 @@ impl Debug for SessionInner {
             .field("current", &self.current)
             .field("call_tree", &self.call_tree)
             .field("instances_len", &self.instances.len())
+            .field("compiled_modules_len", &self.compiled_modules.len())
             .field("debug_len", &self.debug.len())
             .field("data", &self.data)
             .field("buffer_len", &self.buffer.len())
@@ -186,6 +190,7 @@ impl Session {
             current: ContractId::from_bytes([0; CONTRACT_ID_BYTES]),
             call_tree: CallTree::new(),
             instances: BTreeMap::new(),
+            compiled_modules: BTreeMap::new(),
             debug: vec![],
             data,
             contract_session,
@@ -378,6 +383,7 @@ impl Session {
                 metadata_bytes.as_slice(),
             )
             .map_err(|err| PersistenceError(Arc::new(err)))?;
+        self.inner_mut().compiled_modules.remove(&contract_id);
 
         let instantiate = || {
             self.create_instance(contract_id)?;
@@ -412,6 +418,7 @@ impl Session {
             self.inner_mut()
                 .contract_session
                 .remove_contract(&contract_id);
+            self.inner_mut().compiled_modules.remove(&contract_id);
         })
     }
 
@@ -559,6 +566,8 @@ impl Session {
         self.inner_mut()
             .contract_session
             .replace(contract, new_contract)?;
+        self.inner_mut().compiled_modules.remove(&contract);
+        self.inner_mut().compiled_modules.remove(&new_contract);
 
         Ok(self)
     }
@@ -688,18 +697,29 @@ impl Session {
             .map_err(|err| PersistenceError(Arc::new(err)))?
             .ok_or(Error::ContractDoesNotExist(contract_id))?;
 
-        let contract = WrappedContract::new(
-            &self.engine,
-            store_data.bytecode,
-            Some(store_data.module.serialize()),
-        )?;
+        let module = if let Some(module) =
+            self.inner().compiled_modules.get(&contract_id)
+        {
+            module.clone()
+        } else {
+            let module = unsafe {
+                WasmtimeModule::deserialize(
+                    &self.engine,
+                    store_data.module.serialize(),
+                )?
+            };
+            self.inner_mut()
+                .compiled_modules
+                .insert(contract_id, module.clone());
+            module
+        };
 
         self.inner_mut().current = contract_id;
 
         let instance = WrappedInstance::new(
             self.clone(),
             contract_id,
-            &contract,
+            &module,
             store_data.memory,
         )?;
 

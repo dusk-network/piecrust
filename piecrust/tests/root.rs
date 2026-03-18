@@ -11,6 +11,38 @@ use piecrust::{
 const OWNER: [u8; 32] = [0u8; 32];
 const LIMIT: u64 = 1_000_000;
 
+fn run_sequence(vm: &VM) -> Result<Vec<[u8; 32]>, Error> {
+    let mut roots = Vec::new();
+
+    let mut session = vm.session(SessionData::builder())?;
+    let (counter_id, _) = session.deploy::<_, (), _>(
+        contract_bytecode!("counter"),
+        ContractData::builder().owner(OWNER),
+        LIMIT,
+    )?;
+    session.call::<_, ()>(counter_id, "increment", &(), LIMIT)?;
+    let commit_1 = session.commit()?;
+    roots.push(commit_1);
+
+    let mut session = vm.session(SessionData::builder().base(commit_1))?;
+    session.call::<_, ()>(counter_id, "increment", &(), LIMIT)?;
+    session.call::<_, ()>(counter_id, "increment", &(), LIMIT)?;
+    let commit_2 = session.commit()?;
+    roots.push(commit_2);
+
+    let mut session = vm.session(SessionData::builder().base(commit_2))?;
+    let (box_id, _) = session.deploy::<_, (), _>(
+        contract_bytecode!("box"),
+        ContractData::builder().owner(OWNER),
+        LIMIT,
+    )?;
+    session.call::<i16, ()>(box_id, "set", &0x33, LIMIT)?;
+    let commit_3 = session.commit()?;
+    roots.push(commit_3);
+
+    Ok(roots)
+}
+
 #[test]
 pub fn state_root_calculation() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
@@ -59,6 +91,22 @@ pub fn state_root_calculation() -> Result<(), Error> {
         root_2, root_3,
         "The root of a session should be the same if no modifications were made"
     );
+    Ok(())
+}
+
+#[test]
+pub fn deterministic_commit_roots_for_same_sequence() -> Result<(), Error> {
+    let vm_a = VM::ephemeral()?;
+    let vm_b = VM::ephemeral()?;
+
+    let roots_a = run_sequence(&vm_a)?;
+    let roots_b = run_sequence(&vm_b)?;
+
+    assert_eq!(
+        roots_a, roots_b,
+        "the same call sequence should produce identical commit roots"
+    );
+
     Ok(())
 }
 
