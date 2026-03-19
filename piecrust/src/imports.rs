@@ -156,7 +156,7 @@ pub(crate) fn hq(
 
     let name_len = name_len as usize;
 
-    let (name, arg, gas_remaining) = {
+    let (name, gas_remaining) = {
         let instance = env.self_instance();
         check_ptr(instance, name_ofs, name_len)?;
         check_arg(instance, arg_len)?;
@@ -167,21 +167,24 @@ pub(crate) fn hq(
                 .map(ToOwned::to_owned)
         })?;
 
-        let arg = instance.with_arg_buf(|arg_buf| {
-            let arg_len = arg_len as usize;
-            Vec::from(&arg_buf[..arg_len])
-        });
-
         let gas_remaining = instance.get_remaining_gas();
 
-        (name, arg, gas_remaining)
+        (name, gas_remaining)
     };
 
     let host_query = env
         .host_query_arc(&name)
         .ok_or_else(move || Error::MissingHostQuery(name))?;
     let mut query_arg: Box<dyn Any> = Box::new(());
-    let query_cost = host_query.deserialize_and_price(&arg, &mut query_arg);
+    let query_cost = {
+        let instance = env.self_instance();
+        instance.with_arg_buf(|arg_buf| {
+            host_query.deserialize_and_price(
+                &arg_buf[..arg_len as usize],
+                &mut query_arg,
+            )
+        })
+    };
 
     if gas_remaining < query_cost {
         env.self_instance().set_remaining_gas(0);
@@ -409,15 +412,22 @@ fn callstack(mut env: Caller<Env>) -> i32 {
     let env = env.data_mut();
     let call_ids: Vec<_> =
         env.call_ids().into_iter().skip(1).copied().collect();
-    let caller_count = call_ids.len();
     let instance = env.self_instance();
 
-    for (i, contract_id) in call_ids.into_iter().enumerate() {
-        instance.with_arg_buf_mut(|buf| {
-            buf[i * CONTRACT_ID_BYTES..(i + 1) * CONTRACT_ID_BYTES]
-                .copy_from_slice(contract_id.as_bytes());
-        });
-    }
+    let caller_count = instance.with_arg_buf_mut(|buf| {
+        let mut written = 0usize;
+        for contract_id in call_ids {
+            let start = written * CONTRACT_ID_BYTES;
+            let end = start + CONTRACT_ID_BYTES;
+            if end > buf.len() {
+                break;
+            }
+
+            buf[start..end].copy_from_slice(contract_id.as_bytes());
+            written += 1;
+        }
+        written
+    });
     caller_count as i32
 }
 
