@@ -11,7 +11,6 @@ use dusk_wasmtime::{Instance, Module, Mutability, Store, ValType};
 use piecrust_uplink::{ARGBUF_LEN, ContractId, Event};
 
 use crate::Error;
-use crate::contract::WrappedContract;
 use crate::imports::Imports;
 use crate::session::Session;
 use crate::store::Memory;
@@ -85,7 +84,7 @@ impl WrappedInstance {
     pub fn new(
         session: Session,
         contract_id: ContractId,
-        contract: &WrappedContract,
+        contract: &Module,
         memory: Memory,
     ) -> Result<Self, Error> {
         let mut memory = memory;
@@ -96,8 +95,7 @@ impl WrappedInstance {
             session,
         };
 
-        let module =
-            unsafe { Module::deserialize(&engine, contract.as_bytes())? };
+        let module = contract.clone();
         let mut store = Store::new(&engine, env);
 
         // Ensure there is at most one memory exported, and that it is called
