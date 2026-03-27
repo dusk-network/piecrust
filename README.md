@@ -1,7 +1,7 @@
 # π-crust
 
 [![Repository](https://img.shields.io/badge/github-piecrust-blueviolet?logo=github)](https://github.com/dusk-network/piecrust)
-![Build Status](https://github.com/dusk-network/piecrust/workflows/build/badge.svg)
+[![Build Status](https://github.com/dusk-network/piecrust/actions/workflows/build.yml/badge.svg)](https://github.com/dusk-network/piecrust/actions)
 [![Documentation](https://img.shields.io/badge/docs-piecrust-blue?logo=rust)](https://docs.rs/piecrust/)
 
 `piecrust` is a Rust workspace containing two crates, `piecrust` and `piecrust-uplink`, that together form the WASM virtual machine for running, handling and creating Dusk smart contracts.
