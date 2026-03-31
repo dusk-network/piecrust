@@ -12,6 +12,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Add `call-hook` feature with `CallHook` type, `Session::set_call_hook`, and `Session::clear_call_hook` for intercepting and optionally rejecting inter-contract calls with a descriptive error message; both methods return the previous hook value
+
+### Changed
+
+- Change `deploy` and `deploy_raw` to return `(ContractId, Option<CallReceipt>)`, exposing init gas spent, events, and call tree to callers
+
+### Fixed
+
+- Reduce host-query argument copying and streamline callstack export writes on the execution path
+- Cache compiled modules in memory and avoid redundant module reloads during commit-store reconstruction
+- Stop execution-path contract loads from silently recompiling missing modules; shaded modules now remain unavailable until explicitly recompiled.
+
+## [0.30.0] - 2026-02-27
+
+### Added
+
 - Add functionality to remove & recompile WASM modules [#459]
 - Add pretty Debug to CallTree [#455]
 - Add docs & simple unit tests to CallTree [#453]
@@ -19,9 +34,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Change `deploy` and `deploy_raw` to return `(ContractId, Option<CallReceipt>)`, exposing init gas spent, events, and call tree to callers
 - Update workspace and contracts to Rust edition 2024 [#466]
-- Update `dusk-plonk` dev-dependency to 0.22.0-rc.0 [#466]
+- Update `dusk-plonk` dev-dependency to 0.22.0 [#466]
 - Enable `gc` feature in `dusk-wasmtime` for reference-types support (required by Rust 1.82+) [#466]
 - Switch contract builds to wasm32 with standard toolchain, keeping c-example on wasm64 [#466]
 - Allow to exclude host queries when creating a session
