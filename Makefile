@@ -43,11 +43,16 @@ clippy: ## Run clippy on all crates
 	@$(MAKE) -C ./piecrust-uplink $@
 	@$(MAKE) -C ./piecrust $@
 
+cq: ## Run code quality checks (formatting + clippy)
+	@$(MAKE) fmt CHECK=1
+	@$(MAKE) clippy
+
 no-std: ## Run no_std build check
 	@$(MAKE) -C ./piecrust-uplink $@
 
 fmt: ## Format all code
-	@cargo +nightly fmt --all
+	@rustup component add --toolchain nightly rustfmt 2>/dev/null || true
+	@cargo +nightly fmt --all $(if $(CHECK),-- --check,)
 
 check: ## Run cargo check
 	@cargo check
@@ -72,4 +77,4 @@ MAX_COUNTER_CONTRACT_SIZE = 8192
 assert-counter-contract-small: contracts
 	@test `wc -c target/stripped/counter.wasm | sed 's/^[^0-9]*\([0-9]*\).*/\1/'` -lt $(MAX_COUNTER_CONTRACT_SIZE);
 
-.PHONY: help test contracts contracts-wasm64 setup-compiler cold-reboot assert-counter-contract-small clippy no-std fmt check doc clean
+.PHONY: help test contracts contracts-wasm64 setup-compiler cold-reboot assert-counter-contract-small clippy cq no-std fmt check doc clean

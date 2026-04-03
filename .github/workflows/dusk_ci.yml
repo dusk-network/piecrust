@@ -1,0 +1,35 @@
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+name: Continuous integration
+
+jobs:
+  code-quality:
+    name: Code quality
+    uses: dusk-network/.github/.github/workflows/run-make.yml@main
+    with:
+      make_target: cq
+
+  test-linux:
+    name: Run tests (Linux)
+    uses: dusk-network/.github/.github/workflows/run-make.yml@main
+    with:
+      runner: ubuntu-latest
+      make_target: test
+
+  test-macos-arm:
+    name: Run tests (macOS ARM)
+    uses: dusk-network/.github/.github/workflows/run-make.yml@main
+    with:
+      runner: macos-latest-xlarge
+      make_target: test
+
+  no-std:
+    name: Run no-std checks
+    uses: dusk-network/.github/.github/workflows/run-make.yml@main
+    with:
+      make_target: no-std
+      rust_target: wasm32-unknown-unknown

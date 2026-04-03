@@ -16,7 +16,7 @@ impl Serialize for ContractId {
         &self,
         serializer: S,
     ) -> Result<S::Ok, S::Error> {
-        hex::serde::serialize(&self.to_bytes(), serializer)
+        hex::serde::serialize(self.to_bytes(), serializer)
     }
 }
 

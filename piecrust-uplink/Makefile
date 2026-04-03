@@ -7,6 +7,7 @@ test: ## Run tests
 
 clippy: ## Run clippy
 	@cargo clippy -- -D warnings
+	@cargo clippy --no-default-features --features serde -- -D warnings
 
 no-std: ## Build for wasm32 (no_std check)
 	@cargo build --release --no-default-features --features serde --target wasm32-unknown-unknown
