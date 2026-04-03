@@ -20,13 +20,6 @@ jobs:
       runner: ubuntu-latest
       make_target: test
 
-  test-macos-x86:
-    name: Run tests (macOS x86)
-    uses: dusk-network/.github/.github/workflows/run-make.yml@main
-    with:
-      runner: macos-latest-large
-      make_target: test
-
   test-macos-arm:
     name: Run tests (macOS ARM)
     uses: dusk-network/.github/.github/workflows/run-make.yml@main
