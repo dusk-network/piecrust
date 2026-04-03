@@ -6,5 +6,6 @@ test: ## Run tests
 
 clippy: ## Run clippy
 	@cargo clippy --all-features -- -D warnings
+	@cargo clippy --no-default-features -- -D warnings
 
 .PHONY: help test clippy
