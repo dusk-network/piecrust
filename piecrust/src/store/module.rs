@@ -12,6 +12,8 @@ use std::{env, fs, io, mem};
 
 use dusk_wasmtime::Engine;
 
+use super::dedup;
+
 /// WASM object code belonging to a given contract.
 #[derive(Debug, Clone)]
 pub struct Module {
@@ -93,17 +95,13 @@ fn invalidate_cached_modules(module_path: &Path) {
         .retain(|key, _| key.path != module_path);
 }
 
-fn write_cache_meta(
-    module_path: &Path,
-    module_bytes: &[u8],
-    bytecode: &[u8],
-) -> io::Result<()> {
+fn cache_meta_bytes(module_bytes: &[u8], bytecode: &[u8]) -> Vec<u8> {
     let mut meta = Vec::with_capacity(MODULE_CACHE_META_LEN);
     meta.extend_from_slice(&MODULE_CACHE_META_VERSION.to_le_bytes());
     meta.extend_from_slice(blake3::hash(bytecode).as_bytes());
     meta.extend_from_slice(blake3::hash(module_bytes).as_bytes());
     meta.extend_from_slice(cache_runtime_fingerprint().as_bytes());
-    fs::write(cache_meta_path(module_path), meta)
+    meta
 }
 
 fn validate_cache_meta(
@@ -248,9 +246,19 @@ impl Module {
         bytecode: &[u8],
     ) -> io::Result<()> {
         let module_path = module_path.as_ref();
+        let store_root = module_path.parent().ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!("module path has no parent: {module_path:?}"),
+            )
+        })?;
         let module_bytes = self.serialize();
-        fs::write(module_path, &module_bytes)?;
-        write_cache_meta(module_path, &module_bytes, bytecode)?;
+        dedup::write(store_root, "objectcode", module_path, &module_bytes)?;
+
+        let meta_path = cache_meta_path(module_path);
+        let meta = cache_meta_bytes(&module_bytes, bytecode);
+        dedup::write(store_root, "objectcode-meta", meta_path, meta)?;
+
         insert_cached_module(module_path, bytecode, self);
         Ok(())
     }

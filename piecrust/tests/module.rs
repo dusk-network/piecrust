@@ -4,6 +4,8 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
+#[cfg(unix)]
+use std::os::unix::fs::MetadataExt;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -27,6 +29,14 @@ fn module_meta_path(vm: &VM, contract_id: ContractId) -> PathBuf {
     module.with_extension("a.meta")
 }
 
+fn bytecode_path(vm: &VM, contract_id: ContractId) -> PathBuf {
+    let contract_hex = hex::encode(contract_id);
+    vm.root_dir()
+        .join("main")
+        .join("bytecode")
+        .join(&contract_hex)
+}
+
 fn deploy_counter(vm: &VM) -> Result<(ContractId, [u8; 32]), Error> {
     let mut session = vm.session(SessionData::builder())?;
     let (counter_id, _) = session.deploy::<_, (), _>(
@@ -41,6 +51,62 @@ fn deploy_counter(vm: &VM) -> Result<(ContractId, [u8; 32]), Error> {
 
 fn io_to_error(err: std::io::Error) -> Error {
     Error::PersistenceError(Arc::new(err))
+}
+
+#[cfg(unix)]
+fn inode(path: &PathBuf) -> Result<u64, Error> {
+    Ok(std::fs::metadata(path).map_err(io_to_error)?.ino())
+}
+
+#[cfg(unix)]
+#[test]
+fn duplicate_bytecode_and_modules_share_storage() -> Result<(), Error> {
+    let vm = VM::ephemeral()?;
+    let counter_a = ContractId::from_bytes([3; 32]);
+    let counter_b = ContractId::from_bytes([4; 32]);
+    let mut session = vm.session(SessionData::builder())?;
+
+    session.deploy::<_, (), _>(
+        contract_bytecode!("counter"),
+        ContractData::builder().owner(OWNER).contract_id(counter_a),
+        LIMIT,
+    )?;
+    session.deploy::<_, (), _>(
+        contract_bytecode!("counter"),
+        ContractData::builder().owner(OWNER).contract_id(counter_b),
+        LIMIT,
+    )?;
+    let commit_id = session.commit()?;
+
+    assert_eq!(
+        inode(&bytecode_path(&vm, counter_a))?,
+        inode(&bytecode_path(&vm, counter_b))?
+    );
+    assert_eq!(
+        inode(&module_path(&vm, counter_a))?,
+        inode(&module_path(&vm, counter_b))?
+    );
+    assert_eq!(
+        inode(&module_meta_path(&vm, counter_a))?,
+        inode(&module_meta_path(&vm, counter_b))?
+    );
+
+    let vm = VM::new(vm.root_dir())?;
+    let mut session = vm.session(SessionData::builder().base(commit_id))?;
+    assert_eq!(
+        session
+            .call::<_, i64>(counter_a, "read_value", &(), LIMIT)?
+            .data,
+        0xfc
+    );
+    assert_eq!(
+        session
+            .call::<_, i64>(counter_b, "read_value", &(), LIMIT)?
+            .data,
+        0xfc
+    );
+
+    Ok(())
 }
 
 #[test]
