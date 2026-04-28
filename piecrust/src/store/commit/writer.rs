@@ -159,7 +159,7 @@ impl CommitWriter {
                 // we write them to the main location
                 dedup::write(
                     &directories.bytecode_main_dir,
-                    "wasm",
+                    dedup::Kind::Bytecode,
                     bytecode_main_path,
                     contract_data.bytecode.as_ref(),
                 )?;

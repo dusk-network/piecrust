@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Contain host-query panics by default and return them as contract panic errors [#476]
 - Move `rand` from runtime dependencies to dev-dependencies.
 - Deduplicate stored contract bytecode and compiled module payloads.
+- Remove unreferenced deduplicated contract payload canonicals.
 
 ### Fixed
 

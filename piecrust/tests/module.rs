@@ -6,7 +6,7 @@
 
 #[cfg(unix)]
 use std::os::unix::fs::MetadataExt;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use piecrust::{ContractData, Error, SessionData, VM, contract_bytecode};
@@ -15,13 +15,13 @@ use piecrust_uplink::ContractId;
 const OWNER: [u8; 32] = [0u8; 32];
 const LIMIT: u64 = 1_000_000;
 
+fn bytecode_dir(vm: &VM) -> PathBuf {
+    vm.root_dir().join("main").join("bytecode")
+}
+
 fn module_path(vm: &VM, contract_id: ContractId) -> PathBuf {
     let contract_hex = hex::encode(contract_id);
-    vm.root_dir()
-        .join("main") // MAIN_DIR
-        .join("bytecode") // BYTECODE_DIR
-        .join(&contract_hex)
-        .with_extension("a") // OBJECTCODE_EXTENSION
+    bytecode_dir(vm).join(&contract_hex).with_extension("a") // OBJECTCODE_EXTENSION
 }
 
 fn module_meta_path(vm: &VM, contract_id: ContractId) -> PathBuf {
@@ -31,10 +31,23 @@ fn module_meta_path(vm: &VM, contract_id: ContractId) -> PathBuf {
 
 fn bytecode_path(vm: &VM, contract_id: ContractId) -> PathBuf {
     let contract_hex = hex::encode(contract_id);
-    vm.root_dir()
-        .join("main")
-        .join("bytecode")
-        .join(&contract_hex)
+    bytecode_dir(vm).join(&contract_hex)
+}
+
+fn dedup_canonical_path(vm: &VM, kind: &str, bytes: &[u8]) -> PathBuf {
+    bytecode_dir(vm)
+        .join(".dedup")
+        .join(kind)
+        .join(blake3::hash(bytes).to_hex().to_string())
+}
+
+fn dedup_canonical_path_for_file(
+    vm: &VM,
+    kind: &str,
+    path: &Path,
+) -> Result<PathBuf, Error> {
+    let bytes = std::fs::read(path).map_err(io_to_error)?;
+    Ok(dedup_canonical_path(vm, kind, &bytes))
 }
 
 fn deploy_counter(vm: &VM) -> Result<(ContractId, [u8; 32]), Error> {
@@ -116,16 +129,39 @@ fn remove_module() -> Result<(), Error> {
 
     let module_file = module_path(&vm, counter_id);
     let module_meta_file = module_meta_path(&vm, counter_id);
+    let module_canonical =
+        dedup_canonical_path_for_file(&vm, "objectcode", &module_file)?;
+    let module_meta_canonical = dedup_canonical_path_for_file(
+        &vm,
+        "objectcode-meta",
+        &module_meta_file,
+    )?;
     assert!(module_file.exists());
     assert!(module_meta_file.exists());
+    assert!(module_canonical.exists());
+    assert!(module_meta_canonical.exists());
 
     vm.remove_module(counter_id)?;
     assert!(!module_file.exists());
     assert!(!module_meta_file.exists());
+    assert!(!module_canonical.exists());
+    assert!(!module_meta_canonical.exists());
 
     vm.recompile_module(counter_id)?;
     assert!(module_file.exists());
     assert!(module_meta_file.exists());
+    assert!(
+        dedup_canonical_path_for_file(&vm, "objectcode", &module_file)?
+            .exists()
+    );
+    assert!(
+        dedup_canonical_path_for_file(
+            &vm,
+            "objectcode-meta",
+            &module_meta_file
+        )?
+        .exists()
+    );
 
     let mut session = vm.session(SessionData::builder().base(commit_id))?;
     assert_eq!(
@@ -140,6 +176,128 @@ fn remove_module() -> Result<(), Error> {
             .call::<_, i64>(counter_id, "read_value", &(), LIMIT)?
             .data,
         0xfe
+    );
+
+    Ok(())
+}
+
+#[test]
+fn removing_duplicate_module_keeps_shared_canonical() -> Result<(), Error> {
+    let vm = VM::ephemeral()?;
+    let counter_a = ContractId::from_bytes([5; 32]);
+    let counter_b = ContractId::from_bytes([6; 32]);
+    let mut session = vm.session(SessionData::builder())?;
+
+    session.deploy::<_, (), _>(
+        contract_bytecode!("counter"),
+        ContractData::builder().owner(OWNER).contract_id(counter_a),
+        LIMIT,
+    )?;
+    session.deploy::<_, (), _>(
+        contract_bytecode!("counter"),
+        ContractData::builder().owner(OWNER).contract_id(counter_b),
+        LIMIT,
+    )?;
+    let commit_id = session.commit()?;
+
+    let module_a = module_path(&vm, counter_a);
+    let module_b = module_path(&vm, counter_b);
+    let meta_a = module_meta_path(&vm, counter_a);
+    let meta_b = module_meta_path(&vm, counter_b);
+    let module_canonical =
+        dedup_canonical_path_for_file(&vm, "objectcode", &module_a)?;
+    let meta_canonical =
+        dedup_canonical_path_for_file(&vm, "objectcode-meta", &meta_a)?;
+
+    vm.remove_module(counter_a)?;
+
+    assert!(!module_a.exists());
+    assert!(!meta_a.exists());
+    assert!(module_b.exists());
+    assert!(meta_b.exists());
+    assert!(module_canonical.exists());
+    assert!(meta_canonical.exists());
+
+    vm.recompile_module(counter_a)?;
+
+    let mut session = vm.session(SessionData::builder().base(commit_id))?;
+    assert_eq!(
+        session
+            .call::<_, i64>(counter_a, "read_value", &(), LIMIT)?
+            .data,
+        0xfc
+    );
+    assert_eq!(
+        session
+            .call::<_, i64>(counter_b, "read_value", &(), LIMIT)?
+            .data,
+        0xfc
+    );
+
+    Ok(())
+}
+
+#[test]
+fn migration_removes_replaced_bytecode_canonical() -> Result<(), Error> {
+    let vm = VM::ephemeral()?;
+    let mut session = vm.session(SessionData::builder())?;
+
+    let (contract, _) = session.deploy::<_, (), _>(
+        contract_bytecode!("counter"),
+        ContractData::builder().owner(OWNER),
+        LIMIT,
+    )?;
+    session.call::<_, ()>(contract, "increment", &(), LIMIT)?;
+    session.call::<_, ()>(contract, "increment", &(), LIMIT)?;
+    let root = session.commit()?;
+
+    let old_canonical =
+        dedup_canonical_path(&vm, "bytecode", contract_bytecode!("counter"));
+    assert!(old_canonical.exists());
+
+    let mut session = vm.session(SessionData::builder().base(root))?;
+    session = session.migrate(
+        contract,
+        contract_bytecode!("double_counter"),
+        ContractData::builder(),
+        LIMIT,
+        |new_contract, session| {
+            let old_counter_value = session
+                .call::<_, i64>(contract, "read_value", &(), LIMIT)?
+                .data;
+            let (left_counter_value, _) = session
+                .call::<_, (i64, i64)>(new_contract, "read_values", &(), LIMIT)?
+                .data;
+            let diff = old_counter_value - left_counter_value;
+
+            for _ in 0..diff {
+                session.call::<_, ()>(
+                    new_contract,
+                    "increment_left",
+                    &(),
+                    LIMIT,
+                )?;
+            }
+
+            Ok(())
+        },
+    )?;
+    let root = session.commit()?;
+
+    let new_canonical = dedup_canonical_path(
+        &vm,
+        "bytecode",
+        contract_bytecode!("double_counter"),
+    );
+    assert!(!old_canonical.exists());
+    assert!(new_canonical.exists());
+
+    let mut session = vm.session(SessionData::builder().base(root))?;
+    assert_eq!(
+        session
+            .call::<_, (i64, i64)>(contract, "read_values", &(), LIMIT)?
+            .data,
+        (0xfe, 0xcf)
     );
 
     Ok(())

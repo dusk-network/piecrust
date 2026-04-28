@@ -253,11 +253,16 @@ impl Module {
             )
         })?;
         let module_bytes = self.serialize();
-        dedup::write(store_root, "objectcode", module_path, &module_bytes)?;
+        dedup::write(
+            store_root,
+            dedup::Kind::Objectcode,
+            module_path,
+            &module_bytes,
+        )?;
 
         let meta_path = cache_meta_path(module_path);
         let meta = cache_meta_bytes(&module_bytes, bytecode);
-        dedup::write(store_root, "objectcode-meta", meta_path, meta)?;
+        dedup::write(store_root, dedup::Kind::ObjectcodeMeta, meta_path, meta)?;
 
         insert_cached_module(module_path, bytecode, self);
         Ok(())
@@ -345,13 +350,14 @@ impl Module {
 
         invalidate_cached_modules(module_path);
 
-        if module_path.exists() {
-            fs::remove_file(module_path)?;
-        }
-
-        if meta_path.exists() {
-            fs::remove_file(meta_path)?;
-        }
+        let store_root = module_path.parent().ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!("module path has no parent: {module_path:?}"),
+            )
+        })?;
+        dedup::remove_file(store_root, dedup::Kind::Objectcode, module_path)?;
+        dedup::remove_file(store_root, dedup::Kind::ObjectcodeMeta, meta_path)?;
 
         Ok(())
     }
