@@ -8,6 +8,7 @@ use std::fs::{self, OpenOptions};
 use std::io::{self, Write};
 use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
+use std::process;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -58,7 +59,7 @@ where
     replace_with_hard_link_or_copy(&canonical, target)?;
 
     if let Some(old_hash) = old_hash.filter(|old_hash| old_hash != &hash) {
-        remove_unreferenced_hash(store_root, kind, &old_hash)?;
+        remove_unreferenced_hash_best_effort(store_root, kind, &old_hash);
     }
 
     Ok(())
@@ -81,12 +82,26 @@ where
     match fs::remove_file(target) {
         Ok(()) => {
             if let Some(hash) = hash {
-                remove_unreferenced_hash(store_root, kind, &hash)?;
+                remove_unreferenced_hash_best_effort(store_root, kind, &hash);
             }
             Ok(())
         }
         Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(()),
         Err(err) => Err(err),
+    }
+}
+
+fn remove_unreferenced_hash_best_effort(
+    store_root: &Path,
+    kind: Kind,
+    hash: &str,
+) {
+    if let Err(err) = remove_unreferenced_hash(store_root, kind, hash) {
+        tracing::warn!(
+            kind = kind.directory(),
+            hash,
+            "failed to remove unreferenced dedup canonical: {err}"
+        );
     }
 }
 
@@ -181,14 +196,21 @@ fn replace_with_hard_link_or_copy(
         }
         Err(_) => {
             let _ = fs::remove_file(&tmp);
-            let result = fs::copy(canonical, &tmp)
-                .and_then(|_| fs::rename(&tmp, target));
-            if result.is_err() {
-                let _ = fs::remove_file(&tmp);
-            }
-            result
+            replace_with_copy(canonical, target, &tmp)
         }
     }
+}
+
+fn replace_with_copy(
+    canonical: &Path,
+    target: &Path,
+    tmp: &Path,
+) -> io::Result<()> {
+    let result = fs::copy(canonical, tmp).and_then(|_| fs::rename(tmp, target));
+    if result.is_err() {
+        let _ = fs::remove_file(tmp);
+    }
+    result
 }
 
 fn tmp_path(path: &Path) -> PathBuf {
@@ -200,13 +222,29 @@ fn tmp_path(path: &Path) -> PathBuf {
 
     path.with_file_name(format!(
         ".{file_name}.dedup-tmp-{}-{counter}",
-        std::process::id()
+        process::id()
     ))
 }
 
 #[cfg(test)]
 mod tests {
+    use std::os::unix::fs::PermissionsExt;
+
     use super::*;
+
+    fn canonical_path(store_root: &Path, kind: Kind, bytes: &[u8]) -> PathBuf {
+        store_root
+            .join(DEDUP_DIR)
+            .join(kind.directory())
+            .join(hash_bytes(bytes))
+    }
+
+    fn set_mode(path: &Path, mode: u32) {
+        let mut permissions =
+            fs::metadata(path).expect("metadata").permissions();
+        permissions.set_mode(mode);
+        fs::set_permissions(path, permissions).expect("set permissions");
+    }
 
     #[test]
     fn hard_link_rename_failure_removes_tmp_link() {
@@ -226,5 +264,82 @@ mod tests {
             .any(|name| name.to_string_lossy().contains("dedup-tmp"));
         assert!(!leaked_tmp);
         assert_eq!(fs::metadata(&canonical).expect("metadata").nlink(), 1);
+    }
+
+    #[test]
+    fn copy_fallback_creates_independent_target() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let store_root = dir.path();
+        let kind = Kind::Bytecode;
+        let bytes = b"canonical bytecode";
+        let canonical = canonical_path(store_root, kind, bytes);
+        let target = store_root.join("target");
+        let tmp = tmp_path(&target);
+
+        fs::create_dir_all(canonical.parent().expect("canonical dir"))
+            .expect("canonical dir");
+        fs::write(&canonical, bytes).expect("canonical");
+
+        replace_with_copy(&canonical, &target, &tmp)
+            .expect("copy fallback should write target");
+
+        assert_eq!(fs::read(&target).expect("read target"), bytes);
+        assert_ne!(
+            fs::metadata(&canonical).expect("canonical metadata").ino(),
+            fs::metadata(&target).expect("target metadata").ino()
+        );
+
+        remove_unreferenced_hash(store_root, kind, &hash_bytes(bytes))
+            .expect("evict unreferenced canonical");
+
+        assert!(!canonical.exists());
+        assert_eq!(fs::read(&target).expect("read copied target"), bytes);
+    }
+
+    #[test]
+    fn write_ignores_old_canonical_eviction_failure() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let store_root = dir.path();
+        let target = store_root.join("target");
+        let kind = Kind::Bytecode;
+        let old_bytes = b"old bytecode";
+        let new_bytes = b"new bytecode";
+
+        write(store_root, kind, &target, old_bytes).expect("write old bytes");
+
+        let canonical_dir = store_root.join(DEDUP_DIR).join(kind.directory());
+        let old_canonical = canonical_path(store_root, kind, old_bytes);
+        let new_canonical = canonical_path(store_root, kind, new_bytes);
+        fs::write(&new_canonical, new_bytes).expect("write new canonical");
+        set_mode(&canonical_dir, 0o500);
+
+        write(store_root, kind, &target, new_bytes)
+            .expect("write should ignore old canonical cleanup failure");
+
+        set_mode(&canonical_dir, 0o700);
+        assert_eq!(fs::read(&target).expect("read target"), new_bytes);
+        assert!(old_canonical.exists());
+    }
+
+    #[test]
+    fn remove_file_ignores_canonical_eviction_failure() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let store_root = dir.path();
+        let target = store_root.join("target");
+        let kind = Kind::Bytecode;
+        let bytes = b"bytecode";
+
+        write(store_root, kind, &target, bytes).expect("write bytes");
+
+        let canonical_dir = store_root.join(DEDUP_DIR).join(kind.directory());
+        let canonical = canonical_path(store_root, kind, bytes);
+        set_mode(&canonical_dir, 0o500);
+
+        remove_file(store_root, kind, &target)
+            .expect("remove should ignore canonical cleanup failure");
+
+        set_mode(&canonical_dir, 0o700);
+        assert!(!target.exists());
+        assert!(canonical.exists());
     }
 }

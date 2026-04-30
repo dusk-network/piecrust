@@ -16,8 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Declare minimum supported Rust version of 1.94.
 - Contain host-query panics by default and return them as contract panic errors [#476]
 - Move `rand` from runtime dependencies to dev-dependencies.
-- Deduplicate stored contract bytecode and compiled module payloads.
-- Remove unreferenced deduplicated contract payload canonicals.
+- Deduplicate stored contract bytecode and compiled module payloads [#470].
+- Remove unreferenced deduplicated contract payload canonicals [#470].
 
 ### Fixed
 
@@ -586,6 +586,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- ISSUES -->
 [#466]: https://github.com/dusk-network/piecrust/issues/466
+[#470]: https://github.com/dusk-network/piecrust/issues/470
 [#476]: https://github.com/dusk-network/piecrust/issues/476
 
 [#rusk_3341]: https://github.com/dusk-network/rusk/issues/3341

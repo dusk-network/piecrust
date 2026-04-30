@@ -304,6 +304,85 @@ fn migration_removes_replaced_bytecode_canonical() -> Result<(), Error> {
 }
 
 #[test]
+fn migration_of_duplicate_bytecode_keeps_shared_canonical() -> Result<(), Error>
+{
+    let vm = VM::ephemeral()?;
+    let counter_a = ContractId::from_bytes([7; 32]);
+    let counter_b = ContractId::from_bytes([8; 32]);
+    let mut session = vm.session(SessionData::builder())?;
+
+    session.deploy::<_, (), _>(
+        contract_bytecode!("counter"),
+        ContractData::builder().owner(OWNER).contract_id(counter_a),
+        LIMIT,
+    )?;
+    session.deploy::<_, (), _>(
+        contract_bytecode!("counter"),
+        ContractData::builder().owner(OWNER).contract_id(counter_b),
+        LIMIT,
+    )?;
+    let root = session.commit()?;
+
+    let old_canonical =
+        dedup_canonical_path(&vm, "bytecode", contract_bytecode!("counter"));
+    assert!(old_canonical.exists());
+
+    let mut session = vm.session(SessionData::builder().base(root))?;
+    session = session.migrate(
+        counter_a,
+        contract_bytecode!("double_counter"),
+        ContractData::builder(),
+        LIMIT,
+        |new_contract, session| {
+            let old_counter_value = session
+                .call::<_, i64>(counter_a, "read_value", &(), LIMIT)?
+                .data;
+            let (left_counter_value, _) = session
+                .call::<_, (i64, i64)>(new_contract, "read_values", &(), LIMIT)?
+                .data;
+            let diff = old_counter_value - left_counter_value;
+
+            for _ in 0..diff {
+                session.call::<_, ()>(
+                    new_contract,
+                    "increment_left",
+                    &(),
+                    LIMIT,
+                )?;
+            }
+
+            Ok(())
+        },
+    )?;
+    let root = session.commit()?;
+
+    let new_canonical = dedup_canonical_path(
+        &vm,
+        "bytecode",
+        contract_bytecode!("double_counter"),
+    );
+    assert!(old_canonical.exists());
+    assert!(new_canonical.exists());
+    assert!(bytecode_path(&vm, counter_b).exists());
+
+    let mut session = vm.session(SessionData::builder().base(root))?;
+    assert_eq!(
+        session
+            .call::<_, (i64, i64)>(counter_a, "read_values", &(), LIMIT)?
+            .data,
+        (0xfc, 0xcf)
+    );
+    assert_eq!(
+        session
+            .call::<_, i64>(counter_b, "read_value", &(), LIMIT)?
+            .data,
+        0xfc
+    );
+
+    Ok(())
+}
+
+#[test]
 fn recompile_module() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
     let (counter_id, commit_id) = deploy_counter(&vm)?;
