@@ -10,6 +10,7 @@ members = [
     "debugger",
     "double_counter",
     "empty_initializer",
+    "event_reverter",
     "eventer",
     "everest",
     "fallible_counter",
