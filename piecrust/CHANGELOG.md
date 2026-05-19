@@ -17,12 +17,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Change `deploy` and `deploy_raw` to return `(ContractId, Option<CallReceipt>)`, exposing init gas spent, events, and call tree to callers
+- Change call receipts to return enriched events that identify whether each event came from reverted execution
 
 ### Fixed
 
 - Reduce host-query argument copying and streamline callstack export writes on the execution path
 - Cache compiled modules in memory and avoid redundant module reloads during commit-store reconstruction
 - Stop execution-path contract loads from silently recompiling missing modules; shaded modules now remain unavailable until explicitly recompiled.
+- Mark events emitted during reverted inter-contract calls as reverted
 
 ## [0.30.0] - 2026-02-27
 

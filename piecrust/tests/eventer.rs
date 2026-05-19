@@ -31,9 +31,10 @@ pub fn vm_center_events() -> Result<(), Error> {
 
     for i in 0..EVENT_NUM {
         let index = i as usize;
-        assert_eq!(events[index].source, eventer_id);
-        assert_eq!(events[index].topic, "number");
-        assert_eq!(events[index].data, i.to_le_bytes());
+        assert!(!events[index].reverted);
+        assert_eq!(events[index].canonical_event.source, eventer_id);
+        assert_eq!(events[index].canonical_event.topic, "number");
+        assert_eq!(events[index].canonical_event.data, i.to_le_bytes());
     }
 
     let receipt = session.call::<_, ()>(
@@ -48,9 +49,10 @@ pub fn vm_center_events() -> Result<(), Error> {
 
     for i in 0..EVENT_NUM {
         let index = i as usize;
-        assert_eq!(events[index].source, eventer_id);
-        assert_eq!(events[index].topic, "number");
-        assert_eq!(events[index].data, i.to_le_bytes());
+        assert!(!events[index].reverted);
+        assert_eq!(events[index].canonical_event.source, eventer_id);
+        assert_eq!(events[index].canonical_event.topic, "number");
+        assert_eq!(events[index].canonical_event.data, i.to_le_bytes());
     }
 
     Ok(())

@@ -11,7 +11,7 @@ const OWNER: [u8; 32] = [0u8; 32];
 const LIMIT: u64 = 1_000_000;
 
 #[test]
-pub fn reverted_icc_discards_events() -> Result<(), Error> {
+pub fn reverted_icc_marks_events() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
 
     let mut session = vm.session(SessionData::builder())?;
@@ -53,22 +53,31 @@ pub fn reverted_icc_discards_events() -> Result<(), Error> {
     let value: u32 = session.call(eventer_id, "read_value", &(), LIMIT)?.data;
     assert_eq!(value, 0, "eventer state should be reverted");
 
+    let callcenter_event = receipt
+        .events
+        .iter()
+        .find(|event| {
+            event.canonical_event.source == center_id
+                && event.canonical_event.topic == "callcenter"
+        })
+        .expect(
+            "the upper-layer callcenter event should remain in the receipt",
+        );
     assert!(
-        receipt
-            .events
-            .iter()
-            .any(|event| event.source == center_id
-                && event.topic == "callcenter"),
-        "the upper-layer callcenter event should remain in the receipt"
+        !callcenter_event.reverted,
+        "the upper-layer callcenter event should not be marked as reverted"
     );
+
+    let eventer_event = receipt
+        .events
+        .iter()
+        .find(|event| event.canonical_event.source == eventer_id)
+        .expect("the reverted ICC event should remain in the receipt");
     assert!(
-        receipt
-            .events
-            .iter()
-            .all(|event| event.source != eventer_id),
-        "event(s) from a reverted ICC survived in the outer receipt"
+        eventer_event.reverted,
+        "event emitted by the reverted ICC should be marked as reverted"
     );
-    assert_eq!(receipt.events.len(), 1);
+    assert_eq!(receipt.events.len(), 2);
 
     Ok(())
 }

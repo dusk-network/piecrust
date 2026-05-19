@@ -292,6 +292,7 @@ pub(crate) fn c(
         return Ok(write_contract_error(env, Error::Panic(msg)));
     }
 
+    let event_checkpoint = env.event_checkpoint();
     let callee_stack_element = match env.push_callstack(callee_id, callee_limit)
     {
         Ok(stack_element) => stack_element,
@@ -338,6 +339,7 @@ pub(crate) fn c(
             Ok(ret_len)
         }
         Err(mut err) => {
+            env.revert_events_from(event_checkpoint);
             if let Err(io_err) = env.revert_callstack() {
                 err = Error::MemorySnapshotFailure {
                     reason: Some(Arc::new(err)),

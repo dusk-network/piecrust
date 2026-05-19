@@ -8,7 +8,7 @@ use std::io;
 use std::ops::{Deref, DerefMut};
 
 use dusk_wasmtime::{Instance, Module, Mutability, Store, ValType};
-use piecrust_uplink::{ARGBUF_LEN, ContractId, Event};
+use piecrust_uplink::{ARGBUF_LEN, ContractId, EnrichedEvent, Event};
 
 use crate::Error;
 use crate::imports::Imports;
@@ -70,6 +70,10 @@ impl Env {
             source: self.self_id,
             topic,
             data,
+        };
+        let event = EnrichedEvent {
+            canonical_event: event,
+            reverted: false,
         };
 
         self.session.push_event(event);

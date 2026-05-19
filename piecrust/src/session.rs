@@ -17,7 +17,7 @@ use dusk_wasmtime::{
     Engine, LinearMemory, MemoryCreator, MemoryType, Module as WasmtimeModule,
 };
 use piecrust_uplink::{
-    ARGBUF_LEN, CONTRACT_ID_BYTES, ContractId, Event, SCRATCH_BUF_BYTES,
+    ARGBUF_LEN, CONTRACT_ID_BYTES, ContractId, EnrichedEvent, SCRATCH_BUF_BYTES,
 };
 use rkyv::ser::Serializer;
 use rkyv::ser::serializers::{
@@ -111,7 +111,7 @@ struct SessionInner {
     buffer: Vec<u8>,
 
     feeder: Option<mpsc::Sender<Vec<u8>>>,
-    events: Vec<Event>,
+    events: Vec<EnrichedEvent>,
 
     #[cfg(feature = "call-hook")]
     call_hook: Option<CallHook>,
@@ -679,8 +679,18 @@ impl Session {
         self.inner().contract_session.memory_pages(contract)
     }
 
-    pub(crate) fn push_event(&mut self, event: Event) {
+    pub(crate) fn push_event(&mut self, event: EnrichedEvent) {
         self.inner_mut().events.push(event);
+    }
+
+    pub(crate) fn event_checkpoint(&self) -> usize {
+        self.inner().events.len()
+    }
+
+    pub(crate) fn revert_events_from(&mut self, checkpoint: usize) {
+        for event in self.inner_mut().events.iter_mut().skip(checkpoint) {
+            event.reverted = true;
+        }
     }
 
     pub(crate) fn push_feed(&mut self, data: Vec<u8>) -> Result<(), Error> {
@@ -897,6 +907,7 @@ impl Session {
         fdata: Vec<u8>,
         limit: u64,
     ) -> Result<(Vec<u8>, u64, CallTree), Error> {
+        let event_checkpoint = self.event_checkpoint();
         let stack_element = self.push_callstack(contract, limit)?;
         {
             let instance = self
@@ -931,6 +942,7 @@ impl Session {
                 } else {
                     err
                 };
+                self.revert_events_from(event_checkpoint);
                 self.move_up_prune_call_tree();
                 self.clear_call_tree_and_instances();
                 return Err(err);
@@ -1026,7 +1038,7 @@ pub struct CallReceipt<T> {
     pub gas_limit: u64,
 
     /// The events emitted during the execution of the call.
-    pub events: Vec<Event>,
+    pub events: Vec<EnrichedEvent>,
     /// The call tree produced during the execution.
     pub call_tree: CallTree,
 
