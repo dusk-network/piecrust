@@ -26,31 +26,8 @@ pub struct Event {
         serde(with = "serde_with::As::<serde_with::hex::Hex>")
     )]
     pub data: Vec<u8>,
-}
-
-/// An event emitted by a contract, enriched with execution metadata.
-#[derive(
-    Debug,
-    Clone,
-    PartialEq,
-    Eq,
-    PartialOrd,
-    Ord,
-    Hash,
-    Archive,
-    Serialize,
-    Deserialize,
-)]
-#[archive_attr(derive(CheckBytes))]
-pub struct EnrichedEvent {
-    pub canonical_event: Event,
+    #[cfg_attr(feature = "serde", serde(default))]
     pub reverted: bool,
-}
-
-impl From<EnrichedEvent> for Event {
-    fn from(event: EnrichedEvent) -> Self {
-        event.canonical_event
-    }
 }
 
 /// Type with `rkyv` serialization capabilities for specific types.
