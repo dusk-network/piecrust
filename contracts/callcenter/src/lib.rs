@@ -50,15 +50,17 @@ impl Callcenter {
         uplink::call_raw(contract_id, &fn_name, &fn_arg)
     }
 
-    /// Emit an event and then query a contract specified by its ID.
+    /// Emit events around a query to a contract specified by its ID.
     pub fn delegate_query_with_event(
         &self,
         contract_id: ContractId,
         fn_name: String,
         fn_arg: Vec<u8>,
     ) -> Result<Vec<u8>, ContractError> {
-        uplink::emit("callcenter", ());
-        self.delegate_query(contract_id, fn_name, fn_arg)
+        uplink::emit("callcenter-before", ());
+        let result = self.delegate_query(contract_id, fn_name, fn_arg);
+        uplink::emit("callcenter-after", ());
+        result
     }
 
     /// Pass the current query
