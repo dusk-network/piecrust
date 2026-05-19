@@ -50,6 +50,17 @@ impl Callcenter {
         uplink::call_raw(contract_id, &fn_name, &fn_arg)
     }
 
+    /// Emit an event and then query a contract specified by its ID.
+    pub fn delegate_query_with_event(
+        &self,
+        contract_id: ContractId,
+        fn_name: String,
+        fn_arg: Vec<u8>,
+    ) -> Result<Vec<u8>, ContractError> {
+        uplink::emit("callcenter", ());
+        self.delegate_query(contract_id, fn_name, fn_arg)
+    }
+
     /// Pass the current query
     pub fn query_passthrough(
         &mut self,
@@ -238,6 +249,18 @@ unsafe fn delegate_query(arg_len: u32) -> u32 {
     unsafe {
         wrap_call(arg_len, |(mod_id, fn_name, fn_arg)| {
             (*(&raw const STATE)).delegate_query(mod_id, fn_name, fn_arg)
+        })
+    }
+}
+
+/// Expose `Callcenter::delegate_query_with_event()` to the host
+#[unsafe(no_mangle)]
+unsafe fn delegate_query_with_event(arg_len: u32) -> u32 {
+    unsafe {
+        wrap_call(arg_len, |(mod_id, fn_name, fn_arg)| {
+            (*(&raw const STATE)).delegate_query_with_event(
+                mod_id, fn_name, fn_arg,
+            )
         })
     }
 }
