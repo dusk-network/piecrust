@@ -91,6 +91,11 @@ path = "tests/deserialization.rs"
 required-features = ["debug"]
 
 [[test]]
+name = "event_reverter"
+path = "tests/event_reverter.rs"
+required-features = ["debug"]
+
+[[test]]
 name = "call_hook"
 path = "tests/call_hook.rs"
 required-features = ["call-hook", "debug"]

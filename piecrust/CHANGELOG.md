@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Add `call-hook` feature with `CallHook` type, `Session::set_call_hook`, and `Session::clear_call_hook` for intercepting and optionally rejecting inter-contract calls with a descriptive error message; both methods return the previous hook value
+- Add a regression test for events emitted during reverted inter-contract calls
 
 ### Changed
 
