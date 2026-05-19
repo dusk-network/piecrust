@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Add `EnrichedEvent` to carry canonical event data together with reverted-call metadata
+
 ## [0.20.0] - 2026-02-27
 
 ### Changed
