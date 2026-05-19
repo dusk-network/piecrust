@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Add `EnrichedEvent` to carry canonical event data together with reverted-call metadata
 
+### Removed
+
+- Remove rkyv serialization support from `Event`
+
 ## [0.20.0] - 2026-02-27
 
 ### Changed

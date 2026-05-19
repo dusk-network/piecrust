@@ -16,19 +16,7 @@ use rkyv::{Archive, Deserialize, Serialize};
 use crate::SCRATCH_BUF_BYTES;
 
 /// And event emitted by a contract.
-#[derive(
-    Debug,
-    Clone,
-    PartialEq,
-    Eq,
-    PartialOrd,
-    Ord,
-    Hash,
-    Archive,
-    Serialize,
-    Deserialize,
-)]
-#[archive_attr(derive(CheckBytes))]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Event {
     pub source: ContractId,
     pub topic: String,
