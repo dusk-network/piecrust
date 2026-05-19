@@ -57,8 +57,7 @@ pub fn reverted_icc_marks_events() -> Result<(), Error> {
         .events
         .iter()
         .find(|event| {
-            event.canonical_event.source == center_id
-                && event.canonical_event.topic == "callcenter-before"
+            event.source == center_id && event.topic == "callcenter-before"
         })
         .expect("the pre-ICC callcenter event should remain in the receipt");
     assert!(
@@ -69,7 +68,7 @@ pub fn reverted_icc_marks_events() -> Result<(), Error> {
     let eventer_event = receipt
         .events
         .iter()
-        .find(|event| event.canonical_event.source == eventer_id)
+        .find(|event| event.source == eventer_id)
         .expect("the reverted ICC event should remain in the receipt");
     assert!(
         eventer_event.reverted,
@@ -80,8 +79,7 @@ pub fn reverted_icc_marks_events() -> Result<(), Error> {
         .events
         .iter()
         .find(|event| {
-            event.canonical_event.source == center_id
-                && event.canonical_event.topic == "callcenter-after"
+            event.source == center_id && event.topic == "callcenter-after"
         })
         .expect("the post-ICC callcenter event should remain in the receipt");
     assert!(

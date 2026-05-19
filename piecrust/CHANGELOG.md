@@ -17,7 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Change `deploy` and `deploy_raw` to return `(ContractId, Option<CallReceipt>)`, exposing init gas spent, events, and call tree to callers
-- Change call receipts to return enriched events that identify whether each event came from reverted execution
+- Change call receipts to identify whether each event came from reverted execution
 
 ### Fixed
 
