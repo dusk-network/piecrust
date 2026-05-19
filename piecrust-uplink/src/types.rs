@@ -17,9 +17,14 @@ use crate::SCRATCH_BUF_BYTES;
 
 /// And event emitted by a contract.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Event {
     pub source: ContractId,
     pub topic: String,
+    #[cfg_attr(
+        feature = "serde",
+        serde(with = "serde_with::As::<serde_with::hex::Hex>")
+    )]
     pub data: Vec<u8>,
 }
 
@@ -73,7 +78,14 @@ pub const CONTRACT_ID_BYTES: usize = 32;
 )]
 #[archive(as = "Self")]
 #[repr(C)]
-pub struct ContractId([u8; CONTRACT_ID_BYTES]);
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct ContractId(
+    #[cfg_attr(
+        feature = "serde",
+        serde(with = "serde_with::As::<serde_with::hex::Hex>")
+    )]
+    [u8; CONTRACT_ID_BYTES],
+);
 
 impl ContractId {
     /// Creates a new [`ContractId`] from an array of bytes
