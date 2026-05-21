@@ -23,7 +23,6 @@ dlmalloc = { version = "0.2", optional = true, features = ["global"] }
 serde = { version = "1.0", default-features = false, features = [
     "alloc",
 ], optional = true }
-serde_with = { version = "2", default-features = false, optional = true }
 hex = { version = "0.4", default-features = false, features = ["alloc"] }
 tracing = { version = "0.1.40", default-features = false, features = ["log"] }
 
@@ -34,7 +33,7 @@ serde_json = "1.0"
 [features]
 abi = []
 debug = []
-serde = ["serde/derive", "serde_with/hex"]
+serde = ["serde/derive", "hex/serde"]
 
 [package.metadata.docs.rs]
 all-features = true

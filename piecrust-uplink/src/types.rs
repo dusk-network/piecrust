@@ -21,10 +21,7 @@ use crate::SCRATCH_BUF_BYTES;
 pub struct Event {
     pub source: ContractId,
     pub topic: String,
-    #[cfg_attr(
-        feature = "serde",
-        serde(with = "serde_with::As::<serde_with::hex::Hex>")
-    )]
+    #[cfg_attr(feature = "serde", serde(with = "hex::serde"))]
     pub data: Vec<u8>,
     #[cfg_attr(feature = "serde", serde(default))]
     pub reverted: bool,
@@ -57,10 +54,7 @@ pub const CONTRACT_ID_BYTES: usize = 32;
 #[repr(C)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct ContractId(
-    #[cfg_attr(
-        feature = "serde",
-        serde(with = "serde_with::As::<serde_with::hex::Hex>")
-    )]
+    #[cfg_attr(feature = "serde", serde(with = "hex::serde"))]
     [u8; CONTRACT_ID_BYTES],
 );
 
