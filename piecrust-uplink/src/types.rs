@@ -15,7 +15,7 @@ use rkyv::{Archive, Deserialize, Serialize};
 
 use crate::SCRATCH_BUF_BYTES;
 
-/// And event emitted by a contract.
+/// An event emitted by a contract.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Event {
