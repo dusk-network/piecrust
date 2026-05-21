@@ -66,6 +66,18 @@ fn serde_event() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[test]
+fn serde_event_defaults_missing_reverted_to_false()
+-> Result<(), Box<dyn std::error::Error>> {
+    let mut rng = StdRng::seed_from_u64(0xbeef);
+    let event = rand_event(&mut rng);
+    let deser: Event =
+        serde_json::from_str(include_str!("./event_legacy.json"))?;
+    assert_eq!(event, deser);
+    assert!(!deser.reverted);
+    Ok(())
+}
+
+#[test]
 fn serde_wrong_encoded() {
     let wrong_encoded = "\"wrong-encoded\"";
 
