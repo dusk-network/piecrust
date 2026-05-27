@@ -53,40 +53,27 @@ pub fn reverted_icc_marks_events() -> Result<(), Error> {
     let value: u32 = session.call(eventer_id, "read_value", &(), LIMIT)?.data;
     assert_eq!(value, 0, "eventer state should be reverted");
 
-    let before_event = receipt
-        .events
-        .iter()
-        .find(|event| {
-            event.source == center_id && event.topic == "callcenter-before"
-        })
-        .expect("the pre-ICC callcenter event should remain in the receipt");
+    assert_eq!(receipt.events.len(), 3);
+    assert_eq!(receipt.events[0].source, center_id);
+    assert_eq!(receipt.events[0].topic, "callcenter-before");
     assert!(
-        !before_event.reverted,
+        !receipt.events[0].reverted,
         "the pre-ICC callcenter event should not be marked as reverted"
     );
 
-    let eventer_event = receipt
-        .events
-        .iter()
-        .find(|event| event.source == eventer_id)
-        .expect("the reverted ICC event should remain in the receipt");
+    assert_eq!(receipt.events[1].source, eventer_id);
+    assert_eq!(receipt.events[1].topic, "number");
     assert!(
-        eventer_event.reverted,
+        receipt.events[1].reverted,
         "event emitted by the reverted ICC should be marked as reverted"
     );
 
-    let after_event = receipt
-        .events
-        .iter()
-        .find(|event| {
-            event.source == center_id && event.topic == "callcenter-after"
-        })
-        .expect("the post-ICC callcenter event should remain in the receipt");
+    assert_eq!(receipt.events[2].source, center_id);
+    assert_eq!(receipt.events[2].topic, "callcenter-after");
     assert!(
-        !after_event.reverted,
+        !receipt.events[2].reverted,
         "the post-ICC callcenter event should not be marked as reverted"
     );
-    assert_eq!(receipt.events.len(), 3);
 
     Ok(())
 }
