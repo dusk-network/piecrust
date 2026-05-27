@@ -9,6 +9,7 @@ use piecrust::{
 };
 
 const CONTRACT_INIT_METHOD: &str = "init";
+const GENERATED_MEMORY_INIT_METHOD: &str = "__piecrust_init_memory";
 const OWNER: [u8; 32] = [0u8; 32];
 const LIMIT: u64 = 1_000_000;
 
@@ -70,6 +71,74 @@ fn init() -> Result<(), Error> {
     assert!(
         result.is_err(),
         "calling init directly should never be allowed"
+    );
+
+    Ok(())
+}
+
+#[test]
+fn generated_memory_init_direct_call_blocked() -> Result<(), Error> {
+    let vm = VM::ephemeral()?;
+    let mut session = vm.session(SessionData::builder())?;
+
+    let (id, _) = session.deploy::<_, (), _>(
+        contract_bytecode!("counter"),
+        ContractData::builder().owner(OWNER),
+        LIMIT,
+    )?;
+
+    let result =
+        session.call_raw(id, GENERATED_MEMORY_INIT_METHOD, Vec::new(), LIMIT);
+    assert!(
+        result.is_err(),
+        "calling generated memory initializer directly should not be allowed"
+    );
+
+    assert_eq!(
+        session.call::<_, i64>(id, "read_value", &(), LIMIT)?.data,
+        0xfc
+    );
+
+    Ok(())
+}
+
+#[test]
+fn active_data_not_reapplied_on_reopen() -> Result<(), Error> {
+    let vm = VM::ephemeral()?;
+    let mut session = vm.session(SessionData::builder())?;
+
+    // `counter` has no init method: its initial value of 0xfc comes solely from
+    // an active data segment that the rewriter moves into the generated memory
+    // initializer.
+    let (id, _) = session.deploy::<_, (), _>(
+        contract_bytecode!("counter"),
+        ContractData::builder().owner(OWNER),
+        LIMIT,
+    )?;
+
+    // The active data is applied once, when the persistent memory is first
+    // created.
+    assert_eq!(
+        session.call::<_, i64>(id, "read_value", &(), LIMIT)?.data,
+        0xfc
+    );
+
+    // Mutate the memory away from its initial active-data value.
+    session.call::<_, ()>(id, "increment", &(), LIMIT)?;
+    assert_eq!(
+        session.call::<_, i64>(id, "read_value", &(), LIMIT)?.data,
+        0xfd
+    );
+
+    // Persist the mutated memory and reopen it in a fresh session.
+    let commit_id = session.commit()?;
+    let mut session = vm.session(SessionData::builder().base(commit_id))?;
+
+    // Reopening must not re-run the generated initializer; the mutated value
+    // survives instead of being reset to the active-data value of 0xfc.
+    assert_eq!(
+        session.call::<_, i64>(id, "read_value", &(), LIMIT)?.data,
+        0xfd
     );
 
     Ok(())
