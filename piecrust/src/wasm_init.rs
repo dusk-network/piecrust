@@ -502,58 +502,182 @@ fn too_many_types() -> io::Error {
 
 #[cfg(test)]
 mod tests {
-    use dusk_wasmtime::{Engine, Module as WasmtimeModule};
+    use dusk_wasmtime::{
+        Config, Engine, Instance, Module as WasmtimeModule, Store,
+    };
     use wasm_encoder::{
-        ConstExpr, DataSection, ExportKind, ExportSection, GlobalSection,
-        GlobalType, MemorySection, MemoryType, Module, ValType,
+        CodeSection, ConstExpr, DataSection, ExportKind, ExportSection,
+        Function, FunctionSection, MemorySection, MemoryType, Module,
+        StartSection, TypeSection,
     };
 
     use super::{MEMORY_INIT_EXPORT, prepare_contract_bytecode};
 
-    #[test]
-    fn rewrites_active_data_without_existing_function_sections() {
+    fn memory_section(memory64: bool) -> MemorySection {
         let mut memory = MemorySection::new();
         memory.memory(MemoryType {
             minimum: 1,
             maximum: None,
-            memory64: false,
+            memory64,
             shared: false,
             page_size_log2: None,
         });
+        memory
+    }
 
-        let mut global = GlobalSection::new();
-        global.global(
-            GlobalType {
-                val_type: ValType::I32,
-                mutable: false,
-                shared: false,
-            },
-            &ConstExpr::i32_const(0),
-        );
-
+    fn memory_export() -> ExportSection {
         let mut exports = ExportSection::new();
         exports.export("memory", ExportKind::Memory, 0);
-        exports.export("A", ExportKind::Global, 0);
+        exports
+    }
+
+    fn module_with_data(memory64: bool, data: DataSection) -> Vec<u8> {
+        let memory = memory_section(memory64);
+        let exports = memory_export();
+
+        let mut module = Module::new();
+        module.section(&memory).section(&exports).section(&data);
+        module.finish()
+    }
+
+    fn empty_function_declaration(module: &mut Module) {
+        let mut types = TypeSection::new();
+        types.ty().function([], []);
+
+        let mut functions = FunctionSection::new();
+        functions.function(0);
+
+        module.section(&types).section(&functions);
+    }
+
+    fn empty_code_section() -> CodeSection {
+        let mut function = Function::new([]);
+        function.instructions().end();
+
+        let mut code = CodeSection::new();
+        code.function(&function);
+        code
+    }
+
+    fn engine(memory64: bool) -> Engine {
+        if memory64 {
+            let mut config = Config::new();
+            config.wasm_memory64(true);
+            Engine::new(&config).unwrap()
+        } else {
+            Engine::default()
+        }
+    }
+
+    fn instantiate(bytecode: &[u8], memory64: bool) -> (Store<()>, Instance) {
+        let engine = engine(memory64);
+        let module = WasmtimeModule::new(&engine, bytecode).unwrap();
+        let mut store = Store::new(&engine, ());
+        let instance = Instance::new(&mut store, &module, &[]).unwrap();
+
+        (store, instance)
+    }
+
+    fn assert_initializer_copies(
+        bytecode: &[u8],
+        memory64: bool,
+        offset: usize,
+        expected: [u8; 3],
+    ) {
+        let prepared = prepare_contract_bytecode(bytecode).unwrap();
+        let (mut store, instance) = instantiate(prepared.as_ref(), memory64);
+        let memory = instance.get_memory(&mut store, "memory").unwrap();
+
+        let mut before_init = [0xff; 3];
+        memory.read(&store, offset, &mut before_init).unwrap();
+        assert_eq!(before_init, [0, 0, 0]);
+
+        let memory_init = instance
+            .get_func(&mut store, MEMORY_INIT_EXPORT)
+            .unwrap()
+            .typed::<(), ()>(&store)
+            .unwrap();
+        memory_init.call(&mut store, ()).unwrap();
+
+        let mut after_init = [0; 3];
+        memory.read(&store, offset, &mut after_init).unwrap();
+        assert_eq!(after_init, expected);
+    }
+
+    #[test]
+    fn rewrites_active_data_without_existing_function_sections() {
+        let mut data = DataSection::new();
+        data.passive([0xaa, 0xbb, 0xcc]);
+        data.active(0, &ConstExpr::i32_const(7), [1, 2, 3]);
+
+        let bytecode = module_with_data(false, data);
+
+        assert_initializer_copies(&bytecode, false, 7, [1, 2, 3]);
+    }
+
+    #[test]
+    fn rewrites_memory64_active_data_offsets() {
+        let mut data = DataSection::new();
+        data.active(0, &ConstExpr::i64_const(11), [4, 5, 6]);
+
+        let bytecode = module_with_data(true, data);
+
+        assert_initializer_copies(&bytecode, true, 11, [4, 5, 6]);
+    }
+
+    #[test]
+    fn leaves_modules_without_active_data_borrowed() {
+        let mut data = DataSection::new();
+        data.passive([7, 8, 9]);
+
+        let bytecode = module_with_data(false, data);
+        let prepared = prepare_contract_bytecode(&bytecode).unwrap();
+
+        assert!(matches!(prepared, std::borrow::Cow::Borrowed(_)));
+        assert_eq!(prepared.as_ref(), bytecode);
+    }
+
+    #[test]
+    fn rejects_reserved_generated_initializer_export() {
+        let mut module = Module::new();
+        empty_function_declaration(&mut module);
+
+        let mut exports = ExportSection::new();
+        exports.export(MEMORY_INIT_EXPORT, ExportKind::Func, 0);
+
+        let code = empty_code_section();
+        module.section(&exports).section(&code);
+
+        let err = prepare_contract_bytecode(&module.finish()).unwrap_err();
+
+        assert!(err.to_string().contains("reserved function"));
+    }
+
+    #[test]
+    fn rejects_active_data_with_start_function() {
+        let mut module = Module::new();
+        empty_function_declaration(&mut module);
+
+        let memory = memory_section(false);
+        let exports = memory_export();
+        let start = StartSection { function_index: 0 };
+        let code = empty_code_section();
 
         let mut data = DataSection::new();
         data.active(0, &ConstExpr::i32_const(0), [1, 2, 3]);
 
-        let mut module = Module::new();
         module
             .section(&memory)
-            .section(&global)
             .section(&exports)
+            .section(&start)
+            .section(&code)
             .section(&data);
-        let bytecode = module.finish();
 
-        let prepared = prepare_contract_bytecode(&bytecode).unwrap();
-        let wasmtime_module =
-            WasmtimeModule::new(&Engine::default(), prepared.as_ref()).unwrap();
+        let err = prepare_contract_bytecode(&module.finish()).unwrap_err();
 
         assert!(
-            wasmtime_module
-                .exports()
-                .any(|export| export.name() == MEMORY_INIT_EXPORT)
+            err.to_string()
+                .contains("start functions and active data segments")
         );
     }
 
