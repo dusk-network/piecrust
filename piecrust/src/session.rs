@@ -13,7 +13,9 @@ use std::ptr::NonNull;
 use std::sync::{Arc, mpsc};
 
 use bytecheck::CheckBytes;
-use dusk_wasmtime::{Engine, LinearMemory, MemoryCreator, MemoryType};
+use dusk_wasmtime::{
+    Engine, LinearMemory, MemoryCreator, MemoryType, Module as WasmtimeModule,
+};
 use piecrust_uplink::{
     ARGBUF_LEN, CONTRACT_ID_BYTES, ContractId, Event, SCRATCH_BUF_BYTES,
 };
@@ -21,10 +23,8 @@ use rkyv::ser::Serializer;
 use rkyv::ser::serializers::{
     BufferScratch, BufferSerializer, CompositeSerializer,
 };
-use rkyv::{
-    Archive, Deserialize, Infallible, Serialize, check_archived_root,
-    validation::validators::DefaultValidator,
-};
+use rkyv::validation::validators::DefaultValidator;
+use rkyv::{Archive, Deserialize, Infallible, Serialize, check_archived_root};
 
 use crate::call_tree::{CallTree, CallTreeElem};
 use crate::contract::{ContractData, ContractMetadata, WrappedContract};
@@ -88,11 +88,21 @@ impl Drop for Session {
     }
 }
 
+/// A hook called before each inter-contract call.
+///
+/// Receives the callee contract ID, the function name, and the raw argument
+/// bytes. Returns `Ok(())` to allow the call, or `Err(reason)` to reject it
+/// with a descriptive message.
+#[cfg(feature = "call-hook")]
+pub type CallHook =
+    Box<dyn Fn(&ContractId, &str, &[u8]) -> Result<(), String> + Send + Sync>;
+
 struct SessionInner {
     current: ContractId,
 
     call_tree: CallTree,
     instances: BTreeMap<ContractId, Box<WrappedInstance>>,
+    compiled_modules: BTreeMap<ContractId, WasmtimeModule>,
     debug: Vec<String>,
     data: SessionData,
 
@@ -102,6 +112,9 @@ struct SessionInner {
 
     feeder: Option<mpsc::Sender<Vec<u8>>>,
     events: Vec<Event>,
+
+    #[cfg(feature = "call-hook")]
+    call_hook: Option<CallHook>,
 }
 
 impl Debug for SessionInner {
@@ -110,6 +123,7 @@ impl Debug for SessionInner {
             .field("current", &self.current)
             .field("call_tree", &self.call_tree)
             .field("instances_len", &self.instances.len())
+            .field("compiled_modules_len", &self.compiled_modules.len())
             .field("debug_len", &self.debug.len())
             .field("data", &self.data)
             .field("buffer_len", &self.buffer.len())
@@ -178,6 +192,7 @@ impl Session {
             current: ContractId::from_bytes([0; CONTRACT_ID_BYTES]),
             call_tree: CallTree::new(),
             instances: BTreeMap::new(),
+            compiled_modules: BTreeMap::new(),
             debug: vec![],
             data,
             contract_session,
@@ -185,6 +200,8 @@ impl Session {
             buffer: vec![0; PAGE_SIZE],
             feeder: None,
             events: vec![],
+            #[cfg(feature = "call-hook")]
+            call_hook: None,
         };
 
         // This implementation purposefully boxes and leaks the `SessionInner`.
@@ -226,13 +243,16 @@ impl Session {
         &self.engine
     }
 
-    /// Deploy a contract, returning its [`ContractId`]. The ID is computed
+    /// Deploy a contract, returning its [`ContractId`] and an optional
+    /// [`CallReceipt`] for the `init` function execution. The ID is computed
     /// using a `blake3` hash of the `bytecode`. Contracts using the `memory64`
     /// proposal are accepted in just the same way as 32-bit contracts, and
     /// their handling is totally transparent.
     ///
     /// Since a deployment may execute some contract initialization code, that
-    /// code will be metered and executed with the given `gas_limit`.
+    /// code will be metered and executed with the given `gas_limit`. If the
+    /// contract exports an `init` function, the returned receipt contains
+    /// the gas spent, events emitted, and call tree produced by that call.
     ///
     /// # Errors
     /// It is possible that a collision between contract IDs occurs, even for
@@ -243,18 +263,22 @@ impl Session {
     /// If such a collision occurs, [`PersistenceError`] will be returned.
     ///
     /// [`ContractId`]: ContractId
+    /// [`CallReceipt`]: CallReceipt
     /// [`PersistenceError`]: PersistenceError
     ///
     /// # Panics
     /// If `deploy_data` does not specify an owner, this will panic.
-    pub fn deploy<'a, A, D>(
+    pub fn deploy<'a, A, R, D>(
         &mut self,
         bytecode: &[u8],
         deploy_data: D,
         gas_limit: u64,
-    ) -> Result<ContractId, Error>
+    ) -> Result<(ContractId, Option<CallReceipt<R>>), Error>
     where
         A: 'a + for<'b> Serialize<StandardBufSerializer<'b>>,
+        R: Archive,
+        R::Archived: Deserialize<R, Infallible>
+            + for<'b> CheckBytes<DefaultValidator<'b>>,
         D: Into<ContractData<'a, A>>,
     {
         let deploy_data = deploy_data.into();
@@ -272,7 +296,7 @@ impl Session {
             init_arg = Some(self.inner().buffer[0..pos].to_vec());
         }
 
-        self.deploy_raw(
+        let (contract_id, receipt) = self.deploy_raw(
             deploy_data.contract_id,
             bytecode,
             init_arg,
@@ -280,16 +304,22 @@ impl Session {
                 .owner
                 .expect("Owner must be specified when deploying a contract"),
             gas_limit,
-        )
+        )?;
+
+        let receipt = receipt.map(|r| r.deserialize()).transpose()?;
+        Ok((contract_id, receipt))
     }
 
-    /// Deploy a contract, returning its [`ContractId`]. If ID is not provided,
-    /// it is computed using a `blake3` hash of the `bytecode`. Contracts using
-    /// the `memory64` proposal are accepted in just the same way as 32-bit
-    /// contracts, and their handling is totally transparent.
+    /// Deploy a contract, returning its [`ContractId`] and an optional
+    /// [`CallReceipt`] for the `init` function execution. If ID is not
+    /// provided, it is computed using a `blake3` hash of the `bytecode`.
+    /// Contracts using the `memory64` proposal are accepted in just the same
+    /// way as 32-bit contracts, and their handling is totally transparent.
     ///
     /// Since a deployment may execute some contract initialization code, that
-    /// code will be metered and executed with the given `gas_limit`.
+    /// code will be metered and executed with the given `gas_limit`. If the
+    /// contract exports an `init` function, the returned receipt contains
+    /// the gas spent, events emitted, and call tree produced by that call.
     ///
     /// # Errors
     /// It is possible that a collision between contract IDs occurs, even for
@@ -300,7 +330,9 @@ impl Session {
     /// If such a collision occurs, [`PersistenceError`] will be returned.
     ///
     /// [`ContractId`]: ContractId
+    /// [`CallReceipt`]: CallReceipt
     /// [`PersistenceError`]: PersistenceError
+    #[allow(clippy::type_complexity)]
     pub fn deploy_raw(
         &mut self,
         contract_id: Option<ContractId>,
@@ -308,14 +340,15 @@ impl Session {
         init_arg: Option<Vec<u8>>,
         owner: Vec<u8>,
         gas_limit: u64,
-    ) -> Result<ContractId, Error> {
+    ) -> Result<(ContractId, Option<CallReceipt<Vec<u8>>>), Error> {
         let contract_id = contract_id.unwrap_or({
             let hash = blake3::hash(bytecode);
             ContractId::from_bytes(hash.into())
         });
-        self.do_deploy(contract_id, bytecode, init_arg, owner, gas_limit)?;
+        let receipt =
+            self.do_deploy(contract_id, bytecode, init_arg, owner, gas_limit)?;
 
-        Ok(contract_id)
+        Ok((contract_id, receipt))
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -326,7 +359,7 @@ impl Session {
         arg: Option<Vec<u8>>,
         owner: Vec<u8>,
         gas_limit: u64,
-    ) -> Result<(), Error> {
+    ) -> Result<Option<CallReceipt<Vec<u8>>>, Error> {
         if self
             .inner_mut()
             .contract_session
@@ -352,6 +385,7 @@ impl Session {
                 metadata_bytes.as_slice(),
             )
             .map_err(|err| PersistenceError(Arc::new(err)))?;
+        self.inner_mut().compiled_modules.remove(&contract_id);
 
         let instantiate = || {
             self.create_instance(contract_id)?;
@@ -367,16 +401,26 @@ impl Session {
                 // contract has an init method in the first place, which might
                 // not be the case, such as when ingesting untrusted bytecode.
                 let arg = arg.unwrap_or_default();
-                self.call_inner(contract_id, INIT_METHOD, arg, gas_limit)?;
+                let (data, gas_spent, call_tree) =
+                    self.call_inner(contract_id, INIT_METHOD, arg, gas_limit)?;
+                let events = mem::take(&mut self.inner_mut().events);
+                return Ok(Some(CallReceipt {
+                    gas_limit,
+                    gas_spent,
+                    events,
+                    call_tree,
+                    data,
+                }));
             }
 
-            Ok(())
+            Ok(None)
         };
 
         instantiate().inspect_err(|_| {
             self.inner_mut()
                 .contract_session
                 .remove_contract(&contract_id);
+            self.inner_mut().compiled_modules.remove(&contract_id);
         })
     }
 
@@ -513,14 +557,19 @@ impl Session {
             }
         }
 
-        let new_contract =
-            self.deploy(bytecode, new_contract_data, deploy_gas_limit)?;
+        let (new_contract, _init_receipt) = self.deploy::<_, (), _>(
+            bytecode,
+            new_contract_data,
+            deploy_gas_limit,
+        )?;
 
         closure(new_contract, &mut self)?;
 
         self.inner_mut()
             .contract_session
             .replace(contract, new_contract)?;
+        self.inner_mut().compiled_modules.remove(&contract);
+        self.inner_mut().compiled_modules.remove(&new_contract);
 
         Ok(self)
     }
@@ -634,6 +683,16 @@ impl Session {
         self.inner_mut().events.push(event);
     }
 
+    pub(crate) fn event_checkpoint(&self) -> usize {
+        self.inner().events.len()
+    }
+
+    pub(crate) fn revert_events_from(&mut self, checkpoint: usize) {
+        for event in self.inner_mut().events.iter_mut().skip(checkpoint) {
+            event.reverted = true;
+        }
+    }
+
     pub(crate) fn push_feed(&mut self, data: Vec<u8>) -> Result<(), Error> {
         let feed = self.inner().feeder.as_ref().ok_or(Error::MissingFeed)?;
         feed.send(data).map_err(Error::FeedPulled)
@@ -650,18 +709,29 @@ impl Session {
             .map_err(|err| PersistenceError(Arc::new(err)))?
             .ok_or(Error::ContractDoesNotExist(contract_id))?;
 
-        let contract = WrappedContract::new(
-            &self.engine,
-            store_data.bytecode,
-            Some(store_data.module.serialize()),
-        )?;
+        let module = if let Some(module) =
+            self.inner().compiled_modules.get(&contract_id)
+        {
+            module.clone()
+        } else {
+            let module = unsafe {
+                WasmtimeModule::deserialize(
+                    &self.engine,
+                    store_data.module.serialize(),
+                )?
+            };
+            self.inner_mut()
+                .compiled_modules
+                .insert(contract_id, module.clone());
+            module
+        };
 
         self.inner_mut().current = contract_id;
 
         let instance = WrappedInstance::new(
             self.clone(),
             contract_id,
-            &contract,
+            &module,
             store_data.memory,
         )?;
 
@@ -837,6 +907,7 @@ impl Session {
         fdata: Vec<u8>,
         limit: u64,
     ) -> Result<(Vec<u8>, u64, CallTree), Error> {
+        let event_checkpoint = self.event_checkpoint();
         let stack_element = self.push_callstack(contract, limit)?;
         {
             let instance = self
@@ -871,6 +942,7 @@ impl Session {
                 } else {
                     err
                 };
+                self.revert_events_from(event_checkpoint);
                 self.move_up_prune_call_tree();
                 self.clear_call_tree_and_instances();
                 return Err(err);
@@ -917,10 +989,44 @@ impl Session {
             .contract_session
             .contract_metadata(contract_id)
     }
+
+    /// Set a hook that is called before each inter-contract call.
+    ///
+    /// The hook receives the callee contract ID, the function name, and the
+    /// raw argument bytes.
+    #[cfg(feature = "call-hook")]
+    pub fn set_call_hook(&mut self, hook: CallHook) -> Option<CallHook> {
+        self.inner_mut().call_hook.replace(hook)
+    }
+
+    /// Remove the call hook, if one is set.
+    #[cfg(feature = "call-hook")]
+    pub fn clear_call_hook(&mut self) -> Option<CallHook> {
+        self.inner_mut().call_hook.take()
+    }
+
+    /// Run the call hook, if one is set.
+    ///
+    /// Returns `Ok(())` if the call is allowed (or no hook is set), or
+    /// `Err(reason)` if the hook rejects.
+    #[cfg(feature = "call-hook")]
+    pub(crate) fn call_hook(
+        &self,
+        callee: &ContractId,
+        fn_name: &str,
+        arg: &[u8],
+    ) -> Result<(), String> {
+        if let Some(hook) = &self.inner().call_hook {
+            hook(callee, fn_name, arg)
+        } else {
+            Ok(())
+        }
+    }
 }
 
 /// The receipt given for a call execution using one of either [`call`] or
-/// [`call_raw`].
+/// [`call_raw`]. This receipt is also returned within a tuple when
+/// a Contract is deployed and its `init` method is executed.
 ///
 /// [`call`]: [`Session::call`]
 /// [`call_raw`]: [`Session::call_raw`]

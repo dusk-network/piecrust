@@ -19,8 +19,8 @@ unsafe fn handle_panic(info: &PanicInfo) -> ! {
     unsafe {
         let mut w = crate::ArgbufWriter::default();
 
-        // If we fail in writing to the argument buffer, we just call `panic` after
-        // writing a standard message instead.
+        // If we fail in writing to the argument buffer, we just call `panic`
+        // after writing a standard message instead.
 
         if w.write_fmt(format_args!("{}", info.message())).is_err() {
             w = crate::ArgbufWriter::default();

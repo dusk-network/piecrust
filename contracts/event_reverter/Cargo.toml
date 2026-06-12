@@ -1,0 +1,15 @@
+[package]
+name = "event_reverter"
+version = "0.1.0"
+authors = [
+    "Dusk Network",
+]
+edition.workspace = true
+
+license = "MPL-2.0"
+
+[dependencies]
+piecrust-uplink = { path = "../../piecrust-uplink", features = ["abi", "dlmalloc"] }
+
+[lib]
+crate-type = ["cdylib", "rlib"]

@@ -10,7 +10,6 @@ mod wasm64;
 use std::any::Any;
 use std::sync::Arc;
 
-use crate::contract::ContractMetadata;
 use dusk_wasmtime::{
     Caller, Extern, Func, Module, Result as WasmtimeResult, Store,
 };
@@ -20,6 +19,7 @@ use piecrust_uplink::{
 
 use crate::Error;
 use crate::config::BYTE_STORE_COST;
+use crate::contract::ContractMetadata;
 use crate::instance::{Env, WrappedInstance};
 use crate::session::INIT_METHOD;
 
@@ -156,7 +156,7 @@ pub(crate) fn hq(
 
     let name_len = name_len as usize;
 
-    let (name, arg, gas_remaining) = {
+    let (name, gas_remaining) = {
         let instance = env.self_instance();
         check_ptr(instance, name_ofs, name_len)?;
         check_arg(instance, arg_len)?;
@@ -167,21 +167,24 @@ pub(crate) fn hq(
                 .map(ToOwned::to_owned)
         })?;
 
-        let arg = instance.with_arg_buf(|arg_buf| {
-            let arg_len = arg_len as usize;
-            Vec::from(&arg_buf[..arg_len])
-        });
-
         let gas_remaining = instance.get_remaining_gas();
 
-        (name, arg, gas_remaining)
+        (name, gas_remaining)
     };
 
     let host_query = env
         .host_query_arc(&name)
         .ok_or_else(move || Error::MissingHostQuery(name))?;
     let mut query_arg: Box<dyn Any> = Box::new(());
-    let query_cost = host_query.deserialize_and_price(&arg, &mut query_arg);
+    let query_cost = {
+        let instance = env.self_instance();
+        instance.with_arg_buf(|arg_buf| {
+            host_query.deserialize_and_price(
+                &arg_buf[..arg_len as usize],
+                &mut query_arg,
+            )
+        })
+    };
 
     if gas_remaining < query_cost {
         env.self_instance().set_remaining_gas(0);
@@ -284,6 +287,12 @@ pub(crate) fn c(
         Err(err) => return Ok(write_contract_error(env, err)),
     };
 
+    #[cfg(feature = "call-hook")]
+    if let Err(msg) = env.call_hook(&callee_id, &name, &arg) {
+        return Ok(write_contract_error(env, Error::Panic(msg)));
+    }
+
+    let event_checkpoint = env.event_checkpoint();
     let callee_stack_element = match env.push_callstack(callee_id, callee_limit)
     {
         Ok(stack_element) => stack_element,
@@ -330,6 +339,7 @@ pub(crate) fn c(
             Ok(ret_len)
         }
         Err(mut err) => {
+            env.revert_events_from(event_checkpoint);
             if let Err(io_err) = env.revert_callstack() {
                 err = Error::MemorySnapshotFailure {
                     reason: Some(Arc::new(err)),
@@ -404,15 +414,22 @@ fn callstack(mut env: Caller<Env>) -> i32 {
     let env = env.data_mut();
     let call_ids: Vec<_> =
         env.call_ids().into_iter().skip(1).copied().collect();
-    let caller_count = call_ids.len();
     let instance = env.self_instance();
 
-    for (i, contract_id) in call_ids.into_iter().enumerate() {
-        instance.with_arg_buf_mut(|buf| {
-            buf[i * CONTRACT_ID_BYTES..(i + 1) * CONTRACT_ID_BYTES]
-                .copy_from_slice(contract_id.as_bytes());
-        });
-    }
+    let caller_count = instance.with_arg_buf_mut(|buf| {
+        let mut written = 0usize;
+        for contract_id in call_ids {
+            let start = written * CONTRACT_ID_BYTES;
+            let end = start + CONTRACT_ID_BYTES;
+            if end > buf.len() {
+                break;
+            }
+
+            buf[start..end].copy_from_slice(contract_id.as_bytes());
+            written += 1;
+        }
+        written
+    });
     caller_count as i32
 }
 
@@ -526,7 +543,7 @@ fn owner(mut fenv: Caller<Env>, mod_id_ofs: usize) -> WasmtimeResult<i32> {
                 arg[..owner.len()].copy_from_slice(&owner)
             });
 
-            Ok(1)
+            Ok(owner.len() as i32)
         }
     }
 }
@@ -558,8 +575,8 @@ mod tests {
         let mut session = vm
             .session(SessionData::builder())
             .expect("session should be created");
-        let contract_id = session
-            .deploy(
+        let (contract_id, _) = session
+            .deploy::<_, (), _>(
                 contract_bytecode!("counter"),
                 ContractData::builder().owner(OWNER),
                 LIMIT,
@@ -597,8 +614,8 @@ mod tests {
         let mut session = vm
             .session(SessionData::builder())
             .expect("session should be created");
-        let contract_id = session
-            .deploy(
+        let (contract_id, _) = session
+            .deploy::<_, (), _>(
                 contract_bytecode!("counter"),
                 ContractData::builder().owner(OWNER),
                 LIMIT,

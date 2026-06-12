@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.31.0] - 2026-06-12
+
+### Added
+
+- Add `call-hook` feature with `CallHook` type, `Session::set_call_hook`, and `Session::clear_call_hook` for intercepting and optionally rejecting inter-contract calls with a descriptive error message; both methods return the previous hook value
+- Add a regression test for events emitted during reverted inter-contract calls
+
+### Changed
+
+- Change `deploy` and `deploy_raw` to return `(ContractId, Option<CallReceipt>)`, exposing init gas spent, events, and call tree to callers
+- Change call receipts to identify whether each event came from reverted execution
+
+### Fixed
+
+- Reduce host-query argument copying and streamline callstack export writes on the execution path
+- Cache compiled modules in memory and avoid redundant module reloads during commit-store reconstruction
+- Stop execution-path contract loads from silently recompiling missing modules; shaded modules now remain unavailable until explicitly recompiled.
+- Mark events emitted during reverted inter-contract calls as reverted
+
 ## [0.30.0] - 2026-02-27
 
 ### Added
@@ -29,9 +48,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Harden module cache loading with sidecar metadata checks (bytecode hash, module hash and runtime context). Invalid or stale cache entries are discarded and safely recompiled from canonical bytecode.
-
-### Fixed
-
 - Enforce explicit call depth and callstack argument-buffer bounds, returning VM errors instead of panicking on overflow
 
 ## [0.28.1] - 2025-04-16
@@ -599,7 +615,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- VERSIONS -->
 
-[Unreleased]: https://github.com/dusk-network/piecrust/compare/piecrust-0.30.0...HEAD
+[Unreleased]: https://github.com/dusk-network/piecrust/compare/piecrust-0.31.0...HEAD
+[0.31.0]: https://github.com/dusk-network/piecrust/compare/piecrust-0.30.0...piecrust-0.31.0
 [0.30.0]: https://github.com/dusk-network/piecrust/compare/piecrust-0.28.1...piecrust-0.30.0
 [0.28.1]: https://github.com/dusk-network/piecrust/compare/piecrust-0.28.0...piecrust-0.28.1
 [0.28.0]: https://github.com/dusk-network/piecrust/compare/piecrust-0.27.2...piecrust-0.28.0

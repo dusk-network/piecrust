@@ -50,6 +50,19 @@ impl Callcenter {
         uplink::call_raw(contract_id, &fn_name, &fn_arg)
     }
 
+    /// Emit events around a query to a contract specified by its ID.
+    pub fn delegate_query_with_event(
+        &self,
+        contract_id: ContractId,
+        fn_name: String,
+        fn_arg: Vec<u8>,
+    ) -> Result<Vec<u8>, ContractError> {
+        uplink::emit("callcenter-before", ());
+        let result = self.delegate_query(contract_id, fn_name, fn_arg);
+        uplink::emit("callcenter-after", ());
+        result
+    }
+
     /// Pass the current query
     pub fn query_passthrough(
         &mut self,
@@ -126,6 +139,20 @@ impl Callcenter {
     /// Just panic.
     pub fn panik(&self) {
         panic!("panik");
+    }
+
+    /// Call another contract's function expecting a `bool` return, and
+    /// propagate the result (including deserialization errors) instead of
+    /// unwrapping. 
+    /// 
+    /// Uses `bool` because it has validation constraints (only 0 or 1 are
+    /// valid), unlike primitive integers which accept any bit pattern.
+    pub fn try_query_bool(
+        &self,
+        contract_id: ContractId,
+        fn_name: String,
+    ) -> Result<bool, ContractError> {
+        uplink::call(contract_id, &fn_name, &())
     }
 }
 
@@ -228,6 +255,18 @@ unsafe fn delegate_query(arg_len: u32) -> u32 {
     }
 }
 
+/// Expose `Callcenter::delegate_query_with_event()` to the host
+#[unsafe(no_mangle)]
+unsafe fn delegate_query_with_event(arg_len: u32) -> u32 {
+    unsafe {
+        wrap_call(arg_len, |(mod_id, fn_name, fn_arg)| {
+            (*(&raw const STATE)).delegate_query_with_event(
+                mod_id, fn_name, fn_arg,
+            )
+        })
+    }
+}
+
 /// Expose `Callcenter::query_passthrough()` to the host
 #[unsafe(no_mangle)]
 unsafe fn query_passthrough(arg_len: u32) -> u32 {
@@ -252,4 +291,14 @@ unsafe fn delegate_transaction(arg_len: u32) -> u32 {
 #[unsafe(no_mangle)]
 unsafe fn panik(arg_len: u32) -> u32 {
     unsafe { wrap_call(arg_len, |()| (*(&raw const STATE)).panik()) }
+}
+
+/// Expose `Callcenter::try_query_bool()` to the host
+#[unsafe(no_mangle)]
+unsafe fn try_query_bool(arg_len: u32) -> u32 {
+    unsafe {
+        wrap_call(arg_len, |(contract_id, fn_name)| {
+            (*(&raw const STATE)).try_query_bool(contract_id, fn_name)
+        })
+    }
 }

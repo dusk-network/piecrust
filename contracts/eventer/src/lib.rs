@@ -15,10 +15,12 @@ use alloc::vec::Vec;
 use piecrust_uplink as uplink;
 
 /// Struct that describes the state of the eventer contract
-pub struct Eventer;
+pub struct Eventer {
+    value: u32,
+}
 
 /// State of the eventer contract
-static mut STATE: Eventer = Eventer;
+static mut STATE: Eventer = Eventer { value: 0 };
 
 impl Eventer {
     /// Emits an event with the given number
@@ -40,6 +42,15 @@ impl Eventer {
         uplink::emit("input", input);
         let spent_after = uplink::spent();
         (spent_before, spent_after)
+    }
+
+    pub fn emit_and_mutate(&mut self, value: u32) {
+        uplink::emit("number", value);
+        self.value = value;
+    }
+
+    pub fn read_value(&self) -> u32 {
+        self.value
     }
 }
 
@@ -66,5 +77,23 @@ unsafe fn emit_events_raw(arg_len: u32) -> u32 {
 unsafe fn emit_input(arg_len: u32) -> u32 {
     unsafe {
         uplink::wrap_call(arg_len, |input| (*&raw mut STATE).emit_input(input))
+    }
+}
+
+/// Expose `Eventer::emit_and_mutate()` to the host
+#[unsafe(no_mangle)]
+unsafe fn emit_and_mutate(arg_len: u32) -> u32 {
+    unsafe {
+        uplink::wrap_call(arg_len, |value| {
+            (*&raw mut STATE).emit_and_mutate(value)
+        })
+    }
+}
+
+/// Expose `Eventer::read_value()` to the host
+#[unsafe(no_mangle)]
+unsafe fn read_value(arg_len: u32) -> u32 {
+    unsafe {
+        uplink::wrap_call(arg_len, |_: ()| (*&raw const STATE).read_value())
     }
 }

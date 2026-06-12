@@ -28,14 +28,14 @@ fn crossover() -> Result<(), Error> {
 
     let mut session = vm.session(SessionData::builder())?;
 
-    session.deploy(
+    session.deploy::<_, (), _>(
         contract_bytecode!("crossover"),
         ContractData::builder()
             .owner(OWNER)
             .contract_id(CROSSOVER_ONE),
         LIMIT,
     )?;
-    session.deploy(
+    session.deploy::<_, (), _>(
         contract_bytecode!("crossover"),
         ContractData::builder()
             .owner(OWNER)
@@ -79,14 +79,14 @@ fn iccs_dont_rollback() -> Result<(), Error> {
 
     let mut session = vm.session(SessionData::builder())?;
 
-    session.deploy(
+    session.deploy::<_, (), _>(
         contract_bytecode!("crossover"),
         ContractData::builder()
             .owner(OWNER)
             .contract_id(CROSSOVER_ONE),
         LIMIT,
     )?;
-    session.deploy(
+    session.deploy::<_, (), _>(
         contract_bytecode!("crossover"),
         ContractData::builder()
             .owner(OWNER)

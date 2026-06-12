@@ -8,31 +8,26 @@ use alloc::string::String;
 use alloc::vec::Vec;
 
 use bytecheck::CheckBytes;
-use rkyv::{
-    Archive, Deserialize, Serialize,
-    ser::serializers::{BufferScratch, BufferSerializer, CompositeSerializer},
+use rkyv::ser::serializers::{
+    BufferScratch, BufferSerializer, CompositeSerializer,
 };
+use rkyv::{Archive, Deserialize, Serialize};
 
 use crate::SCRATCH_BUF_BYTES;
 
 /// And event emitted by a contract.
-#[derive(
-    Debug,
-    Clone,
-    PartialEq,
-    Eq,
-    PartialOrd,
-    Ord,
-    Hash,
-    Archive,
-    Serialize,
-    Deserialize,
-)]
-#[archive_attr(derive(CheckBytes))]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Event {
     pub source: ContractId,
     pub topic: String,
+    #[cfg_attr(
+        feature = "serde",
+        serde(with = "serde_with::As::<serde_with::hex::Hex>")
+    )]
     pub data: Vec<u8>,
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub reverted: bool,
 }
 
 /// Type with `rkyv` serialization capabilities for specific types.
@@ -60,7 +55,14 @@ pub const CONTRACT_ID_BYTES: usize = 32;
 )]
 #[archive(as = "Self")]
 #[repr(C)]
-pub struct ContractId([u8; CONTRACT_ID_BYTES]);
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct ContractId(
+    #[cfg_attr(
+        feature = "serde",
+        serde(with = "serde_with::As::<serde_with::hex::Hex>")
+    )]
+    [u8; CONTRACT_ID_BYTES],
+);
 
 impl ContractId {
     /// Creates a new [`ContractId`] from an array of bytes
@@ -154,7 +156,8 @@ impl TryFrom<String> for ContractId {
 
 #[cfg(test)]
 mod tests {
-    use alloc::{format, string::ToString};
+    use alloc::format;
+    use alloc::string::ToString;
 
     use rand::rngs::StdRng;
     use rand::{Rng, SeedableRng};

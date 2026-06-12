@@ -16,12 +16,12 @@ pub fn gas_get_used() -> Result<(), Error> {
 
     let mut session = vm.session(SessionData::builder())?;
 
-    let counter_id = session.deploy(
+    let (counter_id, _) = session.deploy::<_, (), _>(
         contract_bytecode!("counter"),
         ContractData::builder().owner(OWNER),
         LIMIT,
     )?;
-    let center_id = session.deploy(
+    let (center_id, _) = session.deploy::<_, (), _>(
         contract_bytecode!("callcenter"),
         ContractData::builder().owner(OWNER),
         LIMIT,
@@ -50,12 +50,12 @@ pub fn call_receipt() -> Result<(), Error> {
 
     let mut session = vm.session(SessionData::builder())?;
 
-    let counter_id = session.deploy(
+    let (counter_id, _) = session.deploy::<_, (), _>(
         contract_bytecode!("counter"),
         ContractData::builder().owner(OWNER),
         LIMIT,
     )?;
-    let center_id = session.deploy(
+    let (center_id, _) = session.deploy::<_, (), _>(
         contract_bytecode!("callcenter"),
         ContractData::builder().owner(OWNER),
         LIMIT,
@@ -85,12 +85,12 @@ pub fn panic_msg_gets_through() -> Result<(), Error> {
 
     let mut session = vm.session(SessionData::builder())?;
 
-    let spender_id = session.deploy(
+    let (spender_id, _) = session.deploy::<_, (), _>(
         contract_bytecode!("spender"),
         ContractData::builder().owner(OWNER),
         LIMIT,
     )?;
-    let callcenter_id = session.deploy(
+    let (callcenter_id, _) = session.deploy::<_, (), _>(
         contract_bytecode!("callcenter"),
         ContractData::builder().owner(OWNER),
         LIMIT,
@@ -116,7 +116,7 @@ pub fn fails_with_out_of_gas() -> Result<(), Error> {
 
     let mut session = vm.session(SessionData::builder())?;
 
-    let counter_id = session.deploy(
+    let (counter_id, _) = session.deploy::<_, (), _>(
         contract_bytecode!("counter"),
         ContractData::builder().owner(OWNER),
         LIMIT,
@@ -138,23 +138,23 @@ pub fn contract_sets_call_limit() -> Result<(), Error> {
     let mut session_1st = vm.session(SessionData::builder())?;
     let mut session_2nd = vm.session(SessionData::builder())?;
 
-    session_1st.deploy(
+    session_1st.deploy::<_, (), _>(
         contract_bytecode!("spender"),
         ContractData::builder().owner(OWNER),
         LIMIT,
     )?;
-    session_1st.deploy(
+    session_1st.deploy::<_, (), _>(
         contract_bytecode!("callcenter"),
         ContractData::builder().owner(OWNER),
         LIMIT,
     )?;
 
-    let spender_id = session_2nd.deploy(
+    let (spender_id, _) = session_2nd.deploy::<_, (), _>(
         contract_bytecode!("spender"),
         ContractData::builder().owner(OWNER),
         LIMIT,
     )?;
-    let callcenter_id = session_2nd.deploy(
+    let (callcenter_id, _) = session_2nd.deploy::<_, (), _>(
         contract_bytecode!("callcenter"),
         ContractData::builder().owner(OWNER),
         LIMIT,
@@ -192,7 +192,7 @@ pub fn limit_and_spent() -> Result<(), Error> {
 
     let mut session = vm.session(SessionData::builder())?;
 
-    let spender_id = session.deploy(
+    let (spender_id, _) = session.deploy::<_, (), _>(
         contract_bytecode!("spender"),
         ContractData::builder().owner(OWNER),
         LIMIT,

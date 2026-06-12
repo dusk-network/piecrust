@@ -7,14 +7,14 @@ categories = ["wasm", "no-std", "cryptography::cryptocurrencies"]
 keywords = ["virtual", "machine", "smart", "contract", "wasm"]
 
 repository = "https://github.com/dusk-network/piecrust"
-version = "0.30.0"
+version = "0.31.0"
 
 edition.workspace = true
 license = "MPL-2.0"
 
 [dependencies]
 crumbles = { version = "0.4.0", path = "../crumbles" }
-piecrust-uplink = { version = "0.20.0", path = "../piecrust-uplink" }
+piecrust-uplink = { version = "0.21.0", path = "../piecrust-uplink" }
 
 dusk-wasmtime = { version = "21.0.0-alpha", default-features = false, features = [
     "cranelift",
@@ -43,6 +43,7 @@ dusk-plonk = { version = "0.22.0-rc.0", features = ["rkyv-impl"] }
 
 [features]
 debug = []
+call-hook = []
 
 [[test]]
 name = "callcenter"
@@ -83,6 +84,21 @@ required-features = ["debug"]
 name = "validation"
 path = "tests/validation.rs"
 required-features = ["debug"]
+
+[[test]]
+name = "deserialization"
+path = "tests/deserialization.rs"
+required-features = ["debug"]
+
+[[test]]
+name = "event_reverter"
+path = "tests/event_reverter.rs"
+required-features = ["debug"]
+
+[[test]]
+name = "call_hook"
+path = "tests/call_hook.rs"
+required-features = ["call-hook", "debug"]
 
 [[bench]]
 name = "stack"

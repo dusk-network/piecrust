@@ -15,7 +15,7 @@ pub fn debug() -> Result<(), Error> {
 
     let mut session = vm.session(SessionData::builder())?;
 
-    let id = session.deploy(
+    let (id, _) = session.deploy::<_, (), _>(
         contract_bytecode!("debugger"),
         ContractData::builder().owner(OWNER),
         LIMIT,

@@ -15,7 +15,7 @@ pub fn vm_center_events() -> Result<(), Error> {
 
     let mut session = vm.session(SessionData::builder())?;
 
-    let eventer_id = session.deploy(
+    let (eventer_id, _) = session.deploy::<_, (), _>(
         contract_bytecode!("eventer"),
         ContractData::builder().owner(OWNER),
         LIMIT,
@@ -31,6 +31,7 @@ pub fn vm_center_events() -> Result<(), Error> {
 
     for i in 0..EVENT_NUM {
         let index = i as usize;
+        assert!(!events[index].reverted);
         assert_eq!(events[index].source, eventer_id);
         assert_eq!(events[index].topic, "number");
         assert_eq!(events[index].data, i.to_le_bytes());
@@ -48,6 +49,7 @@ pub fn vm_center_events() -> Result<(), Error> {
 
     for i in 0..EVENT_NUM {
         let index = i as usize;
+        assert!(!events[index].reverted);
         assert_eq!(events[index].source, eventer_id);
         assert_eq!(events[index].topic, "number");
         assert_eq!(events[index].data, i.to_le_bytes());
@@ -62,7 +64,7 @@ pub fn event_costs() -> Result<(), Error> {
 
     let mut session = vm.session(SessionData::builder())?;
 
-    let eventer_id = session.deploy(
+    let (eventer_id, _) = session.deploy::<_, (), _>(
         contract_bytecode!("eventer"),
         ContractData::builder().owner(OWNER),
         LIMIT,

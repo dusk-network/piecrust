@@ -32,6 +32,18 @@ impl Metadata {
     pub fn read_owner_of(&self, id: ContractId) -> Option<[u8; 33]> {
         uplink::owner(id)
     }
+
+    /// Attempt to read self_owner with wrong N (32 instead of 33).
+    /// Should panic at runtime.
+    pub fn read_owner_wrong_n(&self) -> [u8; 32] {
+        uplink::self_owner()
+    }
+
+    /// Attempt to read another contract's owner with wrong N.
+    /// Should panic at runtime.
+    pub fn read_owner_of_wrong_n(&self, id: ContractId) -> Option<[u8; 32]> {
+        uplink::owner(id)
+    }
 }
 
 /// Expose `Metadata::read_owner()` to the host
@@ -61,5 +73,29 @@ unsafe fn read_owner_of(arg_len: u32) -> u32 {
     // static via raw pointer is safe - there's no risk of data races.
     unsafe {
         uplink::wrap_call(arg_len, |id| (*&raw const STATE).read_owner_of(id))
+    }
+}
+
+/// Expose `Metadata::read_owner_wrong_n()` to the host
+#[unsafe(no_mangle)]
+unsafe fn read_owner_wrong_n(arg_len: u32) -> u32 {
+    // SAFETY: WASM smart contracts are single-threaded, so accessing mutable
+    // static via raw pointer is safe - there's no risk of data races.
+    unsafe {
+        uplink::wrap_call(arg_len, |_: ()| {
+            (*&raw const STATE).read_owner_wrong_n()
+        })
+    }
+}
+
+/// Expose `Metadata::read_owner_of_wrong_n()` to the host
+#[unsafe(no_mangle)]
+unsafe fn read_owner_of_wrong_n(arg_len: u32) -> u32 {
+    // SAFETY: WASM smart contracts are single-threaded, so accessing mutable
+    // static via raw pointer is safe - there's no risk of data races.
+    unsafe {
+        uplink::wrap_call(arg_len, |id| {
+            (*&raw const STATE).read_owner_of_wrong_n(id)
+        })
     }
 }

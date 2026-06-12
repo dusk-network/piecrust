@@ -4,10 +4,11 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use piecrust::{ContractData, Error, SessionData, VM, contract_bytecode};
-use piecrust_uplink::ContractId;
 use std::path::PathBuf;
 use std::sync::Arc;
+
+use piecrust::{ContractData, Error, SessionData, VM, contract_bytecode};
+use piecrust_uplink::ContractId;
 
 const OWNER: [u8; 32] = [0u8; 32];
 const LIMIT: u64 = 1_000_000;
@@ -28,7 +29,7 @@ fn module_meta_path(vm: &VM, contract_id: ContractId) -> PathBuf {
 
 fn deploy_counter(vm: &VM) -> Result<(ContractId, [u8; 32]), Error> {
     let mut session = vm.session(SessionData::builder())?;
-    let counter_id = session.deploy(
+    let (counter_id, _) = session.deploy::<_, (), _>(
         contract_bytecode!("counter"),
         ContractData::builder().owner(OWNER),
         LIMIT,
@@ -123,6 +124,7 @@ fn module_cache_recovers_from_missing_or_corrupt_metadata() -> Result<(), Error>
 
     std::fs::remove_file(&module_meta_file).map_err(io_to_error)?;
 
+    let vm = VM::new(vm.root_dir())?;
     let mut session = vm.session(SessionData::builder().base(commit_id))?;
     assert_eq!(
         session
@@ -136,6 +138,7 @@ fn module_cache_recovers_from_missing_or_corrupt_metadata() -> Result<(), Error>
     std::fs::write(&module_meta_file, b"broken-metadata")
         .map_err(io_to_error)?;
 
+    let vm = VM::new(vm.root_dir())?;
     let mut session = vm.session(SessionData::builder().base(commit_id))?;
     assert_eq!(
         session
@@ -152,16 +155,76 @@ fn module_cache_recovers_from_missing_or_corrupt_metadata() -> Result<(), Error>
 }
 
 #[test]
+fn module_cache_recovers_from_missing_objectcode_with_live_memory_cache()
+-> Result<(), Error> {
+    let vm = VM::ephemeral()?;
+    let (counter_id, commit_id) = deploy_counter(&vm)?;
+    let module_file = module_path(&vm, counter_id);
+    let module_meta_file = module_meta_path(&vm, counter_id);
+
+    std::fs::remove_file(&module_file).map_err(io_to_error)?;
+    assert!(!module_file.exists());
+    assert!(module_meta_file.exists());
+
+    let vm = VM::new(vm.root_dir())?;
+    assert!(module_file.exists());
+
+    let mut session = vm.session(SessionData::builder().base(commit_id))?;
+    assert_eq!(
+        session
+            .call::<_, i64>(counter_id, "read_value", &(), LIMIT)?
+            .data,
+        0xfd
+    );
+
+    Ok(())
+}
+
+#[test]
+fn removed_module_stays_unavailable_until_recompiled() -> Result<(), Error> {
+    let vm = VM::ephemeral()?;
+    let (counter_id, commit_id) = deploy_counter(&vm)?;
+
+    let module_file = module_path(&vm, counter_id);
+    let module_meta_file = module_meta_path(&vm, counter_id);
+
+    vm.remove_module(counter_id)?;
+    assert!(!module_file.exists());
+    assert!(!module_meta_file.exists());
+
+    let mut session = vm.session(SessionData::builder().base(commit_id))?;
+    assert!(
+        session
+            .call::<_, i64>(counter_id, "read_value", &(), LIMIT)
+            .is_err()
+    );
+    assert!(!module_file.exists());
+    assert!(!module_meta_file.exists());
+
+    vm.recompile_module(counter_id)?;
+
+    let mut session = vm.session(SessionData::builder().base(commit_id))?;
+    assert_eq!(
+        session
+            .call::<_, i64>(counter_id, "read_value", &(), LIMIT)?
+            .data,
+        0xfd
+    );
+
+    Ok(())
+}
+
+#[test]
 fn remove_and_recompile_multiple_contracts() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
     let mut session = vm.session(SessionData::builder())?;
 
-    let counter_id = session.deploy(
+    let (counter_id, _) = session.deploy::<_, (), _>(
         contract_bytecode!("counter"),
         ContractData::builder().owner(OWNER),
         LIMIT,
     )?;
-    let box_id = session.deploy(
+    let (box_id, _) = session.deploy::<_, (), _>(
         contract_bytecode!("box"),
         ContractData::builder().owner(OWNER),
         LIMIT,

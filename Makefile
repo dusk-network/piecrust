@@ -34,14 +34,34 @@ contracts-wasm64: setup-compiler ## Build wasm64 contracts
 	  target/stripped/c_example.wasm
 
 test: contracts cold-reboot assert-counter-contract-small ## Run all tests
-	@cargo test \
-	  --manifest-path=./crumbles/Cargo.toml \
-	  --all-features \
-	  --color=always
-	@cargo test \
-	  --manifest-path=./piecrust/Cargo.toml \
-	  --all-features \
-	  --color=always
+	@$(MAKE) -C ./crumbles $@
+	@$(MAKE) -C ./piecrust-uplink $@
+	@$(MAKE) -C ./piecrust $@
+
+clippy: ## Run clippy on all crates
+	@$(MAKE) -C ./crumbles $@
+	@$(MAKE) -C ./piecrust-uplink $@
+	@$(MAKE) -C ./piecrust $@
+
+cq: ## Run code quality checks (formatting + clippy)
+	@$(MAKE) fmt CHECK=1
+	@$(MAKE) clippy
+
+no-std: ## Run no_std build check
+	@$(MAKE) -C ./piecrust-uplink $@
+
+fmt: ## Format all code
+	@rustup component add --toolchain nightly rustfmt 2>/dev/null || true
+	@cargo +nightly fmt --all $(if $(CHECK),-- --check,)
+
+check: ## Run cargo check
+	@cargo check
+
+doc: ## Build documentation
+	@cargo doc --no-deps
+
+clean: ## Clean build artifacts
+	@cargo clean
 
 cold-reboot: contracts ## Run the cold reboot test
 	@cargo build \
@@ -52,9 +72,9 @@ cold-reboot: contracts ## Run the cold reboot test
 	@./target/debug/cold_reboot /tmp/piecrust-cold-reboot confirm
 	@rm -r /tmp/piecrust-cold-reboot
 
-.PHONY: test contracts contracts-wasm64 setup-compiler cold-reboot assert-counter-contract-small
-
 MAX_COUNTER_CONTRACT_SIZE = 8192
 
 assert-counter-contract-small: contracts
 	@test `wc -c target/stripped/counter.wasm | sed 's/^[^0-9]*\([0-9]*\).*/\1/'` -lt $(MAX_COUNTER_CONTRACT_SIZE);
+
+.PHONY: help test contracts contracts-wasm64 setup-compiler cold-reboot assert-counter-contract-small clippy cq no-std fmt check doc clean

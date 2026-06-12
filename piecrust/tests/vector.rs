@@ -15,7 +15,7 @@ pub fn vector_push_pop() -> Result<(), Error> {
 
     let mut session = vm.session(SessionData::builder())?;
 
-    let id = session.deploy(
+    let (id, _) = session.deploy::<_, (), _>(
         contract_bytecode!("vector"),
         ContractData::builder().owner(OWNER),
         LIMIT,

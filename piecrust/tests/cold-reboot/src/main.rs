@@ -27,7 +27,7 @@ fn initialize_counter<P: AsRef<Path>>(
     let counter_bytecode =
         include_bytes!("../../../../target/stripped/counter.wasm");
 
-    session.deploy(
+    session.deploy::<_, (), _>(
         counter_bytecode,
         ContractData::builder().owner(OWNER).contract_id(COUNTER_ID),
         u64::MAX,

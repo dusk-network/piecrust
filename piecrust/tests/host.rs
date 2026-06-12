@@ -4,6 +4,8 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
+use std::any::Any;
+
 use dusk_plonk::prelude::{
     BlsScalar, Circuit, Compiler, Composer, Constraint, Error as PlonkError,
     Proof, Prover, PublicParameters, Verifier,
@@ -14,7 +16,6 @@ use piecrust::{
 };
 use rand::rngs::OsRng;
 use rkyv::Deserialize;
-use std::any::Any;
 
 const OWNER: [u8; 32] = [0u8; 32];
 const LIMIT: u64 = 1_000_000;
@@ -94,7 +95,7 @@ pub fn host_hash() -> Result<(), Error> {
 
     let mut session = vm.session(SessionData::builder())?;
 
-    let id = session.deploy(
+    let (id, _) = session.deploy::<_, (), _>(
         contract_bytecode!("host"),
         ContractData::builder().owner(OWNER),
         LIMIT,
@@ -116,7 +117,7 @@ pub fn host_very_expensive_oog() -> Result<(), Error> {
 
     let mut session = vm.session(SessionData::builder())?;
 
-    let id = session.deploy(
+    let (id, _) = session.deploy::<_, (), _>(
         contract_bytecode!("host"),
         ContractData::builder().owner(OWNER),
         LIMIT,
@@ -163,7 +164,7 @@ pub fn host_proof() -> Result<(), Error> {
 
     let mut session = vm.session(SessionData::builder())?;
 
-    let id = session.deploy(
+    let (id, _) = session.deploy::<_, (), _>(
         contract_bytecode!("host"),
         ContractData::builder().owner(OWNER),
         LIMIT,

@@ -4,11 +4,12 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
+use std::path::Path;
+use std::{fs, io};
+
 use crate::store::baseinfo::BaseInfo;
 use crate::store::hasher::Hash;
 use crate::store::{BASE_FILE, LEAF_DIR, MAIN_DIR, MEMORY_DIR};
-use std::path::Path;
-use std::{fs, io};
 
 pub struct CommitRemover;
 

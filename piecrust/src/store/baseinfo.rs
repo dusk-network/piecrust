@@ -4,12 +4,14 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use crate::store::hasher::Hash;
+use std::path::Path;
+use std::{fs, io};
+
 use bytecheck::CheckBytes;
 use piecrust_uplink::ContractId;
 use rkyv::{Archive, Deserialize, Serialize};
-use std::path::Path;
-use std::{fs, io};
+
+use crate::store::hasher::Hash;
 
 #[derive(Debug, Clone, Default, Archive, Deserialize, Serialize)]
 #[archive_attr(derive(CheckBytes))]

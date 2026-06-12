@@ -1,0 +1,11 @@
+help: ## Display this help screen
+	@grep -h -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-15s\033[0m %s\n", $$1, $$2}'
+
+test: ## Run tests
+	@cargo test --all-features --color=always
+
+clippy: ## Run clippy
+	@cargo clippy --all-features -- -D warnings
+	@cargo clippy --no-default-features -- -D warnings
+
+.PHONY: help test clippy

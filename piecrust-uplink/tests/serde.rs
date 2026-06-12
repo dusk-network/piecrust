@@ -24,6 +24,7 @@ fn rand_event(rng: &mut StdRng) -> Event {
         source: rand_contract_id(rng),
         topic: "a-contract-topic".into(),
         data: data.into(),
+        reverted: false,
     }
 }
 

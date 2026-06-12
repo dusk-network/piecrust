@@ -6,12 +6,12 @@
 
 use std::borrow::Cow;
 use std::sync::{Arc, mpsc};
-use thiserror::Error;
 
 use piecrust_uplink::{ContractError, ContractId};
 use rkyv::ser::serializers::{
     BufferSerializerError, CompositeSerializerError, FixedSizeScratchError,
 };
+use thiserror::Error;
 
 pub type Compo = CompositeSerializerError<
     BufferSerializerError,

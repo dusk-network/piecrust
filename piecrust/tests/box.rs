@@ -16,7 +16,7 @@ pub fn box_set_get() -> Result<(), Error> {
 
     let mut session = vm.session(SessionData::builder())?;
 
-    let id = session.deploy(
+    let (id, _) = session.deploy::<_, (), _>(
         contract_bytecode!("box"),
         ContractData::builder().owner(OWNER),
         LIMIT,
@@ -41,7 +41,7 @@ pub fn box_set_get_raw() -> Result<(), Error> {
 
     let mut session = vm.session(SessionData::builder())?;
 
-    let id = session.deploy(
+    let (id, _) = session.deploy::<_, (), _>(
         contract_bytecode!("box"),
         ContractData::builder().owner(OWNER),
         LIMIT,

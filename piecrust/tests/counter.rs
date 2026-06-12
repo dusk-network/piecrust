@@ -15,7 +15,7 @@ fn counter_read_simple() -> Result<(), Error> {
 
     let mut session = vm.session(SessionData::builder())?;
 
-    let id = session.deploy(
+    let (id, _) = session.deploy::<_, (), _>(
         contract_bytecode!("counter"),
         ContractData::builder().owner(OWNER),
         LIMIT,
@@ -35,7 +35,7 @@ fn counter_read_write_simple() -> Result<(), Error> {
 
     let mut session = vm.session(SessionData::builder())?;
 
-    let id = session.deploy(
+    let (id, _) = session.deploy::<_, (), _>(
         contract_bytecode!("counter"),
         ContractData::builder().owner(OWNER),
         LIMIT,
@@ -62,12 +62,12 @@ fn call_through_c() -> Result<(), Error> {
 
     let mut session = vm.session(SessionData::builder())?;
 
-    let counter_id = session.deploy(
+    let (counter_id, _) = session.deploy::<_, (), _>(
         contract_bytecode!("counter"),
         ContractData::builder().owner(OWNER),
         LIMIT,
     )?;
-    let c_example_id = session.deploy(
+    let (c_example_id, _) = session.deploy::<_, (), _>(
         contract_bytecode!("c_example"),
         ContractData::builder().owner(OWNER),
         LIMIT,
@@ -94,7 +94,7 @@ fn increment_panic() -> Result<(), Error> {
 
     let mut session = vm.session(SessionData::builder())?;
 
-    let counter_id = session.deploy(
+    let (counter_id, _) = session.deploy::<_, (), _>(
         contract_bytecode!("fallible_counter"),
         ContractData::builder().owner(OWNER),
         LIMIT,
