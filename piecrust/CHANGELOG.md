@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.30.0] - 2026-02-27
+## [0.31.0] - 2026-06-12
 
 ### Added
 
@@ -38,7 +38,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Update workspace and contracts to Rust edition 2024 [#466]
-- Update `dusk-plonk` dev-dependency to 0.22.0 [#466]
+- Update `dusk-plonk` dev-dependency to 0.22.0-rc.0 [#466]
 - Enable `gc` feature in `dusk-wasmtime` for reference-types support (required by Rust 1.82+) [#466]
 - Switch contract builds to wasm32 with standard toolchain, keeping c-example on wasm64 [#466]
 - Allow to exclude host queries when creating a session
@@ -615,7 +615,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- VERSIONS -->
 
-[Unreleased]: https://github.com/dusk-network/piecrust/compare/piecrust-0.30.0...HEAD
+[Unreleased]: https://github.com/dusk-network/piecrust/compare/piecrust-0.31.0...HEAD
+[0.31.0]: https://github.com/dusk-network/piecrust/compare/piecrust-0.30.0...piecrust-0.31.0
 [0.30.0]: https://github.com/dusk-network/piecrust/compare/piecrust-0.28.1...piecrust-0.30.0
 [0.28.1]: https://github.com/dusk-network/piecrust/compare/piecrust-0.28.0...piecrust-0.28.1
 [0.28.0]: https://github.com/dusk-network/piecrust/compare/piecrust-0.27.2...piecrust-0.28.0
