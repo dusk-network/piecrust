@@ -339,7 +339,11 @@ pub fn caller() -> Option<ContractId> {
     }
 }
 
-/// Returns IDs of all calling contracts present in the calling stack
+/// Returns IDs of all calling contracts present in the calling stack.
+///
+/// The current contract is not included. Index 0 is the immediate caller, and
+/// the last element is the root contract call. Direct/root calls return an
+/// empty stack.
 pub fn callstack() -> Vec<ContractId> {
     let n = unsafe { ext::callstack() };
     with_arg_buf(|buf| {

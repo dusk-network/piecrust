@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Expose the active caller stack to call hooks before each inter-contract call.
+
 ## [0.31.0] - 2026-06-12
 
 ### Added

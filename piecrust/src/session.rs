@@ -90,12 +90,19 @@ impl Drop for Session {
 
 /// A hook called before each inter-contract call.
 ///
-/// Receives the callee contract ID, the function name, and the raw argument
-/// bytes. Returns `Ok(())` to allow the call, or `Err(reason)` to reject it
-/// with a descriptive message.
+/// Receives the callee contract ID, the function name, the raw argument bytes,
+/// and the current call stack before the callee is pushed. Returns `Ok(())` to
+/// allow the call, or `Err(reason)` to reject it with a descriptive message.
+///
+/// The callee is not included in the stack because the hook runs before the
+/// callee is pushed. The stack is ordered like `abi::callstack()`: index 0 is
+/// the immediate caller, and the last element is the root contract call.
 #[cfg(feature = "call-hook")]
-pub type CallHook =
-    Box<dyn Fn(&ContractId, &str, &[u8]) -> Result<(), String> + Send + Sync>;
+pub type CallHook = Box<
+    dyn Fn(&ContractId, &str, &[u8], &[&ContractId]) -> Result<(), String>
+        + Send
+        + Sync,
+>;
 
 struct SessionInner {
     current: ContractId,
@@ -992,8 +999,8 @@ impl Session {
 
     /// Set a hook that is called before each inter-contract call.
     ///
-    /// The hook receives the callee contract ID, the function name, and the
-    /// raw argument bytes.
+    /// The hook receives the callee contract ID, the function name, the raw
+    /// argument bytes, and the current call stack before the callee is pushed.
     #[cfg(feature = "call-hook")]
     pub fn set_call_hook(&mut self, hook: CallHook) -> Option<CallHook> {
         self.inner_mut().call_hook.replace(hook)
@@ -1017,7 +1024,8 @@ impl Session {
         arg: &[u8],
     ) -> Result<(), String> {
         if let Some(hook) = &self.inner().call_hook {
-            hook(callee, fn_name, arg)
+            let call_stack = self.call_ids();
+            hook(callee, fn_name, arg, &call_stack)
         } else {
             Ok(())
         }
