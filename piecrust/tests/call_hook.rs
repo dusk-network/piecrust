@@ -9,7 +9,7 @@ use std::sync::{Arc, Mutex};
 use piecrust::{
     CallHook, ContractData, Error, SessionData, VM, contract_bytecode,
 };
-use piecrust_uplink::ContractId;
+use piecrust_uplink::{ContractError, ContractId};
 
 const OWNER: [u8; 32] = [0u8; 32];
 const LIMIT: u64 = 1_000_000;
@@ -184,6 +184,71 @@ fn call_hook_can_deserialize_fn_args() -> Result<(), Error> {
         assert_eq!(call.call_stack.len(), i + 1);
         assert!(call.call_stack.iter().all(|id| *id == center_id));
     }
+
+    Ok(())
+}
+
+#[test]
+fn call_hook_stack_is_immediate_caller_first() -> Result<(), Error> {
+    let vm = VM::ephemeral()?;
+    let mut session = vm.session(SessionData::builder())?;
+
+    let (counter_id, _) = session.deploy::<_, (), _>(
+        contract_bytecode!("counter"),
+        ContractData::builder().owner(OWNER),
+        LIMIT,
+    )?;
+    let outer_id = ContractId::from_bytes([0x11; 32]);
+    let (outer_id, _) = session.deploy::<_, (), _>(
+        contract_bytecode!("callcenter"),
+        ContractData::builder().owner(OWNER).contract_id(outer_id),
+        LIMIT,
+    )?;
+    let inner_id = ContractId::from_bytes([0x22; 32]);
+    let (inner_id, _) = session.deploy::<_, (), _>(
+        contract_bytecode!("callcenter"),
+        ContractData::builder().owner(OWNER).contract_id(inner_id),
+        LIMIT,
+    )?;
+
+    let inner_args = rkyv::to_bytes::<_, 1024>(&(
+        counter_id,
+        String::from("read_value"),
+        Vec::<u8>::new(),
+    ))
+    .expect("inner args should serialize")
+    .to_vec();
+
+    let recorder = CallRecorder::new();
+    session.set_call_hook(recorder.hook());
+
+    let res = session
+        .call::<_, Result<Vec<u8>, ContractError>>(
+            outer_id,
+            "delegate_query",
+            &(inner_id, String::from("delegate_query"), inner_args),
+            LIMIT,
+        )?
+        .data
+        .expect("nested ICC should succeed");
+    let inner_res: Result<Vec<u8>, ContractError> =
+        rkyv::from_bytes(&res).expect("inner result should decode");
+    let value: i64 = rkyv::from_bytes(
+        &inner_res.expect("inner counter query should succeed"),
+    )
+    .expect("counter value should decode");
+    assert_eq!(value, 0xfc);
+
+    let calls = recorder.calls();
+    assert_eq!(calls.len(), 2);
+
+    assert_eq!(calls[0].contract, inner_id);
+    assert_eq!(calls[0].fn_name, "delegate_query");
+    assert_eq!(calls[0].call_stack, vec![outer_id]);
+
+    assert_eq!(calls[1].contract, counter_id);
+    assert_eq!(calls[1].fn_name, "read_value");
+    assert_eq!(calls[1].call_stack, vec![inner_id, outer_id]);
 
     Ok(())
 }

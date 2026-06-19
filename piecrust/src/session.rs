@@ -93,6 +93,10 @@ impl Drop for Session {
 /// Receives the callee contract ID, the function name, the raw argument bytes,
 /// and the current call stack before the callee is pushed. Returns `Ok(())` to
 /// allow the call, or `Err(reason)` to reject it with a descriptive message.
+///
+/// The callee is not included in the stack because the hook runs before the
+/// callee is pushed. The stack is ordered like `abi::callstack()`: index 0 is
+/// the immediate caller, and the last element is the root contract call.
 #[cfg(feature = "call-hook")]
 pub type CallHook = Box<
     dyn Fn(&ContractId, &str, &[u8], &[&ContractId]) -> Result<(), String>
