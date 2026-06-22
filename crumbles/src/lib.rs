@@ -171,7 +171,7 @@ impl Mmap {
                 let start_addr = inner.bytes.as_mut_ptr() as usize;
                 let end_addr = start_addr + inner.bytes.len();
 
-                let inner_ptr = inner as *mut _;
+                let inner_ptr = ptr::from_mut(inner);
 
                 global_map.insert(start_addr..end_addr, inner_ptr as _);
 
@@ -349,7 +349,7 @@ impl Drop for Mmap {
     fn drop(&mut self) {
         with_global_map_mut(|global_map| {
             unsafe {
-                let inner_ptr = self.0 as *mut MmapInner;
+                let inner_ptr = ptr::from_mut(self.0);
                 let inner = Box::from_raw(inner_ptr);
 
                 let start_addr = inner.bytes.as_mut_ptr() as usize;
@@ -423,7 +423,8 @@ impl PageBits {
     /// Maps one bit per each page of memory.
     fn new(page_number: usize) -> io::Result<Self> {
         let page_bits = unsafe {
-            let len = page_number / 8 + usize::from(page_number % 8 != 0);
+            let len =
+                page_number / 8 + usize::from(!page_number.is_multiple_of(8));
 
             let ptr = libc::mmap(
                 ptr::null_mut(),
@@ -546,7 +547,7 @@ impl MmapInner {
             setup_action();
 
             let system_page_size = system_page_size();
-            if page_size % system_page_size != 0 {
+            if !page_size.is_multiple_of(system_page_size) {
                 return Err(io::Error::new(
                     io::ErrorKind::InvalidInput,
                     format!(
@@ -846,7 +847,7 @@ unsafe fn setup_action() -> sigaction {
             sigemptyset(sa_mask.as_mut_ptr());
 
             let act = sigaction {
-                sa_sigaction: segfault_handler as _,
+                sa_sigaction: segfault_handler as *const () as _,
                 sa_mask: sa_mask.assume_init(),
                 sa_flags: SA_SIGINFO,
                 #[cfg(target_os = "linux")]
@@ -854,14 +855,24 @@ unsafe fn setup_action() -> sigaction {
             };
             let mut old_act = MaybeUninit::<sigaction>::uninit();
 
-            if libc::sigaction(libc::SIGSEGV, &act, old_act.as_mut_ptr()) != 0 {
+            if libc::sigaction(
+                libc::SIGSEGV,
+                &raw const act,
+                old_act.as_mut_ptr(),
+            ) != 0
+            {
                 process::exit(1);
             }
 
             // On Apple Silicon for some reason SIGBUS is thrown instead of
             // SIGSEGV. TODO should investigate properly
             #[cfg(target_os = "macos")]
-            if libc::sigaction(libc::SIGBUS, &act, old_act.as_mut_ptr()) != 0 {
+            if libc::sigaction(
+                libc::SIGBUS,
+                &raw const act,
+                old_act.as_mut_ptr(),
+            ) != 0
+            {
                 process::exit(2);
             }
 
