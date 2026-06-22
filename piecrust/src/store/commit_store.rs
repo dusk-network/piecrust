@@ -95,17 +95,11 @@ impl CommitStore {
                     continue;
                 }
                 for (c, hh) in elements_to_remove.iter() {
-                    if let Some(el) = commit.index().get(c) {
-                        if let Some(el_hash) = el.hash() {
-                            if el_hash == *hh {
-                                if let Some(element) = commit.index().get(c) {
-                                    self.main_index.insert_contract_index(
-                                        c,
-                                        element.clone(),
-                                    );
-                                }
-                            }
-                        }
+                    if let Some(element) = commit.index().get(c)
+                        && element.hash() == Some(*hh)
+                    {
+                        self.main_index
+                            .insert_contract_index(c, element.clone());
                     }
                 }
             }

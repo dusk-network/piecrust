@@ -199,71 +199,68 @@ impl CommitReader {
                     &main_path,
                     0,
                 );
-                if let Some((element_path, element_depth)) = path_depth_pair {
-                    if element_path.is_file() {
-                        let element_bytes = fs::read(&element_path)?;
-                        let element: ContractIndexElement =
-                            rkyv::from_bytes(&element_bytes).map_err(|err| {
-                                tracing::trace!(
+                if let Some((element_path, element_depth)) = path_depth_pair
+                    && element_path.is_file()
+                {
+                    let element_bytes = fs::read(&element_path)?;
+                    let element: ContractIndexElement =
+                        rkyv::from_bytes(&element_bytes).map_err(|err| {
+                            tracing::trace!(
                                 "deserializing element file failed {}",
                                 err
                             );
-                                io::Error::new(
-                                    io::ErrorKind::InvalidData,
-                                    format!(
-                                        "Invalid element file \"{element_path:?}\": {err}"
-                                    ),
-                                )
-                            })?;
-                        if let Some(h) = element.hash() {
-                            merkle_from_elements.insert(
-                                element.int_pos().expect("internal pos exists")
-                                    as u32,
-                                (
-                                    h,
-                                    position_from_contract(&contract_id),
-                                    contract_id,
-                                ),
+                            let msg = format!(
+                                "Invalid element file {element_path:?}: {err}"
                             );
-                        }
-
-                        let bytecode_dir =
-                            main_path.as_ref().join(BYTECODE_DIR);
-
-                        // Check that all contracts in the index file have a
-                        // corresponding bytecode and
-                        // memory pages specified.
-                        let bytecode_path = bytecode_dir.join(&contract_id_hex);
-                        if !bytecode_path.is_file() {
-                            return Err(io::Error::new(
-                                io::ErrorKind::InvalidData,
-                                format!(
-                                    "Non-existing bytecode for contract: {contract_id_hex}"
-                                ),
-                            ));
-                        }
-
-                        let module_path =
-                            bytecode_path.with_extension(OBJECTCODE_EXTENSION);
-
-                        let bytecode = Bytecode::from_file(&bytecode_path)?;
-                        Module::load_or_recompile(
-                            engine,
-                            &module_path,
-                            bytecode.as_ref(),
-                        )
-                        .map_err(|err| {
-                            io::Error::new(io::ErrorKind::InvalidData, err)
+                            io::Error::new(io::ErrorKind::InvalidData, msg)
                         })?;
+                    if let Some(h) = element.hash() {
+                        merkle_from_elements.insert(
+                            element.int_pos().expect("internal pos exists")
+                                as u32,
+                            (
+                                h,
+                                position_from_contract(&contract_id),
+                                contract_id,
+                            ),
+                        );
+                    }
 
-                        if element_depth != u32::MAX {
-                            index.insert_contract_index(&contract_id, element);
-                        } else {
-                            commit_store
-                                .lock()
-                                .unwrap()
-                                .insert_main_index(&contract_id, element);
-                        }
+                    let bytecode_dir = main_path.as_ref().join(BYTECODE_DIR);
+
+                    // Check that all contracts in the index file have a
+                    // corresponding bytecode and
+                    // memory pages specified.
+                    let bytecode_path = bytecode_dir.join(&contract_id_hex);
+                    if !bytecode_path.is_file() {
+                        return Err(io::Error::new(
+                            io::ErrorKind::InvalidData,
+                            format!(
+                                "Non-existing bytecode for contract: {contract_id_hex}"
+                            ),
+                        ));
+                    }
+
+                    let module_path =
+                        bytecode_path.with_extension(OBJECTCODE_EXTENSION);
+
+                    let bytecode = Bytecode::from_file(&bytecode_path)?;
+                    Module::load_or_recompile(
+                        engine,
+                        &module_path,
+                        bytecode.as_ref(),
+                    )
+                    .map_err(|err| {
+                        io::Error::new(io::ErrorKind::InvalidData, err)
+                    })?;
+
+                    if element_depth != u32::MAX {
+                        index.insert_contract_index(&contract_id, element);
+                    } else {
+                        commit_store
+                            .lock()
+                            .unwrap()
+                            .insert_main_index(&contract_id, element);
                     }
                 }
             }

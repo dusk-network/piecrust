@@ -53,10 +53,10 @@ impl TreePos {
     }
 
     fn is_eof<T>(r: &io::Result<T>) -> bool {
-        if let Err(e) = r {
-            if e.kind() == ErrorKind::UnexpectedEof {
-                return true;
-            }
+        if let Err(e) = r
+            && e.kind() == ErrorKind::UnexpectedEof
+        {
+            return true;
         }
         false
     }
