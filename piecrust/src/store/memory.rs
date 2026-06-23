@@ -52,6 +52,12 @@ impl DerefMut for MemoryInner {
 }
 
 /// WASM memory belonging to a given contract during a given session.
+///
+/// Wasmtime's [`LinearMemory`] hook is intended for embedders that need custom
+/// allocation while still preserving standard Wasm memory semantics. Piecrust
+/// deliberately uses it differently: the full addressable range is backed by a
+/// crumbles mmap that acts as sparse, persistent contract state, while
+/// `current_len` is the Wasmtime-visible logical length.
 #[derive(Debug)]
 pub struct Memory {
     inner: NonNull<MemoryInner>,
@@ -199,6 +205,11 @@ impl Deref for Memory {
 }
 
 unsafe impl LinearMemory for Memory {
+    // Standard Wasm treats this as the current linear-memory length: loads and
+    // stores beyond it should trap. Piecrust keeps it as the logical length
+    // reported to Wasmtime for `memory.size`, allocator bookkeeping, rollback,
+    // and persisted length metadata, but the crumbles backing store may contain
+    // materialized pages outside this range.
     fn byte_size(&self) -> usize {
         self.current_len()
     }
@@ -207,6 +218,11 @@ unsafe impl LinearMemory for Memory {
         Some(self.inner().len())
     }
 
+    // In standard Wasm, growth appends zero-initialized pages. Piecrust growth
+    // only advances `current_len`; it does not allocate or zero pages because
+    // crumbles materializes sparse persistent pages on access. If a page
+    // already exists in the backing store, growing into it exposes the
+    // persisted data.
     fn grow_to(&mut self, new_size: usize) -> Result<(), dusk_wasmtime::Error> {
         self.set_current_len(new_size);
         Ok(())
@@ -220,6 +236,9 @@ unsafe impl LinearMemory for Memory {
         self.inner().as_ptr() as _
     }
 
+    // Wasmtime uses this range for native fault classification. We report the
+    // logical Wasm-visible range, even though crumbles owns and can materialize
+    // the larger persistent backing range.
     fn wasm_accessible(&self) -> Range<usize> {
         let begin = self.inner().mmap.as_ptr() as _;
         let len = self.current_len();
