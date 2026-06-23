@@ -28,7 +28,7 @@ fn config() -> Config {
     let mut config = Config::new();
 
     // Neither WASM backtrace, nor native unwind info.
-    config.wasm_backtrace(false);
+    config.wasm_backtrace_max_frames(None);
     config.wasm_backtrace_details(WasmBacktraceDetails::Disable);
 
     config.native_unwind_info(false);
@@ -45,9 +45,10 @@ fn config() -> Config {
     // Host memory creator is set in the session.
     // config.with_host_memory()
 
-    config.static_memory_forced(true);
-    config.static_memory_guard_size(0);
-    config.dynamic_memory_guard_size(0);
+    config.memory_reservation(0);
+    config.memory_reservation_for_growth(0);
+    config.memory_guard_size(0);
+    config.memory_may_move(false);
     config.guard_before_linear_memory(false);
     config.memory_init_cow(false);
 
@@ -60,9 +61,9 @@ fn config() -> Config {
     // Support 64-bit memories
     config.wasm_memory64(true);
 
-    const BYTE4_STORE_COST: i64 = 4 * BYTE_STORE_COST;
-    const BYTE8_STORE_COST: i64 = 8 * BYTE_STORE_COST;
-    const BYTE16_STORE_COST: i64 = 16 * BYTE_STORE_COST;
+    const BYTE4_STORE_COST: u8 = 4 * BYTE_STORE_COST;
+    const BYTE8_STORE_COST: u8 = 8 * BYTE_STORE_COST;
+    const BYTE16_STORE_COST: u8 = 16 * BYTE_STORE_COST;
 
     config.operator_cost(OperatorCost {
         I32Store: BYTE4_STORE_COST,

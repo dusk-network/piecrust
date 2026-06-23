@@ -17,11 +17,12 @@ rust-version.workspace = true
 crumbles = { version = "0.4.0", path = "../crumbles" }
 piecrust-uplink = { version = "0.21.0", path = "../piecrust-uplink" }
 
-dusk-wasmtime = { version = "21.0.0-alpha", default-features = false, features = [
+dusk-wasmtime = { package = "wasmtime", version = "=44.0.2", default-features = false, features = [
     "cranelift",
     "runtime",
     "parallel-compilation",
     "gc",
+    "gc-drc",
 ] }
 wasm-encoder = { version = "0.246.2", features = ["wasmparser"] }
 wasmparser = "0.246.2"

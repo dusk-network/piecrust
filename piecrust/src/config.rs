@@ -5,4 +5,4 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 // The gas cost for each byte
-pub const BYTE_STORE_COST: i64 = 4;
+pub const BYTE_STORE_COST: u8 = 4;

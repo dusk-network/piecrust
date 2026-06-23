@@ -6,7 +6,7 @@
 
 use std::fmt::{Debug, Formatter};
 use std::io;
-use std::ops::{Deref, DerefMut, Range};
+use std::ops::{Deref, DerefMut};
 use std::ptr::NonNull;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -214,8 +214,8 @@ unsafe impl LinearMemory for Memory {
         self.current_len()
     }
 
-    fn maximum_byte_size(&self) -> Option<usize> {
-        Some(self.inner().len())
+    fn byte_capacity(&self) -> usize {
+        self.inner().len()
     }
 
     // In standard Wasm, growth appends zero-initialized pages. Piecrust growth
@@ -223,27 +223,12 @@ unsafe impl LinearMemory for Memory {
     // crumbles materializes sparse persistent pages on access. If a page
     // already exists in the backing store, growing into it exposes the
     // persisted data.
-    fn grow_to(&mut self, new_size: usize) -> Result<(), dusk_wasmtime::Error> {
+    fn grow_to(&mut self, new_size: usize) -> dusk_wasmtime::Result<()> {
         self.set_current_len(new_size);
         Ok(())
     }
 
-    fn needs_init(&self) -> bool {
-        self.is_new()
-    }
-
     fn as_ptr(&self) -> *mut u8 {
         self.inner().as_ptr() as _
-    }
-
-    // Wasmtime uses this range for native fault classification. We report the
-    // logical Wasm-visible range, even though crumbles owns and can materialize
-    // the larger persistent backing range.
-    fn wasm_accessible(&self) -> Range<usize> {
-        let begin = self.inner().mmap.as_ptr() as _;
-        let len = self.current_len();
-        let end = begin + len;
-
-        begin..end
     }
 }
