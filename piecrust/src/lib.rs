@@ -140,6 +140,6 @@ pub use error::Error;
 pub use piecrust_uplink::*;
 #[cfg(feature = "call-hook")]
 pub use session::CallHook;
-pub use session::{CallReceipt, Session, SessionData};
+pub use session::{CallReceipt, Session, SessionData, SessionDataBuilder};
 pub use store::PageOpening;
 pub use vm::{HostQuery, VM};

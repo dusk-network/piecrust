@@ -752,6 +752,10 @@ impl Session {
         self.inner().host_queries.get_arc(name)
     }
 
+    pub(crate) fn contain_hq_panics(&self) -> bool {
+        self.inner().data.contain_hq_panics
+    }
+
     pub(crate) fn nth_from_top(&self, n: usize) -> Option<CallTreeElem> {
         self.inner().call_tree.nth_parent(n)
     }
@@ -1076,11 +1080,18 @@ impl CallReceipt<Vec<u8>> {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct SessionData {
     data: BTreeMap<Cow<'static, str>, Vec<u8>>,
     pub base: Option<[u8; 32]>,
     excluded_host_queries: BTreeSet<String>,
+    contain_hq_panics: bool,
+}
+
+impl Default for SessionData {
+    fn default() -> Self {
+        Self::builder().into()
+    }
 }
 
 impl SessionData {
@@ -1089,6 +1100,7 @@ impl SessionData {
             data: BTreeMap::new(),
             base: None,
             excluded_host_queries: BTreeSet::new(),
+            contain_hq_panics: true,
         }
     }
 
@@ -1125,6 +1137,7 @@ pub struct SessionDataBuilder {
     data: BTreeMap<Cow<'static, str>, Vec<u8>>,
     base: Option<[u8; 32]>,
     excluded_host_queries: BTreeSet<String>,
+    contain_hq_panics: bool,
 }
 
 impl SessionDataBuilder {
@@ -1148,11 +1161,22 @@ impl SessionDataBuilder {
         self
     }
 
+    /// Set whether host-query panics are contained at the VM boundary.
+    ///
+    /// Containment is enabled by default. Disabling it lets a panic raised by
+    /// host-query pricing or execution unwind through the VM and abort the
+    /// calling stack.
+    pub fn contain_hq_panics(mut self, contain: bool) -> Self {
+        self.contain_hq_panics = contain;
+        self
+    }
+
     fn build(&self) -> SessionData {
         SessionData {
             data: self.data.clone(),
             base: self.base,
             excluded_host_queries: self.excluded_host_queries.clone(),
+            contain_hq_panics: self.contain_hq_panics,
         }
     }
 }

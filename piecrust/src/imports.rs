@@ -8,6 +8,7 @@ mod wasm32;
 mod wasm64;
 
 use std::any::Any;
+use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::sync::Arc;
 
 use dusk_wasmtime::{
@@ -24,6 +25,7 @@ use crate::instance::{Env, WrappedInstance};
 use crate::session::INIT_METHOD;
 
 pub const GAS_PASS_PCT: u64 = 93;
+const HOST_QUERY_PANICKED: &str = "host query panicked";
 
 pub(crate) struct Imports;
 
@@ -176,14 +178,18 @@ pub(crate) fn hq(
         .host_query_arc(&name)
         .ok_or_else(move || Error::MissingHostQuery(name))?;
     let mut query_arg: Box<dyn Any> = Box::new(());
+    let contain_hq_panics = env.contain_hq_panics();
     let query_cost = {
         let instance = env.self_instance();
-        instance.with_arg_buf(|arg_buf| {
-            host_query.deserialize_and_price(
-                &arg_buf[..arg_len as usize],
-                &mut query_arg,
-            )
-        })
+        let result = instance.with_arg_buf(|arg_buf| {
+            maybe_contain_hq_panic(contain_hq_panics, || {
+                host_query.deserialize_and_price(
+                    &arg_buf[..arg_len as usize],
+                    &mut query_arg,
+                )
+            })
+        });
+        result?
     };
 
     if gas_remaining < query_cost {
@@ -194,8 +200,38 @@ pub(crate) fn hq(
     let instance = env.self_instance();
     instance.set_remaining_gas(gas_remaining - query_cost);
 
-    Ok(instance
-        .with_arg_buf_mut(|arg_buf| host_query.execute(&query_arg, arg_buf)))
+    Ok(instance.with_arg_buf_mut(|arg_buf| {
+        maybe_contain_hq_panic(contain_hq_panics, || {
+            host_query.execute(&query_arg, arg_buf)
+        })
+    })?)
+}
+
+fn maybe_contain_hq_panic<R, F>(contain: bool, f: F) -> Result<R, Error>
+where
+    F: FnOnce() -> R,
+{
+    if !contain {
+        return Ok(f());
+    }
+
+    catch_unwind(AssertUnwindSafe(f)).map_err(|payload| {
+        tracing::error!(
+            panic = %hq_panic_message(payload),
+            "host query panicked"
+        );
+        Error::Panic(HOST_QUERY_PANICKED.to_string())
+    })
+}
+
+fn hq_panic_message(payload: Box<dyn Any + Send>) -> String {
+    match payload.downcast::<String>() {
+        Ok(msg) => *msg,
+        Err(payload) => match payload.downcast::<&'static str>() {
+            Ok(msg) => (*msg).to_string(),
+            Err(_) => "host query panicked".to_string(),
+        },
+    }
 }
 
 pub(crate) fn hd(
