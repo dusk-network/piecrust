@@ -35,6 +35,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Rewrite active data-segment initialization into a Piecrust-managed one-shot initializer so restored contract memory is not reset.
 - Change `deploy` and `deploy_raw` to return `(ContractId, Option<CallReceipt>)`, exposing init gas spent, events, and call tree to callers
 - Change call receipts to identify whether each event came from reverted execution
 

@@ -131,6 +131,7 @@ mod session;
 mod store;
 mod types;
 mod vm;
+mod wasm_init;
 
 pub use call_tree::{CallTree, CallTreeElem};
 pub use contract::{ContractData, ContractDataBuilder};

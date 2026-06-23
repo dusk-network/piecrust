@@ -14,6 +14,7 @@ use crate::Error;
 use crate::imports::Imports;
 use crate::session::Session;
 use crate::store::Memory;
+use crate::wasm_init::MEMORY_INIT_EXPORT;
 
 pub struct WrappedInstance {
     instance: Instance,
@@ -123,6 +124,17 @@ impl WrappedInstance {
             if let Some(func_ty) = exp_ty.func() {
                 let func_name = exp.name();
 
+                if func_name == MEMORY_INIT_EXPORT {
+                    if func_ty.params().len() != 0
+                        || func_ty.results().len() != 0
+                    {
+                        return Err(Error::InvalidFunction(
+                            func_name.to_string(),
+                        ));
+                    }
+                    continue;
+                }
+
                 // There must be only one parameter with type `I32`.
                 let mut params = func_ty.params();
                 if params.len() != 1 {
@@ -146,7 +158,17 @@ impl WrappedInstance {
         }
 
         let imports = Imports::for_module(&mut store, &module, is_64)?;
+        let should_init_memory = memory.is_new();
         let instance = Instance::new(&mut store, &module, &imports)?;
+
+        if should_init_memory
+            && let Some(memory_init) =
+                instance.get_func(&mut store, MEMORY_INIT_EXPORT)
+        {
+            let memory_init = memory_init.typed::<(), ()>(&store)?;
+            store.set_fuel(u64::MAX).expect("Fuel is enabled");
+            memory_init.call(&mut store, ())?;
+        }
 
         // Ensure there is a global exported named `A`, whose value is in the
         // memory.

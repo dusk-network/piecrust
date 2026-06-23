@@ -12,6 +12,8 @@ use std::{env, fs, io, mem};
 
 use dusk_wasmtime::Engine;
 
+use crate::wasm_init::prepare_contract_bytecode;
+
 /// WASM object code belonging to a given contract.
 #[derive(Debug, Clone)]
 pub struct Module {
@@ -223,8 +225,9 @@ impl Module {
         engine: &Engine,
         bytecode: &[u8],
     ) -> io::Result<Self> {
-        let module =
-            dusk_wasmtime::Module::new(engine, bytecode).map_err(|e| {
+        let bytecode = prepare_contract_bytecode(bytecode)?;
+        let module = dusk_wasmtime::Module::new(engine, bytecode.as_ref())
+            .map_err(|e| {
                 io::Error::new(
                     io::ErrorKind::InvalidData,
                     format!("failed to compile module: {}", e),

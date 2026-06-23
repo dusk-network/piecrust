@@ -23,6 +23,8 @@ dusk-wasmtime = { version = "21.0.0-alpha", default-features = false, features =
     "parallel-compilation",
     "gc",
 ] }
+wasm-encoder = { version = "0.246.2", features = ["wasmparser"] }
+wasmparser = "0.246.2"
 bytecheck = "0.6"
 rkyv = { version = "0.7", features = ["size_32", "validation"] }
 blake3 = "1"

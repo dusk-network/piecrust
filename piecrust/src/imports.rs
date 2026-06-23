@@ -23,6 +23,7 @@ use crate::config::BYTE_STORE_COST;
 use crate::contract::ContractMetadata;
 use crate::instance::{Env, WrappedInstance};
 use crate::session::INIT_METHOD;
+use crate::wasm_init::MEMORY_INIT_EXPORT;
 
 pub const GAS_PASS_PCT: u64 = 93;
 const HOST_QUERY_PANICKED: &str = "host query panicked";
@@ -345,7 +346,7 @@ pub(crate) fn c(
             io: Arc::new(err),
         })?;
 
-        if name == INIT_METHOD {
+        if name == INIT_METHOD || name == MEMORY_INIT_EXPORT {
             return Err(Error::InitalizationError(
                 "init call not allowed".into(),
             ));
@@ -600,7 +601,7 @@ fn self_id(mut fenv: Caller<Env>) {
 mod tests {
     use super::*;
     use crate::session::MAX_CALL_DEPTH;
-    use crate::{ContractData, SessionData, VM, contract_bytecode};
+    use crate::{ContractData, SessionData, VM};
 
     const OWNER: [u8; 32] = [0u8; 32];
     const LIMIT: u64 = 1_000_000;
@@ -613,7 +614,7 @@ mod tests {
             .expect("session should be created");
         let (contract_id, _) = session
             .deploy::<_, (), _>(
-                contract_bytecode!("counter"),
+                crate::contract_bytecode!("counter"),
                 ContractData::builder().owner(OWNER),
                 LIMIT,
             )
@@ -652,7 +653,7 @@ mod tests {
             .expect("session should be created");
         let (contract_id, _) = session
             .deploy::<_, (), _>(
-                contract_bytecode!("counter"),
+                crate::contract_bytecode!("counter"),
                 ContractData::builder().owner(OWNER),
                 LIMIT,
             )

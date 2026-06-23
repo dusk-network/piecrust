@@ -12,6 +12,7 @@ use piecrust_uplink::ContractId;
 use rkyv::{Archive, Deserialize, Serialize};
 
 use crate::error::Error;
+use crate::wasm_init::prepare_contract_bytecode;
 
 pub struct ContractData<'a, A> {
     pub(crate) contract_id: Option<ContractId>,
@@ -107,6 +108,8 @@ impl WrappedContract {
         let serialized = match module {
             Some(obj) => obj.as_ref().to_vec(),
             _ => {
+                let bytecode = prepare_contract_bytecode(bytecode.as_ref())
+                    .map_err(|err| Error::InvalidFunction(err.to_string()))?;
                 let contract = Module::new(engine, bytecode.as_ref())?;
                 contract.serialize()?.to_vec()
             }

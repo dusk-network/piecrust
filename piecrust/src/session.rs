@@ -33,6 +33,7 @@ use crate::instance::WrappedInstance;
 use crate::store::{ContractSession, PAGE_SIZE, PageOpening};
 use crate::types::StandardBufSerializer;
 use crate::vm::{HostQueries, HostQuery};
+use crate::wasm_init::MEMORY_INIT_EXPORT;
 
 const MAX_META_SIZE: usize = ARGBUF_LEN;
 // Host stack limits in our current runtime effectively allow around 64 nested
@@ -456,7 +457,7 @@ impl Session {
         R::Archived: Deserialize<R, Infallible>
             + for<'b> CheckBytes<DefaultValidator<'b>>,
     {
-        if fn_name == INIT_METHOD {
+        if fn_name == INIT_METHOD || fn_name == MEMORY_INIT_EXPORT {
             return Err(InitalizationError("init call not allowed".into()));
         }
 
@@ -494,7 +495,7 @@ impl Session {
         fn_arg: V,
         gas_limit: u64,
     ) -> Result<CallReceipt<Vec<u8>>, Error> {
-        if fn_name == INIT_METHOD {
+        if fn_name == INIT_METHOD || fn_name == MEMORY_INIT_EXPORT {
             return Err(InitalizationError("init call not allowed".into()));
         }
 
