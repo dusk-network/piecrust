@@ -20,7 +20,7 @@ use piecrust_uplink::ContractId;
 use tempfile::tempdir;
 
 use crate::Error::{self, PersistenceError};
-use crate::config::BYTE_STORE_COST;
+use crate::config::{BYTE_STORE_COST, WASMTIME_MODULE_VERSION};
 use crate::session::{Session, SessionData};
 use crate::store::ContractStore;
 
@@ -53,7 +53,9 @@ fn config() -> Config {
     config.memory_init_cow(false);
 
     config
-        .module_version(ModuleVersionStrategy::Custom(String::from("piecrust")))
+        .module_version(ModuleVersionStrategy::Custom(String::from(
+            WASMTIME_MODULE_VERSION,
+        )))
         .expect("Module version should be valid");
     config.generate_address_map(false);
     config.macos_use_mach_ports(false);

@@ -6,3 +6,6 @@
 
 // The gas cost for each byte
 pub const BYTE_STORE_COST: u8 = 4;
+
+pub(crate) const WASMTIME_MODULE_VERSION: &str =
+    "piecrust-upstream-wasmtime-44.0.2-memory-init-v1";
