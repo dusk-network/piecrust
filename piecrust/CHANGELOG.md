@@ -16,6 +16,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Declare minimum supported Rust version of 1.94.
 - Contain host-query panics by default and return them as contract panic errors [#476]
 
+### Removed
+
+- Remove the `once_cell` dev-dependency from tests.
+
 ## [0.32.0] - 2026-06-19
 
 ### Changed
