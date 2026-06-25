@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Declare minimum supported Rust version of 1.94.
 - Contain host-query panics by default and return them as contract panic errors [#476]
 
 ## [0.32.0] - 2026-06-19
