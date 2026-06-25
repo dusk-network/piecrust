@@ -173,10 +173,10 @@ impl Commit {
                     .expect("commit store present")
                     .lock()
                     .unwrap();
-                if let Some(mel) = commit_store.get_from_main_index(c) {
-                    if mel.hash() == Some(h) {
-                        to_remove.push(*c)
-                    }
+                if let Some(mel) = commit_store.get_from_main_index(c)
+                    && mel.hash() == Some(h)
+                {
+                    to_remove.push(*c)
                 }
             }
         }
@@ -192,7 +192,7 @@ impl Commit {
         }
     }
 
-    pub fn root(&self) -> Ref<Hash> {
+    pub fn root(&self) -> Ref<'_, Hash> {
         tracing::trace!("calculating root started");
         let ret = self.contracts_merkle.root();
         tracing::trace!("calculating root finished");

@@ -163,7 +163,7 @@ impl ContractSession {
         self.call
             .send(Call::Commit {
                 contracts,
-                base,
+                base: base.map(Box::new),
                 replier,
             })
             .expect("The receiver should never drop before sending");
@@ -392,13 +392,12 @@ impl ContractSession {
 
         // If the position is already filled in the tree, the contract cannot be
         // inserted.
-        if let Some(base) = self.base.as_ref() {
-            if base.index_get(&contract_id).is_some() {
-                return Err(io::Error::new(
-                    io::ErrorKind::Other,
-                    format!("Existing contract '{contract_id}'"),
-                ));
-            }
+        if let Some(base) = self.base.as_ref()
+            && base.index_get(&contract_id).is_some()
+        {
+            return Err(io::Error::other(format!(
+                "Existing contract '{contract_id}'"
+            )));
         }
 
         self.contracts.insert(
@@ -425,10 +424,9 @@ impl ContractSession {
     ) -> Result<(), Error> {
         let mut new_contract_data =
             self.contracts.remove(&new_contract).ok_or_else(|| {
-                Error::PersistenceError(Arc::new(io::Error::new(
-                    io::ErrorKind::Other,
-                    format!("Contract '{new_contract}' not found"),
-                )))
+                Error::PersistenceError(Arc::new(io::Error::other(format!(
+                    "Contract '{new_contract}' not found"
+                ))))
             })?;
 
         // The new contract should have the ID of the old contract in its

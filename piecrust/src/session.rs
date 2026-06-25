@@ -557,11 +557,10 @@ impl Session {
             .contract_session
             .contract(contract)
             .map_err(|err| PersistenceError(Arc::new(err)))?
+            && new_contract_data.owner.is_none()
         {
-            if new_contract_data.owner.is_none() {
-                new_contract_data.owner =
-                    Some(old_contract_data.metadata.data().owner.clone());
-            }
+            new_contract_data.owner =
+                Some(old_contract_data.metadata.data().owner.clone());
         }
 
         let (new_contract, _init_receipt) = self.deploy::<_, (), _>(
@@ -1122,7 +1121,7 @@ impl SessionData {
         self.data.remove(&name.into())
     }
 
-    pub fn excluded_host_queries(&self) -> Iter<String> {
+    pub fn excluded_host_queries(&self) -> Iter<'_, String> {
         self.excluded_host_queries.iter()
     }
 }
