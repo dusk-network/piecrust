@@ -6,12 +6,12 @@
 
 use std::any::Any;
 use std::panic::AssertUnwindSafe;
+use std::sync::LazyLock;
 
 use dusk_plonk::prelude::{
     BlsScalar, Circuit, Compiler, Composer, Constraint, Error as PlonkError,
     Proof, Prover, PublicParameters, Verifier,
 };
-use once_cell::sync::Lazy;
 use piecrust::{
     ContractData, ContractId, Error, HostQuery, SessionData, VM,
     contract_bytecode,
@@ -26,18 +26,20 @@ const HOST_QUERY_PANICKED: &str = "host query panicked";
 const HOST_CALLER_ID: ContractId = ContractId::from_bytes([1u8; 32]);
 
 fn get_prover_verifier() -> &'static (Prover, Verifier) {
-    static PROVER_VERIFIER: Lazy<(Prover, Verifier)> = Lazy::new(|| {
-        let mut rng = OsRng;
+    static PROVER_VERIFIER: LazyLock<(Prover, Verifier)> =
+        LazyLock::new(|| {
+            let mut rng = OsRng;
 
-        let pp = PublicParameters::setup(1 << 4, &mut rng)
-            .expect("Generating public parameters should succeed");
-        let label = b"dusk-network";
+            let pp = PublicParameters::setup(1 << 4, &mut rng)
+                .expect("Generating public parameters should succeed");
+            let label = b"dusk-network";
 
-        let (prover, verifier) = Compiler::compile::<TestCircuit>(&pp, label)
-            .expect("Compiling circuit should succeed");
+            let (prover, verifier) =
+                Compiler::compile::<TestCircuit>(&pp, label)
+                    .expect("Compiling circuit should succeed");
 
-        (prover, verifier)
-    });
+            (prover, verifier)
+        });
 
     &PROVER_VERIFIER
 }
