@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 
 - Remove the `once_cell` dev-dependency from tests.
+- Remove the unused `const-decoder` dependency.
 
 ## [0.32.0] - 2026-06-19
 

@@ -32,7 +32,6 @@ thiserror = "1"
 rand = "0.8"
 hex = "0.4"
 dusk-merkle = { version = "0.5", features = ["rkyv-impl"] }
-const-decoder = "0.3"
 tracing = "0.1.40"
 indexmap = "=2.11" # 2.12 requires rustc edition 2024
 
