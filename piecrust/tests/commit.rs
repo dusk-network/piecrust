@@ -4,7 +4,11 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use std::thread;
+use std::collections::BTreeMap;
+use std::path::PathBuf;
+use std::sync::mpsc;
+use std::time::Duration;
+use std::{fs, thread};
 
 use piecrust::{
     ContractData, Error, Session, SessionData, VM, contract_bytecode,
@@ -305,6 +309,149 @@ fn increment_counter_and_commit(
     session.commit()
 }
 
+struct CommitPaths {
+    memory: PathBuf,
+    commit_memory: PathBuf,
+    leaf_element: PathBuf,
+    commit_leaf: PathBuf,
+}
+
+struct CommitSnapshot {
+    memory_pages: BTreeMap<String, Vec<u8>>,
+    leaf_element: Vec<u8>,
+}
+
+fn commit_paths(vm: &VM, contract: ContractId, root: [u8; 32]) -> CommitPaths {
+    let contract = hex::encode(contract.as_bytes());
+    let root = hex::encode(root);
+    let main = vm.root_dir().join("main");
+    let memory = main.join("memory").join(&contract);
+    let leaf = main.join("leaf").join(&contract);
+
+    CommitPaths {
+        commit_memory: memory.join(&root),
+        memory,
+        leaf_element: leaf.join("element"),
+        commit_leaf: leaf.join(&root),
+    }
+}
+
+fn committed_counter() -> Result<(VM, ContractId, [u8; 32]), Error> {
+    let vm = VM::ephemeral()?;
+    let mut session = vm.session(SessionData::builder())?;
+    let (contract, _) = session.deploy::<_, (), _>(
+        contract_bytecode!("counter"),
+        ContractData::builder().owner(OWNER),
+        LIMIT,
+    )?;
+    let root = session.commit()?;
+
+    Ok((vm, contract, root))
+}
+
+fn has_direct_file(path: &PathBuf) -> bool {
+    path.read_dir()
+        .map(|mut entries| {
+            entries.any(|entry| {
+                entry.map(|entry| entry.path().is_file()).unwrap_or(false)
+            })
+        })
+        .unwrap_or(false)
+}
+
+fn read_direct_files(path: &PathBuf) -> BTreeMap<String, Vec<u8>> {
+    path.read_dir()
+        .expect("directory should be readable")
+        .map(|entry| {
+            let entry = entry.expect("directory entry should be readable");
+            let path = entry.path();
+            let name = entry.file_name().to_string_lossy().to_string();
+            let contents = fs::read(path).expect("file should be readable");
+
+            (name, contents)
+        })
+        .collect()
+}
+
+fn snapshot_commit(paths: &CommitPaths) -> CommitSnapshot {
+    let memory_pages = read_direct_files(&paths.commit_memory);
+    assert!(
+        !memory_pages.is_empty(),
+        "commit-scoped memory pages should exist"
+    );
+
+    CommitSnapshot {
+        memory_pages,
+        leaf_element: fs::read(paths.commit_leaf.join("element"))
+            .expect("commit-scoped leaf element should be readable"),
+    }
+}
+
+fn assert_commit_paths_exist(paths: &CommitPaths) {
+    assert!(
+        has_direct_file(&paths.commit_memory),
+        "commit-scoped memory pages should exist"
+    );
+    assert!(
+        paths.commit_leaf.join("element").is_file(),
+        "commit-scoped leaf element should exist"
+    );
+}
+
+fn assert_commit_paths_removed(paths: &CommitPaths) {
+    assert!(
+        !paths.commit_memory.exists(),
+        "commit-scoped memory path should be removed"
+    );
+    assert!(
+        !paths.commit_leaf.exists(),
+        "commit-scoped leaf path should be removed"
+    );
+}
+
+fn assert_commit_promoted(paths: &CommitPaths, snapshot: &CommitSnapshot) {
+    assert_commit_paths_removed(paths);
+    for (page, contents) in &snapshot.memory_pages {
+        let promoted_page = paths.memory.join(page);
+        assert_eq!(
+            fs::read(&promoted_page)
+                .expect("finalized memory page should exist"),
+            *contents,
+            "finalized memory page should match commit-scoped page"
+        );
+    }
+    assert_eq!(
+        fs::read(&paths.leaf_element)
+            .expect("finalized leaf element should exist"),
+        snapshot.leaf_element,
+        "finalized leaf element should match commit-scoped leaf element"
+    );
+}
+
+fn assert_commit_deleted(paths: &CommitPaths) {
+    assert_commit_paths_removed(paths);
+    assert!(
+        !has_direct_file(&paths.memory),
+        "deleted memory pages should not be promoted"
+    );
+    assert!(
+        !paths.leaf_element.exists(),
+        "deleted leaf element should not be promoted"
+    );
+}
+
+fn assert_waiting_for_session_drop<T>(rx: &mpsc::Receiver<T>) {
+    assert!(
+        rx.recv_timeout(Duration::from_millis(500)).is_err(),
+        "commit operation should wait while the base session is held"
+    );
+}
+
+fn assert_started(rx: &mpsc::Receiver<()>) {
+    rx.recv_timeout(Duration::from_secs(1))
+        .expect("commit operation worker should start");
+}
+
 #[test]
 fn concurrent_sessions() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
@@ -396,6 +543,99 @@ fn concurrent_sessions() -> Result<(), Error> {
         THREAD_NUM + 1,
         "The deleted commits should not be returned"
     );
+
+    Ok(())
+}
+
+#[test]
+fn finalize_commit_promotes_commit_state() -> Result<(), Error> {
+    let (vm, contract, root) = committed_counter()?;
+    let paths = commit_paths(&vm, contract, root);
+    assert_commit_paths_exist(&paths);
+    let snapshot = snapshot_commit(&paths);
+
+    vm.finalize_commit(root)?;
+
+    assert!(
+        !vm.commits().contains(&root),
+        "finalized root should not remain an unfinalized commit"
+    );
+    assert_commit_promoted(&paths, &snapshot);
+
+    Ok(())
+}
+
+#[test]
+fn delete_commit_waits_for_held_session_then_removes_state() -> Result<(), Error>
+{
+    let (vm, contract, root) = committed_counter()?;
+    let paths = commit_paths(&vm, contract, root);
+    assert_commit_paths_exist(&paths);
+
+    let held_session = vm.session(SessionData::builder().base(root))?;
+    let (started_tx, started_rx) = mpsc::channel();
+    let (tx, rx) = mpsc::channel();
+
+    thread::scope(|scope| {
+        scope.spawn(|| {
+            started_tx
+                .send(())
+                .expect("started receiver should still be alive");
+            tx.send(vm.delete_commit(root))
+                .expect("result receiver should still be alive");
+        });
+
+        assert_started(&started_rx);
+        assert_waiting_for_session_drop(&rx);
+        drop(held_session);
+
+        rx.recv_timeout(Duration::from_secs(2))
+            .expect("delete should finish after the base session is dropped")
+    })?;
+
+    assert!(
+        !vm.commits().contains(&root),
+        "deleted root should not remain an unfinalized commit"
+    );
+    assert_commit_deleted(&paths);
+
+    Ok(())
+}
+
+#[test]
+fn finalize_commit_waits_for_held_session_then_promotes_state()
+-> Result<(), Error> {
+    let (vm, contract, root) = committed_counter()?;
+    let paths = commit_paths(&vm, contract, root);
+    assert_commit_paths_exist(&paths);
+    let snapshot = snapshot_commit(&paths);
+
+    let held_session = vm.session(SessionData::builder().base(root))?;
+    let (started_tx, started_rx) = mpsc::channel();
+    let (tx, rx) = mpsc::channel();
+
+    thread::scope(|scope| {
+        scope.spawn(|| {
+            started_tx
+                .send(())
+                .expect("started receiver should still be alive");
+            tx.send(vm.finalize_commit(root))
+                .expect("result receiver should still be alive");
+        });
+
+        assert_started(&started_rx);
+        assert_waiting_for_session_drop(&rx);
+        drop(held_session);
+
+        rx.recv_timeout(Duration::from_secs(2))
+            .expect("finalize should finish after the base session is dropped")
+    })?;
+
+    assert!(
+        !vm.commits().contains(&root),
+        "finalized root should not remain an unfinalized commit"
+    );
+    assert_commit_promoted(&paths, &snapshot);
 
     Ok(())
 }

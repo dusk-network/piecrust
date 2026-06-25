@@ -270,6 +270,80 @@ pub(crate) enum Call {
     SessionDrop(Hash),
 }
 
+enum DeferredCommitOp {
+    Delete(mpsc::SyncSender<io::Result<()>>),
+    Finalize(mpsc::SyncSender<io::Result<()>>),
+}
+
+fn queue_deferred_op(
+    deferred_ops: &mut BTreeMap<Hash, Vec<DeferredCommitOp>>,
+    root: Hash,
+    op: DeferredCommitOp,
+) {
+    match deferred_ops.entry(root) {
+        Vacant(entry) => {
+            entry.insert(vec![op]);
+        }
+        Occupied(mut entry) => {
+            entry.get_mut().push(op);
+        }
+    }
+}
+
+fn delete_commit(
+    root_dir: &Path,
+    commit_store: &Arc<Mutex<CommitStore>>,
+    root: Hash,
+    replier: mpsc::SyncSender<io::Result<()>>,
+) {
+    let io_result = CommitRemover::remove(root_dir, root);
+    commit_store.lock().unwrap().remove_commit(&root, false);
+    tracing::trace!("delete commit finished");
+    let _ = replier.send(io_result);
+}
+
+fn finalize_commit(
+    root_dir: &Path,
+    commit_store: &Arc<Mutex<CommitStore>>,
+    root: Hash,
+    replier: mpsc::SyncSender<io::Result<()>>,
+) {
+    let mut commit_store = commit_store.lock().unwrap();
+    if commit_store.get_commit(&root).is_none() {
+        tracing::trace!("finalizing commit finished");
+        let _ = replier.send(Ok(()));
+        return;
+    }
+
+    let io_result = CommitFinalizer::finalize(root, root_dir);
+    match &io_result {
+        Ok(_) => tracing::trace!(
+            "finalizing commit proper finished: {:?}",
+            hex::encode(root.as_bytes())
+        ),
+        Err(e) => tracing::trace!("finalizing commit proper failed {:?}", e),
+    }
+    commit_store.remove_commit(&root, true);
+    tracing::trace!("finalizing commit finished");
+    let _ = replier.send(io_result);
+}
+
+fn execute_deferred_op(
+    root_dir: &Path,
+    commit_store: &Arc<Mutex<CommitStore>>,
+    root: Hash,
+    op: DeferredCommitOp,
+) {
+    match op {
+        DeferredCommitOp::Delete(replier) => {
+            delete_commit(root_dir, commit_store, root, replier);
+        }
+        DeferredCommitOp::Finalize(replier) => {
+            finalize_commit(root_dir, commit_store, root, replier);
+        }
+    }
+}
+
 fn sync_loop<P: AsRef<Path>>(
     root_dir: P,
     commit_store: Arc<Mutex<CommitStore>>,
@@ -279,7 +353,8 @@ fn sync_loop<P: AsRef<Path>>(
 
     let mut sessions = BTreeMap::new();
 
-    let mut delete_bag = BTreeMap::new();
+    let mut deferred_ops: BTreeMap<Hash, Vec<DeferredCommitOp>> =
+        BTreeMap::new();
 
     for call in calls {
         match call {
@@ -315,7 +390,7 @@ fn sync_loop<P: AsRef<Path>>(
                 tracing::trace!("get commits finished");
             }
             // Delete a commit from disk. If the commit is currently in use - as
-            // in it is held by at least one session using `Call::SessionHold` -
+            // in it is held by at least one session using `Call::CommitHold` -
             // queue it for deletion once no session is holding it.
             Call::CommitDelete {
                 commit: root,
@@ -323,22 +398,16 @@ fn sync_loop<P: AsRef<Path>>(
             } => {
                 tracing::trace!("delete commit started");
                 if sessions.contains_key(&root) {
-                    match delete_bag.entry(root) {
-                        Vacant(entry) => {
-                            entry.insert(vec![replier]);
-                        }
-                        Occupied(mut entry) => {
-                            entry.get_mut().push(replier);
-                        }
-                    }
+                    queue_deferred_op(
+                        &mut deferred_ops,
+                        root,
+                        DeferredCommitOp::Delete(replier),
+                    );
 
                     continue;
                 }
 
-                let io_result = CommitRemover::remove(root_dir, root);
-                commit_store.lock().unwrap().remove_commit(&root, false);
-                tracing::trace!("delete commit finished");
-                let _ = replier.send(io_result);
+                delete_commit(root_dir, &commit_store, root, replier);
             }
             // Finalize commit
             Call::CommitFinalize {
@@ -347,42 +416,16 @@ fn sync_loop<P: AsRef<Path>>(
             } => {
                 tracing::trace!("finalizing commit started");
                 if sessions.contains_key(&root) {
-                    match delete_bag.entry(root) {
-                        Vacant(entry) => {
-                            entry.insert(vec![replier]);
-                        }
-                        Occupied(mut entry) => {
-                            entry.get_mut().push(replier);
-                        }
-                    }
+                    queue_deferred_op(
+                        &mut deferred_ops,
+                        root,
+                        DeferredCommitOp::Finalize(replier),
+                    );
 
                     continue;
                 }
 
-                let mut commit_store = commit_store.lock().unwrap();
-                if let Some(_commit) = commit_store.get_commit(&root) {
-                    tracing::trace!(
-                        "finalizing commit proper started {}",
-                        hex::encode(root.as_bytes())
-                    );
-                    let io_result = CommitFinalizer::finalize(root, root_dir);
-                    match &io_result {
-                        Ok(_) => tracing::trace!(
-                            "finalizing commit proper finished: {:?}",
-                            hex::encode(root.as_bytes())
-                        ),
-                        Err(e) => tracing::trace!(
-                            "finalizing commit proper failed {:?}",
-                            e
-                        ),
-                    }
-                    commit_store.remove_commit(&root, true);
-                    tracing::trace!("finalizing commit finished");
-                    let _ = replier.send(io_result);
-                } else {
-                    tracing::trace!("finalizing commit finished");
-                    let _ = replier.send(Ok(()));
-                }
+                finalize_commit(root_dir, &commit_store, root, replier);
             }
             // Increment the hold count of a commit to prevent it from deletion
             // on a `Call::CommitDelete`.
@@ -407,8 +450,8 @@ fn sync_loop<P: AsRef<Path>>(
             }
             // Signal that a session with a base commit has dropped and
             // decrements the hold count, once incremented using
-            // `Call::SessionHold`. If this is the last session that held that
-            // commit, and there are queued deletions, execute them.
+            // `Call::CommitHold`. If this is the last session that held the
+            // commit, execute queued delete and finalize operations.
             Call::SessionDrop(base) => {
                 tracing::trace!("session drop started");
                 match sessions.entry(base) {
@@ -421,19 +464,16 @@ fn sync_loop<P: AsRef<Path>>(
                         if *entry.get() == 0 {
                             entry.remove();
 
-                            // Try all deletions first
-                            match delete_bag.entry(base) {
+                            match deferred_ops.entry(base) {
                                 Vacant(_) => {}
                                 Occupied(entry) => {
-                                    for replier in entry.remove() {
-                                        let io_result = CommitRemover::remove(
-                                            root_dir, base,
+                                    for op in entry.remove() {
+                                        execute_deferred_op(
+                                            root_dir,
+                                            &commit_store,
+                                            base,
+                                            op,
                                         );
-                                        commit_store
-                                            .lock()
-                                            .unwrap()
-                                            .remove_commit(&base, false);
-                                        let _ = replier.send(io_result);
                                     }
                                 }
                             }
