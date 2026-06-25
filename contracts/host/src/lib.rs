@@ -15,6 +15,7 @@ use alloc::vec::Vec;
 
 use piecrust_uplink as uplink;
 use dusk_plonk::prelude::*;
+use uplink::{ContractError, ContractId};
 
 /// Struct that describes the state of the host contract
 pub struct Hoster;
@@ -49,6 +50,14 @@ impl Hoster {
     pub fn host_very_expensive(&self) {
         uplink::host_query::<_, ()>("very_expensive", ());
     }
+
+    /// Call another host test contract's 'host_very_expensive' function.
+    pub fn delegate_host_very_expensive(
+        &self,
+        contract: ContractId,
+    ) -> Result<(), ContractError> {
+        uplink::call(contract, "host_very_expensive", &())
+    }
 }
 
 /// Expose `Hoster::host_hash()` to the host
@@ -77,6 +86,16 @@ unsafe fn host_very_expensive(arg_len: u32) -> u32 {
     unsafe {
         uplink::wrap_call(arg_len, |_: ()| {
             (*&raw const STATE).host_very_expensive()
+        })
+    }
+}
+
+/// Expose `Hoster::delegate_host_very_expensive()` to the host
+#[unsafe(no_mangle)]
+unsafe fn delegate_host_very_expensive(arg_len: u32) -> u32 {
+    unsafe {
+        uplink::wrap_call(arg_len, |contract| {
+            (*&raw const STATE).delegate_host_very_expensive(contract)
         })
     }
 }

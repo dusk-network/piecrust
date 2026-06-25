@@ -5,6 +5,7 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 use std::any::Any;
+use std::panic::AssertUnwindSafe;
 
 use dusk_plonk::prelude::{
     BlsScalar, Circuit, Compiler, Composer, Constraint, Error as PlonkError,
@@ -12,13 +13,17 @@ use dusk_plonk::prelude::{
 };
 use once_cell::sync::Lazy;
 use piecrust::{
-    ContractData, Error, HostQuery, SessionData, VM, contract_bytecode,
+    ContractData, ContractId, Error, HostQuery, SessionData, VM,
+    contract_bytecode,
 };
+use piecrust_uplink::ContractError;
 use rand::rngs::OsRng;
 use rkyv::Deserialize;
 
 const OWNER: [u8; 32] = [0u8; 32];
 const LIMIT: u64 = 1_000_000;
+const HOST_QUERY_PANICKED: &str = "host query panicked";
+const HOST_CALLER_ID: ContractId = ContractId::from_bytes([1u8; 32]);
 
 fn get_prover_verifier() -> &'static (Prover, Verifier) {
     static PROVER_VERIFIER: Lazy<(Prover, Verifier)> = Lazy::new(|| {
@@ -81,6 +86,38 @@ impl HostQuery for VeryExpensiveQuery {
     }
 }
 
+struct PanicsInPricingQuery;
+
+impl HostQuery for PanicsInPricingQuery {
+    fn deserialize_and_price(
+        &self,
+        _arg_buf: &[u8],
+        _arg: &mut Box<dyn Any>,
+    ) -> u64 {
+        panic!("host query pricing panic")
+    }
+
+    fn execute(&self, _arg: &Box<dyn Any>, _arg_buf: &mut [u8]) -> u32 {
+        unreachable!("pricing panic should prevent execution")
+    }
+}
+
+struct PanicsInExecuteQuery;
+
+impl HostQuery for PanicsInExecuteQuery {
+    fn deserialize_and_price(
+        &self,
+        _arg_buf: &[u8],
+        _arg: &mut Box<dyn Any>,
+    ) -> u64 {
+        0
+    }
+
+    fn execute(&self, _arg: &Box<dyn Any>, _arg_buf: &mut [u8]) -> u32 {
+        panic!("host query execute panic")
+    }
+}
+
 fn new_ephemeral_vm() -> Result<VM, Error> {
     let mut vm = VM::ephemeral()?;
     vm.register_host_query("hash", hash);
@@ -89,17 +126,119 @@ fn new_ephemeral_vm() -> Result<VM, Error> {
     Ok(vm)
 }
 
+fn deploy_host_contract(
+    session: &mut piecrust::Session,
+) -> Result<ContractId, Error> {
+    let (id, _) = session.deploy::<_, (), _>(
+        contract_bytecode!("host"),
+        ContractData::builder().owner(OWNER),
+        LIMIT,
+    )?;
+    Ok(id)
+}
+
+fn deploy_host_contract_with_id(
+    session: &mut piecrust::Session,
+    id: ContractId,
+) -> Result<ContractId, Error> {
+    let (id, _) = session.deploy::<_, (), _>(
+        contract_bytecode!("host"),
+        ContractData::builder().contract_id(id).owner(OWNER),
+        LIMIT,
+    )?;
+    Ok(id)
+}
+
+fn assert_hq_panic(err: Error, expected: &str) {
+    assert!(
+        matches!(err, Error::Panic(ref msg) if msg == expected),
+        "expected Error::Panic({expected:?}), got {err:?}"
+    );
+}
+
+#[test]
+pub fn host_query_pricing_panic_is_contained() -> Result<(), Error> {
+    let mut vm = VM::ephemeral()?;
+    vm.register_host_query("very_expensive", PanicsInPricingQuery);
+    let mut session = vm.session(SessionData::builder())?;
+    let id = deploy_host_contract(&mut session)?;
+
+    let err = session
+        .call::<_, ()>(id, "host_very_expensive", &(), LIMIT)
+        .expect_err("host query pricing panic should be returned as an error");
+
+    assert_hq_panic(err, HOST_QUERY_PANICKED);
+    Ok(())
+}
+
+#[test]
+pub fn host_query_execute_panic_is_contained() -> Result<(), Error> {
+    let mut vm = VM::ephemeral()?;
+    vm.register_host_query("very_expensive", PanicsInExecuteQuery);
+    let mut session = vm.session(SessionData::builder())?;
+    let id = deploy_host_contract(&mut session)?;
+
+    let err = session
+        .call::<_, ()>(id, "host_very_expensive", &(), LIMIT)
+        .expect_err("host query execute panic should be returned as an error");
+
+    assert_hq_panic(err, HOST_QUERY_PANICKED);
+    Ok(())
+}
+
+#[test]
+pub fn nested_host_query_panic_uses_deterministic_message() -> Result<(), Error>
+{
+    let mut vm = VM::ephemeral()?;
+    vm.register_host_query("very_expensive", PanicsInExecuteQuery);
+    let mut session = vm.session(SessionData::builder())?;
+    let host_callee_id = deploy_host_contract(&mut session)?;
+    let host_caller_id =
+        deploy_host_contract_with_id(&mut session, HOST_CALLER_ID)?;
+
+    let receipt = session.call::<_, Result<(), ContractError>>(
+        host_caller_id,
+        "delegate_host_very_expensive",
+        &host_callee_id,
+        LIMIT,
+    )?;
+
+    assert!(
+        matches!(
+            receipt.data,
+            Err(ContractError::Panic(ref msg)) if msg == HOST_QUERY_PANICKED
+        ),
+        "expected deterministic host-query panic, got {:?}",
+        receipt.data
+    );
+
+    Ok(())
+}
+
+#[test]
+pub fn host_query_panic_propagates_when_containment_is_disabled()
+-> Result<(), Error> {
+    let mut vm = VM::ephemeral()?;
+    vm.register_host_query("very_expensive", PanicsInExecuteQuery);
+    let mut session =
+        vm.session(SessionData::builder().contain_hq_panics(false))?;
+    let id = deploy_host_contract(&mut session)?;
+
+    let result = std::panic::catch_unwind(AssertUnwindSafe(|| {
+        let _ = session.call::<_, ()>(id, "host_very_expensive", &(), LIMIT);
+    }));
+
+    assert!(result.is_err(), "host query panic should propagate");
+    Ok(())
+}
+
 #[test]
 pub fn host_hash() -> Result<(), Error> {
     let vm = new_ephemeral_vm()?;
 
     let mut session = vm.session(SessionData::builder())?;
 
-    let (id, _) = session.deploy::<_, (), _>(
-        contract_bytecode!("host"),
-        ContractData::builder().owner(OWNER),
-        LIMIT,
-    )?;
+    let id = deploy_host_contract(&mut session)?;
 
     let v = vec![0u8, 1, 2];
     let h = session
@@ -117,11 +256,7 @@ pub fn host_very_expensive_oog() -> Result<(), Error> {
 
     let mut session = vm.session(SessionData::builder())?;
 
-    let (id, _) = session.deploy::<_, (), _>(
-        contract_bytecode!("host"),
-        ContractData::builder().owner(OWNER),
-        LIMIT,
-    )?;
+    let id = deploy_host_contract(&mut session)?;
 
     let err = session
         .call::<_, String>(id, "host_very_expensive", &(), LIMIT)
@@ -164,11 +299,7 @@ pub fn host_proof() -> Result<(), Error> {
 
     let mut session = vm.session(SessionData::builder())?;
 
-    let (id, _) = session.deploy::<_, (), _>(
-        contract_bytecode!("host"),
-        ContractData::builder().owner(OWNER),
-        LIMIT,
-    )?;
+    let id = deploy_host_contract(&mut session)?;
 
     // 1. Generate proof and public inputs
     let (prover, _) = get_prover_verifier();

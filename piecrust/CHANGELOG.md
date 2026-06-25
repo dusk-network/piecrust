@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Add `SessionDataBuilder::contain_hq_panics` opt-out for callers that need host-query panics to propagate [#476]
+
+### Changed
+
+- Contain host-query panics by default and return them as contract panic errors [#476]
+
 ## [0.32.0] - 2026-06-19
 
 ### Changed
@@ -564,6 +572,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- ISSUES -->
 [#466]: https://github.com/dusk-network/piecrust/issues/466
+[#476]: https://github.com/dusk-network/piecrust/issues/476
 
 [#rusk_3341]: https://github.com/dusk-network/rusk/issues/3341
 [#440]: https://github.com/dusk-network/piecrust/issues/440
