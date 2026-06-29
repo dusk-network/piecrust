@@ -17,6 +17,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Contain host-query panics by default and return them as contract panic errors [#476]
 - Move `rand` from runtime dependencies to dev-dependencies.
 
+### Fixed
+
+- Preserve queued `finalize_commit` operations when a commit is held by a live session.
+
 ### Removed
 
 - Remove the `once_cell` dev-dependency from tests.
