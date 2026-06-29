@@ -119,6 +119,9 @@
 //! [runtime docs]: dusk_wasmtime::Config::consume_fuel
 //! [`deletions`]: VM::delete_commit
 
+#[cfg(not(unix))]
+compile_error!("Piecrust only supports Unix targets.");
+
 #[macro_use]
 mod bytecode_macro;
 mod call_tree;

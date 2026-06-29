@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Add `SessionDataBuilder::contain_hq_panics` opt-out for callers that need host-query panics to propagate [#476]
+- Declare unsupported non-Unix targets at compile time.
 
 ### Changed
 
