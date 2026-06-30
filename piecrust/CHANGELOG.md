@@ -14,6 +14,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Disable relaxed SIMD in the engine config
+- Disable Wasmtime multi-memory in the engine config to keep Piecrust's one-memory contract ABI enforced at compile time
+- Disable Wasm-GC in the engine config since contract state is linear memory only
 - Declare minimum supported Rust version of 1.94.
 - Contain host-query panics by default and return them as contract panic errors [#476]
 - Move `rand` from runtime dependencies to dev-dependencies.
