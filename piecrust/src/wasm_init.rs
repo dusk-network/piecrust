@@ -45,6 +45,15 @@
 //! can only be called after `Instance::new`, which is after the start function.
 //! Rewriting such a module would let the start function observe uninitialized
 //! memory, so Piecrust treats that combination as unsupported.
+//!
+//! This combination is valid WebAssembly that the previous Wasmtime fork could
+//! instantiate, so rejecting it here narrows what loads after the upstream
+//! migration. The upgrade therefore relies on an invariant: no already-deployed
+//! contract uses both a start function and active data segments. Because this
+//! module only sees one contract's bytecode at a time, it cannot prove that
+//! invariant for the whole chain; enforcing it across existing on-chain
+//! bytecode (or gating the rejection to new deployments) must happen at the
+//! migration layer before this rewriter is relied upon.
 
 use std::borrow::Cow;
 use std::convert::Infallible;
@@ -382,7 +391,9 @@ pub(crate) fn prepare_contract_bytecode(
     if plan.has_start {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
-            "contracts with start functions and active data segments cannot be rewritten safely",
+            "contract uses both a start function and active data segments; \
+             this is valid WebAssembly but unsupported by the upstream-Wasmtime \
+             migration without an explicit chain-state compatibility check",
         ));
     }
 
@@ -675,10 +686,7 @@ mod tests {
 
         let err = prepare_contract_bytecode(&module.finish()).unwrap_err();
 
-        assert!(
-            err.to_string()
-                .contains("start functions and active data segments")
-        );
+        assert!(err.to_string().contains("chain-state compatibility check"));
     }
 
     #[test]
