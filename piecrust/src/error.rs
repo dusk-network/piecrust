@@ -32,6 +32,8 @@ pub enum Error {
     ContractCacheError(Arc<std::io::Error>),
     #[error("Contract does not exist: {0}")]
     ContractDoesNotExist(ContractId),
+    #[error("Contract '{contract_id}' collides at Merkle position {pos}")]
+    ContractPositionCollision { contract_id: ContractId, pos: u64 },
     #[error(transparent)]
     FeedPulled(mpsc::SendError<Vec<u8>>),
     #[error(transparent)]
