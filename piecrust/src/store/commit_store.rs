@@ -13,6 +13,14 @@ use crate::store::commit::Commit;
 use crate::store::hasher::Hash;
 use crate::store::index::{ContractIndexElement, NewContractIndex};
 
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum ElementOwner {
+    /// Entry lives in a still-guarded commit inside the store.
+    Commit(Hash),
+    /// Entry lives in the finalized main index inside the store.
+    Main,
+}
+
 #[derive(Debug)]
 pub struct CommitStore {
     commits: BTreeMap<Hash, Commit>,
@@ -35,37 +43,34 @@ impl CommitStore {
         self.commits.get(hash)
     }
 
-    pub fn get_element_and_base(
+    pub fn get_element_owner_and_base(
         &self,
         hash: &Hash,
         contract_id: &ContractId,
-    ) -> (Option<*const ContractIndexElement>, Option<Hash>) {
+    ) -> (Option<ElementOwner>, Option<Hash>) {
         match self.commits.get(hash) {
             Some(commit) => {
                 let e = commit.index().get(contract_id);
-                (e.map(|a| a as *const ContractIndexElement), commit.base())
+                (e.map(|_| ElementOwner::Commit(*hash)), commit.base())
             }
             None => {
                 let e = self.main_index.get(contract_id);
-                (e.map(|a| a as *const ContractIndexElement), None)
+                (e.map(|_| ElementOwner::Main), None)
             }
         }
     }
 
-    pub fn get_element_and_base_mut(
-        &mut self,
-        hash: &Hash,
+    pub(crate) fn get_element(
+        &self,
+        owner: ElementOwner,
         contract_id: &ContractId,
-    ) -> (Option<*mut ContractIndexElement>, Option<Hash>) {
-        match self.commits.get_mut(hash) {
-            Some(commit) => {
-                let e = commit.index_mut().get_mut(contract_id);
-                (e.map(|a| a as *mut ContractIndexElement), commit.base())
-            }
-            None => {
-                let e = self.main_index.get_mut(contract_id);
-                (e.map(|a| a as *mut ContractIndexElement), None)
-            }
+    ) -> Option<&ContractIndexElement> {
+        match owner {
+            ElementOwner::Commit(hash) => self
+                .commits
+                .get(&hash)
+                .and_then(|commit| commit.index().get(contract_id)),
+            ElementOwner::Main => self.main_index.get(contract_id),
         }
     }
 

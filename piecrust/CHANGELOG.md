@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Keep inherited commit index lookups guard-bound to avoid dangling references when commits are removed concurrently.
 - Preserve queued `finalize_commit` operations when a commit is held by a live session.
 
 ### Removed

@@ -3,6 +3,8 @@ help: ## Display this help screen
 
 test: ## Run tests
 	@cargo test --all-features --color=always
+	@rustup component add --toolchain nightly miri
+	@cargo +nightly miri test --all-features --color=always test_no_dangling_commit_index_reference
 
 clippy: ## Run clippy
 	@cargo clippy --all-features -- -D warnings
