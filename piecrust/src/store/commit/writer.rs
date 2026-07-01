@@ -20,7 +20,7 @@ use crate::store::hasher::Hash;
 use crate::store::session::ContractDataEntry;
 use crate::store::{
     BASE_FILE, BYTECODE_DIR, Bytecode, ELEMENT_FILE, LEAF_DIR, MAIN_DIR,
-    MEMORY_DIR, METADATA_EXTENSION, Module, OBJECTCODE_EXTENSION,
+    MEMORY_DIR, METADATA_EXTENSION, Module, OBJECTCODE_EXTENSION, dedup,
 };
 
 pub struct CommitWriter;
@@ -157,7 +157,12 @@ impl CommitWriter {
             // metadata files to disk.
             if contract_data.is_new {
                 // we write them to the main location
-                fs::write(bytecode_main_path, &contract_data.bytecode)?;
+                dedup::write(
+                    &directories.bytecode_main_dir,
+                    dedup::Kind::Bytecode,
+                    bytecode_main_path,
+                    contract_data.bytecode.as_ref(),
+                )?;
                 contract_data.module.write_module_data(
                     module_main_path,
                     contract_data.bytecode.as_ref(),
