@@ -17,7 +17,6 @@ rust-version.workspace = true
 rkyv = { version = "0.7", default-features = false, features = [
     "size_32",
     "alloc",
-    "validation",
 ] }
 bytecheck = { version = "0.6", default-features = false }
 dlmalloc = { version = "0.2", optional = true, features = ["global"] }
@@ -34,7 +33,7 @@ rand = "0.8"
 serde_json = "1.0"
 
 [features]
-abi = ["dep:tracing"]
+abi = ["rkyv/validation", "dep:tracing"]
 debug = []
 serde = ["serde/derive", "hex/serde"]
 
