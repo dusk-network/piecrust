@@ -287,8 +287,14 @@ impl ContractSession {
             Vacant(entry) => match &self.base {
                 None => Ok(None),
                 Some(base_commit) => {
-                    match base_commit.index_get(&contract).is_some() {
-                        true => {
+                    let memory_meta =
+                        base_commit.index_get(&contract).map(|elem| {
+                            let elem = &*elem;
+                            (elem.page_indices().clone(), elem.len())
+                        });
+
+                    match memory_meta {
+                        Some((page_indices, len)) => {
                             let base_dir = self.root_dir.join(MAIN_DIR);
 
                             let contract_hex = hex::encode(contract);
@@ -310,31 +316,21 @@ impl ContractSession {
                             )?;
                             let metadata = Metadata::from_file(metadata_path)?;
 
-                            let memory = match base_commit.index_get(&contract)
-                            {
-                                Some(elem) => {
-                                    let page_indices =
-                                        elem.page_indices().clone();
-                                    Memory::from_files(
-                                        module.is_64(),
-                                        move |page_index: usize| {
-                                            match page_indices
-                                                .contains(&page_index)
-                                            {
-                                                true => Self::find_page(
-                                                    page_index,
-                                                    commit_id,
-                                                    &memory_path,
-                                                    &base_dir,
-                                                ),
-                                                false => None,
-                                            }
-                                        },
-                                        elem.len(),
-                                    )?
-                                }
-                                None => Memory::new(module.is_64())?,
-                            };
+                            let memory = Memory::from_files(
+                                module.is_64(),
+                                move |page_index: usize| match page_indices
+                                    .contains(&page_index)
+                                {
+                                    true => Self::find_page(
+                                        page_index,
+                                        commit_id,
+                                        &memory_path,
+                                        &base_dir,
+                                    ),
+                                    false => None,
+                                },
+                                len,
+                            )?;
 
                             let contract = entry
                                 .insert(ContractDataEntry {
@@ -348,7 +344,7 @@ impl ContractSession {
 
                             Ok(Some(contract))
                         }
-                        false => Ok(None),
+                        None => Ok(None),
                     }
                 }
             },

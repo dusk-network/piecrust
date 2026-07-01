@@ -10,14 +10,15 @@ pub mod remover;
 pub mod writer;
 
 use std::cell::Ref;
-use std::sync::{Arc, Mutex};
+use std::ops::Deref;
+use std::sync::{Arc, Mutex, MutexGuard};
 
 use piecrust_uplink::ContractId;
 use tracing::debug;
 
 use crate::PageOpening;
 use crate::store::Memory;
-use crate::store::commit_store::CommitStore;
+use crate::store::commit_store::{CommitStore, ElementOwner};
 use crate::store::hasher::Hash;
 use crate::store::index::{ContractIndexElement, NewContractIndex};
 use crate::store::tree::{ContractsMerkle, position_from_contract};
@@ -29,6 +30,38 @@ pub(crate) struct Commit {
     maybe_hash: Option<Hash>,
     commit_store: Option<Arc<Mutex<CommitStore>>>,
     base: Option<Hash>,
+}
+
+/// A reference to a local or store-backed contract index element.
+pub(crate) enum ContractIndexElementRef<'a> {
+    /// A reference to an element in this `Commit`'s `index` map.
+    Local(&'a ContractIndexElement),
+    /// A reference to an element in the `CommitStore` while its guard is held.
+    Store {
+        /// Keeps inherited entries alive while callers read through this ref.
+        guard: MutexGuard<'a, CommitStore>,
+        /// Identifies which store index to read under the guard.
+        owner: ElementOwner,
+        /// Identifies the specific contract entry under the guarded owner.
+        contract_id: ContractId,
+    },
+}
+
+impl Deref for ContractIndexElementRef<'_> {
+    type Target = ContractIndexElement;
+
+    fn deref(&self) -> &Self::Target {
+        match self {
+            Self::Local(element) => element,
+            Self::Store {
+                guard,
+                owner,
+                contract_id,
+            } => guard.get_element(*owner, contract_id).expect(
+                "index element must exist while the store guard is held",
+            ),
+        }
+    }
 }
 
 impl Commit {
@@ -113,9 +146,12 @@ impl Commit {
                 );
             }
         }
-        let (element, contracts_merkle) =
-            self.element_and_merkle_mut(&contract_id);
-        let element = element.unwrap();
+        let (element, contracts_merkle) = (
+            self.index
+                .get_mut(&contract_id)
+                .expect("commit insertion must create a local index element"),
+            &mut self.contracts_merkle,
+        );
 
         element.set_len(memory.current_len());
 
@@ -202,14 +238,16 @@ impl Commit {
     pub fn index_get(
         &self,
         contract_id: &ContractId,
-    ) -> Option<&ContractIndexElement> {
+    ) -> Option<ContractIndexElementRef<'_>> {
+        if let Some(e) = self.index.get(contract_id) {
+            return Some(ContractIndexElementRef::Local(e));
+        }
+
         Hulk::deep_index_get(
-            &self.index,
             *contract_id,
-            self.commit_store.clone(),
+            self.commit_store.as_ref(),
             self.base,
         )
-        .map(|a| unsafe { &*a })
     }
 
     pub fn index(&self) -> &NewContractIndex {
@@ -223,69 +261,92 @@ impl Commit {
     pub fn base(&self) -> Option<Hash> {
         self.base
     }
-
-    pub fn element_and_merkle_mut(
-        &mut self,
-        contract_id: &ContractId,
-    ) -> (Option<&mut ContractIndexElement>, &mut ContractsMerkle) {
-        (
-            Hulk::deep_index_get_mut(
-                &mut self.index,
-                *contract_id,
-                self.commit_store.clone(),
-                self.base,
-            )
-            .map(|a| unsafe { &mut *a }),
-            &mut self.contracts_merkle,
-        )
-    }
 }
 
 #[derive(Debug, Clone)]
 pub(crate) struct Hulk;
 
 impl Hulk {
-    pub fn deep_index_get(
-        index: &NewContractIndex,
+    pub fn deep_index_get<'a>(
         contract_id: ContractId,
-        commit_store: Option<Arc<Mutex<CommitStore>>>,
+        commit_store: Option<&'a Arc<Mutex<CommitStore>>>,
         base: Option<Hash>,
-    ) -> Option<*const ContractIndexElement> {
-        if let Some(e) = index.get(&contract_id) {
-            return Some(e);
-        }
+    ) -> Option<ContractIndexElementRef<'a>> {
         let mut base = base?;
-        let commit_store = commit_store.clone()?;
+        let commit_store = commit_store?;
         let commit_store = commit_store.lock().unwrap();
         loop {
-            let (maybe_element, commit_base) =
-                commit_store.get_element_and_base(&base, &contract_id);
-            if let Some(e) = maybe_element {
-                return Some(e);
+            let (maybe_owner, commit_base) =
+                commit_store.get_element_owner_and_base(&base, &contract_id);
+            if let Some(owner) = maybe_owner {
+                return Some(ContractIndexElementRef::Store {
+                    guard: commit_store,
+                    owner,
+                    contract_id,
+                });
             }
             base = commit_base?;
         }
     }
+}
 
-    pub fn deep_index_get_mut(
-        index: &mut NewContractIndex,
-        contract_id: ContractId,
-        commit_store: Option<Arc<Mutex<CommitStore>>>,
-        base: Option<Hash>,
-    ) -> Option<*mut ContractIndexElement> {
-        if let Some(e) = index.get_mut(&contract_id) {
-            return Some(e);
-        }
-        let mut base = base?;
-        let commit_store = commit_store.clone()?;
-        let mut commit_store = commit_store.lock().unwrap();
-        loop {
-            let (maybe_element, commit_base) =
-                commit_store.get_element_and_base_mut(&base, &contract_id);
-            if let Some(e) = maybe_element {
-                return Some(e);
+#[cfg(all(test, miri))]
+mod tests {
+    use std::sync::TryLockError;
+
+    use super::*;
+
+    fn remove_commit_if_possible(
+        commit_store: &Arc<Mutex<CommitStore>>,
+        hash: &Hash,
+    ) -> bool {
+        match commit_store.try_lock() {
+            Ok(mut commit_store) => {
+                commit_store.remove_commit(hash, false);
+                true
             }
-            base = commit_base?;
+            Err(TryLockError::WouldBlock) => false,
+            Err(TryLockError::Poisoned(_)) => {
+                panic!("commit store mutex should not be poisoned")
+            }
+        }
+    }
+
+    #[test]
+    fn test_no_dangling_commit_index_reference() {
+        let commit_store = Arc::new(Mutex::new(CommitStore::new()));
+        let contract_id = ContractId::from_bytes([1; 32]);
+        let ancestor_hash = Hash::new(b"ancestor");
+
+        let mut ancestor = Commit::new(&commit_store, None);
+        ancestor.index.insert_contract_index(
+            &contract_id,
+            ContractIndexElement::new(false),
+        );
+
+        commit_store
+            .lock()
+            .unwrap()
+            .insert_commit(ancestor_hash, ancestor);
+
+        let descendant = Commit::new(&commit_store, Some(ancestor_hash));
+        let element = descendant
+            .index_get(&contract_id)
+            .expect("ancestor should contain the element");
+
+        let removed = remove_commit_if_possible(&commit_store, &ancestor_hash);
+
+        // Old code removes the ancestor before this read, so Miri should reject
+        // the stale reference. Fixed code keeps the store locked while
+        // `element` is alive, so the attempted removal is deferred.
+        let _ = element.len();
+
+        if !removed {
+            drop(element);
+            commit_store
+                .lock()
+                .unwrap()
+                .remove_commit(&ancestor_hash, false);
         }
     }
 }
