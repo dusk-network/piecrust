@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Reject distinct explicit `ContractId`s that map to an occupied contract Merkle position.
 - Preserve queued `finalize_commit` operations when a commit is held by a live session.
 
 ### Removed
