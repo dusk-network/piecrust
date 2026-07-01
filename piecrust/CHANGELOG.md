@@ -26,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Remove the `once_cell` dev-dependency from tests.
 - Remove the unused `const-decoder` dependency.
+- Remove the unused direct `indexmap` dependency.
 - Remove the unused direct `half` dev-dependency.
 
 ## [0.32.0] - 2026-06-19
