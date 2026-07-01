@@ -25,14 +25,16 @@ serde = { version = "1.0", default-features = false, features = [
     "alloc",
 ], optional = true }
 hex = { version = "0.4", default-features = false, features = ["alloc"] }
-tracing = { version = "0.1.40", default-features = false, features = ["log"] }
+tracing = { version = "0.1.40", default-features = false, features = [
+    "log",
+], optional = true }
 
 [dev-dependencies]
 rand = "0.8"
 serde_json = "1.0"
 
 [features]
-abi = []
+abi = ["dep:tracing"]
 debug = []
 serde = ["serde/derive", "hex/serde"]
 
