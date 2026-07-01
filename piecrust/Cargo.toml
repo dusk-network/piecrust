@@ -37,6 +37,7 @@ tracing = "0.1.40"
 criterion = "0.4"
 dusk-plonk = { version = "0.22.0-rc.0", features = ["rkyv-impl"] }
 rand = "0.8"
+wasm-encoder = { version = "0.246", default-features = false }
 
 [features]
 debug = []
