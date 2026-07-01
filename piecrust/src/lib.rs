@@ -146,3 +146,8 @@ pub use session::CallHook;
 pub use session::{CallReceipt, Session, SessionData, SessionDataBuilder};
 pub use store::PageOpening;
 pub use vm::{HostQuery, VM};
+
+#[doc(hidden)]
+pub fn contract_merkle_position(contract_id: &ContractId) -> u64 {
+    store::position_from_contract(contract_id)
+}

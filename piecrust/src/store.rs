@@ -35,6 +35,7 @@ use piecrust_uplink::ContractId;
 use session::ContractDataEntry;
 pub use session::ContractSession;
 pub use tree::PageOpening;
+pub(crate) use tree::position_from_contract;
 
 use crate::store::commit::Commit;
 use crate::store::commit::finalizer::CommitFinalizer;
