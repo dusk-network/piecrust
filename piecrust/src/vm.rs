@@ -60,6 +60,22 @@ fn config() -> Config {
     // Support 64-bit memories
     config.wasm_memory64(true);
 
+    // Keep SIMD but force determinism.
+    config.wasm_simd(true);
+    // Reject relaxed SIMD as it can yield host-dependent results.
+    config.wasm_relaxed_simd(false);
+    // Only allow deterministic SIMD operations, this
+    // is only relevant if relaxed SIMD is enabled.
+    config.relaxed_simd_deterministic(true);
+
+    // One memory per contract: the custom memory creator backs every
+    // allocation with the same persistent store.
+    config.wasm_multi_memory(false);
+
+    // No Wasm-GC: contract state is linear memory only, not managed heap
+    // objects.
+    config.wasm_gc(false);
+
     const BYTE4_STORE_COST: i64 = 4 * BYTE_STORE_COST;
     const BYTE8_STORE_COST: i64 = 8 * BYTE_STORE_COST;
     const BYTE16_STORE_COST: i64 = 16 * BYTE_STORE_COST;
@@ -389,5 +405,99 @@ where
     fn execute(&self, arg: &Box<dyn Any>, arg_buf: &mut [u8]) -> u32 {
         let arg_len = *arg.downcast_ref::<u32>().unwrap();
         self(arg_buf, arg_len)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use dusk_wasmtime::{Engine, Module as WasmtimeModule};
+    use wasm_encoder::{
+        CodeSection, ExportKind, ExportSection, Function, FunctionSection,
+        MemorySection, MemoryType, Module, StorageType, TypeSection, ValType,
+    };
+
+    use super::config;
+
+    fn engine() -> Engine {
+        Engine::new(&config()).expect("VM config should be valid")
+    }
+
+    fn memory_type() -> MemoryType {
+        MemoryType {
+            minimum: 1,
+            maximum: None,
+            memory64: false,
+            shared: false,
+            page_size_log2: None,
+        }
+    }
+
+    // One exported `"memory"` plus a hidden second memory must be rejected:
+    // Piecrust only counts exported memories, so the config has to reject it.
+    #[test]
+    fn rejects_module_with_hidden_second_memory() {
+        let mut memories = MemorySection::new();
+        memories.memory(memory_type());
+        memories.memory(memory_type());
+
+        let mut exports = ExportSection::new();
+        exports.export("memory", ExportKind::Memory, 0);
+
+        let mut module = Module::new();
+        module.section(&memories).section(&exports);
+        let bytecode = module.finish();
+
+        assert!(
+            WasmtimeModule::new(&engine(), &bytecode).is_err(),
+            "multi-memory modules must be rejected by the VM config"
+        );
+    }
+
+    // Relaxed SIMD opcodes can be host-dependent and must be rejected.
+    #[test]
+    fn rejects_relaxed_simd_opcodes() {
+        let mut types = TypeSection::new();
+        types.ty().function([], []);
+
+        let mut functions = FunctionSection::new();
+        functions.function(0);
+
+        let mut function = Function::new([]);
+        function
+            .instructions()
+            .v128_const(0)
+            .v128_const(0)
+            .i8x16_relaxed_swizzle()
+            .drop()
+            .end();
+
+        let mut code = CodeSection::new();
+        code.function(&function);
+
+        let mut module = Module::new();
+        module.section(&types).section(&functions).section(&code);
+        let bytecode = module.finish();
+
+        assert!(
+            WasmtimeModule::new(&engine(), &bytecode).is_err(),
+            "relaxed SIMD opcodes must be rejected by the VM config"
+        );
+    }
+
+    // A GC type (here an array) requires the Wasm-GC proposal, which the config
+    // disables, so the module must be rejected.
+    #[test]
+    fn rejects_wasm_gc_types() {
+        let mut types = TypeSection::new();
+        types.ty().array(&StorageType::Val(ValType::I32), true);
+
+        let mut module = Module::new();
+        module.section(&types);
+        let bytecode = module.finish();
+
+        assert!(
+            WasmtimeModule::new(&engine(), &bytecode).is_err(),
+            "Wasm-GC modules must be rejected by the VM config"
+        );
     }
 }
