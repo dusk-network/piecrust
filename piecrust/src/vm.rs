@@ -351,14 +351,13 @@ impl HostQueries {
 
 /// A query executable on the host.
 ///
-/// The buffer containing the argument the contract used to call the query,
-/// together with the argument's length, are passed as arguments to the
-/// function, and should be processed first. Once this is done, the implementor
-/// should emplace the return of the query in the same buffer, and return the
-/// length written.
+/// The argument bytes the contract used to call the query are passed to
+/// [`deserialize_and_price`]. Once the query is priced, [`execute`] receives
+/// the whole argument buffer and should write its return value into that
+/// buffer, returning the length written.
 ///
-/// Implementers of `Fn(&mut [u8], u32) -> u32` can be used as a `HostQuery`,
-/// but the cost will be 0.
+/// [`deserialize_and_price`]: HostQuery::deserialize_and_price
+/// [`execute`]: HostQuery::execute
 pub trait HostQuery: Send + Sync {
     /// Deserialize the argument buffer and return the price of the query.
     ///
@@ -384,28 +383,6 @@ pub trait HostQuery: Send + Sync {
     ///
     /// [`deserialize_and_price`]: HostQuery::deserialize_and_price
     fn execute(&self, arg: &Box<dyn Any>, arg_buf: &mut [u8]) -> u32;
-}
-
-/// An implementer of `Fn(&mut [u8], u32) -> u32` can be used as a `HostQuery`,
-/// and the cost will be 0.
-impl<F> HostQuery for F
-where
-    F: Send + Sync + Fn(&mut [u8], u32) -> u32,
-{
-    fn deserialize_and_price(
-        &self,
-        arg_buf: &[u8],
-        arg: &mut Box<dyn Any>,
-    ) -> u64 {
-        let len = Box::new(arg_buf.len() as u32);
-        *arg = len;
-        0
-    }
-
-    fn execute(&self, arg: &Box<dyn Any>, arg_buf: &mut [u8]) -> u32 {
-        let arg_len = *arg.downcast_ref::<u32>().unwrap();
-        self(arg_buf, arg_len)
-    }
 }
 
 #[cfg(test)]
