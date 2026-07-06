@@ -20,7 +20,7 @@ use crate::store::baseinfo::BaseInfo;
 use crate::store::commit::Commit;
 use crate::store::commit_store::CommitStore;
 use crate::store::hasher::Hash;
-use crate::store::tree::PageOpening;
+use crate::store::tree::{PageOpening, position_from_contract};
 use crate::store::{
     BASE_FILE, BYTECODE_DIR, Bytecode, Call, ELEMENT_FILE, MAIN_DIR,
     MEMORY_DIR, METADATA_EXTENSION, Memory, Metadata, Module,
@@ -372,6 +372,72 @@ impl ContractSession {
         }
     }
 
+    fn pending_contract_position_occupied(
+        &self,
+        contract_id: ContractId,
+        pos: u64,
+        ignored_contract: Option<ContractId>,
+    ) -> bool {
+        // Pending contracts are not inserted into ContractsMerkle until root,
+        // memory_pages, or commit builds a Commit. Until then, self.contracts
+        // is the only place where same-session deployments can be
+        // checked.
+        self.contracts.keys().any(|id| {
+            *id != contract_id
+                && Some(*id) != ignored_contract
+                && position_from_contract(id) == pos
+        })
+    }
+
+    fn ensure_new_contract_position_available(
+        &self,
+        contract_id: ContractId,
+    ) -> Result<(), Error> {
+        let pos = position_from_contract(&contract_id);
+
+        // Deploy creates a new contract ID, so its Merkle position must be
+        // unused both in pending session state and in the committed base tree.
+        if self.pending_contract_position_occupied(contract_id, pos, None)
+            || self
+                .base
+                .as_ref()
+                .is_some_and(|base| base.contains_contract_position(pos))
+        {
+            return Err(Error::ContractPositionCollision { contract_id, pos });
+        }
+
+        Ok(())
+    }
+
+    fn ensure_replace_contract_position_available(
+        &self,
+        contract_id: ContractId,
+        replacement_contract: ContractId,
+    ) -> Result<(), Error> {
+        let pos = position_from_contract(&contract_id);
+
+        // Replace is used by migration: the target ID may already exist and, in
+        // that normal case, reusing its own base Merkle position is correct.
+        // The pending replacement ID is about to be removed and re-keyed to the
+        // target ID, so it must not count as a collision with the target.
+        // Reject only when the position belongs to a different pending/base ID.
+        let pending_collision = self.pending_contract_position_occupied(
+            contract_id,
+            pos,
+            Some(replacement_contract),
+        );
+        let base_collision = self.base.as_ref().is_some_and(|base| {
+            base.contains_contract_position(pos)
+                && base.index_get(&contract_id).is_none()
+        });
+
+        if pending_collision || base_collision {
+            return Err(Error::ContractPositionCollision { contract_id, pos });
+        }
+
+        Ok(())
+    }
+
     /// Deploys bytecode to the contract store with the given its `contract_id`.
     ///
     /// See [`deploy`] for deploying bytecode without specifying a contract ID.
@@ -384,21 +450,31 @@ impl ContractSession {
         module: B,
         metadata: ContractMetadata,
         metadata_bytes: B,
-    ) -> io::Result<()> {
-        let bytecode = Bytecode::new(bytecode)?;
-        let module = Module::new(&self.engine, module)?;
-        let metadata = Metadata::new(metadata_bytes, metadata)?;
-        let memory = Memory::new(module.is_64())?;
+    ) -> Result<(), Error> {
+        let persistence_error = |err: io::Error| -> Error {
+            Error::PersistenceError(Arc::new(err))
+        };
+        let bytecode = Bytecode::new(bytecode).map_err(persistence_error)?;
+        let module =
+            Module::new(&self.engine, module).map_err(persistence_error)?;
+        let metadata = Metadata::new(metadata_bytes, metadata)
+            .map_err(persistence_error)?;
+        let memory = Memory::new(module.is_64()).map_err(persistence_error)?;
 
-        // If the position is already filled in the tree, the contract cannot be
-        // inserted.
-        if let Some(base) = self.base.as_ref()
-            && base.index_get(&contract_id).is_some()
+        // Deploy creates a new contract ID, so exact ID reuse is rejected here.
+        // Folded Merkle-position reuse is checked separately below.
+        if self.contracts.contains_key(&contract_id)
+            || self
+                .base
+                .as_ref()
+                .is_some_and(|base| base.index_get(&contract_id).is_some())
         {
-            return Err(io::Error::other(format!(
+            return Err(persistence_error(io::Error::other(format!(
                 "Existing contract '{contract_id}'"
-            )));
+            ))));
         }
+
+        self.ensure_new_contract_position_available(contract_id)?;
 
         self.contracts.insert(
             contract_id,
@@ -422,6 +498,17 @@ impl ContractSession {
         old_contract: ContractId,
         new_contract: ContractId,
     ) -> Result<(), Error> {
+        if !self.contracts.contains_key(&new_contract) {
+            return Err(Error::PersistenceError(Arc::new(io::Error::other(
+                format!("Contract '{new_contract}' not found"),
+            ))));
+        }
+
+        self.ensure_replace_contract_position_available(
+            old_contract,
+            new_contract,
+        )?;
+
         let mut new_contract_data =
             self.contracts.remove(&new_contract).ok_or_else(|| {
                 Error::PersistenceError(Arc::new(io::Error::other(format!(

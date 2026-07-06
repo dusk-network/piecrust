@@ -199,6 +199,10 @@ impl Commit {
         ret
     }
 
+    pub fn contains_contract_position(&self, pos: u64) -> bool {
+        self.contracts_merkle.contains_position(pos)
+    }
+
     pub fn index_get(
         &self,
         contract_id: &ContractId,

@@ -267,11 +267,12 @@ impl Session {
     /// to fit into a sparse merkle tree with `2^32` positions, and as such
     /// a 256-bit number has to be mapped into a 32-bit number.
     ///
-    /// If such a collision occurs, [`PersistenceError`] will be returned.
+    /// If such a collision occurs, [`ContractPositionCollision`] will be
+    /// returned.
     ///
     /// [`ContractId`]: ContractId
     /// [`CallReceipt`]: CallReceipt
-    /// [`PersistenceError`]: PersistenceError
+    /// [`ContractPositionCollision`]: Error::ContractPositionCollision
     ///
     /// # Panics
     /// If `deploy_data` does not specify an owner, this will panic.
@@ -334,11 +335,12 @@ impl Session {
     /// to fit into a sparse merkle tree with `2^32` positions, and as such
     /// a 256-bit number has to be mapped into a 32-bit number.
     ///
-    /// If such a collision occurs, [`PersistenceError`] will be returned.
+    /// If such a collision occurs, [`ContractPositionCollision`] will be
+    /// returned.
     ///
     /// [`ContractId`]: ContractId
     /// [`CallReceipt`]: CallReceipt
-    /// [`PersistenceError`]: PersistenceError
+    /// [`ContractPositionCollision`]: Error::ContractPositionCollision
     #[allow(clippy::type_complexity)]
     pub fn deploy_raw(
         &mut self,
@@ -382,16 +384,13 @@ impl Session {
         let contract_metadata = ContractMetadata { contract_id, owner };
         let metadata_bytes = Self::serialize_data(&contract_metadata)?;
 
-        self.inner_mut()
-            .contract_session
-            .deploy(
-                contract_id,
-                bytecode,
-                wrapped_contract.as_bytes(),
-                contract_metadata,
-                metadata_bytes.as_slice(),
-            )
-            .map_err(|err| PersistenceError(Arc::new(err)))?;
+        self.inner_mut().contract_session.deploy(
+            contract_id,
+            bytecode,
+            wrapped_contract.as_bytes(),
+            contract_metadata,
+            metadata_bytes.as_slice(),
+        )?;
         self.inner_mut().compiled_modules.remove(&contract_id);
 
         let instantiate = || {
@@ -457,7 +456,9 @@ impl Session {
             + for<'b> CheckBytes<DefaultValidator<'b>>,
     {
         if fn_name == INIT_METHOD {
-            return Err(InitalizationError("init call not allowed".into()));
+            return Err(Error::InitalizationError(
+                "init call not allowed".into(),
+            ));
         }
 
         let mut sbuf = [0u8; SCRATCH_BUF_BYTES];
@@ -495,7 +496,9 @@ impl Session {
         gas_limit: u64,
     ) -> Result<CallReceipt<Vec<u8>>, Error> {
         if fn_name == INIT_METHOD {
-            return Err(InitalizationError("init call not allowed".into()));
+            return Err(Error::InitalizationError(
+                "init call not allowed".into(),
+            ));
         }
 
         let (data, gas_spent, call_tree) =

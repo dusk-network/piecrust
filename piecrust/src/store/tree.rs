@@ -115,6 +115,10 @@ impl ContractsMerkle {
         self.tree_pos.insert(int_pos as u32, (hash, pos));
     }
 
+    pub fn contains_position(&self, pos: u64) -> bool {
+        self.dict.contains_key(&pos)
+    }
+
     pub fn opening(&self, pos: u64) -> Option<TreeOpening> {
         let new_pos = self.dict.get(&pos)?;
         self.inner_tree.opening(*new_pos)
