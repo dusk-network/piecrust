@@ -72,6 +72,24 @@ fn verify_proof(buf: &mut [u8], len: u32) -> u32 {
     valid_bytes.len() as u32
 }
 
+struct ZeroCostHostQuery(fn(&mut [u8], u32) -> u32);
+
+impl HostQuery for ZeroCostHostQuery {
+    fn deserialize_and_price(
+        &self,
+        arg_buf: &[u8],
+        arg: &mut Box<dyn Any>,
+    ) -> u64 {
+        *arg = Box::new(arg_buf.len() as u32);
+        0
+    }
+
+    fn execute(&self, arg: &Box<dyn Any>, arg_buf: &mut [u8]) -> u32 {
+        let arg_len = *arg.downcast_ref::<u32>().unwrap();
+        self.0(arg_buf, arg_len)
+    }
+}
+
 struct VeryExpensiveQuery;
 
 impl HostQuery for VeryExpensiveQuery {
@@ -122,8 +140,8 @@ impl HostQuery for PanicsInExecuteQuery {
 
 fn new_ephemeral_vm() -> Result<VM, Error> {
     let mut vm = VM::ephemeral()?;
-    vm.register_host_query("hash", hash);
-    vm.register_host_query("verify_proof", verify_proof);
+    vm.register_host_query("hash", ZeroCostHostQuery(hash));
+    vm.register_host_query("verify_proof", ZeroCostHostQuery(verify_proof));
     vm.register_host_query("very_expensive", VeryExpensiveQuery);
     Ok(vm)
 }
