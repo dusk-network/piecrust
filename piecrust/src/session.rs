@@ -29,6 +29,7 @@ use rkyv::{Archive, Deserialize, Infallible, Serialize, check_archived_root};
 use crate::call_tree::{CallTree, CallTreeElem};
 use crate::contract::{ContractData, ContractMetadata, WrappedContract};
 use crate::error::Error::{self, InitalizationError, PersistenceError};
+use crate::imports::check_arg;
 use crate::instance::WrappedInstance;
 use crate::store::{ContractSession, PAGE_SIZE, PageOpening};
 use crate::types::StandardBufSerializer;
@@ -1009,6 +1010,25 @@ impl Session {
         Ok(buf[..pos].to_vec())
     }
 
+    fn revert_failed_call(
+        &mut self,
+        event_checkpoint: usize,
+        err: Error,
+    ) -> Error {
+        let err = if let Err(io_err) = self.revert_callstack() {
+            Error::MemorySnapshotFailure {
+                reason: Some(Arc::new(err)),
+                io: Arc::new(io_err),
+            }
+        } else {
+            err
+        };
+        self.revert_events_from(event_checkpoint);
+        self.move_up_prune_call_tree();
+        self.clear_call_tree_and_instances();
+        err
+    }
+
     fn call_inner(
         &mut self,
         contract: ContractId,
@@ -1035,34 +1055,23 @@ impl Session {
                 .instance(&stack_element.contract_id)
                 .expect("instance should exist");
             let arg_len = instance.write_bytes_to_arg_buffer(&fdata)?;
-            instance
+            let ret_len = instance
                 .call(fname, arg_len, limit)
                 .map_err(Error::normalize)
-        };
-
-        let ret_len = match ret_len {
-            Ok(ret_len) => ret_len,
-            Err(err) => {
-                let err = if let Err(io_err) = self.revert_callstack() {
-                    Error::MemorySnapshotFailure {
-                        reason: Some(Arc::new(err)),
-                        io: Arc::new(io_err),
-                    }
-                } else {
-                    err
-                };
-                self.revert_events_from(event_checkpoint);
-                self.move_up_prune_call_tree();
-                self.clear_call_tree_and_instances();
-                return Err(err);
-            }
+                .map_err(|err| {
+                    self.revert_failed_call(event_checkpoint, err)
+                })?;
+            ret_len as u32
         };
 
         let (ret, spent) = {
             let instance = self
                 .instance(&stack_element.contract_id)
                 .expect("instance should exist");
-            let ret = instance.read_bytes_from_arg_buffer(ret_len as u32);
+            if let Err(err) = check_arg(instance, ret_len) {
+                return Err(self.revert_failed_call(event_checkpoint, err));
+            };
+            let ret = instance.read_bytes_from_arg_buffer(ret_len);
             let spent = limit - instance.get_remaining_gas();
             (ret, spent)
         };

@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Reject invalid top-level contract return lengths instead of panicking when reading the argument buffer.
+
 ## [0.32.1] - 2026-08-06
 
 ### Added
