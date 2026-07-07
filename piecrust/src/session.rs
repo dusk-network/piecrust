@@ -483,6 +483,12 @@ impl Session {
     /// most common ones being running against the gas limit and a contract
     /// panic. Calling the 'init' method is not allowed except for when called
     /// from the deploy method.
+    ///
+    /// If this returns [`Error::MemorySnapshotFailure`], the session's
+    /// in-memory execution state may be inconsistent. The session should be
+    /// discarded and not used for further calls, deployments, or commits.
+    /// Recovery should be performed by creating a fresh session from the last
+    /// committed state.
     pub fn call<A, R>(
         &mut self,
         contract: ContractId,
@@ -526,6 +532,7 @@ impl Session {
     /// `contract` expects.
     ///
     /// For more information about calls see [`call`].
+    /// The same error and recovery semantics apply.
     ///
     /// [`call`]: Session::call
     pub fn call_raw<V: Into<Vec<u8>>>(
