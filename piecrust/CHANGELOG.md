@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Add `Session::call_as` and `Session::call_as_raw` to call a contract with a specified caller identity
+- Add an `instance_backed` field to `CallTreeElem`
+
 ## [0.32.2] - 2026-08-06
 
 ### Fixed

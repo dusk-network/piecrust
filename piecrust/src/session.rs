@@ -79,6 +79,19 @@ impl RootCallContext {
 /// [`commit`]: Session::commit
 pub struct Session {
     engine: Engine,
+    /// Raw pointer to a `Box::leak`-ed `SessionInner`.
+    ///
+    /// Multiple `Session` clones share this pointer.  The allocation is
+    /// stable for the lifetime of the session — it is never moved or
+    /// reallocated.  This invariant is relied upon by:
+    ///
+    /// - `SessionMemoryCreator`, which captures the pointer at construction
+    /// - The `call_hook` path (feature `call-hook`), which reads a raw pointer
+    ///   to the hook closure while a `HookContext` holds a mutable session
+    ///   clone pointing to the same `SessionInner`
+    ///
+    /// Only the `original` session (the one with `original: true`) frees
+    /// this allocation on drop.
     inner: NonNull<SessionInner>,
     original: bool,
 }
@@ -449,8 +462,13 @@ impl Session {
                 // contract has an init method in the first place, which might
                 // not be the case, such as when ingesting untrusted bytecode.
                 let arg = arg.unwrap_or_default();
-                let (data, gas_spent, call_tree) =
-                    self.call_inner(contract_id, INIT_METHOD, arg, gas_limit)?;
+                let (data, gas_spent, call_tree) = self.call_inner(
+                    None,
+                    contract_id,
+                    INIT_METHOD,
+                    arg,
+                    gas_limit,
+                )?;
                 let events = mem::take(&mut self.inner_mut().events);
                 return Ok(Some(CallReceipt {
                     gas_limit,
@@ -547,7 +565,89 @@ impl Session {
         }
 
         let (data, gas_spent, call_tree) =
-            self.call_inner(contract, fn_name, fn_arg.into(), gas_limit)?;
+            self.call_inner(None, contract, fn_name, fn_arg.into(), gas_limit)?;
+        let events = mem::take(&mut self.inner_mut().events);
+
+        Ok(CallReceipt {
+            gas_limit,
+            gas_spent,
+            events,
+            call_tree,
+            data,
+        })
+    }
+
+    /// Execute a call on the current state of this session with a specified
+    /// caller identity.
+    ///
+    /// Behaves like [`call`], but inside the callee `abi::caller()` will
+    /// return `caller` and `abi::callstack()` will return `[caller]`,
+    /// matching the stack depth of a normal contract-to-contract call.
+    ///
+    /// The receipt's call tree is rooted at the callee, exactly as for a
+    /// plain [`call`] — the caller identity frame is internal and not part
+    /// of the iterated tree.
+    ///
+    /// [`call`]: Session::call
+    pub fn call_as<A, R>(
+        &mut self,
+        caller: ContractId,
+        contract: ContractId,
+        fn_name: &str,
+        fn_arg: &A,
+        gas_limit: u64,
+    ) -> Result<CallReceipt<R>, Error>
+    where
+        A: for<'b> Serialize<StandardBufSerializer<'b>>,
+        A::Archived: for<'b> CheckBytes<DefaultValidator<'b>>,
+        R: Archive,
+        R::Archived: Deserialize<R, Infallible>
+            + for<'b> CheckBytes<DefaultValidator<'b>>,
+    {
+        let mut sbuf = [0u8; SCRATCH_BUF_BYTES];
+        let scratch = BufferScratch::new(&mut sbuf);
+        let ser = BufferSerializer::new(&mut self.inner_mut().buffer[..]);
+        let mut ser = CompositeSerializer::new(ser, scratch, Infallible);
+
+        ser.serialize_value(fn_arg)?;
+        let pos = ser.pos();
+
+        let receipt = self.call_as_raw(
+            caller,
+            contract,
+            fn_name,
+            self.inner().buffer[..pos].to_vec(),
+            gas_limit,
+        )?;
+
+        receipt.deserialize()
+    }
+
+    /// Execute a raw call with a specified caller identity.
+    ///
+    /// See [`call_as`] and [`call_raw`] for more information.
+    ///
+    /// [`call_as`]: Session::call_as
+    /// [`call_raw`]: Session::call_raw
+    pub fn call_as_raw<V: Into<Vec<u8>>>(
+        &mut self,
+        caller: ContractId,
+        contract: ContractId,
+        fn_name: &str,
+        fn_arg: V,
+        gas_limit: u64,
+    ) -> Result<CallReceipt<Vec<u8>>, Error> {
+        if fn_name == INIT_METHOD {
+            return Err(InitalizationError("init call not allowed".into()));
+        }
+
+        let (data, gas_spent, call_tree) = self.call_inner(
+            Some(caller),
+            contract,
+            fn_name,
+            fn_arg.into(),
+            gas_limit,
+        )?;
         let events = mem::take(&mut self.inner_mut().events);
 
         Ok(CallReceipt {
@@ -914,6 +1014,7 @@ impl Session {
             limit,
             spent: 0,
             mem_len,
+            instance_backed: true,
         });
 
         Ok(self
@@ -931,10 +1032,44 @@ impl Session {
         self.inner_mut().call_tree.move_up_prune();
     }
 
+    /// Push a lightweight frame onto the call tree without creating an
+    /// instance.
+    ///
+    /// This is used when the call tree must record a contract that won't
+    /// execute WASM — e.g. a call rerouted by the call-hook or the caller
+    /// identity frame in [`call_as`](Session::call_as).
+    pub(crate) fn push_callstack_frame(
+        &mut self,
+        contract_id: ContractId,
+        limit: u64,
+    ) -> Result<(), Error> {
+        let current_depth = self.inner().call_tree.depth();
+        if current_depth >= MAX_CALL_DEPTH {
+            return Err(Error::SessionError(
+                format!("Maximum call depth exceeded ({MAX_CALL_DEPTH})")
+                    .into(),
+            ));
+        }
+
+        self.inner_mut().call_tree.push(CallTreeElem {
+            contract_id,
+            limit,
+            spent: 0,
+            mem_len: 0,
+            instance_backed: false,
+        });
+
+        Ok(())
+    }
+
     pub(crate) fn revert_callstack(&mut self) -> Result<(), std::io::Error> {
         let call_tree: Vec<_> =
             self.inner().call_tree.iter().copied().collect();
         for elem in call_tree {
+            // Lightweight frames have no instance to revert.
+            if !elem.instance_backed {
+                continue;
+            }
             let instance = self
                 .instance(&elem.contract_id)
                 .expect("instance should exist");
@@ -1036,25 +1171,46 @@ impl Session {
         err
     }
 
+    /// Execute a contract call, optionally with a specified caller identity.
+    ///
+    /// When `caller` is `Some`, a lightweight frame is pushed onto the call
+    /// tree first so that `abi::caller()` inside the callee returns the
+    /// specified identity and the call stack depth matches a normal
+    /// contract-to-contract call.
     fn call_inner(
         &mut self,
+        caller: Option<ContractId>,
         contract: ContractId,
         fname: &str,
         fdata: Vec<u8>,
         limit: u64,
     ) -> Result<(Vec<u8>, u64, CallTree), Error> {
         let event_checkpoint = self.event_checkpoint();
-        let stack_element = self.push_callstack(contract, limit)?;
+
+        if let Some(caller) = caller {
+            self.push_callstack_frame(caller, limit)?;
+        }
+
+        let stack_element = match self.push_callstack(contract, limit) {
+            Ok(elem) => elem,
+            Err(err) => {
+                // `clear` frees the whole tree regardless of the cursor
+                // position, so the frames pushed above need no pruning.
+                self.clear_call_tree_and_instances();
+                return Err(err);
+            }
+        };
         {
             let instance = self
                 .instance(&stack_element.contract_id)
                 .expect("instance should exist");
-            instance
-                .snap()
-                .map_err(|err| Error::MemorySnapshotFailure {
+            if let Err(err) = instance.snap() {
+                self.clear_call_tree_and_instances();
+                return Err(Error::MemorySnapshotFailure {
                     reason: None,
                     io: Arc::new(err),
-                })?;
+                });
+            }
         }
 
         let ret_len = {
@@ -1091,6 +1247,10 @@ impl Session {
         let call_tree: Vec<_> =
             self.inner().call_tree.iter().copied().collect();
         for elem in call_tree {
+            // Lightweight frames have no instance to apply.
+            if !elem.instance_backed {
+                continue;
+            }
             let instance = self
                 .instance(&elem.contract_id)
                 .expect("instance should exist");

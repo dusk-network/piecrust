@@ -74,6 +74,11 @@ pub struct CallTreeElem {
     pub spent: u64,
     /// The length of memory allocated for this contract call
     pub mem_len: usize,
+    /// Whether this frame has a backing WASM instance. Lightweight frames —
+    /// caller identities pushed by `call_as` and calls answered by a
+    /// call-hook interception — record a contract in the tree without
+    /// executing WASM, and are skipped by state revert and apply.
+    pub instance_backed: bool,
 }
 
 /// A cursor-based tree structure for tracking hierarchical contract calls.
@@ -656,6 +661,7 @@ mod tests {
             limit,
             spent,
             mem_len,
+            instance_backed: true,
         }
     }
 
