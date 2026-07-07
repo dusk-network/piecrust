@@ -4,9 +4,9 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-//! Contract that deliberately returns malformed (non-rkyv) bytes.
-//! Used exclusively for testing that callers handle deserialization
-//! failures gracefully (receiving `Err` instead of panicking).
+//! Contract that deliberately misbehaves at the ABI boundary.
+//! Used for testing that callers handle malformed return bytes, oversized
+//! panic messages, and incorrect return lengths gracefully.
 
 #![no_std]
 
