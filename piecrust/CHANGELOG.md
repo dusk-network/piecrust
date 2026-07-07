@@ -17,6 +17,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Change `CallHook` to a caller-aware signature returning `Result<Option<Interception>, ContractError>`, with the call stack exposed via `HookContext`
 
+### Fixed
+
+- Reject oversized call arguments before pushing call-tree frames
+
 ## [0.32.2] - 2026-08-06
 
 ### Fixed

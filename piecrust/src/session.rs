@@ -1390,6 +1390,18 @@ impl Session {
         fdata: Vec<u8>,
         limit: u64,
     ) -> Result<(Vec<u8>, u64, CallTree), Error> {
+        // Reject oversized arguments before any frame is pushed — a later
+        // failure of the argument write would return with the frames and
+        // snapshot still in place, corrupting the session for subsequent
+        // calls.
+        if fdata.len() > ARGBUF_LEN {
+            return Err(Error::MemoryAccessOutOfBounds {
+                offset: 0,
+                len: fdata.len(),
+                mem_len: ARGBUF_LEN,
+            });
+        }
+
         let event_checkpoint = self.event_checkpoint();
 
         if let Some(caller) = caller {

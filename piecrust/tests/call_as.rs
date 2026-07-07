@@ -521,6 +521,51 @@ fn call_as_rejects_init() -> Result<(), Error> {
     Ok(())
 }
 
+/// Oversized arguments are rejected before any call-tree frame is pushed —
+/// the session stays clean and later calls see no phantom caller.
+#[test]
+fn oversized_args_rejected_without_frame_leak() -> Result<(), Error> {
+    use piecrust_uplink::ARGBUF_LEN;
+
+    let vm = VM::ephemeral()?;
+    let mut session = vm.session(SessionData::builder())?;
+
+    let (center_id, _) = session.deploy::<_, (), _>(
+        contract_bytecode!("callcenter"),
+        ContractData::builder().owner(OWNER),
+        LIMIT,
+    )?;
+
+    let oversized = vec![0u8; ARGBUF_LEN + 1];
+
+    let result =
+        session.call_raw(center_id, "return_caller", oversized.clone(), LIMIT);
+    assert!(
+        matches!(result, Err(Error::MemoryAccessOutOfBounds { .. })),
+        "oversized args to call_raw must be rejected, got: {result:?}"
+    );
+
+    let fake_caller = ContractId::from_bytes([0xAB; 32]);
+    let result = session.call_as_raw(
+        fake_caller,
+        center_id,
+        "return_caller",
+        oversized,
+        LIMIT,
+    );
+    assert!(
+        matches!(result, Err(Error::MemoryAccessOutOfBounds { .. })),
+        "oversized args to call_as_raw must be rejected, got: {result:?}"
+    );
+
+    // No frame leaked: a subsequent call sees no phantom caller.
+    let caller: Option<ContractId> =
+        session.call(center_id, "return_caller", &(), LIMIT)?.data;
+    assert_eq!(caller, None, "no caller frame may leak from failed calls");
+
+    Ok(())
+}
+
 /// A `call_as` to a contract that does not exist fails cleanly: the caller
 /// identity frame is unwound and the session stays usable.
 #[test]
