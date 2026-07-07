@@ -228,6 +228,19 @@ pub(crate) fn hd(
     Ok(data.len() as u32)
 }
 
+/// The gas limit passed to a callee: the explicit `gas_limit` when it is
+/// positive and below the caller's remaining gas, otherwise the
+/// [`GAS_PASS_PCT`] portion of the caller's remaining gas.
+fn callee_gas_limit(caller_remaining: u64, gas_limit: u64) -> u64 {
+    if gas_limit > 0 && gas_limit < caller_remaining {
+        gas_limit
+    } else {
+        let div = caller_remaining / 100 * GAS_PASS_PCT;
+        let rem = caller_remaining % 100 * GAS_PASS_PCT / 100;
+        div + rem
+    }
+}
+
 pub(crate) fn c(
     mut fenv: Caller<Env>,
     callee_ofs: usize,
@@ -255,44 +268,157 @@ pub(crate) fn c(
         check_arg(instance, arg_len)?;
 
         let argbuf_ofs = instance.arg_buffer_offset();
-        let caller_remaining = instance.get_remaining_gas();
-        let callee_limit = if gas_limit > 0 && gas_limit < caller_remaining {
-            gas_limit
-        } else {
-            let div = caller_remaining / 100 * GAS_PASS_PCT;
-            let rem = caller_remaining % 100 * GAS_PASS_PCT / 100;
-            div + rem
-        };
 
-        let (callee_id, name, arg) =
-            instance.with_memory_mut(|memory| -> Result<_, Error> {
-                let mut callee_bytes = [0; CONTRACT_ID_BYTES];
-                callee_bytes.copy_from_slice(
-                    &memory[callee_ofs..callee_ofs + CONTRACT_ID_BYTES],
-                );
-                let callee_id = ContractId::from_bytes(callee_bytes);
+        instance.with_memory_mut(|memory| -> Result<_, Error> {
+            let mut callee_bytes = [0; CONTRACT_ID_BYTES];
+            callee_bytes.copy_from_slice(
+                &memory[callee_ofs..callee_ofs + CONTRACT_ID_BYTES],
+            );
+            let callee_id = ContractId::from_bytes(callee_bytes);
 
-                let name =
-                    core::str::from_utf8(&memory[name_ofs..][..name_len])?;
+            let name = core::str::from_utf8(&memory[name_ofs..][..name_len])?;
 
-                let arg = Vec::from(&memory[argbuf_ofs..][..arg_len as usize]);
-                Ok((callee_id, name.to_owned(), arg))
-            })?;
-
-        Ok::<_, Error>((caller_remaining, callee_limit, callee_id, name, arg))
+            let arg = Vec::from(&memory[argbuf_ofs..][..arg_len as usize]);
+            Ok((callee_id, name.to_owned(), arg))
+        })
     };
 
-    let (caller_remaining, callee_limit, callee_id, name, arg) = match parsed {
+    let (callee_id, name, arg) = match parsed {
         Ok(parsed) => parsed,
         Err(err) => return Ok(write_contract_error(env, err)),
     };
 
     #[cfg(feature = "call-hook")]
-    if let Err(msg) = env.call_hook(&callee_id, &name, &arg) {
-        return Ok(write_contract_error(env, Error::Panic(msg)));
+    let caller_id = env.self_contract_id().to_owned();
+    #[cfg(feature = "call-hook")]
+    {
+        // Events of successful nested `call_as` calls stay live even when
+        // the hook fails afterwards — their state mutations persist. Only
+        // the events the hook emitted itself, tracked by index, are marked
+        // reverted when the call does not go through.
+        let (hook_result, hook_events) =
+            env.call_hook(&caller_id, &callee_id, &name, &arg);
+        match hook_result {
+            Err(c_err) => {
+                env.revert_events_at(&hook_events);
+                // A panic message is an arbitrary host-side string, while
+                // `ContractError::to_parts` needs 4 bytes of the argument
+                // buffer for itself — truncate on a char boundary so the
+                // write cannot overrun the buffer.
+                let c_err = match c_err {
+                    ContractError::Panic(msg) if msg.len() > ARGBUF_LEN - 4 => {
+                        let mut cut = ARGBUF_LEN - 4;
+                        while !msg.is_char_boundary(cut) {
+                            cut -= 1;
+                        }
+                        ContractError::Panic(msg[..cut].into())
+                    }
+                    other => other,
+                };
+                // Surface the hook's `ContractError` to the caller exactly
+                // as a failed WASM callee would: write its parts to the arg
+                // buffer and return the matching code. This preserves the
+                // variant the hook chose (`Panic`, `Unknown`, ...) rather
+                // than flattening every rejection to `Panic`.
+                let code = env
+                    .self_instance()
+                    .with_arg_buf_mut(|buf| c_err.to_parts(buf));
+                return Ok(code);
+            }
+            Ok(Some(interception)) => {
+                // The hook handled the call — write output to arg buffer
+                // and return without executing WASM.
+
+                // The init prohibition is enforced during WASM execution,
+                // which an interception skips — reject here so a hook
+                // cannot fabricate a successful `init` call. Unlike the
+                // normal path, whose init failure charges the callee limit,
+                // this rejection is free of gas — an accepted divergence,
+                // since intercepting `init` is always a host-side bug.
+                if name == INIT_METHOD {
+                    env.revert_events_at(&hook_events);
+                    return Ok(write_contract_error(
+                        env,
+                        Error::InitalizationError(
+                            "init call not allowed".into(),
+                        ),
+                    ));
+                }
+
+                // Gas is read after the hook ran: nested `call_as` calls
+                // have already been charged to this contract's fuel meter,
+                // and `Interception::gas_spent` is an additional charge on
+                // top.
+                let caller_remaining = env.self_instance().get_remaining_gas();
+                let callee_limit =
+                    callee_gas_limit(caller_remaining, gas_limit);
+
+                // An output that cannot fit the argument buffer fails the
+                // call: charge the full limit, like any failed callee.
+                if interception.output.len() > ARGBUF_LEN {
+                    env.revert_events_at(&hook_events);
+                    env.self_instance()
+                        .set_remaining_gas(caller_remaining - callee_limit);
+                    return Ok(write_contract_error(
+                        env,
+                        Error::MemoryAccessOutOfBounds {
+                            offset: 0,
+                            len: interception.output.len(),
+                            mem_len: ARGBUF_LEN,
+                        },
+                    ));
+                }
+
+                // A gas charge beyond what a real callee could have spent
+                // is treated as the callee running out of gas: charge the
+                // full limit and surface `OutOfGas`, like the normal call
+                // path.
+                if interception.gas_spent > callee_limit {
+                    env.revert_events_at(&hook_events);
+                    env.self_instance()
+                        .set_remaining_gas(caller_remaining - callee_limit);
+                    return Ok(write_contract_error(env, Error::OutOfGas));
+                }
+
+                // Push/pop callee on the call tree so the call is tracked.
+                // Use the lightweight push — no instance is needed since
+                // the hook already produced the result.
+                match env.push_callstack_frame(callee_id, callee_limit) {
+                    Ok(()) => {}
+                    Err(err) => {
+                        // No gas is charged, mirroring a failed
+                        // `push_callstack` on the normal path.
+                        env.revert_events_at(&hook_events);
+                        return Ok(write_contract_error(env, err));
+                    }
+                }
+                env.move_up_call_tree(interception.gas_spent);
+
+                let ret_len = interception.output.len() as i32;
+                let caller = env.self_instance();
+                caller.with_arg_buf_mut(|buf| {
+                    buf[..interception.output.len()]
+                        .copy_from_slice(&interception.output);
+                });
+                caller.set_remaining_gas(
+                    caller_remaining - interception.gas_spent,
+                );
+                return Ok(ret_len);
+            }
+            Ok(None) => { /* proceed with normal WASM execution */ }
+        }
     }
 
+    // The event checkpoint is taken after the hook ran: a later failure of
+    // the callee must not sweep events of the hook's successful nested
+    // calls, whose state persists.
     let event_checkpoint = env.event_checkpoint();
+
+    // Gas is read after the hook ran, so that nested calls the hook made are
+    // reflected in the remaining gas the callee's limit is derived from.
+    let caller_remaining = env.self_instance().get_remaining_gas();
+    let callee_limit = callee_gas_limit(caller_remaining, gas_limit);
+
     let callee_stack_element = match env.push_callstack(callee_id, callee_limit)
     {
         Ok(stack_element) => stack_element,

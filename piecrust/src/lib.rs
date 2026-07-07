@@ -139,7 +139,7 @@ pub use error::Error;
 // ensuring this is the only crate we need to define and use a VM.
 pub use piecrust_uplink::*;
 #[cfg(feature = "call-hook")]
-pub use session::CallHook;
+pub use session::{CallHook, HookContext, Interception};
 pub use session::{CallReceipt, RootCallContext, Session, SessionData};
 pub use store::PageOpening;
 pub use vm::{HostQuery, VM};

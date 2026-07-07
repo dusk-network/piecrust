@@ -11,6 +11,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Add `Session::call_as` and `Session::call_as_raw` to call a contract with a specified caller identity
 - Add an `instance_backed` field to `CallTreeElem`
+- Add `HookContext` and `Interception` types letting call hooks inspect the call stack, make nested calls, emit events, and intercept inter-contract calls
+
+### Changed
+
+- Change `CallHook` to a caller-aware signature returning `Result<Option<Interception>, ContractError>`, with the call stack exposed via `HookContext`
 
 ## [0.32.2] - 2026-08-06
 
