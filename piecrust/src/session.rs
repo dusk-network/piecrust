@@ -1054,7 +1054,12 @@ impl Session {
             let instance = self
                 .instance(&stack_element.contract_id)
                 .expect("instance should exist");
-            let arg_len = instance.write_bytes_to_arg_buffer(&fdata)?;
+            let arg_len = match instance.write_bytes_to_arg_buffer(&fdata) {
+                Ok(arg_len) => arg_len,
+                Err(err) => {
+                    return Err(self.revert_failed_call(event_checkpoint, err));
+                }
+            };
             let ret_len = instance
                 .call(fname, arg_len, limit)
                 .map_err(Error::normalize)

@@ -5,9 +5,11 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 use piecrust::{ContractData, Error, SessionData, VM, contract_bytecode};
+use piecrust_uplink::ARGBUF_LEN;
 
 const OWNER: [u8; 32] = [0u8; 32];
 const LIMIT: u64 = 1_000_000;
+const REPEATED_WRITE_FAILURES: usize = 64;
 
 #[test]
 fn counter_read_simple() -> Result<(), Error> {
@@ -106,6 +108,47 @@ fn increment_panic() -> Result<(), Error> {
         }
         _ => panic!("Expected a panic error"),
     }
+
+    Ok(())
+}
+
+#[test]
+fn oversized_argument_failure_cleans_call_context() -> Result<(), Error> {
+    let vm = VM::ephemeral()?;
+
+    let mut session = vm.session(SessionData::builder())?;
+
+    let (id, _) = session.deploy::<_, (), _>(
+        contract_bytecode!("counter"),
+        ContractData::builder().owner(OWNER),
+        LIMIT,
+    )?;
+
+    assert_eq!(
+        session.call::<_, i64>(id, "read_value", &(), LIMIT)?.data,
+        0xfc
+    );
+
+    // Each oversized argument fails after the call context is pushed but before
+    // the contract runs. Reversion should prune that context every time,
+    // otherwise repeated ARGBUF_LEN + 1 calls eventually exhaust call depth.
+    for _ in 0..REPEATED_WRITE_FAILURES {
+        let err = session
+            .call_raw(id, "increment", vec![0u8; ARGBUF_LEN + 1], LIMIT)
+            .expect_err("oversized call argument should be rejected");
+
+        let Error::MemoryAccessOutOfBounds { len, .. } = err else {
+            panic!("unexpected error: {err}");
+        };
+        assert_eq!(len, ARGBUF_LEN + 1);
+    }
+
+    session.call::<_, ()>(id, "increment", &(), LIMIT)?;
+
+    assert_eq!(
+        session.call::<_, i64>(id, "read_value", &(), LIMIT)?.data,
+        0xfd
+    );
 
     Ok(())
 }

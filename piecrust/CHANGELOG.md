@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Reject invalid top-level contract return lengths instead of panicking when reading the argument buffer.
+- Revert top-level call context when argument-buffer writes fail before contract execution.
 
 ## [0.32.1] - 2026-08-06
 
