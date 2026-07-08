@@ -31,7 +31,7 @@ use rkyv::{Archive, Deserialize, Infallible, Serialize, check_archived_root};
 use crate::call_tree::{CallTree, CallTreeElem};
 use crate::contract::{ContractData, ContractMetadata, WrappedContract};
 use crate::error::Error::{self, InitalizationError, PersistenceError};
-use crate::imports::check_arg;
+use crate::imports::{callee_gas_limit, check_arg};
 use crate::instance::WrappedInstance;
 use crate::store::{ContractSession, PAGE_SIZE, PageOpening};
 use crate::types::StandardBufSerializer;
@@ -225,14 +225,13 @@ impl HookContext {
     /// checks must therefore apply them to its own `call_as` calls itself.
     ///
     /// The nested call is paid for by the contract whose call the hook
-    /// intercepted: `gas_limit` is capped at that contract's remaining gas
-    /// but — unlike a normal inter-contract call, which reserves a
-    /// percentage for the caller — nothing is held back, and a *failed*
-    /// nested call charges its full capped limit. A hook passing a generous
-    /// limit to a call that fails can therefore drain the intercepted
-    /// contract's gas entirely. A `gas_limit` of `0` grants no gas — unlike
-    /// the inter-contract-call convention, where `0` selects the default
-    /// share of the caller's remaining gas.
+    /// intercepted, and `gas_limit` follows the inter-contract-call
+    /// convention: an explicit positive limit below that contract's
+    /// remaining gas is used as-is, while `0` or an over-budget limit
+    /// selects the default share of the remaining gas. The held-back
+    /// reserve keeps a *failed* nested call — which charges its full
+    /// limit, exactly like a failed inter-contract call — from starving
+    /// the outer frames into `OutOfGas` while the error propagates.
     ///
     /// On error, the callee's state is reverted and the error is returned.
     /// State changes from earlier successful `call_as` calls in the same
@@ -1509,11 +1508,12 @@ impl Session {
     ///
     /// The nested call is paid for by the contract whose inter-contract call
     /// the hook intercepted (the top of the call tree when the hook fired):
-    /// `gas_limit` is capped at that contract's remaining gas, and the gas
-    /// spent by the nested call — the full capped limit on failure, like a
-    /// failed inter-contract call — is deducted from its fuel meter.  This
-    /// keeps the call tree's invariant that a parent's spent gas covers the
-    /// sum of its children's.
+    /// `gas_limit` resolves through [`callee_gas_limit`] against that
+    /// contract's remaining gas — the inter-contract-call convention — and
+    /// the gas spent by the nested call — the full resolved limit on
+    /// failure, like a failed inter-contract call — is deducted from its
+    /// fuel meter.  This keeps the call tree's invariant that a parent's
+    /// spent gas covers the sum of its children's.
     ///
     /// `apply()` is intentionally not called here: `move_up_call_tree` keeps
     /// the nested frames in the tree as children of the outer caller, so the
@@ -1559,7 +1559,12 @@ impl Session {
                 "suspended caller instance should exist".into(),
             ))?
             .get_remaining_gas();
-        let nested_limit = gas_limit.min(outer_remaining);
+        // Same limit resolution as a WASM inter-contract call: `0` or an
+        // over-budget limit selects the `GAS_PASS_PCT` share of the
+        // intercepted contract's remaining gas, keeping the reserve that
+        // lets a nested failure propagate instead of starving the outer
+        // frames into `OutOfGas`.
+        let nested_limit = callee_gas_limit(outer_remaining, gas_limit);
 
         let event_checkpoint = self.event_checkpoint();
 

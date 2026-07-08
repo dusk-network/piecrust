@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Change `CallHook` to a caller-aware signature returning `Result<Option<Interception>, ContractError>`, with the call stack exposed via `HookContext`
+- Resolve the `HookContext::call_as` gas limit through the inter-contract-call convention: `0` or an over-budget limit selects the default share of the intercepted contract's remaining gas
 
 ### Fixed
 

@@ -231,7 +231,7 @@ pub(crate) fn hd(
 /// The gas limit passed to a callee: the explicit `gas_limit` when it is
 /// positive and below the caller's remaining gas, otherwise the
 /// [`GAS_PASS_PCT`] portion of the caller's remaining gas.
-fn callee_gas_limit(caller_remaining: u64, gas_limit: u64) -> u64 {
+pub(crate) fn callee_gas_limit(caller_remaining: u64, gas_limit: u64) -> u64 {
     if gas_limit > 0 && gas_limit < caller_remaining {
         gas_limit
     } else {

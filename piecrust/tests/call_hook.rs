@@ -1403,6 +1403,81 @@ fn hook_context_call_as_increments_counter() -> Result<(), Error> {
     Ok(())
 }
 
+/// `call_as` follows the inter-contract-call gas convention: `0` (or an
+/// over-budget limit) resolves to the default share of the intercepted
+/// contract's remaining gas, and the held-back reserve lets a nested
+/// failure propagate as its own error instead of starving the outer
+/// frames into `OutOfGas`.
+#[test]
+fn hook_context_call_as_gas_follows_icc_convention() -> Result<(), Error> {
+    let vm = VM::ephemeral()?;
+    let mut session = vm.session(SessionData::builder())?;
+
+    let (counter_id, _) = session.deploy::<_, (), _>(
+        contract_bytecode!("counter"),
+        ContractData::builder().owner(OWNER),
+        LIMIT,
+    )?;
+    let (center_id, _) = session.deploy::<_, (), _>(
+        contract_bytecode!("callcenter"),
+        ContractData::builder().owner(OWNER),
+        LIMIT,
+    )?;
+
+    // A `gas_limit` of 0 selects the default share of the intercepted
+    // contract's remaining gas — the nested call runs instead of
+    // immediately running out of gas.
+    let ctr_id = counter_id;
+    session.set_call_hook(Arc::new(
+        move |_caller, contract, fn_name, _, ctx| {
+            if *contract == ctr_id && fn_name == "read_value" {
+                let args = rkyv::to_bytes::<(), 0>(&()).unwrap().to_vec();
+                let (data, gas) = ctx
+                    .call_as(ctr_id, ctr_id, "read_value", &args, 0)
+                    .map_err(|e| ContractError::Panic(e.to_string()))?;
+                assert!(gas > 0, "the nested call should have spent gas");
+                Ok(Some(Interception {
+                    output: data,
+                    gas_spent: 0,
+                }))
+            } else {
+                Ok(None)
+            }
+        },
+    ));
+    let value: i64 = session
+        .call(center_id, "query_counter", &counter_id, LIMIT)?
+        .data;
+    assert_eq!(value, 0xfc);
+
+    // A failed nested call with an over-budget limit charges only the
+    // default share, leaving the intercepted contract enough reserve to
+    // propagate the failure without itself running out of gas.
+    session.set_call_hook(Arc::new(
+        move |_caller, contract, fn_name, _, ctx| {
+            if *contract == ctr_id && fn_name == "read_value" {
+                let err = ctx
+                    .call_as(ctr_id, ctr_id, "no_such_method", &[], u64::MAX)
+                    .expect_err("nested call to a missing export must fail");
+                Err(ContractError::Panic(format!("nested failed: {err}")))
+            } else {
+                Ok(None)
+            }
+        },
+    ));
+    let err = session
+        .call::<_, i64>(center_id, "query_counter", &counter_id, LIMIT)
+        .expect_err("hook rejection must fail the outer call");
+    let msg = format!("{err:?}");
+    assert!(
+        !msg.contains("OutOfGas"),
+        "the gas reserve must keep error propagation from running out of \
+         gas, got: {msg}"
+    );
+
+    Ok(())
+}
+
 #[test]
 fn hook_context_call_as_error_reverts_state() -> Result<(), Error> {
     let vm = VM::ephemeral()?;
