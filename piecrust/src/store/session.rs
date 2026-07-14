@@ -287,8 +287,11 @@ impl ContractSession {
             Vacant(entry) => match &self.base {
                 None => Ok(None),
                 Some(base_commit) => {
-                    match base_commit.index_get(&contract).is_some() {
-                        true => {
+                    let memory_meta =
+                        base_commit.index_element_memory_meta(&contract);
+
+                    match memory_meta {
+                        Some((page_indices, len)) => {
                             let base_dir = self.root_dir.join(MAIN_DIR);
 
                             let contract_hex = hex::encode(contract);
@@ -310,31 +313,21 @@ impl ContractSession {
                             )?;
                             let metadata = Metadata::from_file(metadata_path)?;
 
-                            let memory = match base_commit.index_get(&contract)
-                            {
-                                Some(elem) => {
-                                    let page_indices =
-                                        elem.page_indices().clone();
-                                    Memory::from_files(
-                                        module.is_64(),
-                                        move |page_index: usize| {
-                                            match page_indices
-                                                .contains(&page_index)
-                                            {
-                                                true => Self::find_page(
-                                                    page_index,
-                                                    commit_id,
-                                                    &memory_path,
-                                                    &base_dir,
-                                                ),
-                                                false => None,
-                                            }
-                                        },
-                                        elem.len(),
-                                    )?
-                                }
-                                None => Memory::new(module.is_64())?,
-                            };
+                            let memory = Memory::from_files(
+                                module.is_64(),
+                                move |page_index: usize| match page_indices
+                                    .contains(&page_index)
+                                {
+                                    true => Self::find_page(
+                                        page_index,
+                                        commit_id,
+                                        &memory_path,
+                                        &base_dir,
+                                    ),
+                                    false => None,
+                                },
+                                len,
+                            )?;
 
                             let contract = entry
                                 .insert(ContractDataEntry {
@@ -348,7 +341,7 @@ impl ContractSession {
 
                             Ok(Some(contract))
                         }
-                        false => Ok(None),
+                        None => Ok(None),
                     }
                 }
             },
@@ -366,7 +359,7 @@ impl ContractSession {
         if self.contracts.contains_key(&contract_id) {
             true
         } else if let Some(base_commit) = &self.base {
-            base_commit.index_get(&contract_id).is_some()
+            base_commit.contains_index_element(&contract_id)
         } else {
             false
         }
@@ -428,7 +421,7 @@ impl ContractSession {
         );
         let base_collision = self.base.as_ref().is_some_and(|base| {
             base.contains_contract_position(pos)
-                && base.index_get(&contract_id).is_none()
+                && !base.contains_index_element(&contract_id)
         });
 
         if pending_collision || base_collision {
@@ -467,7 +460,7 @@ impl ContractSession {
             || self
                 .base
                 .as_ref()
-                .is_some_and(|base| base.index_get(&contract_id).is_some())
+                .is_some_and(|base| base.contains_index_element(&contract_id))
         {
             return Err(persistence_error(io::Error::other(format!(
                 "Existing contract '{contract_id}'"
