@@ -10,6 +10,7 @@ pub mod remover;
 pub mod writer;
 
 use std::cell::Ref;
+use std::collections::BTreeSet;
 use std::sync::{Arc, Mutex};
 
 use piecrust_uplink::ContractId;
@@ -113,9 +114,12 @@ impl Commit {
                 );
             }
         }
-        let (element, contracts_merkle) =
-            self.element_and_merkle_mut(&contract_id);
-        let element = element.unwrap();
+        let (element, contracts_merkle) = (
+            self.index
+                .get_mut(&contract_id)
+                .expect("commit insertion must create a local index element"),
+            &mut self.contracts_merkle,
+        );
 
         element.set_len(memory.current_len());
 
@@ -203,17 +207,42 @@ impl Commit {
         self.contracts_merkle.contains_position(pos)
     }
 
-    pub fn index_get(
+    pub fn contains_index_element(&self, contract_id: &ContractId) -> bool {
+        self.with_index_element(contract_id, |_| ()).is_some()
+    }
+
+    /// Returns the page-index set and memory length for a contract.
+    pub fn index_element_memory_meta(
         &self,
         contract_id: &ContractId,
-    ) -> Option<&ContractIndexElement> {
-        Hulk::deep_index_get(
-            &self.index,
-            *contract_id,
-            self.commit_store.clone(),
-            self.base,
-        )
-        .map(|a| unsafe { &*a })
+    ) -> Option<(BTreeSet<usize>, usize)> {
+        self.with_index_element(contract_id, |elem| {
+            (elem.page_indices().clone(), elem.len())
+        })
+    }
+
+    /// Runs `f` on a contract index element; `f` may run while the commit-store
+    /// mutex is held and must not access the commit store.
+    fn with_index_element<R>(
+        &self,
+        contract_id: &ContractId,
+        f: impl FnOnce(&ContractIndexElement) -> R,
+    ) -> Option<R> {
+        if let Some(e) = self.index.get(contract_id) {
+            return Some(f(e));
+        }
+
+        let mut base = self.base?;
+        let commit_store = self.commit_store.as_ref()?;
+        let commit_store = commit_store.lock().unwrap();
+        loop {
+            let (maybe_element, commit_base) =
+                commit_store.get_element_and_base(&base, contract_id);
+            if let Some(element) = maybe_element {
+                return Some(f(element));
+            }
+            base = commit_base?;
+        }
     }
 
     pub fn index(&self) -> &NewContractIndex {
@@ -226,70 +255,5 @@ impl Commit {
 
     pub fn base(&self) -> Option<Hash> {
         self.base
-    }
-
-    pub fn element_and_merkle_mut(
-        &mut self,
-        contract_id: &ContractId,
-    ) -> (Option<&mut ContractIndexElement>, &mut ContractsMerkle) {
-        (
-            Hulk::deep_index_get_mut(
-                &mut self.index,
-                *contract_id,
-                self.commit_store.clone(),
-                self.base,
-            )
-            .map(|a| unsafe { &mut *a }),
-            &mut self.contracts_merkle,
-        )
-    }
-}
-
-#[derive(Debug, Clone)]
-pub(crate) struct Hulk;
-
-impl Hulk {
-    pub fn deep_index_get(
-        index: &NewContractIndex,
-        contract_id: ContractId,
-        commit_store: Option<Arc<Mutex<CommitStore>>>,
-        base: Option<Hash>,
-    ) -> Option<*const ContractIndexElement> {
-        if let Some(e) = index.get(&contract_id) {
-            return Some(e);
-        }
-        let mut base = base?;
-        let commit_store = commit_store.clone()?;
-        let commit_store = commit_store.lock().unwrap();
-        loop {
-            let (maybe_element, commit_base) =
-                commit_store.get_element_and_base(&base, &contract_id);
-            if let Some(e) = maybe_element {
-                return Some(e);
-            }
-            base = commit_base?;
-        }
-    }
-
-    pub fn deep_index_get_mut(
-        index: &mut NewContractIndex,
-        contract_id: ContractId,
-        commit_store: Option<Arc<Mutex<CommitStore>>>,
-        base: Option<Hash>,
-    ) -> Option<*mut ContractIndexElement> {
-        if let Some(e) = index.get_mut(&contract_id) {
-            return Some(e);
-        }
-        let mut base = base?;
-        let commit_store = commit_store.clone()?;
-        let mut commit_store = commit_store.lock().unwrap();
-        loop {
-            let (maybe_element, commit_base) =
-                commit_store.get_element_and_base_mut(&base, &contract_id);
-            if let Some(e) = maybe_element {
-                return Some(e);
-            }
-            base = commit_base?;
-        }
     }
 }

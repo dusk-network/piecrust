@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Reject distinct explicit `ContractId`s that map to an occupied contract Merkle position.
+- Fix undefined behavior when reading a contract index element inherited from a commit removed concurrently [#493].
 - Preserve queued `finalize_commit` operations when a commit is held by a live session.
 
 ### Removed
@@ -592,6 +593,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 <!-- ISSUES -->
 [#466]: https://github.com/dusk-network/piecrust/issues/466
 [#476]: https://github.com/dusk-network/piecrust/issues/476
+[#493]: https://github.com/dusk-network/piecrust/issues/493
 
 [#rusk_3341]: https://github.com/dusk-network/rusk/issues/3341
 [#440]: https://github.com/dusk-network/piecrust/issues/440

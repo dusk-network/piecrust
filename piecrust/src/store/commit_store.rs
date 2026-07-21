@@ -39,32 +39,15 @@ impl CommitStore {
         &self,
         hash: &Hash,
         contract_id: &ContractId,
-    ) -> (Option<*const ContractIndexElement>, Option<Hash>) {
+    ) -> (Option<&ContractIndexElement>, Option<Hash>) {
         match self.commits.get(hash) {
             Some(commit) => {
                 let e = commit.index().get(contract_id);
-                (e.map(|a| a as *const ContractIndexElement), commit.base())
+                (e, commit.base())
             }
             None => {
                 let e = self.main_index.get(contract_id);
-                (e.map(|a| a as *const ContractIndexElement), None)
-            }
-        }
-    }
-
-    pub fn get_element_and_base_mut(
-        &mut self,
-        hash: &Hash,
-        contract_id: &ContractId,
-    ) -> (Option<*mut ContractIndexElement>, Option<Hash>) {
-        match self.commits.get_mut(hash) {
-            Some(commit) => {
-                let e = commit.index_mut().get_mut(contract_id);
-                (e.map(|a| a as *mut ContractIndexElement), commit.base())
-            }
-            None => {
-                let e = self.main_index.get_mut(contract_id);
-                (e.map(|a| a as *mut ContractIndexElement), None)
+                (e, None)
             }
         }
     }
