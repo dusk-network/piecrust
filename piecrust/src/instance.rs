@@ -302,6 +302,9 @@ impl WrappedInstance {
         arg_len: u32,
         limit: u64,
     ) -> Result<i32, Error> {
+        if !self.is_function_exported(method_name) {
+            return Err(Error::InvalidFunction(method_name.to_owned()));
+        }
         let fun = self
             .instance
             .get_typed_func::<u32, i32>(&mut self.store, method_name)?;

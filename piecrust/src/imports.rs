@@ -433,11 +433,10 @@ pub(crate) fn emit(
 fn caller(mut env: Caller<Env>) -> i32 {
     let env = env.data_mut();
 
-    match env.nth_from_top(1) {
-        Some(call_tree_elem) => {
+    match env.effective_caller() {
+        Some(caller) => {
             let instance = env.self_instance();
             instance.with_arg_buf_mut(|buf| {
-                let caller = call_tree_elem.contract_id;
                 buf[..CONTRACT_ID_BYTES].copy_from_slice(caller.as_bytes());
             });
             1
@@ -448,8 +447,12 @@ fn caller(mut env: Caller<Env>) -> i32 {
 
 fn callstack(mut env: Caller<Env>) -> i32 {
     let env = env.data_mut();
-    let call_ids: Vec<_> =
-        env.call_ids().into_iter().skip(1).copied().collect();
+    let call_ids: Vec<_> = env
+        .effective_call_ids()
+        .into_iter()
+        .skip(1)
+        .copied()
+        .collect();
     let instance = env.self_instance();
 
     let caller_count = instance.with_arg_buf_mut(|buf| {

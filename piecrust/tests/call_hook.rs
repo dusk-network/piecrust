@@ -7,7 +7,8 @@
 use std::sync::{Arc, Mutex};
 
 use piecrust::{
-    CallHook, ContractData, Error, SessionData, VM, contract_bytecode,
+    CallHook, ContractData, Error, RootCallContext, SessionData, VM,
+    contract_bytecode,
 };
 use piecrust_uplink::{ContractError, ContractId};
 
@@ -80,6 +81,94 @@ fn call_hook_observes_inter_contract_call() -> Result<(), Error> {
     assert_eq!(calls[0].contract, counter_id);
     assert_eq!(calls[0].fn_name, "read_value");
     assert_eq!(calls[0].call_stack, vec![center_id]);
+
+    Ok(())
+}
+
+#[test]
+fn call_hook_observes_synthetic_root_ancestry() -> Result<(), Error> {
+    let vm = VM::ephemeral()?;
+    let mut session = vm.session(SessionData::builder())?;
+
+    let (synthetic_caller, _) = session.deploy::<_, (), _>(
+        contract_bytecode!("callcenter"),
+        ContractData::builder()
+            .owner(OWNER)
+            .contract_id(ContractId::from_bytes([0x11; 32])),
+        LIMIT,
+    )?;
+    let (counter_id, _) = session.deploy::<_, (), _>(
+        contract_bytecode!("counter"),
+        ContractData::builder().owner(OWNER),
+        LIMIT,
+    )?;
+    let (center_id, _) = session.deploy::<_, (), _>(
+        contract_bytecode!("callcenter"),
+        ContractData::builder()
+            .owner(OWNER)
+            .contract_id(ContractId::from_bytes([0x22; 32])),
+        LIMIT,
+    )?;
+
+    let recorder = CallRecorder::new();
+    session.set_call_hook(recorder.hook());
+
+    let args = rkyv::to_bytes::<_, 64>(&counter_id).unwrap().to_vec();
+    let receipt = session.call_raw_with_root_context(
+        RootCallContext::synthetic_contract(synthetic_caller),
+        center_id,
+        "query_counter",
+        args,
+        LIMIT,
+    )?;
+    let value: i64 = rkyv::from_bytes(&receipt.data).unwrap();
+    assert_eq!(value, 0xfc);
+
+    let calls = recorder.calls();
+    assert_eq!(calls.len(), 2);
+    assert_eq!(calls[0].contract, center_id);
+    assert_eq!(calls[0].call_stack, vec![synthetic_caller]);
+    assert_eq!(calls[1].contract, counter_id);
+    assert_eq!(calls[1].call_stack, vec![center_id, synthetic_caller]);
+
+    Ok(())
+}
+
+#[test]
+fn rejected_synthetic_root_call_clears_context() -> Result<(), Error> {
+    let vm = VM::ephemeral()?;
+    let mut session = vm.session(SessionData::builder())?;
+    let (synthetic_caller, _) = session.deploy::<_, (), _>(
+        contract_bytecode!("callcenter"),
+        ContractData::builder()
+            .owner(OWNER)
+            .contract_id(ContractId::from_bytes([0x11; 32])),
+        LIMIT,
+    )?;
+    let (target, _) = session.deploy::<_, (), _>(
+        contract_bytecode!("callcenter"),
+        ContractData::builder()
+            .owner(OWNER)
+            .contract_id(ContractId::from_bytes([0x22; 32])),
+        LIMIT,
+    )?;
+
+    session.set_call_hook(Box::new(|_, _, _, _| Err("rejected".into())));
+    let error = session
+        .call_raw_with_root_context(
+            RootCallContext::synthetic_contract(synthetic_caller),
+            target,
+            "return_caller",
+            rkyv::to_bytes::<_, 64>(&()).unwrap().to_vec(),
+            LIMIT,
+        )
+        .expect_err("root hook should reject the call");
+    assert!(matches!(error, Error::Panic(message) if message == "rejected"));
+
+    session.clear_call_hook();
+    let caller: Option<ContractId> =
+        session.call(target, "return_caller", &(), LIMIT)?.data;
+    assert_eq!(caller, None);
 
     Ok(())
 }

@@ -42,6 +42,29 @@ pub(crate) const MAX_CALL_DEPTH: usize = 48;
 const _: () = assert!(MAX_CALL_DEPTH <= ARGBUF_LEN / CONTRACT_ID_BYTES);
 pub const INIT_METHOD: &str = "init";
 
+/// Identity-only context for a root contract call.
+///
+/// The synthetic caller is exposed through `abi::caller()` and
+/// `abi::callstack()`, and is included in call-hook ancestry. It is not an
+/// executable contract frame: gas accounting, state snapshots, reentrancy,
+/// and the returned call tree continue to describe only the real call.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct RootCallContext {
+    synthetic_caller: ContractId,
+}
+
+impl RootCallContext {
+    /// Construct a context whose synthetic ancestor is a deployed contract.
+    pub const fn synthetic_contract(synthetic_caller: ContractId) -> Self {
+        Self { synthetic_caller }
+    }
+
+    /// Return the synthetic caller exposed to contracts.
+    pub const fn synthetic_caller(self) -> ContractId {
+        self.synthetic_caller
+    }
+}
+
 /// A running mutation to a state.
 ///
 /// `Session`s are spawned using a [`VM`] instance, and can be used to [`call`]
@@ -88,7 +111,7 @@ impl Drop for Session {
     }
 }
 
-/// A hook called before each inter-contract call.
+/// A hook called before each inter-contract call and contextual root call.
 ///
 /// Receives the callee contract ID, the function name, the raw argument bytes,
 /// and the current call stack before the callee is pushed. Returns `Ok(())` to
@@ -108,6 +131,7 @@ struct SessionInner {
     current: ContractId,
 
     call_tree: CallTree,
+    root_call_context: Option<RootCallContext>,
     instances: BTreeMap<ContractId, Box<WrappedInstance>>,
     compiled_modules: BTreeMap<ContractId, WasmtimeModule>,
     debug: Vec<String>,
@@ -129,6 +153,7 @@ impl Debug for SessionInner {
         f.debug_struct("SessionInner")
             .field("current", &self.current)
             .field("call_tree", &self.call_tree)
+            .field("root_call_context", &self.root_call_context)
             .field("instances_len", &self.instances.len())
             .field("compiled_modules_len", &self.compiled_modules.len())
             .field("debug_len", &self.debug.len())
@@ -136,6 +161,20 @@ impl Debug for SessionInner {
             .field("buffer_len", &self.buffer.len())
             .field("events_len", &self.events.len())
             .finish()
+    }
+}
+
+struct RootCallContextGuard {
+    inner: NonNull<SessionInner>,
+}
+
+impl Drop for RootCallContextGuard {
+    fn drop(&mut self) {
+        // SAFETY: the guard cannot outlive the mutable Session call that
+        // created it. It only clears the context installed by that call.
+        unsafe {
+            self.inner.as_mut().root_call_context = None;
+        }
     }
 }
 
@@ -198,6 +237,7 @@ impl Session {
         let inner = SessionInner {
             current: ContractId::from_bytes([0; CONTRACT_ID_BYTES]),
             call_tree: CallTree::new(),
+            root_call_context: None,
             instances: BTreeMap::new(),
             compiled_modules: BTreeMap::new(),
             debug: vec![],
@@ -514,6 +554,48 @@ impl Session {
         })
     }
 
+    /// Execute a raw root call with an identity-only synthetic caller.
+    ///
+    /// This is intended for host execution paths that preserve the caller
+    /// identity of an existing contract entry point without executing that
+    /// contract as a frame. The synthetic caller must be a deployed contract.
+    /// The context is visible to contract caller/call-stack queries and call
+    /// hooks for this call only.
+    pub fn call_raw_with_root_context<V: Into<Vec<u8>>>(
+        &mut self,
+        context: RootCallContext,
+        contract: ContractId,
+        fn_name: &str,
+        fn_arg: V,
+        gas_limit: u64,
+    ) -> Result<CallReceipt<Vec<u8>>, Error> {
+        if fn_name == INIT_METHOD {
+            return Err(InitalizationError("init call not allowed".into()));
+        }
+        if self.inner().call_tree.depth() != 0
+            || self.inner().root_call_context.is_some()
+        {
+            return Err(Error::SessionError(
+                "root call context requires an idle session".into(),
+            ));
+        }
+        if self.memory_len(context.synthetic_caller())?.is_none() {
+            return Err(Error::ContractDoesNotExist(
+                context.synthetic_caller(),
+            ));
+        }
+
+        let fn_arg = fn_arg.into();
+        self.inner_mut().root_call_context = Some(context);
+        let _context_guard = RootCallContextGuard { inner: self.inner };
+
+        #[cfg(feature = "call-hook")]
+        self.call_hook(&contract, fn_name, &fn_arg)
+            .map_err(Error::Panic)?;
+
+        self.call_raw(contract, fn_name, fn_arg, gas_limit)
+    }
+
     /// Migrates a `contract` to a new `bytecode`, performing modifications to
     /// its state as specified by the closure.
     ///
@@ -766,6 +848,25 @@ impl Session {
         self.inner().call_tree.call_ids()
     }
 
+    pub(crate) fn effective_call_ids(&self) -> Vec<&ContractId> {
+        let mut call_ids = self.call_ids();
+        if let Some(context) = &self.inner().root_call_context {
+            call_ids.push(&context.synthetic_caller);
+        }
+        call_ids
+    }
+
+    pub(crate) fn effective_caller(&self) -> Option<ContractId> {
+        self.nth_from_top(1)
+            .map(|elem| elem.contract_id)
+            .or_else(|| {
+                (self.inner().call_tree.depth() == 1)
+                    .then(|| self.inner().root_call_context)
+                    .flatten()
+                    .map(RootCallContext::synthetic_caller)
+            })
+    }
+
     /// Creates a new instance of the given contract, returning its memory
     /// length.
     fn create_instance(
@@ -790,7 +891,8 @@ impl Session {
         contract_id: ContractId,
         limit: u64,
     ) -> Result<CallTreeElem, Error> {
-        let current_depth = self.inner().call_tree.depth();
+        let current_depth = self.inner().call_tree.depth()
+            + usize::from(self.inner().root_call_context.is_some());
         if current_depth >= MAX_CALL_DEPTH {
             return Err(Error::SessionError(
                 format!("Maximum call depth exceeded ({MAX_CALL_DEPTH})")
@@ -1003,7 +1105,8 @@ impl Session {
             .contract_metadata(contract_id)
     }
 
-    /// Set a hook that is called before each inter-contract call.
+    /// Set a hook that is called before each inter-contract call and
+    /// contextual root call.
     ///
     /// The hook receives the callee contract ID, the function name, the raw
     /// argument bytes, and the current call stack before the callee is pushed.
@@ -1030,7 +1133,7 @@ impl Session {
         arg: &[u8],
     ) -> Result<(), String> {
         if let Some(hook) = &self.inner().call_hook {
-            let call_stack = self.call_ids();
+            let call_stack = self.effective_call_ids();
             hook(callee, fn_name, arg, &call_stack)
         } else {
             Ok(())
