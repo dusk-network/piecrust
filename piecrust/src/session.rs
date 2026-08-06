@@ -29,6 +29,7 @@ use rkyv::{Archive, Deserialize, Infallible, Serialize, check_archived_root};
 use crate::call_tree::{CallTree, CallTreeElem};
 use crate::contract::{ContractData, ContractMetadata, WrappedContract};
 use crate::error::Error::{self, InitalizationError, PersistenceError};
+use crate::imports::check_arg;
 use crate::instance::WrappedInstance;
 use crate::store::{ContractSession, PAGE_SIZE, PageOpening};
 use crate::types::StandardBufSerializer;
@@ -482,6 +483,12 @@ impl Session {
     /// most common ones being running against the gas limit and a contract
     /// panic. Calling the 'init' method is not allowed except for when called
     /// from the deploy method.
+    ///
+    /// If this returns [`Error::MemorySnapshotFailure`], the session's
+    /// in-memory execution state may be inconsistent. The session should be
+    /// discarded and not used for further calls, deployments, or commits.
+    /// Recovery should be performed by creating a fresh session from the last
+    /// committed state.
     pub fn call<A, R>(
         &mut self,
         contract: ContractId,
@@ -525,6 +532,7 @@ impl Session {
     /// `contract` expects.
     ///
     /// For more information about calls see [`call`].
+    /// The same error and recovery semantics apply.
     ///
     /// [`call`]: Session::call
     pub fn call_raw<V: Into<Vec<u8>>>(
@@ -1009,6 +1017,25 @@ impl Session {
         Ok(buf[..pos].to_vec())
     }
 
+    fn revert_failed_call(
+        &mut self,
+        event_checkpoint: usize,
+        err: Error,
+    ) -> Error {
+        let err = if let Err(io_err) = self.revert_callstack() {
+            Error::MemorySnapshotFailure {
+                reason: Some(Arc::new(err)),
+                io: Arc::new(io_err),
+            }
+        } else {
+            err
+        };
+        self.revert_events_from(event_checkpoint);
+        self.move_up_prune_call_tree();
+        self.clear_call_tree_and_instances();
+        err
+    }
+
     fn call_inner(
         &mut self,
         contract: ContractId,
@@ -1034,35 +1061,29 @@ impl Session {
             let instance = self
                 .instance(&stack_element.contract_id)
                 .expect("instance should exist");
-            let arg_len = instance.write_bytes_to_arg_buffer(&fdata)?;
-            instance
+            let arg_len = match instance.write_bytes_to_arg_buffer(&fdata) {
+                Ok(arg_len) => arg_len,
+                Err(err) => {
+                    return Err(self.revert_failed_call(event_checkpoint, err));
+                }
+            };
+            let ret_len = instance
                 .call(fname, arg_len, limit)
                 .map_err(Error::normalize)
-        };
-
-        let ret_len = match ret_len {
-            Ok(ret_len) => ret_len,
-            Err(err) => {
-                let err = if let Err(io_err) = self.revert_callstack() {
-                    Error::MemorySnapshotFailure {
-                        reason: Some(Arc::new(err)),
-                        io: Arc::new(io_err),
-                    }
-                } else {
-                    err
-                };
-                self.revert_events_from(event_checkpoint);
-                self.move_up_prune_call_tree();
-                self.clear_call_tree_and_instances();
-                return Err(err);
-            }
+                .map_err(|err| {
+                    self.revert_failed_call(event_checkpoint, err)
+                })?;
+            ret_len as u32
         };
 
         let (ret, spent) = {
             let instance = self
                 .instance(&stack_element.contract_id)
                 .expect("instance should exist");
-            let ret = instance.read_bytes_from_arg_buffer(ret_len as u32);
+            if let Err(err) = check_arg(instance, ret_len) {
+                return Err(self.revert_failed_call(event_checkpoint, err));
+            };
+            let ret = instance.read_bytes_from_arg_buffer(ret_len);
             let spent = limit - instance.get_remaining_gas();
             (ret, spent)
         };
