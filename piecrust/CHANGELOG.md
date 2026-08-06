@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Add identity-only synthetic caller context for root contract calls [#496].
+
 ## [0.32.0] - 2026-06-19
 
 ### Changed
