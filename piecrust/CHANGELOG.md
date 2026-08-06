@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.32.2] - 2026-08-06
+
 ### Fixed
 
 - Reject invalid top-level contract return lengths instead of panicking when reading the argument buffer.
@@ -632,7 +634,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- VERSIONS -->
 
-[Unreleased]: https://github.com/dusk-network/piecrust/compare/piecrust-0.32.1...HEAD
+[Unreleased]: https://github.com/dusk-network/piecrust/compare/piecrust-0.32.2...HEAD
+[0.32.2]: https://github.com/dusk-network/piecrust/compare/piecrust-0.32.1...piecrust-0.32.2
 [0.32.1]: https://github.com/dusk-network/piecrust/compare/piecrust-0.32.0...piecrust-0.32.1
 [0.32.0]: https://github.com/dusk-network/piecrust/compare/piecrust-0.31.0...piecrust-0.32.0
 [0.31.0]: https://github.com/dusk-network/piecrust/compare/piecrust-0.30.0...piecrust-0.31.0
