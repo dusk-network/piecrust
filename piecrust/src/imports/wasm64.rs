@@ -78,14 +78,6 @@ pub(crate) fn hd(
     imports::hd(fenv, name_ofs as usize, name_len)
 }
 
-pub(crate) fn hd_host(
-    fenv: Caller<Env>,
-    name_ofs: u64,
-    name_len: u32,
-) -> WasmtimeResult<u32> {
-    imports::hd_host(fenv, name_ofs as usize, name_len)
-}
-
 pub(crate) fn c(
     fenv: Caller<Env>,
     mod_id_ofs: u64,
@@ -133,54 +125,6 @@ pub(crate) fn emit(
     imports::emit(fenv, topic_ofs as usize, topic_len, arg_len)
 }
 
-pub(crate) fn emit_host(
-    fenv: Caller<Env>,
-    topic_ofs: u64,
-    topic_len: u32,
-    data_ofs: u64,
-    data_len: u32,
-) -> WasmtimeResult<()> {
-    imports::emit_host(
-        fenv,
-        topic_ofs as usize,
-        topic_len,
-        data_ofs as usize,
-        data_len,
-    )
-}
-
-pub(crate) fn feed_host(
-    fenv: Caller<Env>,
-    data_ofs: u64,
-    data_len: u32,
-) -> WasmtimeResult<()> {
-    imports::feed_host(fenv, data_ofs as usize, data_len)
-}
-
-pub(crate) fn panic_host(
-    fenv: Caller<Env>,
-    msg_ofs: u64,
-    msg_len: u32,
-) -> WasmtimeResult<()> {
-    imports::panic_host(fenv, msg_ofs as usize, msg_len)
-}
-
-#[cfg(feature = "debug")]
-pub(crate) fn hdebug_host(
-    fenv: Caller<Env>,
-    msg_ofs: u64,
-    msg_len: u32,
-) -> WasmtimeResult<()> {
-    imports::hdebug_host(fenv, msg_ofs as usize, msg_len)
-}
-
 pub(crate) fn owner(fenv: Caller<Env>, mod_id_ofs: u64) -> WasmtimeResult<i32> {
     imports::owner(fenv, mod_id_ofs as usize)
-}
-
-pub(crate) fn owner_host(
-    fenv: Caller<Env>,
-    mod_id_ofs: u64,
-) -> WasmtimeResult<i32> {
-    imports::owner_host(fenv, mod_id_ofs as usize)
 }

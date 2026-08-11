@@ -4,7 +4,8 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
-use std::sync::mpsc;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, mpsc};
 
 use piecrust::{
     ContractData, ContractId, Error, HOST_CALL_FRAME_MAX_LEN, SessionData, VM,
@@ -25,19 +26,27 @@ const FORWARD_RESULT_OFFSET: i32 = 5 * 64 * 1024;
 const QUERY_NAME_OFFSET: i32 = 5 * 64 * 1024;
 
 fn memory_type(pages: u64) -> MemoryType {
+    memory_type_with_width(pages, false)
+}
+
+fn memory_type_with_width(pages: u64, memory64: bool) -> MemoryType {
     MemoryType {
         minimum: pages,
         maximum: Some(pages),
-        memory64: false,
+        memory64,
         shared: false,
         page_size_log2: None,
     }
 }
 
 fn marker_global() -> GlobalType {
+    marker_global_with_type(ValType::I32, false)
+}
+
+fn marker_global_with_type(val_type: ValType, mutable: bool) -> GlobalType {
     GlobalType {
-        val_type: ValType::I32,
-        mutable: false,
+        val_type,
+        mutable,
         shared: false,
     }
 }
@@ -189,13 +198,72 @@ fn host_backed_echo() -> Vec<u8> {
     module.finish()
 }
 
+fn host_backed_sized_output(output_len: usize) -> Vec<u8> {
+    let mut module = Module::new();
+    let mut types = TypeSection::new();
+    types
+        .ty()
+        .function([ValType::I32, ValType::I32], [ValType::I32]);
+    types.ty().function([ValType::I32], [ValType::I32]);
+    module.section(&types);
+    let mut imports = ImportSection::new();
+    imports.import(
+        "env",
+        "__piecrust_b_call_output_set",
+        EntityType::Function(0),
+    );
+    module.section(&imports);
+    let mut functions = FunctionSection::new();
+    functions.function(1);
+    module.section(&functions);
+    let mut memories = MemorySection::new();
+    let pages = output_len.max(1).div_ceil(64 * 1024) as u64;
+    memories.memory(memory_type(pages));
+    module.section(&memories);
+    let mut globals = GlobalSection::new();
+    globals.global(marker_global(), &ConstExpr::i32_const(0));
+    module.section(&globals);
+    let mut exports = ExportSection::new();
+    exports.export("memory", ExportKind::Memory, 0);
+    exports.export("B", ExportKind::Global, 0);
+    exports.export("run", ExportKind::Func, 1);
+    module.section(&exports);
+
+    let mut code = CodeSection::new();
+    let mut run = Function::new([]);
+    run.instructions()
+        .i32_const(0)
+        .i32_const(0)
+        .i32_load8_u(MemArg {
+            offset: 0,
+            align: 0,
+            memory_index: 0,
+        })
+        .i32_const(1)
+        .i32_add()
+        .i32_store8(MemArg {
+            offset: 0,
+            align: 0,
+            memory_index: 0,
+        })
+        .i32_const(0)
+        .i32_const(output_len as i32)
+        .call(0)
+        .drop()
+        .i32_const(output_len as i32)
+        .end();
+    code.function(&run);
+    module.section(&code);
+    module.finish()
+}
+
 fn host_backed_feed() -> Vec<u8> {
     let mut module = Module::new();
     let mut types = TypeSection::new();
     types
         .ty()
         .function([ValType::I32, ValType::I32, ValType::I32], [ValType::I32]);
-    types.ty().function([ValType::I32, ValType::I32], []);
+    types.ty().function([ValType::I32], []);
     types
         .ty()
         .function([ValType::I32, ValType::I32], [ValType::I32]);
@@ -207,7 +275,7 @@ fn host_backed_feed() -> Vec<u8> {
         "__piecrust_b_call_input_copy",
         EntityType::Function(0),
     );
-    imports.import("env", "__piecrust_b_feed", EntityType::Function(1));
+    imports.import("env", "feed", EntityType::Function(1));
     imports.import(
         "env",
         "__piecrust_b_call_output_set",
@@ -236,7 +304,6 @@ fn host_backed_feed() -> Vec<u8> {
         .local_get(0)
         .call(0)
         .drop()
-        .i32_const(0)
         .local_get(0)
         .call(1)
         .i32_const(0)
@@ -277,8 +344,8 @@ fn host_backed_import_parity() -> Vec<u8> {
     );
     types
         .ty()
-        .function([ValType::I32, ValType::I32, ValType::I32, ValType::I32], []);
-    types.ty().function([ValType::I32, ValType::I32], []);
+        .function([ValType::I32, ValType::I32, ValType::I32], []);
+    types.ty().function([ValType::I32], []);
     types.ty().function([], [ValType::I64]);
     types.ty().function([ValType::I32], [ValType::I32]);
     types.ty().function([], []);
@@ -311,20 +378,20 @@ fn host_backed_import_parity() -> Vec<u8> {
         "__piecrust_b_host_result_copy",
         EntityType::Function(1),
     );
-    imports.import("env", "__piecrust_b_caller", EntityType::Function(0));
-    imports.import("env", "__piecrust_b_callstack", EntityType::Function(0));
+    imports.import("env", "caller", EntityType::Function(0));
+    imports.import("env", "callstack", EntityType::Function(0));
     imports.import("env", "__piecrust_b_call", EntityType::Function(3));
     imports.import("env", "__piecrust_b_host_query", EntityType::Function(4));
-    imports.import("env", "__piecrust_b_host_data", EntityType::Function(2));
-    imports.import("env", "__piecrust_b_emit", EntityType::Function(5));
-    imports.import("env", "__piecrust_b_feed", EntityType::Function(6));
+    imports.import("env", "hd", EntityType::Function(2));
+    imports.import("env", "emit", EntityType::Function(5));
+    imports.import("env", "feed", EntityType::Function(6));
     imports.import("env", "limit", EntityType::Function(7));
     imports.import("env", "spent", EntityType::Function(7));
-    imports.import("env", "__piecrust_b_panic", EntityType::Function(6));
-    imports.import("env", "__piecrust_b_owner", EntityType::Function(8));
-    imports.import("env", "__piecrust_b_self_id", EntityType::Function(9));
+    imports.import("env", "panic", EntityType::Function(6));
+    imports.import("env", "owner", EntityType::Function(8));
+    imports.import("env", "self_id", EntityType::Function(9));
     #[cfg(feature = "debug")]
-    imports.import("env", "__piecrust_b_debug", EntityType::Function(6));
+    imports.import("env", "hdebug", EntityType::Function(6));
     module.section(&imports);
     let mut functions = FunctionSection::new();
     functions.function(10);
@@ -505,7 +572,7 @@ fn host_backed_forwarder(callee: ContractId, method: &str) -> Vec<u8> {
     functions.function(4);
     module.section(&functions);
     let mut memories = MemorySection::new();
-    memories.memory(memory_type(6));
+    memories.memory(memory_type(7));
     module.section(&memories);
     let mut globals = GlobalSection::new();
     globals.global(marker_global(), &ConstExpr::i32_const(0));
@@ -625,6 +692,44 @@ fn legacy_echo() -> Vec<u8> {
     legacy_echo_with_extra_b_marker(false)
 }
 
+fn host_backed_marker_contract(
+    memory64: bool,
+    marker_type: ValType,
+    marker_offset: u64,
+    pages: u64,
+    mutable: bool,
+) -> Vec<u8> {
+    let mut module = Module::new();
+    let mut types = TypeSection::new();
+    types.ty().function([ValType::I32], [ValType::I32]);
+    module.section(&types);
+    let mut functions = FunctionSection::new();
+    functions.function(0);
+    module.section(&functions);
+    let mut memories = MemorySection::new();
+    memories.memory(memory_type_with_width(pages, memory64));
+    module.section(&memories);
+    let mut globals = GlobalSection::new();
+    let value = match marker_type {
+        ValType::I32 => ConstExpr::i32_const(marker_offset as i32),
+        ValType::I64 => ConstExpr::i64_const(marker_offset as i64),
+        _ => unreachable!("marker tests only use integer globals"),
+    };
+    globals.global(marker_global_with_type(marker_type, mutable), &value);
+    module.section(&globals);
+    let mut exports = ExportSection::new();
+    exports.export("memory", ExportKind::Memory, 0);
+    exports.export("B", ExportKind::Global, 0);
+    exports.export("run", ExportKind::Func, 0);
+    module.section(&exports);
+    let mut code = CodeSection::new();
+    let mut run = Function::new([]);
+    run.instructions().i32_const(0).end();
+    code.function(&run);
+    module.section(&code);
+    module.finish()
+}
+
 fn payload(len: usize) -> Vec<u8> {
     let mut payload = vec![0u8; len];
     for (chunk_index, chunk) in payload.chunks_mut(CHUNK_LEN).enumerate() {
@@ -703,6 +808,108 @@ fn host_backed_frames_are_bounded_gated_and_copy_metered() -> Result<(), Error>
     let short = session.call_raw(echo, "run", vec![1; 1024], LIMIT)?;
     let long = session.call_raw(echo, "run", vec![1; 2048], LIMIT)?;
     assert_eq!(long.gas_spent - short.gas_spent, 8 * 1024);
+    Ok(())
+}
+
+#[test]
+fn b_marker_is_a_width_matched_validated_scratch_offset() -> Result<(), Error> {
+    let vm = VM::ephemeral()?;
+    let mut session = enabled_session(&vm)?;
+
+    for (index, (memory64, marker_type)) in
+        [(false, ValType::I32), (true, ValType::I64)]
+            .into_iter()
+            .enumerate()
+    {
+        let id = ContractId::from_bytes([0x90 + index as u8; 32]);
+        session.deploy::<_, (), _>(
+            &host_backed_marker_contract(
+                memory64,
+                marker_type,
+                64 * 1024,
+                2,
+                false,
+            ),
+            ContractData::builder().contract_id(id).owner(OWNER),
+            LIMIT,
+        )?;
+    }
+
+    let invalid = [
+        host_backed_marker_contract(false, ValType::I64, 0, 2, false),
+        host_backed_marker_contract(true, ValType::I32, 0, 2, false),
+        host_backed_marker_contract(false, ValType::I32, 1, 1, false),
+        host_backed_marker_contract(false, ValType::I32, 0, 1, true),
+    ];
+    for (index, module) in invalid.into_iter().enumerate() {
+        let id = ContractId::from_bytes([0xa0 + index as u8; 32]);
+        let error = session
+            .deploy::<_, (), _>(
+                &module,
+                ContractData::builder().contract_id(id).owner(OWNER),
+                LIMIT,
+            )
+            .expect_err("invalid B scratch markers must be rejected");
+        assert!(
+            matches!(error, Error::InvalidArgumentBuffer),
+            "unexpected marker error: {error:?}"
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn b_calls_keep_one_transport_for_asymmetric_payloads() -> Result<(), Error> {
+    let vm = VM::ephemeral()?;
+    let mut session = enabled_session(&vm)?;
+
+    let large_callee = ContractId::from_bytes([0x61; 32]);
+    let small_caller = ContractId::from_bytes([0x62; 32]);
+    session.deploy::<_, (), _>(
+        &host_backed_sized_output(LARGE_PAYLOAD_LEN),
+        ContractData::builder()
+            .contract_id(large_callee)
+            .owner(OWNER),
+        LIMIT,
+    )?;
+    session.deploy::<_, (), _>(
+        &host_backed_forwarder(large_callee, "run"),
+        ContractData::builder()
+            .contract_id(small_caller)
+            .owner(OWNER),
+        LIMIT,
+    )?;
+    let receipt =
+        session.call_raw(small_caller, "run", vec![0x11; 32], LIMIT)?;
+    assert_eq!(receipt.data.len(), LARGE_PAYLOAD_LEN);
+    assert_eq!(receipt.data[0], 1, "callee must execute exactly once");
+    assert!(receipt.data[1..].iter().all(|byte| *byte == 0));
+
+    let small_callee = ContractId::from_bytes([0x63; 32]);
+    let large_caller = ContractId::from_bytes([0x64; 32]);
+    session.deploy::<_, (), _>(
+        &host_backed_sized_output(32),
+        ContractData::builder()
+            .contract_id(small_callee)
+            .owner(OWNER),
+        LIMIT,
+    )?;
+    session.deploy::<_, (), _>(
+        &host_backed_forwarder(small_callee, "run"),
+        ContractData::builder()
+            .contract_id(large_caller)
+            .owner(OWNER),
+        LIMIT,
+    )?;
+    let receipt = session.call_raw(
+        large_caller,
+        "run",
+        vec![0x22; LARGE_PAYLOAD_LEN],
+        LIMIT,
+    )?;
+    assert_eq!(receipt.data.len(), 32);
+    assert_eq!(receipt.data[0], 1, "callee must execute exactly once");
+    assert!(receipt.data[1..].iter().all(|byte| *byte == 0));
     Ok(())
 }
 
@@ -790,6 +997,47 @@ fn b_host_queries_round_trip_large_requests_and_results() -> Result<(), Error> {
     expected.reverse();
     let receipt = session.call_raw(contract, "run", input, LIMIT)?;
     assert_eq!(receipt.data, expected);
+    Ok(())
+}
+
+#[test]
+fn b_host_queries_keep_one_transport_for_asymmetric_payloads()
+-> Result<(), Error> {
+    let invocations = Arc::new(AtomicUsize::new(0));
+    let query_invocations = Arc::clone(&invocations);
+    let mut vm = VM::ephemeral()?;
+    vm.register_host_query("resize", move |buf: &mut [u8], len: u32| {
+        let invocation = query_invocations.fetch_add(1, Ordering::SeqCst) + 1;
+        let output_len = if len as usize <= 64 {
+            LARGE_PAYLOAD_LEN
+        } else {
+            32
+        };
+        buf[..output_len].fill(0);
+        buf[0] = invocation as u8;
+        output_len as u32
+    });
+    let mut session = enabled_session(&vm)?;
+    let contract = ContractId::from_bytes([0x65; 32]);
+    session.deploy::<_, (), _>(
+        &host_backed_query("resize"),
+        ContractData::builder().contract_id(contract).owner(OWNER),
+        LIMIT,
+    )?;
+
+    let large = session.call_raw(contract, "run", vec![0x33; 32], LIMIT)?;
+    assert_eq!(large.data.len(), LARGE_PAYLOAD_LEN);
+    assert_eq!(large.data[0], 1);
+
+    let small = session.call_raw(
+        contract,
+        "run",
+        vec![0x44; LARGE_PAYLOAD_LEN],
+        LIMIT,
+    )?;
+    assert_eq!(small.data.len(), 32);
+    assert_eq!(small.data[0], 2);
+    assert_eq!(invocations.load(Ordering::SeqCst), 2);
     Ok(())
 }
 

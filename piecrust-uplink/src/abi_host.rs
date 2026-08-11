@@ -6,17 +6,19 @@
 
 //! Host-backed contract ABI.
 //!
-//! Contract exports retain the standard `(u32) -> u32` signature, while call
-//! data and host interactions use dynamically allocated memory instead of the
-//! legacy fixed argument buffer.
+//! Contract exports retain the standard `(u32) -> u32` signature. Contract
+//! calls and host queries use host-backed frames, while bounded operations
+//! reuse the legacy imports through the `B` scratch buffer.
 
 use rkyv::ser::serializers::AllocSerializer;
 
 use crate::SCRATCH_BUF_BYTES;
-
-#[cfg(not(feature = "abi"))]
-#[path = "abi/allocator.rs"]
-mod allocator;
+#[cfg(feature = "debug")]
+pub use crate::abi::hdebug;
+pub use crate::abi::{
+    ArgbufWriter, caller, callstack, emit, emit_raw, feed, feed_raw, limit,
+    meta_data, owner, self_id, self_owner, spent,
+};
 
 mod externs;
 
@@ -29,26 +31,8 @@ pub use helpers::*;
 mod state;
 pub use state::*;
 
-#[cfg(all(
-    not(feature = "abi"),
-    any(target_arch = "wasm32", target_arch = "wasm64")
-))]
-mod handlers;
-
-#[cfg(feature = "debug")]
-mod debug;
-#[cfg(feature = "debug")]
-pub use debug::*;
-
-/// Dynamic serializer used by the host-backed ABI.
+/// Dynamic serializer used for host-backed call and query payloads.
 pub type HostBufSerializer = AllocSerializer<SCRATCH_BUF_BYTES>;
-
-mod marker {
-    /// Marker used by the host to select the host-backed ABI.
-    #[used]
-    #[unsafe(no_mangle)]
-    static B: u8 = 0;
-}
 
 #[cfg(test)]
 mod tests;

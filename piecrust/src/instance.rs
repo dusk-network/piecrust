@@ -239,22 +239,22 @@ impl WrappedInstance {
                 if global.ty(&mut store).mutability() != Mutability::Const {
                     return Err(Error::InvalidArgumentBuffer);
                 }
-                let marker = global.get(&mut store);
-                let valid_type = if is_64 {
-                    marker.i64().is_some()
+                let value = global.get(&mut store);
+                if is_64 {
+                    value.i64().ok_or(Error::InvalidArgumentBuffer)? as usize
                 } else {
-                    marker.i32().is_some()
-                };
-                if !valid_type {
-                    return Err(Error::InvalidArgumentBuffer);
+                    value.i32().ok_or(Error::InvalidArgumentBuffer)? as usize
                 }
-                0
             }
         };
 
-        if argument_abi == ArgumentAbi::Legacy
-            && arg_buf_ofs + ARGBUF_LEN >= memory.len()
-        {
+        let invalid_arg_buf = match argument_abi {
+            ArgumentAbi::Legacy => arg_buf_ofs + ARGBUF_LEN >= memory.len(),
+            ArgumentAbi::HostBacked => arg_buf_ofs
+                .checked_add(ARGBUF_LEN)
+                .is_none_or(|end| end > memory.current_len()),
+        };
+        if invalid_arg_buf {
             return Err(Error::InvalidArgumentBuffer);
         }
 

@@ -4,6 +4,7 @@
 //
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
+#[cfg(feature = "abi")]
 use alloc::format;
 use alloc::vec::Vec;
 use core::ptr;
@@ -16,9 +17,10 @@ use rkyv::validation::validators::DefaultValidator;
 use rkyv::{Archive, Deserialize, Infallible, Serialize, check_archived_root};
 use tracing::warn;
 
+#[cfg(feature = "abi")]
+use crate::ContractError;
 use crate::{
-    CONTRACT_ID_BYTES, ContractError, ContractId, SCRATCH_BUF_BYTES,
-    StandardBufSerializer,
+    CONTRACT_ID_BYTES, ContractId, SCRATCH_BUF_BYTES, StandardBufSerializer,
 };
 
 pub mod arg_buf {
@@ -26,15 +28,23 @@ pub mod arg_buf {
 
     use crate::ARGBUF_LEN;
 
+    #[cfg(feature = "abi")]
     #[unsafe(no_mangle)]
     static mut A: [u64; ARGBUF_LEN / 8] = [0; ARGBUF_LEN / 8];
+
+    #[cfg(all(not(feature = "abi"), feature = "abi-host"))]
+    #[unsafe(no_mangle)]
+    static mut B: [u64; ARGBUF_LEN / 8] = [0; ARGBUF_LEN / 8];
 
     pub fn with_arg_buf<F, R>(f: F) -> R
     where
         F: FnOnce(&mut [u8]) -> R,
     {
         unsafe {
+            #[cfg(feature = "abi")]
             let addr = ptr::addr_of_mut!(A);
+            #[cfg(all(not(feature = "abi"), feature = "abi-host"))]
+            let addr = ptr::addr_of_mut!(B);
             let slice = slice::from_raw_parts_mut(addr as _, ARGBUF_LEN);
             f(slice)
         }
@@ -45,9 +55,11 @@ pub(crate) use arg_buf::with_arg_buf;
 
 mod ext {
     unsafe extern "C" {
+        #[cfg(feature = "abi")]
         pub fn hq(name: *const u8, name_len: u32, arg_len: u32) -> u32;
         pub fn hd(name: *const u8, name_len: u32) -> u32;
 
+        #[cfg(feature = "abi")]
         pub fn c(
             contract_id: *const u8,
             fn_name: *const u8,
@@ -69,6 +81,7 @@ mod ext {
 }
 
 /// Execute some code that the host provides under the given name.
+#[cfg(feature = "abi")]
 pub fn host_query<A, Ret>(name: &str, arg: A) -> Ret
 where
     A: for<'a> Serialize<StandardBufSerializer<'a>>,
@@ -109,6 +122,7 @@ where
 ///
 /// To specify the gas allowed to be spent by the called contract, use
 /// [`call_with_limit`].
+#[cfg(feature = "abi")]
 pub fn call<A, Ret>(
     contract: ContractId,
     fn_name: &str,
@@ -131,6 +145,7 @@ where
 ///
 /// If the gas limit given is above or equal the remaining amount, the default
 /// behavior will be used instead.
+#[cfg(feature = "abi")]
 pub fn call_with_limit<A, Ret>(
     contract: ContractId,
     fn_name: &str,
@@ -190,6 +205,7 @@ where
 ///
 /// To specify the gas allowed to be spent by the called contract, use
 /// [`call_raw_with_limit`].
+#[cfg(feature = "abi")]
 pub fn call_raw(
     contract: ContractId,
     fn_name: &str,
@@ -206,6 +222,7 @@ pub fn call_raw(
 ///
 /// If the gas limit given is above or equal the remaining amount, the default
 /// behavior will be used instead.
+#[cfg(feature = "abi")]
 pub fn call_raw_with_limit(
     contract: ContractId,
     fn_name: &str,

@@ -13,24 +13,22 @@ use rkyv::validation::validators::DefaultValidator;
 use rkyv::{AlignedVec, Deserialize, Infallible, check_archived_root};
 
 use super::*;
-use crate::{CONTRACT_ID_BYTES, ContractId, SCRATCH_BUF_BYTES};
+use crate::{ContractId, SCRATCH_BUF_BYTES};
 
 struct MockHost {
     input: Vec<u8>,
     output: Vec<u8>,
     result: Vec<u8>,
-    metadata: Vec<u8>,
-    event: Vec<u8>,
-    feed: Vec<u8>,
+    calls: usize,
+    queries: usize,
 }
 
 static HOST: Mutex<MockHost> = Mutex::new(MockHost {
     input: Vec::new(),
     output: Vec::new(),
     result: Vec::new(),
-    metadata: Vec::new(),
-    event: Vec::new(),
-    feed: Vec::new(),
+    calls: 0,
+    queries: 0,
 });
 
 unsafe fn read_pointer(source: *const u8, len: u32) -> Vec<u8> {
@@ -84,7 +82,7 @@ unsafe extern "C" fn mock_host_result_copy(
 }
 
 #[unsafe(export_name = "__piecrust_b_host_query")]
-unsafe extern "C" fn mock_hq_v2(
+unsafe extern "C" fn mock_host_query(
     _name: *const u8,
     _name_len: u32,
     arg: *const u8,
@@ -92,19 +90,14 @@ unsafe extern "C" fn mock_hq_v2(
 ) -> u32 {
     let result = unsafe { read_pointer(arg, arg_len) };
     let len = result.len() as u32;
-    HOST.lock().unwrap().result = result;
+    let mut host = HOST.lock().unwrap();
+    host.result = result;
+    host.queries += 1;
     len
 }
 
-#[unsafe(export_name = "__piecrust_b_host_data")]
-extern "C" fn mock_hd_v2(_name: *const u8, _name_len: u32) -> u32 {
-    let mut host = HOST.lock().unwrap();
-    host.result = host.metadata.clone();
-    host.result.len() as u32
-}
-
 #[unsafe(export_name = "__piecrust_b_call")]
-unsafe extern "C" fn mock_c_v2(
+unsafe extern "C" fn mock_call(
     _contract_id: *const u8,
     _fn_name: *const u8,
     _fn_name_len: u32,
@@ -114,58 +107,10 @@ unsafe extern "C" fn mock_c_v2(
 ) -> i32 {
     let result = unsafe { read_pointer(fn_arg, fn_arg_len) };
     let len = result.len() as i32;
-    HOST.lock().unwrap().result = result;
+    let mut host = HOST.lock().unwrap();
+    host.result = result;
+    host.calls += 1;
     len
-}
-
-#[unsafe(export_name = "__piecrust_b_emit")]
-unsafe extern "C" fn mock_emit_v2(
-    _topic: *const u8,
-    _topic_len: u32,
-    data: *const u8,
-    data_len: u32,
-) {
-    HOST.lock().unwrap().event = unsafe { read_pointer(data, data_len) };
-}
-
-#[unsafe(export_name = "__piecrust_b_feed")]
-unsafe extern "C" fn mock_feed_v2(data: *const u8, data_len: u32) {
-    HOST.lock().unwrap().feed = unsafe { read_pointer(data, data_len) };
-}
-
-#[unsafe(export_name = "__piecrust_b_caller")]
-extern "C" fn mock_caller_v2() -> i32 {
-    HOST.lock().unwrap().result = vec![0x11; CONTRACT_ID_BYTES];
-    1
-}
-
-#[unsafe(export_name = "__piecrust_b_callstack")]
-extern "C" fn mock_callstack_v2() -> i32 {
-    let mut result = vec![0x22; CONTRACT_ID_BYTES];
-    result.extend_from_slice(&[0x33; CONTRACT_ID_BYTES]);
-    HOST.lock().unwrap().result = result;
-    2
-}
-
-#[unsafe(export_name = "__piecrust_b_owner")]
-extern "C" fn mock_owner_v2(_contract_id: *const u8) -> i32 {
-    HOST.lock().unwrap().result = vec![0x44; CONTRACT_ID_BYTES];
-    CONTRACT_ID_BYTES as i32
-}
-
-#[unsafe(export_name = "__piecrust_b_self_id")]
-extern "C" fn mock_self_id_v2() {
-    HOST.lock().unwrap().result = vec![0x55; CONTRACT_ID_BYTES];
-}
-
-#[unsafe(export_name = "limit")]
-extern "C" fn mock_limit() -> u64 {
-    1_000_000
-}
-
-#[unsafe(export_name = "spent")]
-extern "C" fn mock_spent() -> u64 {
-    42
 }
 
 fn deserialize<T>(bytes: &[u8]) -> T
@@ -183,7 +128,7 @@ where
 }
 
 #[test]
-fn supports_dynamic_calls_and_pointer_host_apis() {
+fn calls_and_queries_are_host_backed_for_every_payload_size() {
     let argument = vec![0x5a; 96 * 1024];
     HOST.lock().unwrap().input =
         rkyv::to_bytes::<_, SCRATCH_BUF_BYTES>(&argument)
@@ -198,51 +143,19 @@ fn supports_dynamic_calls_and_pointer_host_apis() {
     assert_eq!(output_len as usize, output.len());
     let output: Vec<u8> = deserialize(&output);
     assert_eq!(output.len(), argument.len() + 4);
-    assert_eq!(&output[..argument.len()], argument);
 
-    let raw = vec![0x6b; 80 * 1024];
-    assert_eq!(
-        call_raw(ContractId::from_bytes([7; 32]), "echo", &raw).unwrap(),
-        raw
-    );
+    let small = vec![0x31; 32];
+    let large = vec![0x6b; 80 * 1024];
+    let id = ContractId::from_bytes([7; 32]);
+    assert_eq!(call_raw(id, "echo", &small).unwrap(), small);
+    assert_eq!(call_raw(id, "echo", &large).unwrap(), large);
 
-    let queried: Vec<u8> = host_query("echo", argument.clone());
-    assert_eq!(queried, argument);
+    let small_query: Vec<u8> = host_query("echo", vec![0x41u8; 32]);
+    let large_query: Vec<u8> = host_query("echo", argument.clone());
+    assert_eq!(small_query, vec![0x41u8; 32]);
+    assert_eq!(large_query, argument);
 
-    HOST.lock().unwrap().metadata =
-        rkyv::to_bytes::<_, SCRATCH_BUF_BYTES>(&argument)
-            .unwrap()
-            .to_vec();
-    assert_eq!(meta_data::<Vec<u8>>("large"), Some(argument.clone()));
-
-    emit_raw("large", &raw);
-    feed_raw(&raw);
     let host = HOST.lock().unwrap();
-    assert_eq!(host.event, raw);
-    assert_eq!(host.feed, raw);
-    drop(host);
-
-    assert_eq!(caller(), Some(ContractId::from_bytes([0x11; 32])));
-    assert_eq!(
-        callstack(),
-        vec![
-            ContractId::from_bytes([0x22; 32]),
-            ContractId::from_bytes([0x33; 32]),
-        ]
-    );
-    assert_eq!(self_owner::<32>(), [0x44; 32]);
-    assert_eq!(
-        owner::<32>(ContractId::from_bytes([9; 32])),
-        Some([0x44; 32])
-    );
-    assert_eq!(self_id(), ContractId::from_bytes([0x55; 32]));
-    assert_eq!(limit(), 1_000_000);
-    assert_eq!(spent(), 42);
-
-    let mut first = [0; 17];
-    let mut second = [0; 15];
-    copy_host_result(0, &mut first);
-    copy_host_result(17, &mut second);
-    assert_eq!(first, [0x55; 17]);
-    assert_eq!(second, [0x55; 15]);
+    assert_eq!(host.calls, 2);
+    assert_eq!(host.queries, 2);
 }

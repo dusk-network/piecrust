@@ -80,7 +80,7 @@ compile_error!(
     "`abi` and `abi-host` cannot be enabled together for a Wasm contract"
 );
 
-#[cfg(feature = "abi")]
+#[cfg(any(feature = "abi", feature = "abi-host"))]
 #[cfg_attr(docsrs, doc(cfg(feature = "abi")))]
 mod abi;
 #[cfg(feature = "abi")]

@@ -8,9 +8,18 @@ use core::fmt::{self, Write};
 
 mod allocator;
 
+#[cfg(any(
+    feature = "abi",
+    all(
+        feature = "abi-host",
+        any(target_arch = "wasm32", target_arch = "wasm64")
+    )
+))]
 mod handlers;
 
+#[cfg(feature = "abi")]
 mod helpers;
+#[cfg(feature = "abi")]
 pub use helpers::*;
 
 mod state;
