@@ -196,6 +196,20 @@ mod tests {
                 .unwrap()
                 .is_some()
         );
+        assert!(
+            pending
+                .resolve(caller, 1, callee, "dispatch", &[3; 32])
+                .is_err()
+        );
+        assert!(pending.ensure_resolved().is_err());
+
+        let mut pending = call().bind_root(caller);
+        assert!(
+            pending
+                .resolve(caller, 1, callee, "dispatch", &[3; 32])
+                .unwrap()
+                .is_some()
+        );
         pending.resolve_delivery();
         assert!(
             pending

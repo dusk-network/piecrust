@@ -532,11 +532,11 @@ fn nested_call(
     {
         Ok(stack_element) => stack_element,
         Err(err) => {
+            if err.requires_session_discard() {
+                env.require_session_discard();
+                return Err(err);
+            }
             if bound_delivery {
-                if err.requires_session_discard() {
-                    env.poison_bound_child_call_delivery();
-                    return Err(err);
-                }
                 env.resolve_bound_child_call_delivery();
             }
             return Ok(contract_error_parts(err, caller_capacity));
@@ -608,21 +608,20 @@ fn nested_call(
             Ok((ret_len, ret_data))
         }
         Err(mut err) => {
-            let mut fatal = bound_delivery
-                && matches!(err, Error::MemorySnapshotFailure { .. });
+            let mut fatal = err.requires_session_discard();
             env.revert_events_from(event_checkpoint);
             if let Err(io_err) = env.revert_callstack() {
                 err = Error::MemorySnapshotFailure {
                     reason: Some(Arc::new(err)),
                     io: Arc::new(io_err),
                 };
-                fatal = bound_delivery;
+                fatal = true;
             }
             env.move_up_prune_call_tree();
             env.self_instance()
                 .set_remaining_gas(caller_remaining - callee_limit);
             if fatal {
-                env.poison_bound_child_call_delivery();
+                env.require_session_discard();
                 Err(err)
             } else {
                 if bound_delivery {

@@ -140,6 +140,7 @@ struct SessionInner {
     call_tree: CallTree,
     root_call_context: Option<RootCallContext>,
     pending_bound_child_call: Option<PendingBoundChildCall>,
+    discard_required: bool,
     instances: BTreeMap<ContractId, Box<WrappedInstance>>,
     compiled_modules: BTreeMap<ContractId, WasmtimeModule>,
     debug: Vec<String>,
@@ -166,6 +167,7 @@ impl Debug for SessionInner {
                 "pending_bound_child_call",
                 &self.pending_bound_child_call.is_some(),
             )
+            .field("discard_required", &self.discard_required)
             .field("instances_len", &self.instances.len())
             .field("compiled_modules_len", &self.compiled_modules.len())
             .field("debug_len", &self.debug.len())
@@ -265,6 +267,7 @@ impl Session {
             call_tree: CallTree::new(),
             root_call_context: None,
             pending_bound_child_call: None,
+            discard_required: false,
             instances: BTreeMap::new(),
             compiled_modules: BTreeMap::new(),
             debug: vec![],
@@ -426,6 +429,7 @@ impl Session {
         owner: Vec<u8>,
         gas_limit: u64,
     ) -> Result<(ContractId, Option<CallReceipt<Vec<u8>>>), Error> {
+        self.ensure_session_usable()?;
         let contract_id = contract_id.unwrap_or({
             let hash = blake3::hash(bytecode);
             ContractId::from_bytes(hash.into())
@@ -521,11 +525,9 @@ impl Session {
     /// panic. Calling the 'init' method is not allowed except for when called
     /// from the deploy method.
     ///
-    /// If this returns [`Error::MemorySnapshotFailure`], the session's
-    /// in-memory execution state may be inconsistent. The session should be
-    /// discarded and not used for further calls, deployments, or commits.
-    /// Recovery should be performed by creating a fresh session from the last
-    /// committed state.
+    /// If the returned error [`Error::requires_session_discard`], the session
+    /// rejects further calls, deployments, and commits. Recovery should be
+    /// performed by creating a fresh session from the last committed state.
     pub fn call<A, R>(
         &mut self,
         contract: ContractId,
@@ -1079,6 +1081,7 @@ impl Session {
     /// Commits the given session to disk, consuming the session and returning
     /// its state root.
     pub fn commit(mut self) -> Result<[u8; 32], Error> {
+        self.ensure_session_usable()?;
         self.inner_mut()
             .contract_session
             .commit()
@@ -1198,6 +1201,19 @@ impl Session {
         }
     }
 
+    pub(crate) fn require_session_discard(&mut self) {
+        self.inner_mut().discard_required = true;
+        self.poison_bound_child_call_delivery();
+    }
+
+    fn ensure_session_usable(&self) -> Result<(), Error> {
+        if self.inner().discard_required {
+            Err(Error::SessionDiscardRequired)
+        } else {
+            Ok(())
+        }
+    }
+
     fn call_inner(
         &mut self,
         contract: ContractId,
@@ -1205,6 +1221,7 @@ impl Session {
         fdata: Vec<u8>,
         limit: u64,
     ) -> Result<(Vec<u8>, u64, CallTree), Error> {
+        self.ensure_session_usable()?;
         let event_checkpoint = self.event_checkpoint();
         let stack_element = self.push_callstack(contract, limit)?;
         {

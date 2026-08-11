@@ -18,6 +18,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   session.
 - Preserve commits when finalization or deletion fails, and finalize new
   contracts that have no dirty memory pages.
+- Propagate session-fatal failures from every descendant of a bound child call
+  and prevent poisoned sessions from executing or committing.
 
 ## [0.32.2] - 2026-08-06
 

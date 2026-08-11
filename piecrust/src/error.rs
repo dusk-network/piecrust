@@ -90,6 +90,10 @@ pub enum Error {
     RuntimeError(dusk_wasmtime::Error),
     #[error("Session error: {0}")]
     SessionError(Cow<'static, str>),
+    #[error(
+        "Session must be discarded after an unrecoverable child-call failure"
+    )]
+    SessionDiscardRequired,
     #[error("Too many memories: {0}")]
     TooManyMemories(usize),
     #[error(transparent)]
@@ -110,9 +114,14 @@ impl Error {
     }
 
     /// Classify whether a child-call failure can be returned to its caller.
+    ///
+    /// [`Self::normalize`] downcasts recognized guest failures before this
+    /// check. An unrecognized raw runtime error remains session-fatal because
+    /// the host cannot safely treat it as a contract result.
     pub fn call_failure_class(&self) -> CallFailureClass {
         match self {
             Self::ArgumentBufferOverflow { .. }
+            | Self::BoundChildCallRequiresHostBackedAbi
             | Self::ContractDoesNotExist(_)
             | Self::InitalizationError(_)
             | Self::InvalidFunction(_)
@@ -180,11 +189,13 @@ mod tests {
     fn child_call_failures_distinguish_contract_results_from_session_faults() {
         let missing =
             Error::ContractDoesNotExist(ContractId::from_bytes([1; 32]));
+        let legacy_target = Error::BoundChildCallRequiresHostBackedAbi;
         let depth = Error::SessionError("maximum depth".into());
         let snapshot = Error::MemorySnapshotFailure {
             reason: None,
             io: Arc::new(std::io::Error::other("snapshot")),
         };
+        let discarded = Error::SessionDiscardRequired;
 
         assert_eq!(
             missing.call_failure_class(),
@@ -194,6 +205,11 @@ mod tests {
             depth.call_failure_class(),
             CallFailureClass::ContractVisible
         );
+        assert_eq!(
+            legacy_target.call_failure_class(),
+            CallFailureClass::ContractVisible
+        );
         assert!(snapshot.requires_session_discard());
+        assert!(discarded.requires_session_discard());
     }
 }

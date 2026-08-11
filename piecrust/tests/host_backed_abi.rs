@@ -11,6 +11,7 @@ use piecrust::{
     BoundChildCall, ContractData, ContractId, Error, HOST_CALL_FRAME_MAX_LEN,
     SessionData, VM,
 };
+use rkyv::to_bytes;
 use wasm_encoder::{
     CodeSection, ConstExpr, DataSection, EntityType, ExportKind, ExportSection,
     Function, FunctionSection, GlobalSection, GlobalType, ImportSection,
@@ -1337,6 +1338,90 @@ fn caught_committed_child_failure_resolves_the_exact_attempt()
             .data,
         b"clean"
     );
+    Ok(())
+}
+
+#[test]
+fn descendant_session_failure_escapes_and_poisoned_session_cannot_continue()
+-> Result<(), Error> {
+    let vm = VM::ephemeral()?;
+    let forwarder = ContractId::from_bytes([0x78; 32]);
+    let leaf = ContractId::from_bytes([0x79; 32]);
+    let root = ContractId::from_bytes([0x7a; 32]);
+    let descriptor = vec![0xa5; 52];
+
+    let mut setup = enabled_session(&vm)?;
+    let init = Vec::<u8>::new();
+    for contract in [forwarder, leaf] {
+        setup.deploy::<_, (), _>(
+            piecrust::contract_bytecode!("host_backed"),
+            ContractData::builder()
+                .contract_id(contract)
+                .owner(OWNER)
+                .init_arg(&init),
+            LIMIT,
+        )?;
+    }
+    setup.deploy::<_, (), _>(
+        &legacy_forwarder(forwarder, "committed_dispatch", false),
+        ContractData::builder().contract_id(root).owner(OWNER),
+        LIMIT,
+    )?;
+    let base = setup.commit()?;
+    let delivered_argument = to_bytes::<_, 1024>(&leaf).unwrap().to_vec();
+
+    let run = |session: &mut piecrust::Session| {
+        let bound = BoundChildCall::new(
+            forwarder,
+            "committed_dispatch",
+            descriptor.clone(),
+            "catch_leaf_failure",
+            delivered_argument.clone(),
+        )?;
+        let err = session
+            .call_raw_with_bound_child_call(
+                bound,
+                root,
+                "run",
+                descriptor.clone(),
+                LIMIT,
+            )
+            .expect_err("the descendant session failure must escape");
+        assert!(
+            matches!(&err, Error::MissingHostQuery(name) if name == "missing-query"),
+            "unexpected descendant error: {err:?}"
+        );
+        assert!(err.requires_session_discard());
+        Ok::<_, Error>(())
+    };
+
+    let mut call_session = vm.session(
+        SessionData::builder()
+            .base(base)
+            .host_backed_abi_enabled(true)
+            .bound_child_call_enabled(true),
+    )?;
+    run(&mut call_session)?;
+    assert!(matches!(
+        call_session
+            .call_raw(leaf, "echo", Vec::new(), LIMIT)
+            .expect_err("a poisoned session must reject later calls"),
+        Error::SessionDiscardRequired
+    ));
+
+    let mut commit_session = vm.session(
+        SessionData::builder()
+            .base(base)
+            .host_backed_abi_enabled(true)
+            .bound_child_call_enabled(true),
+    )?;
+    run(&mut commit_session)?;
+    assert!(matches!(
+        commit_session
+            .commit()
+            .expect_err("a poisoned session must not commit"),
+        Error::SessionDiscardRequired
+    ));
     Ok(())
 }
 

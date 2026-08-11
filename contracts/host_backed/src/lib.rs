@@ -11,7 +11,7 @@
 extern crate alloc;
 
 use alloc::vec::Vec;
-use piecrust_uplink::wrap_call;
+use piecrust_uplink::{ContractId, call, host_query, wrap_call};
 
 /// Accept a dynamically sized initializer.
 #[unsafe(no_mangle)]
@@ -23,4 +23,18 @@ pub extern "C" fn init(arg_len: u32) -> u32 {
 #[unsafe(no_mangle)]
 pub extern "C" fn echo(arg_len: u32) -> u32 {
     wrap_call(arg_len, |input: Vec<u8>| input)
+}
+
+/// Catch an ordinary nested-call result so tests can verify fatal propagation.
+#[unsafe(no_mangle)]
+pub extern "C" fn catch_leaf_failure(arg_len: u32) -> u32 {
+    wrap_call(arg_len, |leaf: ContractId| {
+        let _ = call::<_, ()>(leaf, "fail_missing_query", &());
+    })
+}
+
+/// Invoke an unavailable host query, which requires discarding the session.
+#[unsafe(no_mangle)]
+pub extern "C" fn fail_missing_query(arg_len: u32) -> u32 {
+    wrap_call(arg_len, |_: ()| host_query::<_, ()>("missing-query", ()))
 }
