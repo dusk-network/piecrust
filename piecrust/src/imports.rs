@@ -403,11 +403,11 @@ pub(crate) fn c(
         };
 
     let caller = *env.self_contract_id();
-    let committed_delivery =
-        match env.resolve_committed_call(caller, callee_id, &name, &arg) {
+    let bound_delivery =
+        match env.resolve_bound_child_call(caller, callee_id, &name, &arg) {
             Ok(Some(delivery)) => {
                 name = delivery.method;
-                arg = delivery.payload;
+                arg = delivery.argument;
                 true
             }
             Ok(None) => false,
@@ -423,7 +423,7 @@ pub(crate) fn c(
             name,
             arg,
             caller_capacity: ARGBUF_LEN,
-            committed_delivery,
+            bound_delivery,
         },
     )?;
     env.self_instance().with_arg_buf_mut(|buf| {
@@ -478,7 +478,7 @@ pub(crate) fn c_host(
             name,
             arg,
             caller_capacity: crate::HOST_CALL_FRAME_MAX_LEN,
-            committed_delivery: false,
+            bound_delivery: false,
         },
     )?;
     env.self_instance().set_host_result(data)?;
@@ -502,7 +502,7 @@ struct NestedCall {
     name: String,
     arg: Vec<u8>,
     caller_capacity: usize,
-    committed_delivery: bool,
+    bound_delivery: bool,
 }
 
 fn nested_call(
@@ -516,13 +516,13 @@ fn nested_call(
         name,
         arg,
         caller_capacity,
-        committed_delivery,
+        bound_delivery,
     } = call;
 
     #[cfg(feature = "call-hook")]
     if let Err(msg) = env.call_hook(&callee_id, &name, &arg) {
-        if committed_delivery {
-            env.resolve_committed_call_delivery();
+        if bound_delivery {
+            env.resolve_bound_child_call_delivery();
         }
         return Ok(contract_error_parts(Error::Panic(msg), caller_capacity));
     }
@@ -532,12 +532,12 @@ fn nested_call(
     {
         Ok(stack_element) => stack_element,
         Err(err) => {
-            if committed_delivery {
-                if committed_push_error_is_fatal(&err) {
-                    env.poison_committed_call_delivery();
+            if bound_delivery {
+                if err.requires_session_discard() {
+                    env.poison_bound_child_call_delivery();
                     return Err(err);
                 }
-                env.resolve_committed_call_delivery();
+                env.resolve_bound_child_call_delivery();
             }
             return Ok(contract_error_parts(err, caller_capacity));
         }
@@ -553,8 +553,8 @@ fn nested_call(
             io: Arc::new(err),
         })?;
 
-        if committed_delivery && !callee.is_host_backed_abi() {
-            return Err(Error::CommittedCallRequiresHostBackedAbi);
+        if bound_delivery && !callee.is_host_backed_abi() {
+            return Err(Error::BoundChildCallRequiresHostBackedAbi);
         }
 
         if name == INIT_METHOD {
@@ -599,8 +599,8 @@ fn nested_call(
 
     match callee_result {
         Ok((ret_len, ret_data, callee_spent)) => {
-            if committed_delivery {
-                env.resolve_committed_call_delivery();
+            if bound_delivery {
+                env.resolve_bound_child_call_delivery();
             }
             env.move_up_call_tree(callee_spent);
             env.self_instance()
@@ -608,7 +608,7 @@ fn nested_call(
             Ok((ret_len, ret_data))
         }
         Err(mut err) => {
-            let mut fatal = committed_delivery
+            let mut fatal = bound_delivery
                 && matches!(err, Error::MemorySnapshotFailure { .. });
             env.revert_events_from(event_checkpoint);
             if let Err(io_err) = env.revert_callstack() {
@@ -616,26 +616,22 @@ fn nested_call(
                     reason: Some(Arc::new(err)),
                     io: Arc::new(io_err),
                 };
-                fatal = committed_delivery;
+                fatal = bound_delivery;
             }
             env.move_up_prune_call_tree();
             env.self_instance()
                 .set_remaining_gas(caller_remaining - callee_limit);
             if fatal {
-                env.poison_committed_call_delivery();
+                env.poison_bound_child_call_delivery();
                 Err(err)
             } else {
-                if committed_delivery {
-                    env.resolve_committed_call_delivery();
+                if bound_delivery {
+                    env.resolve_bound_child_call_delivery();
                 }
                 Ok(contract_error_parts(err, caller_capacity))
             }
         }
     }
-}
-
-fn committed_push_error_is_fatal(err: &Error) -> bool {
-    !matches!(err, Error::ContractDoesNotExist(_) | Error::SessionError(_))
 }
 
 fn contract_error_parts(err: Error, capacity: usize) -> (i32, Vec<u8>) {

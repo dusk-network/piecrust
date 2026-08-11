@@ -28,10 +28,10 @@ use rkyv::ser::serializers::{
 use rkyv::validation::validators::DefaultValidator;
 use rkyv::{Archive, Deserialize, Infallible, Serialize, check_archived_root};
 
-use crate::call_tree::{CallTree, CallTreeElem};
-use crate::committed_call::{
-    CommittedCall, CommittedCallDelivery, PendingCommittedCall,
+use crate::bound_child_call::{
+    BoundChildCall, BoundChildCallDelivery, PendingBoundChildCall,
 };
+use crate::call_tree::{CallTree, CallTreeElem};
 use crate::contract::{ContractData, ContractMetadata, WrappedContract};
 use crate::error::Compo;
 use crate::error::Error::{self, InitalizationError, PersistenceError};
@@ -139,7 +139,7 @@ struct SessionInner {
 
     call_tree: CallTree,
     root_call_context: Option<RootCallContext>,
-    pending_committed_call: Option<PendingCommittedCall>,
+    pending_bound_child_call: Option<PendingBoundChildCall>,
     instances: BTreeMap<ContractId, Box<WrappedInstance>>,
     compiled_modules: BTreeMap<ContractId, WasmtimeModule>,
     debug: Vec<String>,
@@ -163,8 +163,8 @@ impl Debug for SessionInner {
             .field("call_tree", &self.call_tree)
             .field("root_call_context", &self.root_call_context)
             .field(
-                "pending_committed_call",
-                &self.pending_committed_call.is_some(),
+                "pending_bound_child_call",
+                &self.pending_bound_child_call.is_some(),
             )
             .field("instances_len", &self.instances.len())
             .field("compiled_modules_len", &self.compiled_modules.len())
@@ -180,7 +180,7 @@ struct RootCallContextGuard {
     inner: NonNull<SessionInner>,
 }
 
-struct CommittedCallGuard {
+struct BoundChildCallGuard {
     inner: NonNull<SessionInner>,
 }
 
@@ -194,12 +194,12 @@ impl Drop for RootCallContextGuard {
     }
 }
 
-impl Drop for CommittedCallGuard {
+impl Drop for BoundChildCallGuard {
     fn drop(&mut self) {
         // SAFETY: the guard cannot outlive the mutable Session call that
         // installed the context.
         unsafe {
-            self.inner.as_mut().pending_committed_call = None;
+            self.inner.as_mut().pending_bound_child_call = None;
         }
     }
 }
@@ -264,7 +264,7 @@ impl Session {
             current: ContractId::from_bytes([0; CONTRACT_ID_BYTES]),
             call_tree: CallTree::new(),
             root_call_context: None,
-            pending_committed_call: None,
+            pending_bound_child_call: None,
             instances: BTreeMap::new(),
             compiled_modules: BTreeMap::new(),
             debug: vec![],
@@ -321,8 +321,8 @@ impl Session {
         self.inner().data.host_backed_abi_enabled()
     }
 
-    pub(crate) fn committed_call_enabled(&self) -> bool {
-        self.inner().data.committed_call_enabled()
+    pub(crate) fn bound_child_call_enabled(&self) -> bool {
+        self.inner().data.bound_child_call_enabled()
     }
 
     /// Deploy a contract, returning its [`ContractId`] and an optional
@@ -627,11 +627,11 @@ impl Session {
         })
     }
 
-    /// Execute a root call with one host-owned payload committed to an exact
-    /// direct child call made by that root contract.
-    pub fn call_raw_with_committed_call<V: Into<Vec<u8>>>(
+    /// Execute a root call with one exact direct-child invocation bound to
+    /// host-owned B call data.
+    pub fn call_raw_with_bound_child_call<V: Into<Vec<u8>>>(
         &mut self,
-        committed_call: CommittedCall,
+        bound_child_call: BoundChildCall,
         contract: ContractId,
         fn_name: &str,
         fn_arg: V,
@@ -640,28 +640,28 @@ impl Session {
         if fn_name == INIT_METHOD {
             return Err(InitalizationError("init call not allowed".into()));
         }
-        if !self.committed_call_enabled() {
-            return Err(Error::CommittedCallNotEnabled);
+        if !self.bound_child_call_enabled() {
+            return Err(Error::BoundChildCallNotEnabled);
         }
         if self.inner().call_tree.depth() != 0
             || self.inner().root_call_context.is_some()
-            || self.inner().pending_committed_call.is_some()
+            || self.inner().pending_bound_child_call.is_some()
         {
             return Err(Error::SessionError(
-                "committed call requires an idle session".into(),
+                "bound child call requires an idle session".into(),
             ));
         }
 
-        self.inner_mut().pending_committed_call =
-            Some(committed_call.bind_root(contract));
-        let _context_guard = CommittedCallGuard { inner: self.inner };
+        self.inner_mut().pending_bound_child_call =
+            Some(bound_child_call.bind_root(contract));
+        let _context_guard = BoundChildCallGuard { inner: self.inner };
         self.call_raw(contract, fn_name, fn_arg, gas_limit)
     }
 
     /// Execute a typed root call with one host-owned child delivery.
-    pub fn call_with_committed_call<A, R>(
+    pub fn call_with_bound_child_call<A, R>(
         &mut self,
-        committed_call: CommittedCall,
+        bound_child_call: BoundChildCall,
         contract: ContractId,
         fn_name: &str,
         fn_arg: &A,
@@ -679,8 +679,8 @@ impl Session {
         }
 
         let serialized = self.serialize_call_argument(contract, fn_arg)?;
-        self.call_raw_with_committed_call(
-            committed_call,
+        self.call_raw_with_bound_child_call(
+            bound_child_call,
             contract,
             fn_name,
             serialized,
@@ -709,7 +709,7 @@ impl Session {
         }
         if self.inner().call_tree.depth() != 0
             || self.inner().root_call_context.is_some()
-            || self.inner().pending_committed_call.is_some()
+            || self.inner().pending_bound_child_call.is_some()
         {
             return Err(Error::SessionError(
                 "root call context requires an idle session".into(),
@@ -1167,30 +1167,32 @@ impl Session {
         err
     }
 
-    pub(crate) fn resolve_committed_call(
+    pub(crate) fn resolve_bound_child_call(
         &mut self,
         caller: ContractId,
         callee: ContractId,
         method: &str,
-        descriptor: &[u8],
-    ) -> Result<Option<CommittedCallDelivery>, Error> {
+        argument: &[u8],
+    ) -> Result<Option<BoundChildCallDelivery>, Error> {
         let depth = self.inner().call_tree.depth();
-        let Some(pending) = self.inner_mut().pending_committed_call.as_mut()
+        let Some(pending) = self.inner_mut().pending_bound_child_call.as_mut()
         else {
             return Ok(None);
         };
-        pending.resolve(caller, depth, callee, method, descriptor)
+        pending.resolve(caller, depth, callee, method, argument)
     }
 
-    pub(crate) fn resolve_committed_call_delivery(&mut self) {
-        if let Some(pending) = self.inner_mut().pending_committed_call.as_mut()
+    pub(crate) fn resolve_bound_child_call_delivery(&mut self) {
+        if let Some(pending) =
+            self.inner_mut().pending_bound_child_call.as_mut()
         {
             pending.resolve_delivery();
         }
     }
 
-    pub(crate) fn poison_committed_call_delivery(&mut self) {
-        if let Some(pending) = self.inner_mut().pending_committed_call.as_mut()
+    pub(crate) fn poison_bound_child_call_delivery(&mut self) {
+        if let Some(pending) =
+            self.inner_mut().pending_bound_child_call.as_mut()
         {
             pending.poison_delivery();
         }
@@ -1242,7 +1244,7 @@ impl Session {
         let (ret, spent) = invocation_result
             .map_err(|err| self.revert_failed_call(event_checkpoint, err))?;
 
-        if let Some(pending) = &self.inner().pending_committed_call {
+        if let Some(pending) = &self.inner().pending_bound_child_call {
             if let Err(err) = pending.ensure_resolved() {
                 return Err(self.revert_failed_call(event_checkpoint, err));
             }
@@ -1380,7 +1382,7 @@ pub struct SessionData {
     pub base: Option<[u8; 32]>,
     excluded_host_queries: BTreeSet<String>,
     host_backed_abi_enabled: bool,
-    committed_call_enabled: bool,
+    bound_child_call_enabled: bool,
 }
 
 impl SessionData {
@@ -1390,7 +1392,7 @@ impl SessionData {
             base: None,
             excluded_host_queries: BTreeSet::new(),
             host_backed_abi_enabled: false,
-            committed_call_enabled: false,
+            bound_child_call_enabled: false,
         }
     }
 
@@ -1420,8 +1422,8 @@ impl SessionData {
         self.host_backed_abi_enabled
     }
 
-    pub(crate) const fn committed_call_enabled(&self) -> bool {
-        self.committed_call_enabled
+    pub(crate) const fn bound_child_call_enabled(&self) -> bool {
+        self.bound_child_call_enabled
     }
 }
 
@@ -1436,7 +1438,7 @@ pub struct SessionDataBuilder {
     base: Option<[u8; 32]>,
     excluded_host_queries: BTreeSet<String>,
     host_backed_abi_enabled: bool,
-    committed_call_enabled: bool,
+    bound_child_call_enabled: bool,
 }
 
 impl SessionDataBuilder {
@@ -1469,12 +1471,12 @@ impl SessionDataBuilder {
         self
     }
 
-    /// Enable one-shot committed child-call delivery.
+    /// Enable one-shot bound child-call delivery.
     ///
     /// This capability is independent from B instantiation so protocol users
-    /// can activate and rehearse the host-backed ABI before committed calls.
-    pub fn committed_call_enabled(mut self, enabled: bool) -> Self {
-        self.committed_call_enabled = enabled;
+    /// can activate and rehearse the host-backed ABI before bound child calls.
+    pub fn bound_child_call_enabled(mut self, enabled: bool) -> Self {
+        self.bound_child_call_enabled = enabled;
         self
     }
 
@@ -1484,7 +1486,7 @@ impl SessionDataBuilder {
             base: self.base,
             excluded_host_queries: self.excluded_host_queries.clone(),
             host_backed_abi_enabled: self.host_backed_abi_enabled,
-            committed_call_enabled: self.committed_call_enabled,
+            bound_child_call_enabled: self.bound_child_call_enabled,
         }
     }
 }

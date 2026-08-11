@@ -19,6 +19,15 @@ pub type Compo = CompositeSerializerError<
     std::convert::Infallible,
 >;
 
+/// How a failed child-call operation affects the enclosing session.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CallFailureClass {
+    /// The failure is an ordinary contract-visible call result.
+    ContractVisible,
+    /// The host session may no longer be safe to continue.
+    SessionFatal,
+}
+
 /// The error type returned by the piecrust VM.
 #[derive(Error, Debug)]
 pub enum Error {
@@ -42,10 +51,10 @@ pub enum Error {
     InvalidArgumentBuffer,
     #[error("The host-backed contract ABI is not enabled in this session")]
     HostBackedAbiNotEnabled,
-    #[error("Committed child calls are not enabled in this session")]
-    CommittedCallNotEnabled,
-    #[error("Committed child calls require a host-backed callee")]
-    CommittedCallRequiresHostBackedAbi,
+    #[error("Bound child calls are not enabled in this session")]
+    BoundChildCallNotEnabled,
+    #[error("Bound child calls require a host-backed callee")]
+    BoundChildCallRequiresHostBackedAbi,
     #[error("Invalid function: {0}")]
     InvalidFunction(String),
     #[error("Invalid memory")]
@@ -99,6 +108,27 @@ impl Error {
             err => err,
         }
     }
+
+    /// Classify whether a child-call failure can be returned to its caller.
+    pub fn call_failure_class(&self) -> CallFailureClass {
+        match self {
+            Self::ArgumentBufferOverflow { .. }
+            | Self::ContractDoesNotExist(_)
+            | Self::InitalizationError(_)
+            | Self::InvalidFunction(_)
+            | Self::OutOfGas
+            | Self::Panic(_)
+            | Self::SessionError(_)
+            | Self::Utf8(_)
+            | Self::ValidationError => CallFailureClass::ContractVisible,
+            _ => CallFailureClass::SessionFatal,
+        }
+    }
+
+    /// Return whether the enclosing session must be discarded.
+    pub fn requires_session_discard(&self) -> bool {
+        self.call_failure_class() == CallFailureClass::SessionFatal
+    }
 }
 
 impl From<std::convert::Infallible> for Error {
@@ -139,5 +169,31 @@ impl From<Error> for ContractError {
             Error::ContractDoesNotExist(_) => Self::DoesNotExist,
             _ => Self::Unknown,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn child_call_failures_distinguish_contract_results_from_session_faults() {
+        let missing =
+            Error::ContractDoesNotExist(ContractId::from_bytes([1; 32]));
+        let depth = Error::SessionError("maximum depth".into());
+        let snapshot = Error::MemorySnapshotFailure {
+            reason: None,
+            io: Arc::new(std::io::Error::other("snapshot")),
+        };
+
+        assert_eq!(
+            missing.call_failure_class(),
+            CallFailureClass::ContractVisible
+        );
+        assert_eq!(
+            depth.call_failure_class(),
+            CallFailureClass::ContractVisible
+        );
+        assert!(snapshot.requires_session_discard());
     }
 }

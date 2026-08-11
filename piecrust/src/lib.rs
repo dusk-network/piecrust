@@ -121,8 +121,8 @@
 
 #[macro_use]
 mod bytecode_macro;
+mod bound_child_call;
 mod call_tree;
-mod committed_call;
 mod config;
 mod contract;
 mod error;
@@ -133,10 +133,10 @@ mod store;
 mod types;
 mod vm;
 
+pub use bound_child_call::BoundChildCall;
 pub use call_tree::{CallTree, CallTreeElem};
-pub use committed_call::CommittedCall;
 pub use contract::{ContractData, ContractDataBuilder};
-pub use error::Error;
+pub use error::{CallFailureClass, Error};
 pub use piecrust_uplink::HOST_CALL_FRAME_MAX_LEN;
 // re-export the contents of the `piecrust-uplink` crate wholesale,
 // ensuring this is the only crate we need to define and use a VM.

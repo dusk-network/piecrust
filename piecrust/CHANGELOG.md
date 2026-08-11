@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Add independently session-gated one-shot committed child calls with
+- Add independently session-gated one-shot bound child calls with opaque,
   exact-attempt delivery to B callees [#500].
 
 ### Fixed

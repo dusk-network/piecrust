@@ -8,7 +8,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, mpsc};
 
 use piecrust::{
-    CommittedCall, ContractData, ContractId, Error, HOST_CALL_FRAME_MAX_LEN,
+    BoundChildCall, ContractData, ContractId, Error, HOST_CALL_FRAME_MAX_LEN,
     SessionData, VM,
 };
 use wasm_encoder::{
@@ -19,7 +19,8 @@ use wasm_encoder::{
 
 const LIMIT: u64 = 100_000_000;
 const OWNER: [u8; 32] = [0xabu8; 32];
-const COMMITTED_PAYLOAD_LEN: usize = 96 * 1024;
+const LARGE_PAYLOAD_LEN: usize = 96 * 1024;
+const COMMITTED_PAYLOAD_LEN: usize = LARGE_PAYLOAD_LEN;
 const HOST_QUERY_PAYLOAD_LEN: usize = 296 * 1024;
 const CHUNK_LEN: usize = 4 * 1024;
 const RESULT_OFFSET: i32 = 8 * 1024;
@@ -822,7 +823,7 @@ fn committed_session(vm: &VM) -> Result<piecrust::Session, Error> {
     vm.session(
         SessionData::builder()
             .host_backed_abi_enabled(true)
-            .committed_call_enabled(true),
+            .bound_child_call_enabled(true),
     )
 }
 
@@ -1195,11 +1196,20 @@ fn committed_payload_is_exact_one_shot_and_legacy_root_scoped()
         LIMIT,
     )?;
 
-    let committed =
-        CommittedCall::new(callee, "run", payload(COMMITTED_PAYLOAD_LEN))?;
-    let descriptor = committed.dispatch_argument().to_vec();
-    let receipt = session.call_raw_with_committed_call(
-        committed, caller, "run", descriptor, LIMIT,
+    let descriptor = vec![0xa1; 52];
+    let bound = BoundChildCall::new(
+        callee,
+        "run",
+        descriptor.clone(),
+        "run",
+        payload(COMMITTED_PAYLOAD_LEN),
+    )?;
+    let receipt = session.call_raw_with_bound_child_call(
+        bound,
+        caller,
+        "run",
+        descriptor.clone(),
+        LIMIT,
     )?;
     assert_eq!(receipt.data, expected_chunk_markers(COMMITTED_PAYLOAD_LEN));
     assert_eq!(
@@ -1211,23 +1221,24 @@ fn committed_payload_is_exact_one_shot_and_legacy_root_scoped()
         vec![callee, caller]
     );
 
-    let committed =
-        CommittedCall::new(callee, "run", payload(COMMITTED_PAYLOAD_LEN))?;
-    let mut wrong_descriptor = committed.dispatch_argument().to_vec();
+    let bound = BoundChildCall::new(
+        callee,
+        "run",
+        descriptor.clone(),
+        "run",
+        payload(COMMITTED_PAYLOAD_LEN),
+    )?;
+    let mut wrong_descriptor = descriptor.clone();
     wrong_descriptor[0] ^= 1;
     session
-        .call_raw_with_committed_call(
-            committed,
+        .call_raw_with_bound_child_call(
+            bound,
             caller,
             "run",
             wrong_descriptor,
             LIMIT,
         )
         .expect_err("the descriptor must match exactly");
-    let descriptor =
-        CommittedCall::new(callee, "run", payload(COMMITTED_PAYLOAD_LEN))?
-            .dispatch_argument()
-            .to_vec();
     session
         .call_raw(caller, "run", descriptor, LIMIT)
         .expect_err("a failed context must not leak into another root call");
@@ -1253,13 +1264,16 @@ fn committed_payload_can_replace_a_compact_dispatch_method() -> Result<(), Error
     )?;
 
     let codeword = vec![0xc7; 513];
-    let committed =
-        CommittedCall::new(callee, "run", payload(COMMITTED_PAYLOAD_LEN))?
-            .dispatch_via("committed_dispatch", codeword.clone())?;
-    let descriptor = committed.dispatch_argument().to_vec();
-    assert_eq!(descriptor, codeword);
-    let receipt = session.call_raw_with_committed_call(
-        committed, caller, "run", descriptor, LIMIT,
+    let bound = BoundChildCall::new(
+        callee,
+        "committed_dispatch",
+        codeword.clone(),
+        "run",
+        payload(COMMITTED_PAYLOAD_LEN),
+    )?;
+    assert_eq!(bound.expected_argument(), codeword);
+    let receipt = session.call_raw_with_bound_child_call(
+        bound, caller, "run", codeword, LIMIT,
     )?;
 
     assert_eq!(receipt.data, expected_chunk_markers(COMMITTED_PAYLOAD_LEN));
@@ -1291,11 +1305,16 @@ fn caught_committed_child_failure_resolves_the_exact_attempt()
         ContractData::builder().contract_id(caller).owner(OWNER),
         LIMIT,
     )?;
-    let committed =
-        CommittedCall::new(callee, "missing", payload(COMMITTED_PAYLOAD_LEN))?;
-    let descriptor = committed.dispatch_argument().to_vec();
-    let receipt = session.call_raw_with_committed_call(
-        committed, caller, "run", descriptor, LIMIT,
+    let descriptor = vec![0xa2; 52];
+    let bound = BoundChildCall::new(
+        callee,
+        "missing",
+        descriptor.clone(),
+        "missing",
+        payload(COMMITTED_PAYLOAD_LEN),
+    )?;
+    let receipt = session.call_raw_with_bound_child_call(
+        bound, caller, "run", descriptor, LIMIT,
     )?;
     assert_eq!(
         receipt
@@ -1338,15 +1357,21 @@ fn committed_delivery_has_an_independent_gate_and_requires_b()
         ContractData::builder().contract_id(caller).owner(OWNER),
         LIMIT,
     )?;
-    let committed = CommittedCall::new(callee, "run", vec![1; 1024])?;
-    let descriptor = committed.dispatch_argument().to_vec();
+    let descriptor = vec![0xa3; 52];
+    let bound = BoundChildCall::new(
+        callee,
+        "run",
+        descriptor.clone(),
+        "run",
+        vec![1; 1024],
+    )?;
     assert!(matches!(
         host_only
-            .call_raw_with_committed_call(
-                committed, caller, "run", descriptor, LIMIT,
+            .call_raw_with_bound_child_call(
+                bound, caller, "run", descriptor, LIMIT,
             )
             .expect_err("committed delivery must have its own activation gate"),
-        Error::CommittedCallNotEnabled
+        Error::BoundChildCallNotEnabled
     ));
 
     let mut session = committed_session(&vm)?;
@@ -1364,10 +1389,16 @@ fn committed_delivery_has_an_independent_gate_and_requires_b()
             .owner(OWNER),
         LIMIT,
     )?;
-    let committed = CommittedCall::new(legacy, "run", vec![2; 1024])?;
-    let descriptor = committed.dispatch_argument().to_vec();
-    let receipt = session.call_raw_with_committed_call(
-        committed,
+    let descriptor = vec![0xa4; 52];
+    let bound = BoundChildCall::new(
+        legacy,
+        "run",
+        descriptor.clone(),
+        "run",
+        vec![2; 1024],
+    )?;
+    let receipt = session.call_raw_with_bound_child_call(
+        bound,
         legacy_caller,
         "run",
         descriptor,
