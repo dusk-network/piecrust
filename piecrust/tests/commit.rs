@@ -5,7 +5,7 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 use std::collections::BTreeMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 use std::time::Duration;
 use std::{fs, thread};
@@ -17,6 +17,15 @@ use piecrust_uplink::ContractId;
 
 const OWNER: [u8; 32] = [0u8; 32];
 const LIMIT: u64 = 1_000_000;
+
+const ZERO_WRITE_CONTRACT: &[u8] = &[
+    0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, 0x01, 0x06, 0x01, 0x60,
+    0x01, 0x7f, 0x01, 0x7f, 0x03, 0x02, 0x01, 0x00, 0x05, 0x03, 0x01, 0x00,
+    0x01, 0x06, 0x06, 0x01, 0x7f, 0x00, 0x41, 0x00, 0x0b, 0x07, 0x14, 0x03,
+    0x06, 0x6d, 0x65, 0x6d, 0x6f, 0x72, 0x79, 0x02, 0x00, 0x01, 0x41, 0x03,
+    0x00, 0x03, 0x72, 0x75, 0x6e, 0x00, 0x00, 0x0a, 0x06, 0x01, 0x04, 0x00,
+    0x20, 0x00, 0x0b,
+];
 
 #[test]
 fn read_write_session() -> Result<(), Error> {
@@ -349,7 +358,36 @@ fn committed_counter() -> Result<(VM, ContractId, [u8; 32]), Error> {
     Ok((vm, contract, root))
 }
 
-fn has_direct_file(path: &PathBuf) -> bool {
+fn committed_zero_write_contract() -> Result<(VM, ContractId, [u8; 32]), Error>
+{
+    let vm = VM::ephemeral()?;
+    let mut session = vm.session(SessionData::builder())?;
+    let (contract, _) = session.deploy::<_, (), _>(
+        ZERO_WRITE_CONTRACT,
+        ContractData::builder().owner(OWNER),
+        LIMIT,
+    )?;
+    let root = session.commit()?;
+
+    Ok((vm, contract, root))
+}
+
+fn hide_commit_metadata(vm: &VM, root: [u8; 32]) -> (PathBuf, PathBuf) {
+    let commit_dir = vm.root_dir().join("main").join(hex::encode(root));
+    let base_info = commit_dir.join("base");
+    let base_info_backup = commit_dir.join("base.test-backup");
+    fs::rename(&base_info, &base_info_backup)
+        .expect("commit metadata should be hidden for fault injection");
+
+    (base_info, base_info_backup)
+}
+
+fn restore_commit_metadata(base_info: &Path, backup: &Path) {
+    fs::rename(backup, base_info)
+        .expect("commit metadata should be restored for retry");
+}
+
+fn has_direct_file(path: &Path) -> bool {
     path.read_dir()
         .map(|mut entries| {
             entries.any(|entry| {
@@ -359,7 +397,7 @@ fn has_direct_file(path: &PathBuf) -> bool {
         .unwrap_or(false)
 }
 
-fn read_direct_files(path: &PathBuf) -> BTreeMap<String, Vec<u8>> {
+fn read_direct_files(path: &Path) -> BTreeMap<String, Vec<u8>> {
     path.read_dir()
         .expect("directory should be readable")
         .map(|entry| {
@@ -561,6 +599,129 @@ fn finalize_commit_promotes_commit_state() -> Result<(), Error> {
         "finalized root should not remain an unfinalized commit"
     );
     assert_commit_promoted(&paths, &snapshot);
+
+    Ok(())
+}
+
+#[test]
+fn finalize_commit_accepts_new_contract_without_dirty_memory_pages()
+-> Result<(), Error> {
+    let (vm, contract, root) = committed_zero_write_contract()?;
+    let paths = commit_paths(&vm, contract, root);
+    assert!(
+        !paths.commit_memory.exists(),
+        "zero-write deployment should not have commit-scoped memory pages"
+    );
+    assert!(
+        paths.commit_leaf.join("element").is_file(),
+        "deployment should have a commit-scoped index element"
+    );
+
+    let mut child_session = vm.session(SessionData::builder().base(root))?;
+    child_session.deploy::<_, (), _>(
+        contract_bytecode!("counter"),
+        ContractData::builder().owner(OWNER),
+        LIMIT,
+    )?;
+    let child_root = child_session.commit()?;
+
+    vm.finalize_commit(root)?;
+
+    assert!(
+        !vm.commits().contains(&root),
+        "finalized root should not remain an unfinalized commit"
+    );
+    assert!(
+        paths.leaf_element.is_file(),
+        "finalized contract index element should be promoted"
+    );
+
+    let reopened = VM::new(vm.root_dir())?;
+    let mut session =
+        reopened.session(SessionData::builder().base(child_root))?;
+    assert_eq!(
+        session.call::<u32, u32>(contract, "run", &7, LIMIT)?.data,
+        7,
+        "finalized zero-write contract should remain callable after reopen"
+    );
+
+    Ok(())
+}
+
+#[test]
+fn failed_finalize_retains_commit_for_retry() -> Result<(), Error> {
+    let (vm, contract, root) = committed_counter()?;
+    let paths = commit_paths(&vm, contract, root);
+    let snapshot = snapshot_commit(&paths);
+    let (base_info, base_info_backup) = hide_commit_metadata(&vm, root);
+
+    assert!(
+        vm.finalize_commit(root).is_err(),
+        "finalization should fail while commit metadata is unavailable"
+    );
+    assert!(
+        vm.commits().contains(&root),
+        "failed finalization should retain the commit for retry"
+    );
+    assert_commit_paths_exist(&paths);
+
+    restore_commit_metadata(&base_info, &base_info_backup);
+    vm.finalize_commit(root)?;
+
+    assert!(
+        !vm.commits().contains(&root),
+        "successful retry should remove the unfinalized commit"
+    );
+    assert_commit_promoted(&paths, &snapshot);
+
+    Ok(())
+}
+
+#[test]
+fn delete_commit_accepts_new_contract_without_dirty_memory_pages()
+-> Result<(), Error> {
+    let (vm, contract, root) = committed_zero_write_contract()?;
+    let paths = commit_paths(&vm, contract, root);
+    assert!(
+        !paths.commit_memory.exists(),
+        "zero-write deployment should not have commit-scoped memory pages"
+    );
+
+    vm.delete_commit(root)?;
+
+    assert!(
+        !vm.commits().contains(&root),
+        "deleted root should not remain in the commit store"
+    );
+    assert_commit_paths_removed(&paths);
+
+    Ok(())
+}
+
+#[test]
+fn failed_delete_retains_commit_for_retry() -> Result<(), Error> {
+    let (vm, contract, root) = committed_counter()?;
+    let paths = commit_paths(&vm, contract, root);
+    let (base_info, base_info_backup) = hide_commit_metadata(&vm, root);
+
+    assert!(
+        vm.delete_commit(root).is_err(),
+        "deletion should fail while commit metadata is unavailable"
+    );
+    assert!(
+        vm.commits().contains(&root),
+        "failed deletion should retain the commit for retry"
+    );
+    assert_commit_paths_exist(&paths);
+
+    restore_commit_metadata(&base_info, &base_info_backup);
+    vm.delete_commit(root)?;
+
+    assert!(
+        !vm.commits().contains(&root),
+        "successful retry should remove the commit"
+    );
+    assert_commit_deleted(&paths);
 
     Ok(())
 }

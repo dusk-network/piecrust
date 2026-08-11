@@ -31,15 +31,18 @@ impl CommitFinalizer {
             let src_path =
                 main_dir.join(MEMORY_DIR).join(&contract_hex).join(&root);
             let dst_path = main_dir.join(MEMORY_DIR).join(&contract_hex);
-            for entry in fs::read_dir(&src_path)? {
-                let filename = entry?.file_name().to_string_lossy().to_string();
-                let src_file_path = src_path.join(&filename);
-                let dst_file_path = dst_path.join(&filename);
-                if src_file_path.is_file() {
-                    fs::rename(&src_file_path, dst_file_path)?;
+            if src_path.exists() {
+                for entry in fs::read_dir(&src_path)? {
+                    let filename =
+                        entry?.file_name().to_string_lossy().to_string();
+                    let src_file_path = src_path.join(&filename);
+                    let dst_file_path = dst_path.join(&filename);
+                    if src_file_path.is_file() {
+                        fs::rename(&src_file_path, dst_file_path)?;
+                    }
                 }
+                fs::remove_dir(&src_path)?;
             }
-            fs::remove_dir(&src_path)?;
             // LEAF
             let src_leaf_path =
                 main_dir.join(LEAF_DIR).join(&contract_hex).join(&root);

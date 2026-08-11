@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Preserve queued `finalize_commit` operations when a commit is held by a live session.
+- Preserve commits when finalization or deletion fails, and finalize new contracts that have no dirty memory pages.
 
 ## [0.32.2] - 2026-08-06
 

@@ -297,7 +297,9 @@ fn delete_commit(
     replier: mpsc::SyncSender<io::Result<()>>,
 ) {
     let io_result = CommitRemover::remove(root_dir, root);
-    commit_store.lock().unwrap().remove_commit(&root, false);
+    if io_result.is_ok() {
+        commit_store.lock().unwrap().remove_commit(&root, false);
+    }
     tracing::trace!("delete commit finished");
     let _ = replier.send(io_result);
 }
@@ -323,7 +325,9 @@ fn finalize_commit(
         ),
         Err(e) => tracing::trace!("finalizing commit proper failed {:?}", e),
     }
-    commit_store.remove_commit(&root, true);
+    if io_result.is_ok() {
+        commit_store.remove_commit(&root, true);
+    }
     tracing::trace!("finalizing commit finished");
     let _ = replier.send(io_result);
 }

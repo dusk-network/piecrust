@@ -28,12 +28,16 @@ impl CommitRemover {
                     .join(MEMORY_DIR)
                     .join(&contract_hex)
                     .join(&root);
-                fs::remove_dir_all(&commit_mem_path)?;
+                if commit_mem_path.exists() {
+                    fs::remove_dir_all(&commit_mem_path)?;
+                }
                 let commit_leaf_path = root_main_dir
                     .join(LEAF_DIR)
                     .join(&contract_hex)
                     .join(&root);
-                fs::remove_dir_all(&commit_leaf_path)?;
+                if commit_leaf_path.exists() {
+                    fs::remove_dir_all(&commit_leaf_path)?;
+                }
             }
             fs::remove_dir_all(&commit_dir)?;
         }
