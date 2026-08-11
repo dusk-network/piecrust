@@ -42,6 +42,10 @@ pub enum Error {
     InvalidArgumentBuffer,
     #[error("The host-backed contract ABI is not enabled in this session")]
     HostBackedAbiNotEnabled,
+    #[error("Committed child calls are not enabled in this session")]
+    CommittedCallNotEnabled,
+    #[error("Committed child calls require a host-backed callee")]
+    CommittedCallRequiresHostBackedAbi,
     #[error("Invalid function: {0}")]
     InvalidFunction(String),
     #[error("Invalid memory")]

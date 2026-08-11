@@ -122,6 +122,7 @@
 #[macro_use]
 mod bytecode_macro;
 mod call_tree;
+mod committed_call;
 mod config;
 mod contract;
 mod error;
@@ -133,6 +134,7 @@ mod types;
 mod vm;
 
 pub use call_tree::{CallTree, CallTreeElem};
+pub use committed_call::CommittedCall;
 pub use contract::{ContractData, ContractDataBuilder};
 pub use error::Error;
 pub use piecrust_uplink::HOST_CALL_FRAME_MAX_LEN;

@@ -8,7 +8,8 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, mpsc};
 
 use piecrust::{
-    ContractData, ContractId, Error, HOST_CALL_FRAME_MAX_LEN, SessionData, VM,
+    CommittedCall, ContractData, ContractId, Error, HOST_CALL_FRAME_MAX_LEN,
+    SessionData, VM,
 };
 use wasm_encoder::{
     CodeSection, ConstExpr, DataSection, EntityType, ExportKind, ExportSection,
@@ -18,7 +19,7 @@ use wasm_encoder::{
 
 const LIMIT: u64 = 100_000_000;
 const OWNER: [u8; 32] = [0xabu8; 32];
-const LARGE_PAYLOAD_LEN: usize = 96 * 1024;
+const COMMITTED_PAYLOAD_LEN: usize = 96 * 1024;
 const HOST_QUERY_PAYLOAD_LEN: usize = 296 * 1024;
 const CHUNK_LEN: usize = 4 * 1024;
 const RESULT_OFFSET: i32 = 8 * 1024;
@@ -730,6 +731,75 @@ fn host_backed_marker_contract(
     module.finish()
 }
 
+fn legacy_forwarder(
+    callee: ContractId,
+    method: &str,
+    catch_failure: bool,
+) -> Vec<u8> {
+    let target_offset = 64 * 1024;
+    let method_offset = target_offset + 32;
+    let mut module = Module::new();
+    let mut types = TypeSection::new();
+    types.ty().function(
+        [
+            ValType::I32,
+            ValType::I32,
+            ValType::I32,
+            ValType::I32,
+            ValType::I64,
+        ],
+        [ValType::I32],
+    );
+    types.ty().function([ValType::I32], [ValType::I32]);
+    module.section(&types);
+    let mut imports = ImportSection::new();
+    imports.import("env", "c", EntityType::Function(0));
+    module.section(&imports);
+    let mut functions = FunctionSection::new();
+    functions.function(1);
+    module.section(&functions);
+    let mut memories = MemorySection::new();
+    memories.memory(memory_type(2));
+    module.section(&memories);
+    let mut globals = GlobalSection::new();
+    globals.global(marker_global(), &ConstExpr::i32_const(0));
+    module.section(&globals);
+    let mut exports = ExportSection::new();
+    exports.export("memory", ExportKind::Memory, 0);
+    exports.export("A", ExportKind::Global, 0);
+    exports.export("run", ExportKind::Func, 1);
+    module.section(&exports);
+    let mut code = CodeSection::new();
+    let mut run = Function::new([]);
+    let mut instructions = run.instructions();
+    instructions
+        .i32_const(target_offset)
+        .i32_const(method_offset)
+        .i32_const(method.len() as i32)
+        .local_get(0)
+        .i64_const(0)
+        .call(0);
+    if catch_failure {
+        instructions.drop().i32_const(0);
+    }
+    instructions.end();
+    code.function(&run);
+    module.section(&code);
+    let mut data = DataSection::new();
+    data.active(
+        0,
+        &ConstExpr::i32_const(target_offset),
+        callee.as_bytes().to_vec(),
+    );
+    data.active(
+        0,
+        &ConstExpr::i32_const(method_offset),
+        method.as_bytes().to_vec(),
+    );
+    module.section(&data);
+    module.finish()
+}
+
 fn payload(len: usize) -> Vec<u8> {
     let mut payload = vec![0u8; len];
     for (chunk_index, chunk) in payload.chunks_mut(CHUNK_LEN).enumerate() {
@@ -746,6 +816,14 @@ fn expected_chunk_markers(len: usize) -> Vec<u8> {
 
 fn enabled_session(vm: &VM) -> Result<piecrust::Session, Error> {
     vm.session(SessionData::builder().host_backed_abi_enabled(true))
+}
+
+fn committed_session(vm: &VM) -> Result<piecrust::Session, Error> {
+    vm.session(
+        SessionData::builder()
+            .host_backed_abi_enabled(true)
+            .committed_call_enabled(true),
+    )
 }
 
 #[test]
@@ -920,7 +998,7 @@ fn b_nested_calls_are_generic_mixed_and_reentrant() -> Result<(), Error> {
     let b_callee = ContractId::from_bytes([0x51; 32]);
     let b_caller = ContractId::from_bytes([0x52; 32]);
     session.deploy::<_, (), _>(
-        &host_backed_reader(LARGE_PAYLOAD_LEN),
+        &host_backed_reader(COMMITTED_PAYLOAD_LEN),
         ContractData::builder().contract_id(b_callee).owner(OWNER),
         LIMIT,
     )?;
@@ -929,9 +1007,13 @@ fn b_nested_calls_are_generic_mixed_and_reentrant() -> Result<(), Error> {
         ContractData::builder().contract_id(b_caller).owner(OWNER),
         LIMIT,
     )?;
-    let receipt =
-        session.call_raw(b_caller, "run", payload(LARGE_PAYLOAD_LEN), LIMIT)?;
-    assert_eq!(receipt.data, expected_chunk_markers(LARGE_PAYLOAD_LEN));
+    let receipt = session.call_raw(
+        b_caller,
+        "run",
+        payload(COMMITTED_PAYLOAD_LEN),
+        LIMIT,
+    )?;
+    assert_eq!(receipt.data, expected_chunk_markers(COMMITTED_PAYLOAD_LEN));
     assert_eq!(
         receipt
             .call_tree
@@ -1092,6 +1174,214 @@ fn uplink_b_contract_round_trips_large_typed_data() -> Result<(), Error> {
     let receipt =
         session.call::<_, Vec<u8>>(contract, "echo", &input, LIMIT)?;
     assert_eq!(receipt.data, input);
+    Ok(())
+}
+
+#[test]
+fn committed_payload_is_exact_one_shot_and_legacy_root_scoped()
+-> Result<(), Error> {
+    let vm = VM::ephemeral()?;
+    let mut session = committed_session(&vm)?;
+    let callee = ContractId::from_bytes([0x61; 32]);
+    let caller = ContractId::from_bytes([0x62; 32]);
+    session.deploy::<_, (), _>(
+        &host_backed_reader(COMMITTED_PAYLOAD_LEN),
+        ContractData::builder().contract_id(callee).owner(OWNER),
+        LIMIT,
+    )?;
+    session.deploy::<_, (), _>(
+        &legacy_forwarder(callee, "run", false),
+        ContractData::builder().contract_id(caller).owner(OWNER),
+        LIMIT,
+    )?;
+
+    let committed =
+        CommittedCall::new(callee, "run", payload(COMMITTED_PAYLOAD_LEN))?;
+    let descriptor = committed.dispatch_argument().to_vec();
+    let receipt = session.call_raw_with_committed_call(
+        committed, caller, "run", descriptor, LIMIT,
+    )?;
+    assert_eq!(receipt.data, expected_chunk_markers(COMMITTED_PAYLOAD_LEN));
+    assert_eq!(
+        receipt
+            .call_tree
+            .iter()
+            .map(|frame| frame.contract_id)
+            .collect::<Vec<_>>(),
+        vec![callee, caller]
+    );
+
+    let committed =
+        CommittedCall::new(callee, "run", payload(COMMITTED_PAYLOAD_LEN))?;
+    let mut wrong_descriptor = committed.dispatch_argument().to_vec();
+    wrong_descriptor[0] ^= 1;
+    session
+        .call_raw_with_committed_call(
+            committed,
+            caller,
+            "run",
+            wrong_descriptor,
+            LIMIT,
+        )
+        .expect_err("the descriptor must match exactly");
+    let descriptor =
+        CommittedCall::new(callee, "run", payload(COMMITTED_PAYLOAD_LEN))?
+            .dispatch_argument()
+            .to_vec();
+    session
+        .call_raw(caller, "run", descriptor, LIMIT)
+        .expect_err("a failed context must not leak into another root call");
+    Ok(())
+}
+
+#[test]
+fn committed_payload_can_replace_a_compact_dispatch_method() -> Result<(), Error>
+{
+    let vm = VM::ephemeral()?;
+    let mut session = committed_session(&vm)?;
+    let callee = ContractId::from_bytes([0x63; 32]);
+    let caller = ContractId::from_bytes([0x64; 32]);
+    session.deploy::<_, (), _>(
+        &host_backed_reader(COMMITTED_PAYLOAD_LEN),
+        ContractData::builder().contract_id(callee).owner(OWNER),
+        LIMIT,
+    )?;
+    session.deploy::<_, (), _>(
+        &legacy_forwarder(callee, "committed_dispatch", false),
+        ContractData::builder().contract_id(caller).owner(OWNER),
+        LIMIT,
+    )?;
+
+    let codeword = vec![0xc7; 513];
+    let committed =
+        CommittedCall::new(callee, "run", payload(COMMITTED_PAYLOAD_LEN))?
+            .dispatch_via("committed_dispatch", codeword.clone())?;
+    let descriptor = committed.dispatch_argument().to_vec();
+    assert_eq!(descriptor, codeword);
+    let receipt = session.call_raw_with_committed_call(
+        committed, caller, "run", descriptor, LIMIT,
+    )?;
+
+    assert_eq!(receipt.data, expected_chunk_markers(COMMITTED_PAYLOAD_LEN));
+    assert_eq!(
+        receipt
+            .call_tree
+            .iter()
+            .map(|frame| frame.contract_id)
+            .collect::<Vec<_>>(),
+        vec![callee, caller]
+    );
+    Ok(())
+}
+
+#[test]
+fn caught_committed_child_failure_resolves_the_exact_attempt()
+-> Result<(), Error> {
+    let vm = VM::ephemeral()?;
+    let mut session = committed_session(&vm)?;
+    let callee = ContractId::from_bytes([0x71; 32]);
+    let caller = ContractId::from_bytes([0x72; 32]);
+    session.deploy::<_, (), _>(
+        &host_backed_reader(COMMITTED_PAYLOAD_LEN),
+        ContractData::builder().contract_id(callee).owner(OWNER),
+        LIMIT,
+    )?;
+    session.deploy::<_, (), _>(
+        &legacy_forwarder(callee, "missing", true),
+        ContractData::builder().contract_id(caller).owner(OWNER),
+        LIMIT,
+    )?;
+    let committed =
+        CommittedCall::new(callee, "missing", payload(COMMITTED_PAYLOAD_LEN))?;
+    let descriptor = committed.dispatch_argument().to_vec();
+    let receipt = session.call_raw_with_committed_call(
+        committed, caller, "run", descriptor, LIMIT,
+    )?;
+    assert_eq!(
+        receipt
+            .call_tree
+            .iter()
+            .map(|frame| frame.contract_id)
+            .collect::<Vec<_>>(),
+        vec![caller]
+    );
+
+    let echo = ContractId::from_bytes([0x73; 32]);
+    session.deploy::<_, (), _>(
+        &host_backed_echo(),
+        ContractData::builder().contract_id(echo).owner(OWNER),
+        LIMIT,
+    )?;
+    assert_eq!(
+        session
+            .call_raw(echo, "run", b"clean".to_vec(), LIMIT)?
+            .data,
+        b"clean"
+    );
+    Ok(())
+}
+
+#[test]
+fn committed_delivery_has_an_independent_gate_and_requires_b()
+-> Result<(), Error> {
+    let vm = VM::ephemeral()?;
+    let callee = ContractId::from_bytes([0x74; 32]);
+    let caller = ContractId::from_bytes([0x75; 32]);
+    let mut host_only = enabled_session(&vm)?;
+    host_only.deploy::<_, (), _>(
+        &host_backed_echo(),
+        ContractData::builder().contract_id(callee).owner(OWNER),
+        LIMIT,
+    )?;
+    host_only.deploy::<_, (), _>(
+        &legacy_forwarder(callee, "run", true),
+        ContractData::builder().contract_id(caller).owner(OWNER),
+        LIMIT,
+    )?;
+    let committed = CommittedCall::new(callee, "run", vec![1; 1024])?;
+    let descriptor = committed.dispatch_argument().to_vec();
+    assert!(matches!(
+        host_only
+            .call_raw_with_committed_call(
+                committed, caller, "run", descriptor, LIMIT,
+            )
+            .expect_err("committed delivery must have its own activation gate"),
+        Error::CommittedCallNotEnabled
+    ));
+
+    let mut session = committed_session(&vm)?;
+    let legacy = ContractId::from_bytes([0x76; 32]);
+    let legacy_caller = ContractId::from_bytes([0x77; 32]);
+    session.deploy::<_, (), _>(
+        &legacy_echo(),
+        ContractData::builder().contract_id(legacy).owner(OWNER),
+        LIMIT,
+    )?;
+    session.deploy::<_, (), _>(
+        &legacy_forwarder(legacy, "run", true),
+        ContractData::builder()
+            .contract_id(legacy_caller)
+            .owner(OWNER),
+        LIMIT,
+    )?;
+    let committed = CommittedCall::new(legacy, "run", vec![2; 1024])?;
+    let descriptor = committed.dispatch_argument().to_vec();
+    let receipt = session.call_raw_with_committed_call(
+        committed,
+        legacy_caller,
+        "run",
+        descriptor,
+        LIMIT,
+    )?;
+    assert_eq!(
+        receipt
+            .call_tree
+            .iter()
+            .map(|frame| frame.contract_id)
+            .collect::<Vec<_>>(),
+        vec![legacy_caller],
+        "the legacy callee must reject hidden payload substitution"
+    );
     Ok(())
 }
 

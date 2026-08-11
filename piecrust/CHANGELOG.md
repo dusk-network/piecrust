@@ -9,8 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Add independently session-gated host-backed contracts with bounded frames,
-  deterministic copy gas, and mixed-ABI calls [#498].
+- Add independently session-gated one-shot committed child calls with
+  exact-attempt delivery to B callees [#500].
 
 ### Fixed
 
