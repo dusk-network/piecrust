@@ -56,9 +56,21 @@ fn host_backed_reader(payload_len: usize) -> Vec<u8> {
     module.section(&types);
 
     let mut imports = ImportSection::new();
-    imports.import("env", "call_input_len", EntityType::Function(0));
-    imports.import("env", "call_input_copy", EntityType::Function(1));
-    imports.import("env", "call_output_set", EntityType::Function(2));
+    imports.import(
+        "env",
+        "__piecrust_b_call_input_len",
+        EntityType::Function(0),
+    );
+    imports.import(
+        "env",
+        "__piecrust_b_call_input_copy",
+        EntityType::Function(1),
+    );
+    imports.import(
+        "env",
+        "__piecrust_b_call_output_set",
+        EntityType::Function(2),
+    );
     module.section(&imports);
 
     let mut functions = FunctionSection::new();
@@ -133,8 +145,16 @@ fn host_backed_echo() -> Vec<u8> {
     types.ty().function([ValType::I32], [ValType::I32]);
     module.section(&types);
     let mut imports = ImportSection::new();
-    imports.import("env", "call_input_copy", EntityType::Function(0));
-    imports.import("env", "call_output_set", EntityType::Function(1));
+    imports.import(
+        "env",
+        "__piecrust_b_call_input_copy",
+        EntityType::Function(0),
+    );
+    imports.import(
+        "env",
+        "__piecrust_b_call_output_set",
+        EntityType::Function(1),
+    );
     module.section(&imports);
     let mut functions = FunctionSection::new();
     functions.function(2);
@@ -182,9 +202,17 @@ fn host_backed_feed() -> Vec<u8> {
     types.ty().function([ValType::I32], [ValType::I32]);
     module.section(&types);
     let mut imports = ImportSection::new();
-    imports.import("env", "call_input_copy", EntityType::Function(0));
-    imports.import("env", "feed", EntityType::Function(1));
-    imports.import("env", "call_output_set", EntityType::Function(2));
+    imports.import(
+        "env",
+        "__piecrust_b_call_input_copy",
+        EntityType::Function(0),
+    );
+    imports.import("env", "__piecrust_b_feed", EntityType::Function(1));
+    imports.import(
+        "env",
+        "__piecrust_b_call_output_set",
+        EntityType::Function(2),
+    );
     module.section(&imports);
     let mut functions = FunctionSection::new();
     functions.function(3);
@@ -258,25 +286,45 @@ fn host_backed_import_parity() -> Vec<u8> {
     module.section(&types);
 
     let mut imports = ImportSection::new();
-    imports.import("env", "call_input_len", EntityType::Function(0));
-    imports.import("env", "call_input_copy", EntityType::Function(1));
-    imports.import("env", "call_output_set", EntityType::Function(2));
-    imports.import("env", "host_result_len", EntityType::Function(0));
-    imports.import("env", "host_result_copy", EntityType::Function(1));
-    imports.import("env", "caller", EntityType::Function(0));
-    imports.import("env", "callstack", EntityType::Function(0));
-    imports.import("env", "c", EntityType::Function(3));
-    imports.import("env", "hq", EntityType::Function(4));
-    imports.import("env", "hd", EntityType::Function(2));
-    imports.import("env", "emit", EntityType::Function(5));
-    imports.import("env", "feed", EntityType::Function(6));
+    imports.import(
+        "env",
+        "__piecrust_b_call_input_len",
+        EntityType::Function(0),
+    );
+    imports.import(
+        "env",
+        "__piecrust_b_call_input_copy",
+        EntityType::Function(1),
+    );
+    imports.import(
+        "env",
+        "__piecrust_b_call_output_set",
+        EntityType::Function(2),
+    );
+    imports.import(
+        "env",
+        "__piecrust_b_host_result_len",
+        EntityType::Function(0),
+    );
+    imports.import(
+        "env",
+        "__piecrust_b_host_result_copy",
+        EntityType::Function(1),
+    );
+    imports.import("env", "__piecrust_b_caller", EntityType::Function(0));
+    imports.import("env", "__piecrust_b_callstack", EntityType::Function(0));
+    imports.import("env", "__piecrust_b_call", EntityType::Function(3));
+    imports.import("env", "__piecrust_b_host_query", EntityType::Function(4));
+    imports.import("env", "__piecrust_b_host_data", EntityType::Function(2));
+    imports.import("env", "__piecrust_b_emit", EntityType::Function(5));
+    imports.import("env", "__piecrust_b_feed", EntityType::Function(6));
     imports.import("env", "limit", EntityType::Function(7));
     imports.import("env", "spent", EntityType::Function(7));
-    imports.import("env", "panic", EntityType::Function(6));
-    imports.import("env", "owner", EntityType::Function(8));
-    imports.import("env", "self_id", EntityType::Function(9));
+    imports.import("env", "__piecrust_b_panic", EntityType::Function(6));
+    imports.import("env", "__piecrust_b_owner", EntityType::Function(8));
+    imports.import("env", "__piecrust_b_self_id", EntityType::Function(9));
     #[cfg(feature = "debug")]
-    imports.import("env", "hdebug", EntityType::Function(6));
+    imports.import("env", "__piecrust_b_debug", EntityType::Function(6));
     module.section(&imports);
     let mut functions = FunctionSection::new();
     functions.function(10);
@@ -322,11 +370,27 @@ fn host_backed_query(name: &str) -> Vec<u8> {
     module.section(&types);
 
     let mut imports = ImportSection::new();
-    imports.import("env", "call_input_copy", EntityType::Function(1));
-    imports.import("env", "hq", EntityType::Function(3));
-    imports.import("env", "host_result_len", EntityType::Function(0));
-    imports.import("env", "host_result_copy", EntityType::Function(1));
-    imports.import("env", "call_output_set", EntityType::Function(2));
+    imports.import(
+        "env",
+        "__piecrust_b_call_input_copy",
+        EntityType::Function(1),
+    );
+    imports.import("env", "__piecrust_b_host_query", EntityType::Function(3));
+    imports.import(
+        "env",
+        "__piecrust_b_host_result_len",
+        EntityType::Function(0),
+    );
+    imports.import(
+        "env",
+        "__piecrust_b_host_result_copy",
+        EntityType::Function(1),
+    );
+    imports.import(
+        "env",
+        "__piecrust_b_call_output_set",
+        EntityType::Function(2),
+    );
     module.section(&imports);
 
     let mut functions = FunctionSection::new();
@@ -414,11 +478,27 @@ fn host_backed_forwarder(callee: ContractId, method: &str) -> Vec<u8> {
     types.ty().function([ValType::I32], [ValType::I32]);
     module.section(&types);
     let mut imports = ImportSection::new();
-    imports.import("env", "call_input_copy", EntityType::Function(0));
-    imports.import("env", "c", EntityType::Function(1));
-    imports.import("env", "host_result_len", EntityType::Function(2));
-    imports.import("env", "host_result_copy", EntityType::Function(0));
-    imports.import("env", "call_output_set", EntityType::Function(3));
+    imports.import(
+        "env",
+        "__piecrust_b_call_input_copy",
+        EntityType::Function(0),
+    );
+    imports.import("env", "__piecrust_b_call", EntityType::Function(1));
+    imports.import(
+        "env",
+        "__piecrust_b_host_result_len",
+        EntityType::Function(2),
+    );
+    imports.import(
+        "env",
+        "__piecrust_b_host_result_copy",
+        EntityType::Function(0),
+    );
+    imports.import(
+        "env",
+        "__piecrust_b_call_output_set",
+        EntityType::Function(3),
+    );
     module.section(&imports);
     let mut functions = FunctionSection::new();
     functions.function(4);

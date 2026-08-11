@@ -62,84 +62,91 @@ impl Imports {
         is_64: bool,
         host_backed_abi: bool,
     ) -> Option<Func> {
-        Some(match name {
-            "caller" => match host_backed_abi {
-                false => Func::wrap(store, caller),
-                true => Func::wrap(store, caller_host),
+        Some(match (name, host_backed_abi) {
+            ("caller", false) => Func::wrap(store, caller),
+            ("__piecrust_b_caller", true) => Func::wrap(store, caller_host),
+            ("callstack", false) => Func::wrap(store, callstack),
+            ("__piecrust_b_callstack", true) => {
+                Func::wrap(store, callstack_host)
+            }
+            ("c", false) => match is_64 {
+                false => Func::wrap(store, wasm32::c),
+                true => Func::wrap(store, wasm64::c),
             },
-            "callstack" => match host_backed_abi {
-                false => Func::wrap(store, callstack),
-                true => Func::wrap(store, callstack_host),
+            ("__piecrust_b_call", true) => match is_64 {
+                false => Func::wrap(store, wasm32::c_host),
+                true => Func::wrap(store, wasm64::c_host),
             },
-            "c" => match (is_64, host_backed_abi) {
-                (false, false) => Func::wrap(store, wasm32::c),
-                (true, false) => Func::wrap(store, wasm64::c),
-                (false, true) => Func::wrap(store, wasm32::c_host),
-                (true, true) => Func::wrap(store, wasm64::c_host),
+            ("hq", false) => match is_64 {
+                false => Func::wrap(store, wasm32::hq),
+                true => Func::wrap(store, wasm64::hq),
             },
-            "hq" => match (is_64, host_backed_abi) {
-                (false, false) => Func::wrap(store, wasm32::hq),
-                (true, false) => Func::wrap(store, wasm64::hq),
-                (false, true) => Func::wrap(store, wasm32::hq_host),
-                (true, true) => Func::wrap(store, wasm64::hq_host),
+            ("__piecrust_b_host_query", true) => match is_64 {
+                false => Func::wrap(store, wasm32::hq_host),
+                true => Func::wrap(store, wasm64::hq_host),
             },
-            "hd" => match (is_64, host_backed_abi) {
-                (false, false) => Func::wrap(store, wasm32::hd),
-                (true, false) => Func::wrap(store, wasm64::hd),
-                (false, true) => Func::wrap(store, wasm32::hd_host),
-                (true, true) => Func::wrap(store, wasm64::hd_host),
+            ("hd", false) => match is_64 {
+                false => Func::wrap(store, wasm32::hd),
+                true => Func::wrap(store, wasm64::hd),
             },
-            "emit" => match (is_64, host_backed_abi) {
-                (false, false) => Func::wrap(store, wasm32::emit),
-                (true, false) => Func::wrap(store, wasm64::emit),
-                (false, true) => Func::wrap(store, wasm32::emit_host),
-                (true, true) => Func::wrap(store, wasm64::emit_host),
+            ("__piecrust_b_host_data", true) => match is_64 {
+                false => Func::wrap(store, wasm32::hd_host),
+                true => Func::wrap(store, wasm64::hd_host),
             },
-            "feed" => match (is_64, host_backed_abi) {
-                (_, false) => Func::wrap(store, feed),
-                (false, true) => Func::wrap(store, wasm32::feed_host),
-                (true, true) => Func::wrap(store, wasm64::feed_host),
+            ("emit", false) => match is_64 {
+                false => Func::wrap(store, wasm32::emit),
+                true => Func::wrap(store, wasm64::emit),
             },
-            "limit" => Func::wrap(store, limit),
-            "spent" => Func::wrap(store, spent),
-            "panic" => match (is_64, host_backed_abi) {
-                (_, false) => Func::wrap(store, panic),
-                (false, true) => Func::wrap(store, wasm32::panic_host),
-                (true, true) => Func::wrap(store, wasm64::panic_host),
+            ("__piecrust_b_emit", true) => match is_64 {
+                false => Func::wrap(store, wasm32::emit_host),
+                true => Func::wrap(store, wasm64::emit_host),
             },
-            "owner" => match (is_64, host_backed_abi) {
-                (false, false) => Func::wrap(store, wasm32::owner),
-                (true, false) => Func::wrap(store, wasm64::owner),
-                (false, true) => Func::wrap(store, wasm32::owner_host),
-                (true, true) => Func::wrap(store, wasm64::owner_host),
+            ("feed", false) => Func::wrap(store, feed),
+            ("__piecrust_b_feed", true) => match is_64 {
+                false => Func::wrap(store, wasm32::feed_host),
+                true => Func::wrap(store, wasm64::feed_host),
             },
-            "self_id" => match host_backed_abi {
-                false => Func::wrap(store, self_id),
-                true => Func::wrap(store, self_id_host),
+            ("limit", _) => Func::wrap(store, limit),
+            ("spent", _) => Func::wrap(store, spent),
+            ("panic", false) => Func::wrap(store, panic),
+            ("__piecrust_b_panic", true) => match is_64 {
+                false => Func::wrap(store, wasm32::panic_host),
+                true => Func::wrap(store, wasm64::panic_host),
             },
-            "call_input_len" if host_backed_abi => {
+            ("owner", false) => match is_64 {
+                false => Func::wrap(store, wasm32::owner),
+                true => Func::wrap(store, wasm64::owner),
+            },
+            ("__piecrust_b_owner", true) => match is_64 {
+                false => Func::wrap(store, wasm32::owner_host),
+                true => Func::wrap(store, wasm64::owner_host),
+            },
+            ("self_id", false) => Func::wrap(store, self_id),
+            ("__piecrust_b_self_id", true) => Func::wrap(store, self_id_host),
+            ("__piecrust_b_call_input_len", true) => {
                 Func::wrap(store, call_input_len)
             }
-            "call_input_copy" if host_backed_abi => match is_64 {
+            ("__piecrust_b_call_input_copy", true) => match is_64 {
                 false => Func::wrap(store, wasm32::call_input_copy),
                 true => Func::wrap(store, wasm64::call_input_copy),
             },
-            "call_output_set" if host_backed_abi => match is_64 {
+            ("__piecrust_b_call_output_set", true) => match is_64 {
                 false => Func::wrap(store, wasm32::call_output_set),
                 true => Func::wrap(store, wasm64::call_output_set),
             },
-            "host_result_len" if host_backed_abi => {
+            ("__piecrust_b_host_result_len", true) => {
                 Func::wrap(store, host_result_len)
             }
-            "host_result_copy" if host_backed_abi => match is_64 {
+            ("__piecrust_b_host_result_copy", true) => match is_64 {
                 false => Func::wrap(store, wasm32::host_result_copy),
                 true => Func::wrap(store, wasm64::host_result_copy),
             },
             #[cfg(feature = "debug")]
-            "hdebug" => match (is_64, host_backed_abi) {
-                (_, false) => Func::wrap(store, hdebug),
-                (false, true) => Func::wrap(store, wasm32::hdebug_host),
-                (true, true) => Func::wrap(store, wasm64::hdebug_host),
+            ("hdebug", false) => Func::wrap(store, hdebug),
+            #[cfg(feature = "debug")]
+            ("__piecrust_b_debug", true) => match is_64 {
+                false => Func::wrap(store, wasm32::hdebug_host),
+                true => Func::wrap(store, wasm64::hdebug_host),
             },
             _ => return None,
         })

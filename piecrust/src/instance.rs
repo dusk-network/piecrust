@@ -5,7 +5,7 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 use std::io;
-use std::ops::{Deref, DerefMut};
+use std::ops::{Deref, DerefMut, Range};
 
 use dusk_wasmtime::{Instance, Module, Mutability, Store, ValType};
 use piecrust_uplink::{ARGBUF_LEN, ContractId, Event, HOST_CALL_FRAME_MAX_LEN};
@@ -37,6 +37,29 @@ struct HostCallFrame {
     output: Vec<u8>,
     result: Vec<u8>,
     result_len: usize,
+}
+
+fn checked_range(
+    offset: usize,
+    len: usize,
+    total: usize,
+) -> Result<Range<usize>, Error> {
+    let end =
+        offset
+            .checked_add(len)
+            .ok_or(Error::MemoryAccessOutOfBounds {
+                offset,
+                len,
+                mem_len: total,
+            })?;
+    if end > total {
+        return Err(Error::MemoryAccessOutOfBounds {
+            offset,
+            len,
+            mem_len: total,
+        });
+    }
+    Ok(offset..end)
 }
 
 pub(crate) struct Env {
@@ -504,45 +527,17 @@ impl WrappedInstance {
             })?
             .input
             .len();
-        let input_end = input_offset.checked_add(len).ok_or(
-            Error::MemoryAccessOutOfBounds {
-                offset: input_offset,
-                len,
-                mem_len: input_len,
-            },
-        )?;
-        if input_end > input_len {
-            return Err(Error::MemoryAccessOutOfBounds {
-                offset: input_offset,
-                len,
-                mem_len: input_len,
-            });
-        }
-
-        let guest_len = self.mem_len();
-        let guest_end = guest_offset.checked_add(len).ok_or(
-            Error::MemoryAccessOutOfBounds {
-                offset: guest_offset,
-                len,
-                mem_len: guest_len,
-            },
-        )?;
-        if guest_end > guest_len {
-            return Err(Error::MemoryAccessOutOfBounds {
-                offset: guest_offset,
-                len,
-                mem_len: guest_len,
-            });
-        }
+        let input_range = checked_range(input_offset, len, input_len)?;
+        let guest_range = checked_range(guest_offset, len, self.mem_len())?;
 
         self.charge_host_call_copy(len)?;
         let input = &self
             .host_call_frames
             .last()
             .expect("host call frame was checked")
-            .input[input_offset..input_end];
+            .input[input_range];
         self.memory.with_bytes_mut(|memory| {
-            memory[guest_offset..guest_end].copy_from_slice(input);
+            memory[guest_range].copy_from_slice(input);
         });
         Ok(())
     }
@@ -564,26 +559,12 @@ impl WrappedInstance {
             ));
         }
 
-        let guest_len = self.mem_len();
-        let guest_end = guest_offset.checked_add(len).ok_or(
-            Error::MemoryAccessOutOfBounds {
-                offset: guest_offset,
-                len,
-                mem_len: guest_len,
-            },
-        )?;
-        if guest_end > guest_len {
-            return Err(Error::MemoryAccessOutOfBounds {
-                offset: guest_offset,
-                len,
-                mem_len: guest_len,
-            });
-        }
+        let guest_range = checked_range(guest_offset, len, self.mem_len())?;
 
         self.charge_host_call_copy(len)?;
         let output = self
             .memory
-            .with_bytes(|memory| memory[guest_offset..guest_end].to_vec());
+            .with_bytes(|memory| memory[guest_range].to_vec());
         self.host_call_frames
             .last_mut()
             .expect("host call frame was checked")
@@ -663,45 +644,17 @@ impl WrappedInstance {
                 Error::SessionError("B call frame is not active".into())
             })?
             .result_len;
-        let result_end = result_offset.checked_add(len).ok_or(
-            Error::MemoryAccessOutOfBounds {
-                offset: result_offset,
-                len,
-                mem_len: result_len,
-            },
-        )?;
-        if result_end > result_len {
-            return Err(Error::MemoryAccessOutOfBounds {
-                offset: result_offset,
-                len,
-                mem_len: result_len,
-            });
-        }
-
-        let guest_len = self.mem_len();
-        let guest_end = guest_offset.checked_add(len).ok_or(
-            Error::MemoryAccessOutOfBounds {
-                offset: guest_offset,
-                len,
-                mem_len: guest_len,
-            },
-        )?;
-        if guest_end > guest_len {
-            return Err(Error::MemoryAccessOutOfBounds {
-                offset: guest_offset,
-                len,
-                mem_len: guest_len,
-            });
-        }
+        let result_range = checked_range(result_offset, len, result_len)?;
+        let guest_range = checked_range(guest_offset, len, self.mem_len())?;
 
         self.charge_host_call_copy(len)?;
         let result = &self
             .host_call_frames
             .last()
             .expect("host call frame was checked")
-            .result[result_offset..result_end];
+            .result[result_range];
         self.memory.with_bytes_mut(|memory| {
-            memory[guest_offset..guest_end].copy_from_slice(result);
+            memory[guest_range].copy_from_slice(result);
         });
         Ok(())
     }
@@ -723,26 +676,12 @@ impl WrappedInstance {
             ));
         }
 
-        let guest_len = self.mem_len();
-        let guest_end = guest_offset.checked_add(len).ok_or(
-            Error::MemoryAccessOutOfBounds {
-                offset: guest_offset,
-                len,
-                mem_len: guest_len,
-            },
-        )?;
-        if guest_end > guest_len {
-            return Err(Error::MemoryAccessOutOfBounds {
-                offset: guest_offset,
-                len,
-                mem_len: guest_len,
-            });
-        }
+        let guest_range = checked_range(guest_offset, len, self.mem_len())?;
 
         self.charge_host_call_copy(len)?;
         Ok(self
             .memory
-            .with_bytes(|memory| memory[guest_offset..guest_end].to_vec()))
+            .with_bytes(|memory| memory[guest_range].to_vec()))
     }
 
     fn charge_host_call_copy(&mut self, len: usize) -> Result<(), Error> {

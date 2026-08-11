@@ -37,12 +37,12 @@ unsafe fn read_pointer(source: *const u8, len: u32) -> Vec<u8> {
     unsafe { slice::from_raw_parts(source, len as usize) }.to_vec()
 }
 
-#[unsafe(export_name = "call_input_len")]
+#[unsafe(export_name = "__piecrust_b_call_input_len")]
 extern "C" fn mock_call_input_len() -> u32 {
     HOST.lock().unwrap().input.len() as u32
 }
 
-#[unsafe(export_name = "call_input_copy")]
+#[unsafe(export_name = "__piecrust_b_call_input_copy")]
 unsafe extern "C" fn mock_call_input_copy(
     destination: *mut u8,
     input_offset: usize,
@@ -57,18 +57,18 @@ unsafe extern "C" fn mock_call_input_copy(
     len as i32
 }
 
-#[unsafe(export_name = "call_output_set")]
+#[unsafe(export_name = "__piecrust_b_call_output_set")]
 unsafe extern "C" fn mock_call_output_set(source: *const u8, len: u32) -> i32 {
     HOST.lock().unwrap().output = unsafe { read_pointer(source, len) };
     len as i32
 }
 
-#[unsafe(export_name = "host_result_len")]
+#[unsafe(export_name = "__piecrust_b_host_result_len")]
 extern "C" fn mock_host_result_len() -> u32 {
     HOST.lock().unwrap().result.len() as u32
 }
 
-#[unsafe(export_name = "host_result_copy")]
+#[unsafe(export_name = "__piecrust_b_host_result_copy")]
 unsafe extern "C" fn mock_host_result_copy(
     destination: *mut u8,
     result_offset: usize,
@@ -83,7 +83,7 @@ unsafe extern "C" fn mock_host_result_copy(
     len as i32
 }
 
-#[unsafe(export_name = "hq")]
+#[unsafe(export_name = "__piecrust_b_host_query")]
 unsafe extern "C" fn mock_hq_v2(
     _name: *const u8,
     _name_len: u32,
@@ -96,14 +96,14 @@ unsafe extern "C" fn mock_hq_v2(
     len
 }
 
-#[unsafe(export_name = "hd")]
+#[unsafe(export_name = "__piecrust_b_host_data")]
 extern "C" fn mock_hd_v2(_name: *const u8, _name_len: u32) -> u32 {
     let mut host = HOST.lock().unwrap();
     host.result = host.metadata.clone();
     host.result.len() as u32
 }
 
-#[unsafe(export_name = "c")]
+#[unsafe(export_name = "__piecrust_b_call")]
 unsafe extern "C" fn mock_c_v2(
     _contract_id: *const u8,
     _fn_name: *const u8,
@@ -118,7 +118,7 @@ unsafe extern "C" fn mock_c_v2(
     len
 }
 
-#[unsafe(export_name = "emit")]
+#[unsafe(export_name = "__piecrust_b_emit")]
 unsafe extern "C" fn mock_emit_v2(
     _topic: *const u8,
     _topic_len: u32,
@@ -128,18 +128,18 @@ unsafe extern "C" fn mock_emit_v2(
     HOST.lock().unwrap().event = unsafe { read_pointer(data, data_len) };
 }
 
-#[unsafe(export_name = "feed")]
+#[unsafe(export_name = "__piecrust_b_feed")]
 unsafe extern "C" fn mock_feed_v2(data: *const u8, data_len: u32) {
     HOST.lock().unwrap().feed = unsafe { read_pointer(data, data_len) };
 }
 
-#[unsafe(export_name = "caller")]
+#[unsafe(export_name = "__piecrust_b_caller")]
 extern "C" fn mock_caller_v2() -> i32 {
     HOST.lock().unwrap().result = vec![0x11; CONTRACT_ID_BYTES];
     1
 }
 
-#[unsafe(export_name = "callstack")]
+#[unsafe(export_name = "__piecrust_b_callstack")]
 extern "C" fn mock_callstack_v2() -> i32 {
     let mut result = vec![0x22; CONTRACT_ID_BYTES];
     result.extend_from_slice(&[0x33; CONTRACT_ID_BYTES]);
@@ -147,13 +147,13 @@ extern "C" fn mock_callstack_v2() -> i32 {
     2
 }
 
-#[unsafe(export_name = "owner")]
+#[unsafe(export_name = "__piecrust_b_owner")]
 extern "C" fn mock_owner_v2(_contract_id: *const u8) -> i32 {
     HOST.lock().unwrap().result = vec![0x44; CONTRACT_ID_BYTES];
     CONTRACT_ID_BYTES as i32
 }
 
-#[unsafe(export_name = "self_id")]
+#[unsafe(export_name = "__piecrust_b_self_id")]
 extern "C" fn mock_self_id_v2() {
     HOST.lock().unwrap().result = vec![0x55; CONTRACT_ID_BYTES];
 }
