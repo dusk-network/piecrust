@@ -24,6 +24,16 @@ pub struct MemoryInner {
     pub is_new: bool,
     is_64: bool,
     ref_count: AtomicUsize,
+    #[cfg(test)]
+    fail_next: Option<MemoryOperation>,
+}
+
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum MemoryOperation {
+    Snap,
+    Revert,
+    Apply,
 }
 
 impl Debug for MemoryInner {
@@ -79,6 +89,8 @@ impl Memory {
             is_new: true,
             is_64,
             ref_count: AtomicUsize::new(1),
+            #[cfg(test)]
+            fail_next: None,
         }));
 
         Ok(Self {
@@ -108,6 +120,8 @@ impl Memory {
             is_new: false,
             is_64,
             ref_count: AtomicUsize::new(1),
+            #[cfg(test)]
+            fail_next: None,
         }));
 
         Ok(Self {
@@ -158,15 +172,50 @@ impl Memory {
     }
 
     pub fn snap(&mut self) -> io::Result<()> {
+        #[cfg(test)]
+        self.fail_if_requested(MemoryOperation::Snap)?;
         self.inner_mut().mmap.snap()
     }
 
     pub fn revert(&mut self) -> io::Result<()> {
+        #[cfg(test)]
+        self.fail_if_requested(MemoryOperation::Revert)?;
         self.inner_mut().mmap.revert()
     }
 
     pub fn apply(&mut self) -> io::Result<()> {
+        #[cfg(test)]
+        self.fail_if_requested(MemoryOperation::Apply)?;
         self.inner_mut().mmap.apply()
+    }
+
+    #[cfg(test)]
+    fn fail_if_requested(
+        &mut self,
+        operation: MemoryOperation,
+    ) -> io::Result<()> {
+        if self.inner().fail_next == Some(operation) {
+            self.inner_mut().fail_next = None;
+            return Err(io::Error::other(format!(
+                "injected {operation:?} failure"
+            )));
+        }
+        Ok(())
+    }
+
+    #[cfg(test)]
+    pub(crate) fn fail_next_snap(&mut self) {
+        self.inner_mut().fail_next = Some(MemoryOperation::Snap);
+    }
+
+    #[cfg(test)]
+    pub(crate) fn fail_next_revert(&mut self) {
+        self.inner_mut().fail_next = Some(MemoryOperation::Revert);
+    }
+
+    #[cfg(test)]
+    pub(crate) fn fail_next_apply(&mut self) {
+        self.inner_mut().fail_next = Some(MemoryOperation::Apply);
     }
 }
 

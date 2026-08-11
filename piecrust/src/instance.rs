@@ -343,6 +343,21 @@ impl WrappedInstance {
         self.memory.set_current_len(len);
     }
 
+    #[cfg(test)]
+    pub(crate) fn fail_next_snap(&mut self) {
+        self.memory.fail_next_snap();
+    }
+
+    #[cfg(test)]
+    pub(crate) fn fail_next_revert(&mut self) {
+        self.memory.fail_next_revert();
+    }
+
+    #[cfg(test)]
+    pub(crate) fn fail_next_apply(&mut self) {
+        self.memory.fail_next_apply();
+    }
+
     pub(crate) fn with_arg_buf<F, R>(&self, f: F) -> R
     where
         F: FnOnce(&[u8]) -> R,

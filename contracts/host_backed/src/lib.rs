@@ -25,7 +25,7 @@ pub extern "C" fn echo(arg_len: u32) -> u32 {
     wrap_call(arg_len, |input: Vec<u8>| input)
 }
 
-/// Catch an ordinary nested-call result so tests can verify fatal propagation.
+/// Catch an ordinary nested-call result.
 #[unsafe(no_mangle)]
 pub extern "C" fn catch_leaf_failure(arg_len: u32) -> u32 {
     wrap_call(arg_len, |leaf: ContractId| {
@@ -33,7 +33,7 @@ pub extern "C" fn catch_leaf_failure(arg_len: u32) -> u32 {
     })
 }
 
-/// Invoke an unavailable host query, which requires discarding the session.
+/// Invoke an unavailable host query.
 #[unsafe(no_mangle)]
 pub extern "C" fn fail_missing_query(arg_len: u32) -> u32 {
     wrap_call(arg_len, |_: ()| host_query::<_, ()>("missing-query", ()))

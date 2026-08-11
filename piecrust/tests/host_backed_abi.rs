@@ -1342,7 +1342,7 @@ fn caught_committed_child_failure_resolves_the_exact_attempt()
 }
 
 #[test]
-fn descendant_session_failure_escapes_and_poisoned_session_cannot_continue()
+fn descendant_contract_failure_can_be_caught_and_session_can_continue()
 -> Result<(), Error> {
     let vm = VM::ephemeral()?;
     let forwarder = ContractId::from_bytes([0x78; 32]);
@@ -1378,20 +1378,13 @@ fn descendant_session_failure_escapes_and_poisoned_session_cannot_continue()
             "catch_leaf_failure",
             delivered_argument.clone(),
         )?;
-        let err = session
-            .call_raw_with_bound_child_call(
-                bound,
-                root,
-                "run",
-                descriptor.clone(),
-                LIMIT,
-            )
-            .expect_err("the descendant session failure must escape");
-        assert!(
-            matches!(&err, Error::MissingHostQuery(name) if name == "missing-query"),
-            "unexpected descendant error: {err:?}"
-        );
-        assert!(err.requires_session_discard());
+        session.call_raw_with_bound_child_call(
+            bound,
+            root,
+            "run",
+            descriptor.clone(),
+            LIMIT,
+        )?;
         Ok::<_, Error>(())
     };
 
@@ -1402,26 +1395,11 @@ fn descendant_session_failure_escapes_and_poisoned_session_cannot_continue()
             .bound_child_call_enabled(true),
     )?;
     run(&mut call_session)?;
-    assert!(matches!(
-        call_session
-            .call_raw(leaf, "echo", Vec::new(), LIMIT)
-            .expect_err("a poisoned session must reject later calls"),
-        Error::SessionDiscardRequired
-    ));
-
-    let mut commit_session = vm.session(
-        SessionData::builder()
-            .base(base)
-            .host_backed_abi_enabled(true)
-            .bound_child_call_enabled(true),
-    )?;
-    run(&mut commit_session)?;
-    assert!(matches!(
-        commit_session
-            .commit()
-            .expect_err("a poisoned session must not commit"),
-        Error::SessionDiscardRequired
-    ));
+    let empty = to_bytes::<_, 1024>(&Vec::<u8>::new())
+        .expect("empty vector should serialize")
+        .to_vec();
+    call_session.call_raw(leaf, "echo", empty, LIMIT)?;
+    call_session.commit()?;
     Ok(())
 }
 

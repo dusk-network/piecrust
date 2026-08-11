@@ -434,8 +434,9 @@ impl Session {
             let hash = blake3::hash(bytecode);
             ContractId::from_bytes(hash.into())
         });
-        let receipt =
-            self.do_deploy(contract_id, bytecode, init_arg, owner, gas_limit)?;
+        let result =
+            self.do_deploy(contract_id, bytecode, init_arg, owner, gas_limit);
+        let receipt = self.latch_session_failure(result)?;
 
         Ok((contract_id, receipt))
     }
@@ -1206,6 +1207,16 @@ impl Session {
         self.poison_bound_child_call_delivery();
     }
 
+    fn latch_session_failure<T>(
+        &mut self,
+        result: Result<T, Error>,
+    ) -> Result<T, Error> {
+        if result.as_ref().is_err_and(Error::requires_session_discard) {
+            self.require_session_discard();
+        }
+        result
+    }
+
     fn ensure_session_usable(&self) -> Result<(), Error> {
         if self.inner().discard_required {
             Err(Error::SessionDiscardRequired)
@@ -1222,72 +1233,76 @@ impl Session {
         limit: u64,
     ) -> Result<(Vec<u8>, u64, CallTree), Error> {
         self.ensure_session_usable()?;
-        let event_checkpoint = self.event_checkpoint();
-        let stack_element = self.push_callstack(contract, limit)?;
-        {
-            let instance = self
-                .instance(&stack_element.contract_id)
-                .expect("instance should exist");
-            instance
-                .snap()
-                .map_err(|err| Error::MemorySnapshotFailure {
-                    reason: None,
-                    io: Arc::new(err),
+        let result = (|| {
+            let event_checkpoint = self.event_checkpoint();
+            let stack_element = self.push_callstack(contract, limit)?;
+            {
+                let instance = self
+                    .instance(&stack_element.contract_id)
+                    .expect("instance should exist");
+                instance.snap().map_err(|err| {
+                    Error::MemorySnapshotFailure {
+                        reason: None,
+                        io: Arc::new(err),
+                    }
                 })?;
-        }
-
-        let invocation_result = (|| -> Result<(Vec<u8>, u64), Error> {
-            let instance = self
-                .instance(&stack_element.contract_id)
-                .expect("instance should exist");
-            if instance.is_host_backed_abi() {
-                let ret = instance
-                    .call_host_backed(fname, fdata, limit)
-                    .map_err(Error::normalize)?;
-                let spent = limit - instance.get_remaining_gas();
-                Ok((ret, spent))
-            } else {
-                let arg_len = instance.write_bytes_to_arg_buffer(&fdata)?;
-                let ret_len = instance
-                    .call(fname, arg_len, limit)
-                    .map_err(Error::normalize)?
-                    as u32;
-                check_arg(instance, ret_len)?;
-                let ret = instance.read_bytes_from_arg_buffer(ret_len);
-                let spent = limit - instance.get_remaining_gas();
-                Ok((ret, spent))
             }
+
+            let invocation_result = (|| -> Result<(Vec<u8>, u64), Error> {
+                let instance = self
+                    .instance(&stack_element.contract_id)
+                    .expect("instance should exist");
+                if instance.is_host_backed_abi() {
+                    let ret = instance
+                        .call_host_backed(fname, fdata, limit)
+                        .map_err(Error::normalize)?;
+                    let spent = limit - instance.get_remaining_gas();
+                    Ok((ret, spent))
+                } else {
+                    let arg_len = instance.write_bytes_to_arg_buffer(&fdata)?;
+                    let ret_len = instance
+                        .call(fname, arg_len, limit)
+                        .map_err(Error::normalize)?
+                        as u32;
+                    check_arg(instance, ret_len)?;
+                    let ret = instance.read_bytes_from_arg_buffer(ret_len);
+                    let spent = limit - instance.get_remaining_gas();
+                    Ok((ret, spent))
+                }
+            })();
+            let (ret, spent) = invocation_result.map_err(|err| {
+                self.revert_failed_call(event_checkpoint, err)
+            })?;
+
+            if let Some(pending) = &self.inner().pending_bound_child_call {
+                if let Err(err) = pending.ensure_resolved() {
+                    return Err(self.revert_failed_call(event_checkpoint, err));
+                }
+            }
+
+            let call_tree: Vec<_> =
+                self.inner().call_tree.iter().copied().collect();
+            for elem in call_tree {
+                let instance = self
+                    .instance(&elem.contract_id)
+                    .expect("instance should exist");
+                instance.apply().map_err(|err| {
+                    Error::MemorySnapshotFailure {
+                        reason: None,
+                        io: Arc::new(err),
+                    }
+                })?;
+            }
+
+            let mut call_tree = CallTree::new();
+            mem::swap(&mut self.inner_mut().call_tree, &mut call_tree);
+            call_tree.update_spent(spent);
+
+            self.clear_call_tree_and_instances();
+
+            Ok((ret, spent, call_tree))
         })();
-        let (ret, spent) = invocation_result
-            .map_err(|err| self.revert_failed_call(event_checkpoint, err))?;
-
-        if let Some(pending) = &self.inner().pending_bound_child_call {
-            if let Err(err) = pending.ensure_resolved() {
-                return Err(self.revert_failed_call(event_checkpoint, err));
-            }
-        }
-
-        let call_tree: Vec<_> =
-            self.inner().call_tree.iter().copied().collect();
-        for elem in call_tree {
-            let instance = self
-                .instance(&elem.contract_id)
-                .expect("instance should exist");
-            instance
-                .apply()
-                .map_err(|err| Error::MemorySnapshotFailure {
-                    reason: None,
-                    io: Arc::new(err),
-                })?;
-        }
-
-        let mut call_tree = CallTree::new();
-        mem::swap(&mut self.inner_mut().call_tree, &mut call_tree);
-        call_tree.update_spent(spent);
-
-        self.clear_call_tree_and_instances();
-
-        Ok((ret, spent, call_tree))
+        self.latch_session_failure(result)
     }
 
     pub fn contract_metadata(
@@ -1346,6 +1361,256 @@ fn argument_serialization_error(err: Compo, max_len: usize) -> Error {
             max_len,
         },
         err => err.into(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use wasm_encoder::{
+        CodeSection, ConstExpr, DataSection, EntityType, ExportKind,
+        ExportSection, Function, FunctionSection, GlobalSection, GlobalType,
+        ImportSection, MemorySection, MemoryType, Module, TypeSection, ValType,
+    };
+
+    use super::*;
+    use crate::{VM, contract_bytecode};
+
+    const OWNER: [u8; 32] = [0; 32];
+    const LIMIT: u64 = 10_000_000;
+
+    #[derive(Clone, Copy)]
+    enum InjectedFailure {
+        Snap,
+        Revert,
+        Apply,
+    }
+
+    fn legacy_forwarder(callee: ContractId, method: &str) -> Vec<u8> {
+        let target_offset = 64 * 1024;
+        let method_offset = target_offset + 32;
+        let mut module = Module::new();
+        let mut types = TypeSection::new();
+        types.ty().function(
+            [
+                ValType::I32,
+                ValType::I32,
+                ValType::I32,
+                ValType::I32,
+                ValType::I64,
+            ],
+            [ValType::I32],
+        );
+        types.ty().function([ValType::I32], [ValType::I32]);
+        module.section(&types);
+        let mut imports = ImportSection::new();
+        imports.import("env", "c", EntityType::Function(0));
+        module.section(&imports);
+        let mut functions = FunctionSection::new();
+        functions.function(1);
+        module.section(&functions);
+        let mut memories = MemorySection::new();
+        memories.memory(MemoryType {
+            minimum: 2,
+            maximum: Some(2),
+            memory64: false,
+            shared: false,
+            page_size_log2: None,
+        });
+        module.section(&memories);
+        let mut globals = GlobalSection::new();
+        globals.global(
+            GlobalType {
+                val_type: ValType::I32,
+                mutable: false,
+                shared: false,
+            },
+            &ConstExpr::i32_const(0),
+        );
+        module.section(&globals);
+        let mut exports = ExportSection::new();
+        exports.export("memory", ExportKind::Memory, 0);
+        exports.export("A", ExportKind::Global, 0);
+        exports.export("run", ExportKind::Func, 1);
+        module.section(&exports);
+        let mut code = CodeSection::new();
+        let mut run = Function::new([]);
+        run.instructions()
+            .i32_const(target_offset)
+            .i32_const(method_offset)
+            .i32_const(method.len() as i32)
+            .local_get(0)
+            .i64_const(0)
+            .call(0)
+            .end();
+        code.function(&run);
+        module.section(&code);
+        let mut data = DataSection::new();
+        data.active(
+            0,
+            &ConstExpr::i32_const(target_offset),
+            callee.as_bytes().to_vec(),
+        );
+        data.active(
+            0,
+            &ConstExpr::i32_const(method_offset),
+            method.as_bytes().to_vec(),
+        );
+        module.section(&data);
+        module.finish()
+    }
+
+    fn assert_root_failure_latches(failure: InjectedFailure) {
+        let vm = VM::ephemeral().expect("ephemeral VM");
+        let mut setup =
+            vm.session(SessionData::builder()).expect("setup session");
+        let (counter, _) = setup
+            .deploy::<_, (), _>(
+                contract_bytecode!("counter"),
+                ContractData::builder().owner(OWNER),
+                LIMIT,
+            )
+            .expect("counter deployment");
+        let base = setup.commit().expect("setup commit");
+
+        let mut session = vm
+            .session(SessionData::builder().base(base))
+            .expect("test session");
+        session.create_instance(counter).expect("counter instance");
+        let instance = session.instance(&counter).expect("counter instance");
+        match failure {
+            InjectedFailure::Snap => instance.fail_next_snap(),
+            InjectedFailure::Revert => instance.fail_next_revert(),
+            InjectedFailure::Apply => instance.fail_next_apply(),
+        }
+
+        let error = match failure {
+            InjectedFailure::Revert => session
+                .call_raw(counter, "missing", Vec::new(), LIMIT)
+                .expect_err("revert failure must escape"),
+            InjectedFailure::Snap | InjectedFailure::Apply => session
+                .call::<_, i64>(counter, "read_value", &(), LIMIT)
+                .expect_err("memory failure must escape"),
+        };
+        assert!(matches!(error, Error::MemorySnapshotFailure { .. }));
+        assert!(error.requires_session_discard());
+
+        assert!(matches!(
+            session
+                .call_raw(counter, "read_value", Vec::new(), LIMIT)
+                .expect_err("raw call must reject poisoned session"),
+            Error::SessionDiscardRequired
+        ));
+        assert!(matches!(
+            session
+                .call::<_, i64>(counter, "read_value", &(), LIMIT)
+                .expect_err("typed call must reject poisoned session"),
+            Error::SessionDiscardRequired
+        ));
+        assert!(matches!(
+            session
+                .deploy_raw(
+                    None,
+                    contract_bytecode!("counter"),
+                    None,
+                    OWNER.to_vec(),
+                    LIMIT,
+                )
+                .expect_err("deployment must reject poisoned session"),
+            Error::SessionDiscardRequired
+        ));
+        assert!(matches!(
+            session
+                .commit()
+                .expect_err("commit must reject poisoned session"),
+            Error::SessionDiscardRequired
+        ));
+    }
+
+    #[test]
+    fn root_integrity_failures_latch_the_session() {
+        for failure in [
+            InjectedFailure::Snap,
+            InjectedFailure::Revert,
+            InjectedFailure::Apply,
+        ] {
+            assert_root_failure_latches(failure);
+        }
+    }
+
+    #[test]
+    fn descendant_snapshot_failure_escapes_a_catching_intermediary() {
+        let vm = VM::ephemeral().expect("ephemeral VM");
+        let root = ContractId::from_bytes([0x61; 32]);
+        let forwarder = ContractId::from_bytes([0x62; 32]);
+        let leaf = ContractId::from_bytes([0x63; 32]);
+        let enabled = SessionData::builder()
+            .host_backed_abi_enabled(true)
+            .bound_child_call_enabled(true);
+        let mut setup = vm.session(enabled).expect("setup session");
+        setup
+            .deploy::<_, (), _>(
+                &legacy_forwarder(forwarder, "catch_leaf_failure"),
+                ContractData::builder().contract_id(root).owner(OWNER),
+                LIMIT,
+            )
+            .expect("root deployment");
+        for contract in [forwarder, leaf] {
+            setup
+                .deploy::<_, (), _>(
+                    contract_bytecode!("host_backed"),
+                    ContractData::builder()
+                        .contract_id(contract)
+                        .owner(OWNER)
+                        .init_arg(&Vec::<u8>::new()),
+                    LIMIT,
+                )
+                .expect("B contract deployment");
+        }
+        let base = setup.commit().expect("setup commit");
+        let mut session = vm
+            .session(
+                SessionData::builder()
+                    .base(base)
+                    .host_backed_abi_enabled(true)
+                    .bound_child_call_enabled(true),
+            )
+            .expect("test session");
+        session.create_instance(leaf).expect("leaf instance");
+        session
+            .instance(&leaf)
+            .expect("leaf instance")
+            .fail_next_snap();
+
+        let child_argument = rkyv::to_bytes::<_, 1024>(&leaf)
+            .expect("child argument")
+            .to_vec();
+        let root_argument = vec![0x5a; 52];
+        let bound = BoundChildCall::new(
+            forwarder,
+            "catch_leaf_failure",
+            root_argument.clone(),
+            "catch_leaf_failure",
+            child_argument,
+        )
+        .expect("bound child call");
+
+        let error = session
+            .call_raw_with_bound_child_call(
+                bound,
+                root,
+                "run",
+                root_argument,
+                LIMIT,
+            )
+            .expect_err("descendant snapshot failure must escape");
+        assert!(matches!(error, Error::MemorySnapshotFailure { .. }));
+        assert!(error.requires_session_discard());
+        assert!(matches!(
+            session
+                .call_raw(leaf, "echo", Vec::new(), LIMIT)
+                .expect_err("poisoned session must reject later calls"),
+            Error::SessionDiscardRequired
+        ));
     }
 }
 

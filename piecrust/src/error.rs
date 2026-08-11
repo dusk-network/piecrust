@@ -115,22 +115,18 @@ impl Error {
 
     /// Classify whether a child-call failure can be returned to its caller.
     ///
-    /// [`Self::normalize`] downcasts recognized guest failures before this
-    /// check. An unrecognized raw runtime error remains session-fatal because
-    /// the host cannot safely treat it as a contract result.
+    /// Only failures that can leave persisted or snapshotted session state
+    /// inconsistent are fatal. Guest execution and ABI failures remain
+    /// contract-visible after the affected call stack is reverted.
     pub fn call_failure_class(&self) -> CallFailureClass {
         match self {
-            Self::ArgumentBufferOverflow { .. }
-            | Self::BoundChildCallRequiresHostBackedAbi
-            | Self::ContractDoesNotExist(_)
-            | Self::InitalizationError(_)
-            | Self::InvalidFunction(_)
-            | Self::OutOfGas
-            | Self::Panic(_)
-            | Self::SessionError(_)
-            | Self::Utf8(_)
-            | Self::ValidationError => CallFailureClass::ContractVisible,
-            _ => CallFailureClass::SessionFatal,
+            Self::CommitError(_)
+            | Self::ContractCacheError(_)
+            | Self::MemorySnapshotFailure { .. }
+            | Self::PersistenceError(_)
+            | Self::RestoreError(_)
+            | Self::SessionDiscardRequired => CallFailureClass::SessionFatal,
+            _ => CallFailureClass::ContractVisible,
         }
     }
 
@@ -196,6 +192,12 @@ mod tests {
             io: Arc::new(std::io::Error::other("snapshot")),
         };
         let discarded = Error::SessionDiscardRequired;
+        let missing_query = Error::MissingHostQuery("query".into());
+        let invalid_range = Error::MemoryAccessOutOfBounds {
+            offset: 10,
+            len: 5,
+            mem_len: 12,
+        };
 
         assert_eq!(
             missing.call_failure_class(),
@@ -207,6 +209,14 @@ mod tests {
         );
         assert_eq!(
             legacy_target.call_failure_class(),
+            CallFailureClass::ContractVisible
+        );
+        assert_eq!(
+            missing_query.call_failure_class(),
+            CallFailureClass::ContractVisible
+        );
+        assert_eq!(
+            invalid_range.call_failure_class(),
             CallFailureClass::ContractVisible
         );
         assert!(snapshot.requires_session_discard());
