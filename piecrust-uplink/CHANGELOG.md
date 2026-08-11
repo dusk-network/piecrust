@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Add an opt-in `abi-host` contract ABI with an `B` marker, dynamically
+  allocated call data, pointer-based host operations, and chunk-copyable host
+  results for inter-contract calls, host queries, and metadata [#498].
+
 ## [0.21.0] - 2026-06-12
 
 ### Added

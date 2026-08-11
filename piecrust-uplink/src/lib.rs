@@ -17,11 +17,11 @@
 //! memory]. The contract is free to represent its data as it sees fit, and may
 //! allocate at will.
 //!
-//! To communicate with the host, both the contract and the host can
-//! emplace data in a special region of this memory called the argument buffer.
-//! The argument buffer is used as both the input from the host and as the
-//! output of the contract. All functions exposed by the contract must follow
-//! the convention:
+//! With the legacy `abi` feature, both the contract and the host communicate
+//! through a special region of this memory called the argument buffer. The
+//! argument buffer is used as both the input from the host and as the output
+//! of the contract. All functions exposed by the contract must follow the
+//! convention:
 //!
 //! ```c
 //! // A function compatible with the piecrust ABI takes in the number of bytes
@@ -47,10 +47,12 @@
 //!
 //! # Features
 //! By default, this crate will include no features and build only the types and
-//! functions available when the ABI is not present. To write a contract one
-//! must use the `abi` feature:
+//! functions available when an ABI is not present. To write a contract, select
+//! one ABI feature:
 //!
-//! - `abi` for writing contracts
+//! - `abi` for writing contracts that use the legacy fixed argument buffer
+//! - `abi-host` for writing contracts that exchange dynamically sized call data
+//!   through host imports
 //! - `dlmalloc` to using the builtin allocator
 //! - `debug` for writing contracts with debug capabilities such as the
 //!   [`debug!`] macro, and logging panics to stdout
@@ -66,12 +68,29 @@
 #![no_std]
 
 extern crate alloc;
+#[cfg(test)]
+extern crate std;
+
+#[cfg(all(
+    any(target_arch = "wasm32", target_arch = "wasm64"),
+    feature = "abi",
+    feature = "abi-host"
+))]
+compile_error!(
+    "`abi` and `abi-host` cannot be enabled together for a Wasm contract"
+);
 
 #[cfg(feature = "abi")]
 #[cfg_attr(docsrs, doc(cfg(feature = "abi")))]
 mod abi;
 #[cfg(feature = "abi")]
 pub use abi::*;
+
+#[cfg(feature = "abi-host")]
+#[cfg_attr(docsrs, doc(cfg(feature = "abi-host")))]
+pub mod abi_host;
+#[cfg(all(feature = "abi-host", not(feature = "abi")))]
+pub use abi_host::*;
 
 mod types;
 pub use types::*;
@@ -84,3 +103,6 @@ pub const SCRATCH_BUF_BYTES: usize = 1024;
 
 /// The size of the argument buffer in bytes
 pub const ARGBUF_LEN: usize = 64 * 1024;
+
+/// Maximum input or output length of one host-backed call frame.
+pub const HOST_CALL_FRAME_MAX_LEN: usize = 320 * 1024;

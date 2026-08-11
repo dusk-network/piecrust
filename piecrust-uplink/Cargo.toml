@@ -33,6 +33,7 @@ serde_json = "1.0"
 
 [features]
 abi = []
+abi-host = []
 debug = []
 serde = ["serde/derive", "serde_with/hex"]
 

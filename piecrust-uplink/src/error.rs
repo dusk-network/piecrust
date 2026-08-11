@@ -33,7 +33,7 @@ pub enum ContractError {
 impl ContractError {
     /// Returns a contract error from a return `code` and the data in the
     /// `slice`.
-    #[cfg(feature = "abi")]
+    #[cfg(any(feature = "abi", feature = "abi-host"))]
     pub(crate) fn from_parts(code: i32, slice: &[u8]) -> Self {
         fn get_msg(slice: &[u8]) -> String {
             let msg_len = {
