@@ -6,6 +6,10 @@ on:
 
 name: Continuous integration
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   code-quality:
     name: Code quality
@@ -18,13 +22,6 @@ jobs:
     uses: dusk-network/.github/.github/workflows/run-make.yml@main
     with:
       runner: ubuntu-latest
-      make_target: test
-
-  test-macos-arm:
-    name: Run tests (macOS ARM)
-    uses: dusk-network/.github/.github/workflows/run-make.yml@main
-    with:
-      runner: macos-latest-xlarge
       make_target: test
 
   no-std:

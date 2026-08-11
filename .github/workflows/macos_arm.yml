@@ -1,0 +1,22 @@
+name: macOS ARM validation
+
+on:
+  pull_request:
+    types: [labeled]
+  push:
+    branches:
+      - release/0.32.x
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test-macos-arm:
+    if: github.event_name != 'pull_request' || github.event.label.name == 'ci:macos-arm'
+    name: Run tests (macOS ARM)
+    uses: dusk-network/.github/.github/workflows/run-make.yml@main
+    with:
+      runner: macos-latest-xlarge
+      make_target: test
