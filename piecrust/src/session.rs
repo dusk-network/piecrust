@@ -17,17 +17,20 @@ use dusk_wasmtime::{
     Engine, LinearMemory, MemoryCreator, MemoryType, Module as WasmtimeModule,
 };
 use piecrust_uplink::{
-    ARGBUF_LEN, CONTRACT_ID_BYTES, ContractId, Event, SCRATCH_BUF_BYTES,
+    ARGBUF_LEN, CONTRACT_ID_BYTES, ContractId, Event, HOST_CALL_FRAME_MAX_LEN,
+    SCRATCH_BUF_BYTES,
 };
 use rkyv::ser::Serializer;
 use rkyv::ser::serializers::{
-    BufferScratch, BufferSerializer, CompositeSerializer,
+    BufferScratch, BufferSerializer, BufferSerializerError,
+    CompositeSerializer, CompositeSerializerError,
 };
 use rkyv::validation::validators::DefaultValidator;
 use rkyv::{Archive, Deserialize, Infallible, Serialize, check_archived_root};
 
 use crate::call_tree::{CallTree, CallTreeElem};
 use crate::contract::{ContractData, ContractMetadata, WrappedContract};
+use crate::error::Compo;
 use crate::error::Error::{self, InitalizationError, PersistenceError};
 use crate::imports::check_arg;
 use crate::instance::WrappedInstance;
@@ -291,6 +294,10 @@ impl Session {
         &self.engine
     }
 
+    pub(crate) fn host_backed_abi_enabled(&self) -> bool {
+        self.inner().data.host_backed_abi_enabled()
+    }
+
     /// Deploy a contract, returning its [`ContractId`] and an optional
     /// [`CallReceipt`] for the `init` function execution. The ID is computed
     /// using a `blake3` hash of the `bytecode`. Contracts using the `memory64`
@@ -333,12 +340,15 @@ impl Session {
 
         let mut init_arg = None;
         if let Some(arg) = deploy_data.init_arg {
+            self.inner_mut().buffer.resize(HOST_CALL_FRAME_MAX_LEN, 0);
             let mut sbuf = [0u8; SCRATCH_BUF_BYTES];
             let scratch = BufferScratch::new(&mut sbuf);
             let ser = BufferSerializer::new(&mut self.inner_mut().buffer[..]);
             let mut ser = CompositeSerializer::new(ser, scratch, Infallible);
 
-            ser.serialize_value(arg)?;
+            ser.serialize_value(arg).map_err(|err| {
+                argument_serialization_error(err, HOST_CALL_FRAME_MAX_LEN)
+            })?;
             let pos = ser.pos();
 
             init_arg = Some(self.inner().buffer[0..pos].to_vec());
@@ -507,13 +517,35 @@ impl Session {
             return Err(InitalizationError("init call not allowed".into()));
         }
 
-        let mut sbuf = [0u8; SCRATCH_BUF_BYTES];
-        let scratch = BufferScratch::new(&mut sbuf);
-        let ser = BufferSerializer::new(&mut self.inner_mut().buffer[..]);
-        let mut ser = CompositeSerializer::new(ser, scratch, Infallible);
+        let prepared_instance = !self.inner().instances.contains_key(&contract);
+        if prepared_instance {
+            self.create_instance(contract)?;
+        }
+        let capacity = self
+            .instance(&contract)
+            .expect("target instance should be prepared")
+            .argument_capacity();
 
-        ser.serialize_value(fn_arg)?;
-        let pos = ser.pos();
+        let serialized = (|| -> Result<usize, Compo> {
+            let buffer = &mut self.inner_mut().buffer;
+            buffer.resize(capacity, 0);
+            let mut sbuf = [0u8; SCRATCH_BUF_BYTES];
+            let scratch = BufferScratch::new(&mut sbuf);
+            let ser = BufferSerializer::new(&mut buffer[..capacity]);
+            let mut ser = CompositeSerializer::new(ser, scratch, Infallible);
+
+            ser.serialize_value(fn_arg)?;
+            Ok(ser.pos())
+        })();
+        let pos = match serialized {
+            Ok(pos) => pos,
+            Err(err) => {
+                if prepared_instance {
+                    self.inner_mut().instances.remove(&contract);
+                }
+                return Err(argument_serialization_error(err, capacity));
+            }
+        };
 
         let receipt = self.call_raw(
             contract,
@@ -1057,36 +1089,30 @@ impl Session {
                 })?;
         }
 
-        let ret_len = {
+        let invocation_result = (|| -> Result<(Vec<u8>, u64), Error> {
             let instance = self
                 .instance(&stack_element.contract_id)
                 .expect("instance should exist");
-            let arg_len = match instance.write_bytes_to_arg_buffer(&fdata) {
-                Ok(arg_len) => arg_len,
-                Err(err) => {
-                    return Err(self.revert_failed_call(event_checkpoint, err));
-                }
-            };
-            let ret_len = instance
-                .call(fname, arg_len, limit)
-                .map_err(Error::normalize)
-                .map_err(|err| {
-                    self.revert_failed_call(event_checkpoint, err)
-                })?;
-            ret_len as u32
-        };
-
-        let (ret, spent) = {
-            let instance = self
-                .instance(&stack_element.contract_id)
-                .expect("instance should exist");
-            if let Err(err) = check_arg(instance, ret_len) {
-                return Err(self.revert_failed_call(event_checkpoint, err));
-            };
-            let ret = instance.read_bytes_from_arg_buffer(ret_len);
-            let spent = limit - instance.get_remaining_gas();
-            (ret, spent)
-        };
+            if instance.is_host_backed_abi() {
+                let ret = instance
+                    .call_host_backed(fname, fdata, limit)
+                    .map_err(Error::normalize)?;
+                let spent = limit - instance.get_remaining_gas();
+                Ok((ret, spent))
+            } else {
+                let arg_len = instance.write_bytes_to_arg_buffer(&fdata)?;
+                let ret_len = instance
+                    .call(fname, arg_len, limit)
+                    .map_err(Error::normalize)?
+                    as u32;
+                check_arg(instance, ret_len)?;
+                let ret = instance.read_bytes_from_arg_buffer(ret_len);
+                let spent = limit - instance.get_remaining_gas();
+                Ok((ret, spent))
+            }
+        })();
+        let (ret, spent) = invocation_result
+            .map_err(|err| self.revert_failed_call(event_checkpoint, err))?;
 
         let call_tree: Vec<_> =
             self.inner().call_tree.iter().copied().collect();
@@ -1156,6 +1182,20 @@ impl Session {
     }
 }
 
+fn argument_serialization_error(err: Compo, max_len: usize) -> Error {
+    match err {
+        CompositeSerializerError::SerializerError(
+            BufferSerializerError::Overflow {
+                pos, bytes_needed, ..
+            },
+        ) => Error::ArgumentBufferOverflow {
+            len: pos.saturating_add(bytes_needed),
+            max_len,
+        },
+        err => err.into(),
+    }
+}
+
 /// The receipt given for a call execution using one of either [`call`] or
 /// [`call_raw`]. This receipt is also returned within a tuple when
 /// a Contract is deployed and its `init` method is executed.
@@ -1205,6 +1245,7 @@ pub struct SessionData {
     data: BTreeMap<Cow<'static, str>, Vec<u8>>,
     pub base: Option<[u8; 32]>,
     excluded_host_queries: BTreeSet<String>,
+    host_backed_abi_enabled: bool,
 }
 
 impl SessionData {
@@ -1213,6 +1254,7 @@ impl SessionData {
             data: BTreeMap::new(),
             base: None,
             excluded_host_queries: BTreeSet::new(),
+            host_backed_abi_enabled: false,
         }
     }
 
@@ -1237,6 +1279,10 @@ impl SessionData {
     pub fn excluded_host_queries(&self) -> Iter<String> {
         self.excluded_host_queries.iter()
     }
+
+    pub(crate) const fn host_backed_abi_enabled(&self) -> bool {
+        self.host_backed_abi_enabled
+    }
 }
 
 impl From<SessionDataBuilder> for SessionData {
@@ -1249,6 +1295,7 @@ pub struct SessionDataBuilder {
     data: BTreeMap<Cow<'static, str>, Vec<u8>>,
     base: Option<[u8; 32]>,
     excluded_host_queries: BTreeSet<String>,
+    host_backed_abi_enabled: bool,
 }
 
 impl SessionDataBuilder {
@@ -1272,11 +1319,21 @@ impl SessionDataBuilder {
         self
     }
 
+    /// Enable contracts using the host-backed B call ABI.
+    ///
+    /// This is disabled by default so callers can activate the ABI at a
+    /// deterministic protocol boundary.
+    pub fn host_backed_abi_enabled(mut self, enabled: bool) -> Self {
+        self.host_backed_abi_enabled = enabled;
+        self
+    }
+
     fn build(&self) -> SessionData {
         SessionData {
             data: self.data.clone(),
             base: self.base,
             excluded_host_queries: self.excluded_host_queries.clone(),
+            host_backed_abi_enabled: self.host_backed_abi_enabled,
         }
     }
 }

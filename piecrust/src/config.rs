@@ -6,3 +6,6 @@
 
 // The gas cost for each byte
 pub const BYTE_STORE_COST: i64 = 4;
+
+// Host-backed ABI copies are priced like a byte written by Wasm.
+pub const HOST_CALL_COPY_BYTE_GAS: u64 = BYTE_STORE_COST as u64;

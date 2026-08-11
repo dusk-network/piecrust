@@ -135,6 +135,7 @@ mod vm;
 pub use call_tree::{CallTree, CallTreeElem};
 pub use contract::{ContractData, ContractDataBuilder};
 pub use error::Error;
+pub use piecrust_uplink::HOST_CALL_FRAME_MAX_LEN;
 // re-export the contents of the `piecrust-uplink` crate wholesale,
 // ensuring this is the only crate we need to define and use a VM.
 pub use piecrust_uplink::*;

@@ -40,6 +40,8 @@ pub enum Error {
     InitalizationError(Cow<'static, str>),
     #[error("Invalid global")]
     InvalidArgumentBuffer,
+    #[error("The host-backed contract ABI is not enabled in this session")]
+    HostBackedAbiNotEnabled,
     #[error("Invalid function: {0}")]
     InvalidFunction(String),
     #[error("Invalid memory")]

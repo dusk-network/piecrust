@@ -8,9 +8,10 @@ use std::io;
 use std::ops::{Deref, DerefMut};
 
 use dusk_wasmtime::{Instance, Module, Mutability, Store, ValType};
-use piecrust_uplink::{ARGBUF_LEN, ContractId, Event};
+use piecrust_uplink::{ARGBUF_LEN, ContractId, Event, HOST_CALL_FRAME_MAX_LEN};
 
 use crate::Error;
+use crate::config::HOST_CALL_COPY_BYTE_GAS;
 use crate::imports::Imports;
 use crate::session::Session;
 use crate::store::Memory;
@@ -18,8 +19,24 @@ use crate::store::Memory;
 pub struct WrappedInstance {
     instance: Instance,
     arg_buf_ofs: usize,
+    argument_abi: ArgumentAbi,
+    host_call_frames: Vec<HostCallFrame>,
     store: Store<Env>,
     memory: Memory,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ArgumentAbi {
+    Legacy,
+    HostBacked,
+}
+
+#[derive(Debug)]
+struct HostCallFrame {
+    input: Vec<u8>,
+    output: Vec<u8>,
+    result: Vec<u8>,
+    result_len: usize,
 }
 
 pub(crate) struct Env {
@@ -90,6 +107,7 @@ impl WrappedInstance {
     ) -> Result<Self, Error> {
         let mut memory = memory;
         let engine = session.engine().clone();
+        let host_backed_abi_enabled = session.host_backed_abi_enabled();
 
         let env = Env {
             self_id: contract_id,
@@ -145,31 +163,75 @@ impl WrappedInstance {
             }
         }
 
-        let imports = Imports::for_module(&mut store, &module, is_64)?;
-        let instance = Instance::new(&mut store, &module, &imports)?;
-
-        // Ensure there is a global exported named `A`, whose value is in the
-        // memory.
-        let arg_buf_ofs = match instance.get_global(&mut store, "A") {
-            Some(global) => {
-                let ty = global.ty(&mut store);
-
-                if ty.mutability() != Mutability::Const {
-                    return Err(Error::InvalidArgumentBuffer);
-                }
-
-                let val = global.get(&mut store);
-
-                if is_64 {
-                    val.i64().ok_or(Error::InvalidArgumentBuffer)? as usize
-                } else {
-                    val.i32().ok_or(Error::InvalidArgumentBuffer)? as usize
-                }
-            }
+        let has_legacy_abi = module.exports().any(|export| {
+            export.name() == "A" && export.ty().global().is_some()
+        });
+        let has_host_backed_abi = module.exports().any(|export| {
+            export.name() == "B" && export.ty().global().is_some()
+        });
+        let argument_abi = match (has_legacy_abi, has_host_backed_abi) {
+            (true, _) => ArgumentAbi::Legacy,
+            (false, true) if host_backed_abi_enabled => ArgumentAbi::HostBacked,
+            (false, true) => return Err(Error::HostBackedAbiNotEnabled),
             _ => return Err(Error::InvalidArgumentBuffer),
         };
 
-        if arg_buf_ofs + ARGBUF_LEN >= memory.len() {
+        let imports = Imports::for_module(
+            &mut store,
+            &module,
+            is_64,
+            argument_abi == ArgumentAbi::HostBacked,
+        )?;
+        let instance = Instance::new(&mut store, &module, &imports)?;
+
+        let arg_buf_ofs = match argument_abi {
+            ArgumentAbi::Legacy => {
+                // Ensure there is a global exported named `A`, whose value is
+                // in the memory.
+                match instance.get_global(&mut store, "A") {
+                    Some(global) => {
+                        let ty = global.ty(&mut store);
+
+                        if ty.mutability() != Mutability::Const {
+                            return Err(Error::InvalidArgumentBuffer);
+                        }
+
+                        let val = global.get(&mut store);
+
+                        if is_64 {
+                            val.i64().ok_or(Error::InvalidArgumentBuffer)?
+                                as usize
+                        } else {
+                            val.i32().ok_or(Error::InvalidArgumentBuffer)?
+                                as usize
+                        }
+                    }
+                    _ => return Err(Error::InvalidArgumentBuffer),
+                }
+            }
+            ArgumentAbi::HostBacked => {
+                let global = instance
+                    .get_global(&mut store, "B")
+                    .ok_or(Error::InvalidArgumentBuffer)?;
+                if global.ty(&mut store).mutability() != Mutability::Const {
+                    return Err(Error::InvalidArgumentBuffer);
+                }
+                let marker = global.get(&mut store);
+                let valid_type = if is_64 {
+                    marker.i64().is_some()
+                } else {
+                    marker.i32().is_some()
+                };
+                if !valid_type {
+                    return Err(Error::InvalidArgumentBuffer);
+                }
+                0
+            }
+        };
+
+        if argument_abi == ArgumentAbi::Legacy
+            && arg_buf_ofs + ARGBUF_LEN >= memory.len()
+        {
             return Err(Error::InvalidArgumentBuffer);
         }
 
@@ -180,6 +242,8 @@ impl WrappedInstance {
             store,
             instance,
             arg_buf_ofs,
+            argument_abi,
+            host_call_frames: Vec::new(),
             memory,
         };
 
@@ -367,6 +431,331 @@ impl WrappedInstance {
 
     pub fn arg_buffer_offset(&self) -> usize {
         self.arg_buf_ofs
+    }
+
+    pub(crate) const fn argument_capacity(&self) -> usize {
+        match self.argument_abi {
+            ArgumentAbi::Legacy => ARGBUF_LEN,
+            ArgumentAbi::HostBacked => HOST_CALL_FRAME_MAX_LEN,
+        }
+    }
+
+    pub(crate) fn is_host_backed_abi(&self) -> bool {
+        self.argument_abi == ArgumentAbi::HostBacked
+    }
+
+    pub(crate) fn call_host_backed(
+        &mut self,
+        method_name: &str,
+        input: Vec<u8>,
+        limit: u64,
+    ) -> Result<Vec<u8>, Error> {
+        if !self.is_host_backed_abi() {
+            return Err(Error::InvalidArgumentBuffer);
+        }
+        if input.len() > HOST_CALL_FRAME_MAX_LEN {
+            return Err(Error::ArgumentBufferOverflow {
+                len: input.len(),
+                max_len: HOST_CALL_FRAME_MAX_LEN,
+            });
+        }
+
+        let input_len = input.len() as u32;
+        self.host_call_frames.push(HostCallFrame {
+            input,
+            output: Vec::new(),
+            result: Vec::new(),
+            result_len: 0,
+        });
+        let result = self.call(method_name, input_len, limit);
+        let frame = self
+            .host_call_frames
+            .pop()
+            .expect("host call frame was just pushed");
+
+        let returned_len = usize::try_from(result?)
+            .map_err(|_| Error::InvalidArgumentBuffer)?;
+        if returned_len != frame.output.len() {
+            return Err(Error::SessionError(
+                "B return length does not match host output".into(),
+            ));
+        }
+        Ok(frame.output)
+    }
+
+    pub(crate) fn host_call_input_len(&self) -> Result<u32, Error> {
+        let frame = self.host_call_frames.last().ok_or_else(|| {
+            Error::SessionError("B call frame is not active".into())
+        })?;
+        Ok(frame.input.len() as u32)
+    }
+
+    pub(crate) fn copy_host_call_input(
+        &mut self,
+        input_offset: usize,
+        guest_offset: usize,
+        len: usize,
+    ) -> Result<(), Error> {
+        let input_len = self
+            .host_call_frames
+            .last()
+            .ok_or_else(|| {
+                Error::SessionError("B call frame is not active".into())
+            })?
+            .input
+            .len();
+        let input_end = input_offset.checked_add(len).ok_or(
+            Error::MemoryAccessOutOfBounds {
+                offset: input_offset,
+                len,
+                mem_len: input_len,
+            },
+        )?;
+        if input_end > input_len {
+            return Err(Error::MemoryAccessOutOfBounds {
+                offset: input_offset,
+                len,
+                mem_len: input_len,
+            });
+        }
+
+        let guest_len = self.mem_len();
+        let guest_end = guest_offset.checked_add(len).ok_or(
+            Error::MemoryAccessOutOfBounds {
+                offset: guest_offset,
+                len,
+                mem_len: guest_len,
+            },
+        )?;
+        if guest_end > guest_len {
+            return Err(Error::MemoryAccessOutOfBounds {
+                offset: guest_offset,
+                len,
+                mem_len: guest_len,
+            });
+        }
+
+        self.charge_host_call_copy(len)?;
+        let input = &self
+            .host_call_frames
+            .last()
+            .expect("host call frame was checked")
+            .input[input_offset..input_end];
+        self.memory.with_bytes_mut(|memory| {
+            memory[guest_offset..guest_end].copy_from_slice(input);
+        });
+        Ok(())
+    }
+
+    pub(crate) fn set_host_call_output(
+        &mut self,
+        guest_offset: usize,
+        len: usize,
+    ) -> Result<(), Error> {
+        if len > HOST_CALL_FRAME_MAX_LEN {
+            return Err(Error::ArgumentBufferOverflow {
+                len,
+                max_len: HOST_CALL_FRAME_MAX_LEN,
+            });
+        }
+        if self.host_call_frames.is_empty() {
+            return Err(Error::SessionError(
+                "B call frame is not active".into(),
+            ));
+        }
+
+        let guest_len = self.mem_len();
+        let guest_end = guest_offset.checked_add(len).ok_or(
+            Error::MemoryAccessOutOfBounds {
+                offset: guest_offset,
+                len,
+                mem_len: guest_len,
+            },
+        )?;
+        if guest_end > guest_len {
+            return Err(Error::MemoryAccessOutOfBounds {
+                offset: guest_offset,
+                len,
+                mem_len: guest_len,
+            });
+        }
+
+        self.charge_host_call_copy(len)?;
+        let output = self
+            .memory
+            .with_bytes(|memory| memory[guest_offset..guest_end].to_vec());
+        self.host_call_frames
+            .last_mut()
+            .expect("host call frame was checked")
+            .output = output;
+        Ok(())
+    }
+
+    pub(crate) fn clear_host_result(&mut self) -> Result<(), Error> {
+        self.host_call_frames
+            .last_mut()
+            .ok_or_else(|| {
+                Error::SessionError("B call frame is not active".into())
+            })?
+            .result_len = 0;
+        Ok(())
+    }
+
+    pub(crate) fn execute_host_query(
+        &mut self,
+        arg: &[u8],
+        execute: impl FnOnce(&mut [u8]) -> u32,
+    ) -> Result<u32, Error> {
+        let frame = self.host_call_frames.last_mut().ok_or_else(|| {
+            Error::SessionError("B call frame is not active".into())
+        })?;
+        if frame.result.len() < HOST_CALL_FRAME_MAX_LEN {
+            frame.result.resize(HOST_CALL_FRAME_MAX_LEN, 0);
+        }
+        frame.result[..arg.len()].copy_from_slice(arg);
+
+        let ret_len = execute(&mut frame.result) as usize;
+        if ret_len > frame.result.len() {
+            return Err(Error::ArgumentBufferOverflow {
+                len: ret_len,
+                max_len: frame.result.len(),
+            });
+        }
+        frame.result_len = ret_len;
+        Ok(ret_len as u32)
+    }
+
+    pub(crate) fn set_host_result(
+        &mut self,
+        result: Vec<u8>,
+    ) -> Result<(), Error> {
+        if result.len() > HOST_CALL_FRAME_MAX_LEN {
+            return Err(Error::ArgumentBufferOverflow {
+                len: result.len(),
+                max_len: HOST_CALL_FRAME_MAX_LEN,
+            });
+        }
+        let frame = self.host_call_frames.last_mut().ok_or_else(|| {
+            Error::SessionError("B call frame is not active".into())
+        })?;
+        frame.result_len = result.len();
+        frame.result = result;
+        Ok(())
+    }
+
+    pub(crate) fn host_result_len(&self) -> Result<u32, Error> {
+        let frame = self.host_call_frames.last().ok_or_else(|| {
+            Error::SessionError("B call frame is not active".into())
+        })?;
+        Ok(frame.result_len as u32)
+    }
+
+    pub(crate) fn copy_host_result(
+        &mut self,
+        result_offset: usize,
+        guest_offset: usize,
+        len: usize,
+    ) -> Result<(), Error> {
+        let result_len = self
+            .host_call_frames
+            .last()
+            .ok_or_else(|| {
+                Error::SessionError("B call frame is not active".into())
+            })?
+            .result_len;
+        let result_end = result_offset.checked_add(len).ok_or(
+            Error::MemoryAccessOutOfBounds {
+                offset: result_offset,
+                len,
+                mem_len: result_len,
+            },
+        )?;
+        if result_end > result_len {
+            return Err(Error::MemoryAccessOutOfBounds {
+                offset: result_offset,
+                len,
+                mem_len: result_len,
+            });
+        }
+
+        let guest_len = self.mem_len();
+        let guest_end = guest_offset.checked_add(len).ok_or(
+            Error::MemoryAccessOutOfBounds {
+                offset: guest_offset,
+                len,
+                mem_len: guest_len,
+            },
+        )?;
+        if guest_end > guest_len {
+            return Err(Error::MemoryAccessOutOfBounds {
+                offset: guest_offset,
+                len,
+                mem_len: guest_len,
+            });
+        }
+
+        self.charge_host_call_copy(len)?;
+        let result = &self
+            .host_call_frames
+            .last()
+            .expect("host call frame was checked")
+            .result[result_offset..result_end];
+        self.memory.with_bytes_mut(|memory| {
+            memory[guest_offset..guest_end].copy_from_slice(result);
+        });
+        Ok(())
+    }
+
+    pub(crate) fn copy_guest_to_host(
+        &mut self,
+        guest_offset: usize,
+        len: usize,
+    ) -> Result<Vec<u8>, Error> {
+        if len > HOST_CALL_FRAME_MAX_LEN {
+            return Err(Error::ArgumentBufferOverflow {
+                len,
+                max_len: HOST_CALL_FRAME_MAX_LEN,
+            });
+        }
+        if self.host_call_frames.is_empty() {
+            return Err(Error::SessionError(
+                "B call frame is not active".into(),
+            ));
+        }
+
+        let guest_len = self.mem_len();
+        let guest_end = guest_offset.checked_add(len).ok_or(
+            Error::MemoryAccessOutOfBounds {
+                offset: guest_offset,
+                len,
+                mem_len: guest_len,
+            },
+        )?;
+        if guest_end > guest_len {
+            return Err(Error::MemoryAccessOutOfBounds {
+                offset: guest_offset,
+                len,
+                mem_len: guest_len,
+            });
+        }
+
+        self.charge_host_call_copy(len)?;
+        Ok(self
+            .memory
+            .with_bytes(|memory| memory[guest_offset..guest_end].to_vec()))
+    }
+
+    fn charge_host_call_copy(&mut self, len: usize) -> Result<(), Error> {
+        let cost = u64::try_from(len)
+            .unwrap_or(u64::MAX)
+            .saturating_mul(HOST_CALL_COPY_BYTE_GAS);
+        let remaining = self.get_remaining_gas();
+        if cost > remaining {
+            self.set_remaining_gas(0);
+            return Err(Error::OutOfGas);
+        }
+        self.set_remaining_gas(remaining - cost);
+        Ok(())
     }
 }
 
