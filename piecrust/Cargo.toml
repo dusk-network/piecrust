@@ -40,6 +40,7 @@ once_cell = "1.18"
 criterion = "0.4"
 half = "2,<2.5"
 dusk-plonk = { version = "0.22.0-rc.0", features = ["rkyv-impl"] }
+wat = "1"
 
 [features]
 debug = []

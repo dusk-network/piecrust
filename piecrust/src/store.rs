@@ -38,6 +38,7 @@ pub use tree::PageOpening;
 
 use crate::store::commit::Commit;
 use crate::store::commit::finalizer::CommitFinalizer;
+use crate::store::commit::operation::CommitOperation;
 use crate::store::commit::reader::CommitReader;
 use crate::store::commit::remover::CommitRemover;
 use crate::store::commit::writer::CommitWriter;
@@ -104,6 +105,8 @@ impl ContractStore {
         let (call, calls) = mpsc::channel();
         let commit_store = self.commit_store.clone();
 
+        CommitOperation::recover_all(&self.root_dir)?;
+
         tracing::trace!("before read_all_commit");
         CommitReader::read_all_commits(
             &self.engine,
@@ -149,8 +152,9 @@ impl ContractStore {
     /// For session with a base commit, please see [`session`].
     ///
     /// [`session`]: ContractStore::session
-    pub fn genesis_session(&self) -> ContractSession {
-        self.session_with_base(None)
+    pub fn genesis_session(&self) -> io::Result<ContractSession> {
+        self.call_with_replier(|replier| Call::StoreReady { replier })?;
+        Ok(self.session_with_base(None))
     }
 
     /// Returns the roots of the commits that are currently in the store.
@@ -268,6 +272,9 @@ pub(crate) enum Call {
         replier: mpsc::SyncSender<Option<Hash>>,
     },
     SessionDrop(Hash),
+    StoreReady {
+        replier: mpsc::SyncSender<io::Result<()>>,
+    },
 }
 
 enum DeferredCommitOp {
@@ -294,28 +301,34 @@ fn delete_commit(
     root_dir: &Path,
     commit_store: &Arc<Mutex<CommitStore>>,
     root: Hash,
-    replier: mpsc::SyncSender<io::Result<()>>,
-) {
+) -> io::Result<()> {
+    let known = commit_store.lock().unwrap().contains_key(&root);
+    if !known && CommitOperation::pending(root_dir, root)?.is_none() {
+        return Ok(());
+    }
     let io_result = CommitRemover::remove(root_dir, root);
-    commit_store.lock().unwrap().remove_commit(&root, false);
+    if io_result.is_ok() {
+        commit_store.lock().unwrap().remove_commit(&root, false);
+    }
     tracing::trace!("delete commit finished");
-    let _ = replier.send(io_result);
+    io_result
 }
 
 fn finalize_commit(
     root_dir: &Path,
     commit_store: &Arc<Mutex<CommitStore>>,
     root: Hash,
-    replier: mpsc::SyncSender<io::Result<()>>,
-) {
-    let mut commit_store = commit_store.lock().unwrap();
-    if commit_store.get_commit(&root).is_none() {
-        tracing::trace!("finalizing commit finished");
-        let _ = replier.send(Ok(()));
-        return;
-    }
+) -> io::Result<()> {
+    let commit = {
+        let commit_store = commit_store.lock().unwrap();
+        let Some(commit) = commit_store.get_commit(&root).cloned() else {
+            tracing::trace!("finalizing commit finished");
+            return Ok(());
+        };
+        commit
+    };
 
-    let io_result = CommitFinalizer::finalize(root, root_dir);
+    let io_result = CommitFinalizer::finalize(root, root_dir, &commit);
     match &io_result {
         Ok(_) => tracing::trace!(
             "finalizing commit proper finished: {:?}",
@@ -323,9 +336,11 @@ fn finalize_commit(
         ),
         Err(e) => tracing::trace!("finalizing commit proper failed {:?}", e),
     }
-    commit_store.remove_commit(&root, true);
+    if io_result.is_ok() {
+        commit_store.lock().unwrap().remove_commit(&root, true);
+    }
     tracing::trace!("finalizing commit finished");
-    let _ = replier.send(io_result);
+    io_result
 }
 
 fn execute_deferred_op(
@@ -333,13 +348,55 @@ fn execute_deferred_op(
     commit_store: &Arc<Mutex<CommitStore>>,
     root: Hash,
     op: DeferredCommitOp,
-) {
+) -> io::Result<()> {
     match op {
         DeferredCommitOp::Delete(replier) => {
-            delete_commit(root_dir, commit_store, root, replier);
+            let result = delete_commit(root_dir, commit_store, root);
+            let return_result = result.as_ref().map(|_| ()).map_err(clone_io);
+            let _ = replier.send(result);
+            return_result
         }
         DeferredCommitOp::Finalize(replier) => {
-            finalize_commit(root_dir, commit_store, root, replier);
+            let result = finalize_commit(root_dir, commit_store, root);
+            let return_result = result.as_ref().map(|_| ()).map_err(clone_io);
+            let _ = replier.send(result);
+            return_result
+        }
+    }
+}
+
+fn clone_io(error: &io::Error) -> io::Error {
+    io::Error::new(error.kind(), error.to_string())
+}
+
+fn has_incomplete_operation(root_dir: &Path) -> bool {
+    CommitOperation::any_pending(root_dir).unwrap_or(true)
+}
+
+fn operation_allowed(
+    root_dir: &Path,
+    root: Hash,
+    incomplete_operation: bool,
+) -> bool {
+    !incomplete_operation
+        || CommitOperation::pending(root_dir, root)
+            .map(|pending| pending.is_some())
+            .unwrap_or(false)
+}
+
+fn incomplete_operation_error() -> io::Error {
+    io::Error::other("Commit store has an incomplete operation")
+}
+
+fn reject_deferred_op(op: DeferredCommitOp, cause: &io::Error) {
+    let error = io::Error::new(
+        io::ErrorKind::Interrupted,
+        format!("Skipped after an earlier commit operation failed: {cause}"),
+    );
+    match op {
+        DeferredCommitOp::Delete(replier)
+        | DeferredCommitOp::Finalize(replier) => {
+            let _ = replier.send(Err(error));
         }
     }
 }
@@ -355,6 +412,7 @@ fn sync_loop<P: AsRef<Path>>(
 
     let mut deferred_ops: BTreeMap<Hash, Vec<DeferredCommitOp>> =
         BTreeMap::new();
+    let mut incomplete_operation = false;
 
     for call in calls {
         match call {
@@ -366,12 +424,16 @@ fn sync_loop<P: AsRef<Path>>(
                 replier,
             } => {
                 tracing::trace!("writing commit started");
-                let io_result = CommitWriter::create_and_write(
-                    root_dir,
-                    commit_store.clone(),
-                    base,
-                    contracts,
-                );
+                let io_result = if incomplete_operation {
+                    Err(incomplete_operation_error())
+                } else {
+                    CommitWriter::create_and_write(
+                        root_dir,
+                        commit_store.clone(),
+                        base,
+                        contracts,
+                    )
+                };
                 match &io_result {
                     Ok(hash) => tracing::trace!(
                         "writing commit finished: {:?}",
@@ -384,9 +446,21 @@ fn sync_loop<P: AsRef<Path>>(
             // Copy all commits and send them back to the caller.
             Call::GetCommits { replier } => {
                 tracing::trace!("get commits started");
-                let _ = replier.send(
-                    commit_store.lock().unwrap().keys().copied().collect(),
-                );
+                let commits = commit_store.lock().unwrap();
+                let commits = if incomplete_operation {
+                    commits
+                        .keys()
+                        .copied()
+                        .filter(|root| {
+                            CommitOperation::pending(root_dir, *root)
+                                .map(|pending| pending.is_none())
+                                .unwrap_or(false)
+                        })
+                        .collect()
+                } else {
+                    commits.keys().copied().collect()
+                };
+                let _ = replier.send(commits);
                 tracing::trace!("get commits finished");
             }
             // Delete a commit from disk. If the commit is currently in use - as
@@ -407,7 +481,17 @@ fn sync_loop<P: AsRef<Path>>(
                     continue;
                 }
 
-                delete_commit(root_dir, &commit_store, root, replier);
+                let result = if operation_allowed(
+                    root_dir,
+                    root,
+                    incomplete_operation,
+                ) {
+                    delete_commit(root_dir, &commit_store, root)
+                } else {
+                    Err(incomplete_operation_error())
+                };
+                incomplete_operation = has_incomplete_operation(root_dir);
+                let _ = replier.send(result);
             }
             // Finalize commit
             Call::CommitFinalize {
@@ -425,14 +509,26 @@ fn sync_loop<P: AsRef<Path>>(
                     continue;
                 }
 
-                finalize_commit(root_dir, &commit_store, root, replier);
+                let result = if operation_allowed(
+                    root_dir,
+                    root,
+                    incomplete_operation,
+                ) {
+                    finalize_commit(root_dir, &commit_store, root)
+                } else {
+                    Err(incomplete_operation_error())
+                };
+                incomplete_operation = has_incomplete_operation(root_dir);
+                let _ = replier.send(result);
             }
             // Increment the hold count of a commit to prevent it from deletion
             // on a `Call::CommitDelete`.
             Call::CommitHold { base, replier } => {
                 tracing::trace!("hold commit open session started");
                 let mut maybe_base = None;
-                if commit_store.lock().unwrap().contains_key(&base) {
+                if !incomplete_operation
+                    && commit_store.lock().unwrap().contains_key(&base)
+                {
                     maybe_base = Some(base);
 
                     match sessions.entry(base) {
@@ -467,20 +563,48 @@ fn sync_loop<P: AsRef<Path>>(
                             match deferred_ops.entry(base) {
                                 Vacant(_) => {}
                                 Occupied(entry) => {
+                                    let mut failure = None;
                                     for op in entry.remove() {
-                                        execute_deferred_op(
+                                        if !operation_allowed(
+                                            root_dir,
+                                            base,
+                                            incomplete_operation,
+                                        ) {
+                                            reject_deferred_op(
+                                                op,
+                                                &incomplete_operation_error(),
+                                            );
+                                            continue;
+                                        }
+                                        if let Some(error) = &failure {
+                                            reject_deferred_op(op, error);
+                                            continue;
+                                        }
+                                        if let Err(error) = execute_deferred_op(
                                             root_dir,
                                             &commit_store,
                                             base,
                                             op,
-                                        );
+                                        ) {
+                                            failure = Some(error);
+                                        }
                                     }
+                                    incomplete_operation =
+                                        has_incomplete_operation(root_dir);
                                 }
                             }
                         }
                     }
                 };
                 tracing::trace!("session drop finished");
+            }
+            Call::StoreReady { replier } => {
+                let result = if incomplete_operation {
+                    Err(incomplete_operation_error())
+                } else {
+                    Ok(())
+                };
+                let _ = replier.send(result);
             }
         }
     }

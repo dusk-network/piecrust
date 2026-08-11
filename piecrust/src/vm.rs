@@ -227,7 +227,10 @@ impl VM {
                 .store
                 .session(base.into())
                 .map_err(|err| PersistenceError(Arc::new(err)))?,
-            _ => self.store.genesis_session(),
+            _ => self
+                .store
+                .genesis_session()
+                .map_err(|err| PersistenceError(Arc::new(err)))?,
         };
         let mut host_queries = self.host_queries.clone();
         for excluded in data.excluded_host_queries() {

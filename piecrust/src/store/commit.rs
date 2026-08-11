@@ -5,22 +5,26 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 pub mod finalizer;
+pub mod operation;
 pub mod reader;
 pub mod remover;
 pub mod writer;
 
 use std::cell::Ref;
+use std::path::Path;
 use std::sync::{Arc, Mutex};
+use std::{fs, io};
 
 use piecrust_uplink::ContractId;
 use tracing::debug;
 
 use crate::PageOpening;
-use crate::store::Memory;
+use crate::store::baseinfo::BaseInfo;
 use crate::store::commit_store::CommitStore;
 use crate::store::hasher::Hash;
 use crate::store::index::{ContractIndexElement, NewContractIndex};
 use crate::store::tree::{ContractsMerkle, position_from_contract};
+use crate::store::{ContractSession, Memory};
 
 #[derive(Debug, Clone)]
 pub(crate) struct Commit {
@@ -224,6 +228,116 @@ impl Commit {
         self.base
     }
 
+    pub fn validate_persisted_state(
+        &self,
+        root_dir: &Path,
+        root: Hash,
+    ) -> io::Result<()> {
+        let main_dir = root_dir.join(crate::store::MAIN_DIR);
+        let base_info = BaseInfo::from_path(
+            main_dir
+                .join(hex::encode(root))
+                .join(crate::store::BASE_FILE),
+        )?;
+
+        for contract in &base_info.contract_hints {
+            let expected = self.index_get(contract).ok_or_else(|| {
+                invalid_state(contract, "missing index entry")
+            })?;
+            let contract_hex = hex::encode(contract);
+            let leaf_path =
+                main_dir.join(crate::store::LEAF_DIR).join(&contract_hex);
+            let (element_path, _) = ContractSession::find_element(
+                Some(root),
+                &leaf_path,
+                &main_dir,
+                0,
+            )
+            .ok_or_else(|| invalid_state(contract, "missing index element"))?;
+            let bytes = fs::read(element_path)?;
+            let actual: ContractIndexElement = rkyv::from_bytes(&bytes)
+                .map_err(|error| {
+                    io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        error.to_string(),
+                    )
+                })?;
+
+            if actual.len() != expected.len()
+                || actual.page_indices() != expected.page_indices()
+                || actual.hash() != expected.hash()
+                || actual.int_pos() != expected.int_pos()
+                || *actual.tree().root() != *expected.tree().root()
+            {
+                return Err(invalid_state(
+                    contract,
+                    "mismatched index element",
+                ));
+            }
+
+            let tree_opening = self
+                .contracts_merkle
+                .opening(position_from_contract(contract))
+                .ok_or_else(|| {
+                    invalid_state(contract, "missing tree opening")
+                })?;
+            if !tree_opening.verify(*expected.tree().root()) {
+                return Err(invalid_state(contract, "invalid tree opening"));
+            }
+
+            let memory_path =
+                main_dir.join(crate::store::MEMORY_DIR).join(&contract_hex);
+            let commit_memory_path = memory_path.join(hex::encode(root));
+            match fs::symlink_metadata(&commit_memory_path) {
+                Ok(metadata) if !metadata.is_dir() => {
+                    return Err(invalid_state(
+                        contract,
+                        "invalid memory directory",
+                    ));
+                }
+                Ok(_) => {}
+                Err(error)
+                    if error.kind() == io::ErrorKind::NotFound
+                        && expected.page_indices().is_empty() => {}
+                Err(error) if error.kind() == io::ErrorKind::NotFound => {
+                    return Err(invalid_state(
+                        contract,
+                        "missing memory directory",
+                    ));
+                }
+                Err(error) => return Err(error),
+            }
+            for page_index in expected.page_indices() {
+                let page_path = ContractSession::find_page(
+                    *page_index,
+                    Some(root),
+                    &memory_path,
+                    &main_dir,
+                )
+                .ok_or_else(|| {
+                    invalid_state(contract, "missing memory page")
+                })?;
+                let page = fs::read(page_path)?;
+                let inner =
+                    expected.tree().opening(*page_index as u64).ok_or_else(
+                        || invalid_state(contract, "missing page opening"),
+                    )?;
+                let opening = PageOpening {
+                    tree: tree_opening,
+                    inner,
+                };
+                if !opening.verify(&page) {
+                    return Err(invalid_state(
+                        contract,
+                        "mismatched memory page",
+                    ));
+                }
+            }
+        }
+
+        Ok(())
+    }
+
     pub fn element_and_merkle_mut(
         &mut self,
         contract_id: &ContractId,
@@ -239,6 +353,16 @@ impl Commit {
             &mut self.contracts_merkle,
         )
     }
+}
+
+fn invalid_state(contract: &ContractId, detail: &str) -> io::Error {
+    io::Error::new(
+        io::ErrorKind::InvalidData,
+        format!(
+            "Invalid persisted state for contract {}: {detail}",
+            hex::encode(contract)
+        ),
+    )
 }
 
 #[derive(Debug, Clone)]

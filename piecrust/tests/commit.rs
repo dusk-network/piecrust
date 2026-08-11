@@ -5,10 +5,10 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 use std::collections::BTreeMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 use std::time::Duration;
-use std::{fs, thread};
+use std::{fs, io, thread};
 
 use piecrust::{
     ContractData, Error, Session, SessionData, VM, contract_bytecode,
@@ -17,6 +17,15 @@ use piecrust_uplink::ContractId;
 
 const OWNER: [u8; 32] = [0u8; 32];
 const LIMIT: u64 = 1_000_000;
+
+const ZERO_WRITE_CONTRACT: &[u8] = &[
+    0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, 0x01, 0x06, 0x01, 0x60,
+    0x01, 0x7f, 0x01, 0x7f, 0x03, 0x02, 0x01, 0x00, 0x05, 0x03, 0x01, 0x00,
+    0x01, 0x06, 0x06, 0x01, 0x7f, 0x00, 0x41, 0x00, 0x0b, 0x07, 0x14, 0x03,
+    0x06, 0x6d, 0x65, 0x6d, 0x6f, 0x72, 0x79, 0x02, 0x00, 0x01, 0x41, 0x03,
+    0x00, 0x03, 0x72, 0x75, 0x6e, 0x00, 0x00, 0x0a, 0x06, 0x01, 0x04, 0x00,
+    0x20, 0x00, 0x0b,
+];
 
 #[test]
 fn read_write_session() -> Result<(), Error> {
@@ -349,7 +358,46 @@ fn committed_counter() -> Result<(VM, ContractId, [u8; 32]), Error> {
     Ok((vm, contract, root))
 }
 
-fn has_direct_file(path: &PathBuf) -> bool {
+fn committed_zero_write_contract() -> Result<(VM, ContractId, [u8; 32]), Error>
+{
+    let vm = VM::ephemeral()?;
+    let mut session = vm.session(SessionData::builder())?;
+    let (contract, _) = session.deploy::<_, (), _>(
+        ZERO_WRITE_CONTRACT,
+        ContractData::builder().owner(OWNER),
+        LIMIT,
+    )?;
+    let root = session.commit()?;
+
+    Ok((vm, contract, root))
+}
+
+fn child_commit(vm: &VM, root: [u8; 32]) -> Result<[u8; 32], Error> {
+    let mut session = vm.session(SessionData::builder().base(root))?;
+    session.deploy::<_, (), _>(
+        contract_bytecode!("everest"),
+        ContractData::builder().owner([1; 32]),
+        LIMIT,
+    )?;
+    session.commit()
+}
+
+fn hide_commit_metadata(vm: &VM, root: [u8; 32]) -> (PathBuf, PathBuf) {
+    let commit_dir = vm.root_dir().join("main").join(hex::encode(root));
+    let base_info = commit_dir.join("base");
+    let base_info_backup = commit_dir.join("base.test-backup");
+    fs::rename(&base_info, &base_info_backup)
+        .expect("commit metadata should be hidden for fault injection");
+
+    (base_info, base_info_backup)
+}
+
+fn restore_commit_metadata(base_info: &Path, backup: &Path) {
+    fs::rename(backup, base_info)
+        .expect("commit metadata should be restored for retry");
+}
+
+fn has_direct_file(path: &Path) -> bool {
     path.read_dir()
         .map(|mut entries| {
             entries.any(|entry| {
@@ -359,7 +407,7 @@ fn has_direct_file(path: &PathBuf) -> bool {
         .unwrap_or(false)
 }
 
-fn read_direct_files(path: &PathBuf) -> BTreeMap<String, Vec<u8>> {
+fn read_direct_files(path: &Path) -> BTreeMap<String, Vec<u8>> {
     path.read_dir()
         .expect("directory should be readable")
         .map(|entry| {
@@ -560,7 +608,504 @@ fn finalize_commit_promotes_commit_state() -> Result<(), Error> {
         !vm.commits().contains(&root),
         "finalized root should not remain an unfinalized commit"
     );
+    assert!(
+        !vm.root_dir().join("main/.completed-operations").exists(),
+        "successful finalization should not retain recovery metadata"
+    );
     assert_commit_promoted(&paths, &snapshot);
+
+    Ok(())
+}
+
+#[test]
+fn finalize_commit_with_squashed_contract_hint() -> Result<(), Error> {
+    const DIRTY_SAME_CONTRACT: &str = r#"
+        (module
+          (memory (export "memory") 1)
+          (global (export "A") i32 (i32.const 0))
+          (func (export "same") (param i32) (result i32)
+            (i32.store8 (i32.const 4096) (i32.const 1))
+            (i32.store8 (i32.const 4096) (i32.const 0))
+            (i32.const 0)))
+    "#;
+    let vm = VM::ephemeral()?;
+    let mut session = vm.session(SessionData::builder())?;
+    let bytecode = wat::parse_str(DIRTY_SAME_CONTRACT)
+        .expect("dirty-same contract should compile");
+    let (contract, _) = session.deploy::<_, (), _>(
+        &bytecode,
+        ContractData::builder().owner(OWNER),
+        LIMIT,
+    )?;
+    session.call_raw(contract, "same", [], LIMIT)?;
+    let initial = session.commit()?;
+
+    let mut session = vm.session(SessionData::builder().base(initial))?;
+    session.deploy::<_, (), _>(
+        contract_bytecode!("everest"),
+        ContractData::builder().owner([1; 32]),
+        LIMIT,
+    )?;
+    let descendant = session.commit()?;
+    vm.finalize_commit(initial)?;
+
+    let mut session = vm.session(SessionData::builder().base(descendant))?;
+    session.call_raw(contract, "same", [], LIMIT)?;
+    session.deploy::<_, (), _>(
+        contract_bytecode!("counter"),
+        ContractData::builder().owner([2; 32]),
+        LIMIT,
+    )?;
+    let root = session.commit()?;
+
+    let paths = commit_paths(&vm, contract, root);
+    assert!(
+        !paths.commit_leaf.join("element").exists(),
+        "an unchanged contract index should be squashed"
+    );
+
+    vm.finalize_commit(descendant)?;
+    vm.finalize_commit(root)?;
+
+    Ok(())
+}
+
+#[test]
+fn finalize_commit_accepts_new_contract_without_dirty_memory_pages()
+-> Result<(), Error> {
+    let (vm, contract, root) = committed_zero_write_contract()?;
+    let paths = commit_paths(&vm, contract, root);
+    assert!(
+        paths.commit_memory.is_dir(),
+        "zero-write deployment should have an empty commit-scoped memory directory"
+    );
+    assert!(
+        !has_direct_file(&paths.commit_memory),
+        "zero-write deployment should not have commit-scoped memory pages"
+    );
+    assert!(
+        paths.commit_leaf.join("element").is_file(),
+        "deployment should have a commit-scoped index element"
+    );
+
+    let mut child_session = vm.session(SessionData::builder().base(root))?;
+    child_session.deploy::<_, (), _>(
+        contract_bytecode!("counter"),
+        ContractData::builder().owner(OWNER),
+        LIMIT,
+    )?;
+    let child_root = child_session.commit()?;
+
+    vm.finalize_commit(root)?;
+
+    assert!(
+        !vm.commits().contains(&root),
+        "finalized root should not remain an unfinalized commit"
+    );
+    assert!(
+        paths.leaf_element.is_file(),
+        "finalized contract index element should be promoted"
+    );
+
+    let reopened = VM::new(vm.root_dir())?;
+    let mut session =
+        reopened.session(SessionData::builder().base(child_root))?;
+    assert_eq!(
+        session.call::<u32, u32>(contract, "run", &7, LIMIT)?.data,
+        7,
+        "finalized zero-write contract should remain callable after reopen"
+    );
+
+    Ok(())
+}
+
+#[test]
+fn finalize_commit_accepts_legacy_zero_write_layout() -> Result<(), Error> {
+    let (vm, contract, root) = committed_zero_write_contract()?;
+    let child_root = child_commit(&vm, root)?;
+    let paths = commit_paths(&vm, contract, root);
+    fs::remove_dir(&paths.commit_memory)
+        .expect("legacy zero-write layout should omit the empty directory");
+
+    vm.finalize_commit(root)?;
+
+    let reopened = VM::new(vm.root_dir())?;
+    let mut session =
+        reopened.session(SessionData::builder().base(child_root))?;
+    assert_eq!(
+        session.call::<u32, u32>(contract, "run", &7, LIMIT)?.data,
+        7,
+        "legacy zero-write contracts should remain callable"
+    );
+
+    Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn finalize_rejects_broken_memory_directory_symlink() -> Result<(), Error> {
+    use std::os::unix::fs::symlink;
+
+    let (vm, contract, root) = committed_zero_write_contract()?;
+    let paths = commit_paths(&vm, contract, root);
+    fs::remove_dir(&paths.commit_memory)
+        .expect("empty memory directory should be removable");
+    symlink("missing.test-target", &paths.commit_memory)
+        .expect("broken memory-directory symlink should be created");
+
+    assert!(
+        vm.finalize_commit(root).is_err(),
+        "a broken memory-directory symlink must not look like a legacy zero-write layout"
+    );
+    assert!(vm.commits().contains(&root));
+
+    fs::remove_file(&paths.commit_memory)
+        .expect("broken memory-directory symlink should be removed");
+    fs::create_dir(&paths.commit_memory)
+        .expect("valid empty memory directory should be restored");
+    vm.finalize_commit(root)?;
+
+    Ok(())
+}
+
+#[test]
+fn failed_finalize_retains_commit_for_retry() -> Result<(), Error> {
+    let (vm, contract, root) = committed_counter()?;
+    let paths = commit_paths(&vm, contract, root);
+    let snapshot = snapshot_commit(&paths);
+    let (base_info, base_info_backup) = hide_commit_metadata(&vm, root);
+
+    assert!(
+        vm.finalize_commit(root).is_err(),
+        "finalization should fail while commit metadata is unavailable"
+    );
+    assert!(
+        vm.commits().contains(&root),
+        "a preflight failure should retain the commit for retry"
+    );
+    assert_commit_paths_exist(&paths);
+
+    restore_commit_metadata(&base_info, &base_info_backup);
+    vm.finalize_commit(root)?;
+
+    assert!(
+        !vm.commits().contains(&root),
+        "successful retry should remove the unfinalized commit"
+    );
+    assert_commit_promoted(&paths, &snapshot);
+
+    Ok(())
+}
+
+#[test]
+fn delete_commit_accepts_new_contract_without_dirty_memory_pages()
+-> Result<(), Error> {
+    let (vm, contract, root) = committed_zero_write_contract()?;
+    let paths = commit_paths(&vm, contract, root);
+    assert!(
+        paths.commit_memory.is_dir(),
+        "zero-write deployment should have an empty commit-scoped memory directory"
+    );
+    assert!(
+        !has_direct_file(&paths.commit_memory),
+        "zero-write deployment should not have commit-scoped memory pages"
+    );
+
+    vm.delete_commit(root)?;
+
+    assert!(
+        !vm.commits().contains(&root),
+        "deleted root should not remain in the commit store"
+    );
+    assert_commit_paths_removed(&paths);
+
+    Ok(())
+}
+
+#[test]
+fn failed_delete_retains_commit_for_retry() -> Result<(), Error> {
+    let (vm, contract, root) = committed_counter()?;
+    let paths = commit_paths(&vm, contract, root);
+    let (base_info, base_info_backup) = hide_commit_metadata(&vm, root);
+
+    assert!(
+        vm.delete_commit(root).is_err(),
+        "deletion should fail while commit metadata is unavailable"
+    );
+    assert!(
+        !vm.commits().contains(&root),
+        "a pending deletion should hide the commit until retry"
+    );
+    assert_commit_paths_exist(&paths);
+
+    restore_commit_metadata(&base_info, &base_info_backup);
+    vm.delete_commit(root)?;
+
+    assert!(
+        !vm.commits().contains(&root),
+        "successful retry should remove the commit"
+    );
+    assert_commit_deleted(&paths);
+
+    Ok(())
+}
+
+#[test]
+fn late_finalize_failure_is_recoverable_and_blocks_sessions()
+-> Result<(), Error> {
+    let (vm, contract, root) = committed_counter()?;
+    let child_root = child_commit(&vm, root)?;
+    let paths = commit_paths(&vm, contract, root);
+    let blocker = paths.commit_memory.join("unexpected.test-directory");
+    fs::create_dir(&blocker).expect("late-failure blocker should be created");
+
+    assert!(
+        vm.finalize_commit(root).is_err(),
+        "finalization should fail on unexpected commit-scoped state"
+    );
+    assert!(
+        !vm.commits().contains(&root),
+        "a pending operation should hide its root"
+    );
+    assert!(
+        vm.session(SessionData::builder()).is_err(),
+        "sessions should be blocked while recovery is pending"
+    );
+    assert!(
+        vm.session(SessionData::builder().base(root)).is_err(),
+        "the partially finalized root should not remain executable"
+    );
+
+    fs::remove_dir(blocker).expect("late-failure blocker should be removed");
+    vm.finalize_commit(root)?;
+
+    let reopened = VM::new(vm.root_dir())?;
+    let mut session =
+        reopened.session(SessionData::builder().base(child_root))?;
+    assert_eq!(
+        session
+            .call::<(), i64>(contract, "read_value", &(), LIMIT)?
+            .data,
+        0xfc,
+        "retry should publish the committed state"
+    );
+
+    Ok(())
+}
+
+#[test]
+fn late_delete_failure_is_recoverable_and_blocks_sessions() -> Result<(), Error>
+{
+    let (vm, _contract, root) = committed_counter()?;
+    let paths = commit_paths(&vm, _contract, root);
+    let leaf_backup = paths.commit_leaf.with_extension("test-backup");
+    fs::rename(&paths.commit_leaf, &leaf_backup)
+        .expect("leaf directory should be moved for fault injection");
+    fs::write(&paths.commit_leaf, b"not a directory")
+        .expect("leaf blocker should be created");
+
+    assert!(vm.delete_commit(root).is_err());
+    assert!(!vm.commits().contains(&root));
+    assert!(vm.session(SessionData::builder()).is_err());
+    assert!(
+        vm.session(SessionData::builder().base(root)).is_err(),
+        "the partially deleted root should not remain executable"
+    );
+
+    fs::remove_file(&paths.commit_leaf)
+        .expect("leaf blocker should be removed");
+    fs::rename(leaf_backup, &paths.commit_leaf)
+        .expect("leaf directory should be restored");
+    vm.delete_commit(root)?;
+
+    assert!(!vm.commits().contains(&root));
+    assert_commit_deleted(&paths);
+
+    Ok(())
+}
+
+#[test]
+fn finalize_rejects_missing_dirty_pages_and_allows_retry() -> Result<(), Error>
+{
+    let (vm, contract, root) = committed_counter()?;
+    let child_root = child_commit(&vm, root)?;
+    let paths = commit_paths(&vm, contract, root);
+    let memory_backup = paths.commit_memory.with_extension("test-backup");
+    fs::rename(&paths.commit_memory, &memory_backup)
+        .expect("dirty pages should be moved for fault injection");
+
+    assert!(
+        vm.finalize_commit(root).is_err(),
+        "missing dirty pages should be rejected"
+    );
+    assert!(vm.commits().contains(&root));
+
+    fs::rename(memory_backup, &paths.commit_memory)
+        .expect("dirty pages should be restored");
+    vm.finalize_commit(root)?;
+
+    let mut session = vm.session(SessionData::builder().base(child_root))?;
+    assert_eq!(
+        session
+            .call::<(), i64>(contract, "read_value", &(), LIMIT)?
+            .data,
+        0xfc,
+        "retry should publish the original committed bytes"
+    );
+
+    Ok(())
+}
+
+#[test]
+fn deferred_operations_stop_after_the_first_failure() -> Result<(), Error> {
+    let (vm, contract, root) = committed_counter()?;
+    let child_root = child_commit(&vm, root)?;
+    let paths = commit_paths(&vm, contract, root);
+    let blocker = paths.commit_memory.join("unexpected.test-directory");
+    fs::create_dir(&blocker).expect("late-failure blocker should be created");
+
+    let held_session = vm.session(SessionData::builder().base(root))?;
+    let (finalize_started_tx, finalize_started_rx) = mpsc::channel();
+    let (finalize_tx, finalize_rx) = mpsc::channel();
+    let (delete_started_tx, delete_started_rx) = mpsc::channel();
+    let (delete_tx, delete_rx) = mpsc::channel();
+
+    thread::scope(|scope| {
+        scope.spawn(|| {
+            finalize_started_tx.send(()).unwrap();
+            finalize_tx.send(vm.finalize_commit(root)).unwrap();
+        });
+        assert_started(&finalize_started_rx);
+        thread::sleep(Duration::from_millis(50));
+
+        scope.spawn(|| {
+            delete_started_tx.send(()).unwrap();
+            delete_tx.send(vm.delete_commit(root)).unwrap();
+        });
+        assert_started(&delete_started_rx);
+        thread::sleep(Duration::from_millis(50));
+
+        drop(held_session);
+
+        assert!(
+            finalize_rx
+                .recv_timeout(Duration::from_secs(2))
+                .unwrap()
+                .is_err(),
+            "the first deferred operation should report its failure"
+        );
+        let delete_error = delete_rx
+            .recv_timeout(Duration::from_secs(2))
+            .unwrap()
+            .expect_err("the next deferred operation should be skipped");
+        assert!(
+            matches!(
+                delete_error,
+                Error::PersistenceError(error)
+                    if error.kind() == io::ErrorKind::Interrupted
+            ),
+            "the skipped operation should report an interrupted persistence error"
+        );
+    });
+
+    fs::remove_dir(blocker).expect("late-failure blocker should be removed");
+    vm.finalize_commit(root)?;
+    let mut session = vm.session(SessionData::builder().base(child_root))?;
+    assert_eq!(
+        session
+            .call::<(), i64>(contract, "read_value", &(), LIMIT)?
+            .data,
+        0xfc,
+        "the skipped delete must not consume the finalized state"
+    );
+
+    Ok(())
+}
+
+#[test]
+fn startup_resumes_pending_finalization() -> Result<(), Error> {
+    let (vm, contract, root) = committed_counter()?;
+    let child_root = child_commit(&vm, root)?;
+    let root_dir = vm.root_dir().to_path_buf();
+    let paths = commit_paths(&vm, contract, root);
+    let blocker = paths.commit_memory.join("unexpected.test-directory");
+    fs::create_dir(&blocker).expect("late-failure blocker should be created");
+
+    assert!(vm.finalize_commit(root).is_err());
+    let marker = root_dir
+        .join("main")
+        .join(hex::encode(root))
+        .join(".finalize");
+    assert!(
+        marker.is_file(),
+        "a failed finalization should leave a recovery marker"
+    );
+    assert_eq!(
+        marker
+            .metadata()
+            .expect("marker metadata should exist")
+            .len(),
+        0,
+        "the operation should be fully encoded by the marker name"
+    );
+    fs::remove_dir(blocker).expect("late-failure blocker should be removed");
+    drop(vm);
+
+    let reopened = VM::new(&root_dir)?;
+    assert!(
+        !reopened.commits().contains(&root),
+        "startup should complete rather than reload the pending finalization"
+    );
+    let mut session =
+        reopened.session(SessionData::builder().base(child_root))?;
+    assert_eq!(
+        session
+            .call::<(), i64>(contract, "read_value", &(), LIMIT)?
+            .data,
+        0xfc,
+        "startup should resume and complete finalization"
+    );
+
+    Ok(())
+}
+
+#[test]
+fn startup_resumes_pending_deletion() -> Result<(), Error> {
+    let (vm, contract, root) = committed_counter()?;
+    let root_dir = vm.root_dir().to_path_buf();
+    let paths = commit_paths(&vm, contract, root);
+    let leaf_backup = paths.commit_leaf.with_extension("test-backup");
+    fs::rename(&paths.commit_leaf, &leaf_backup)
+        .expect("leaf directory should be moved for fault injection");
+    fs::write(&paths.commit_leaf, b"not a directory")
+        .expect("leaf blocker should be created");
+
+    assert!(vm.delete_commit(root).is_err());
+    let marker = root_dir
+        .join("main")
+        .join(hex::encode(root))
+        .join(".delete");
+    assert!(marker.is_file(), "a failed deletion should leave a marker");
+    assert_eq!(
+        marker
+            .metadata()
+            .expect("marker metadata should exist")
+            .len(),
+        0,
+        "the operation should be fully encoded by the marker name"
+    );
+    fs::remove_file(&paths.commit_leaf)
+        .expect("leaf blocker should be removed");
+    fs::rename(leaf_backup, &paths.commit_leaf)
+        .expect("leaf directory should be restored");
+    drop(vm);
+
+    let reopened = VM::new(&root_dir)?;
+    assert!(
+        !reopened.commits().contains(&root),
+        "startup should resume and complete deletion"
+    );
+    assert_commit_deleted(&paths);
 
     Ok(())
 }

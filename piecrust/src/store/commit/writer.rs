@@ -166,6 +166,7 @@ impl CommitWriter {
                 dirty = true;
             }
             if dirty {
+                fs::create_dir_all(memory_main_dir.join(commit_id.as_ref()))?;
                 base_info.contract_hints.push(*contract);
             }
         }

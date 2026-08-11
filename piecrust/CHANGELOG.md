@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Preserve queued `finalize_commit` operations when a commit is held by a live session.
+- Make finalization and deletion recoverable across failures and restarts, hide incomplete operations, and reject missing persisted commit state.
+- Finalize and delete new contracts that have no dirty memory pages.
 
 ## [0.32.2] - 2026-08-06
 

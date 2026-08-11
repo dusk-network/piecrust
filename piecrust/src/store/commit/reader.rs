@@ -16,6 +16,7 @@ use piecrust_uplink::ContractId;
 
 use crate::store::baseinfo::BaseInfo;
 use crate::store::commit::Commit;
+use crate::store::commit::operation::COMPLETED_DIR;
 use crate::store::commit_store::CommitStore;
 use crate::store::hasher::Hash;
 use crate::store::index::{ContractIndexElement, NewContractIndex};
@@ -48,6 +49,7 @@ impl CommitReader {
                 if filename == MEMORY_DIR
                     || filename == BYTECODE_DIR
                     || filename == LEAF_DIR
+                    || filename == COMPLETED_DIR
                 {
                     continue;
                 }
