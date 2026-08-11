@@ -366,6 +366,7 @@ impl Session {
             + for<'b> CheckBytes<DefaultValidator<'b>>,
         D: Into<ContractData<'a, A>>,
     {
+        self.ensure_session_usable()?;
         let deploy_data = deploy_data.into();
 
         let mut init_arg = None;
@@ -543,6 +544,7 @@ impl Session {
         R::Archived: Deserialize<R, Infallible>
             + for<'b> CheckBytes<DefaultValidator<'b>>,
     {
+        self.ensure_session_usable()?;
         if fn_name == INIT_METHOD {
             return Err(InitalizationError("init call not allowed".into()));
         }
@@ -613,6 +615,7 @@ impl Session {
         fn_arg: V,
         gas_limit: u64,
     ) -> Result<CallReceipt<Vec<u8>>, Error> {
+        self.ensure_session_usable()?;
         if fn_name == INIT_METHOD {
             return Err(InitalizationError("init call not allowed".into()));
         }
@@ -640,6 +643,7 @@ impl Session {
         fn_arg: V,
         gas_limit: u64,
     ) -> Result<CallReceipt<Vec<u8>>, Error> {
+        self.ensure_session_usable()?;
         if fn_name == INIT_METHOD {
             return Err(InitalizationError("init call not allowed".into()));
         }
@@ -677,6 +681,7 @@ impl Session {
         R::Archived: Deserialize<R, Infallible>
             + for<'b> CheckBytes<DefaultValidator<'b>>,
     {
+        self.ensure_session_usable()?;
         if fn_name == INIT_METHOD {
             return Err(InitalizationError("init call not allowed".into()));
         }
@@ -707,6 +712,7 @@ impl Session {
         fn_arg: V,
         gas_limit: u64,
     ) -> Result<CallReceipt<Vec<u8>>, Error> {
+        self.ensure_session_usable()?;
         if fn_name == INIT_METHOD {
             return Err(InitalizationError("init call not allowed".into()));
         }
@@ -1504,6 +1510,13 @@ mod tests {
             session
                 .call::<_, i64>(counter, "read_value", &(), LIMIT)
                 .expect_err("typed call must reject poisoned session"),
+            Error::SessionDiscardRequired
+        ));
+        let unknown = ContractId::from_bytes([0xff; 32]);
+        assert!(matches!(
+            session
+                .call::<_, i64>(unknown, "read_value", &(), LIMIT)
+                .expect_err("typed call must fail before target preparation"),
             Error::SessionDiscardRequired
         ));
         assert!(matches!(
