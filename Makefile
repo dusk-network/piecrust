@@ -13,6 +13,13 @@ contracts: ## Build example contracts
 	  --manifest-path=contracts/Cargo.toml \
 	  --color=always \
 	  --target wasm32-unknown-unknown
+	@RUSTFLAGS="-C link-args=-zstack-size=65536" \
+	cargo build \
+	  --release \
+	  --manifest-path=contracts/host_backed/Cargo.toml \
+	  --target-dir=target \
+	  --color=always \
+	  --target wasm32-unknown-unknown
 	@mkdir -p target/stripped
 	@find target/wasm32-unknown-unknown/release -maxdepth 1 -name "*.wasm" \
 	    | xargs -I % basename % \
