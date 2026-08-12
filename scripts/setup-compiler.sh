@@ -66,8 +66,6 @@ if [ ! -d "$UNZIPPED_DIR" ] || [ "$(cat "$UNZIPPED_DIR/.artifact.sha256" 2>/dev/
     rm -rf "$UNZIPPED_DIR"
     mkdir -p "$UNZIPPED_DIR"
     unzip "$ARTIFACT_PATH" -d "$UNZIPPED_DIR" >> /dev/null
-    # We don't require the source of the compiler itself
-    rm "$UNZIPPED_DIR/rustc-nightly-src.tar.gz"
 fi
 
 printf '%s\n' "$EXPECTED_SHA256" > "$UNZIPPED_DIR/.artifact.sha256"
