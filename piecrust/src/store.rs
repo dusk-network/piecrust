@@ -10,6 +10,7 @@ mod baseinfo;
 mod bytecode;
 mod commit;
 mod commit_store;
+mod dedup;
 mod hasher;
 mod index;
 mod memory;
