@@ -235,7 +235,7 @@ fn roots_and_page_materialization_match_unfiltered_execution()
             .expect("zero page metadata should exist")
             .len(),
         PAGE_SIZE as u64,
-        "a zero page must retain its complete logical length"
+        "an all-hole page must retain its complete logical length"
     );
     assert_eq!(
         fs::read_dir(zero_page.parent().expect("page should have a parent"))

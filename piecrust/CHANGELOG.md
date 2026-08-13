@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Avoid persisting dirty pages of existing contracts that are byte-identical to an already-materialized predecessor page, publish complete page and commit metadata files through temporary paths, and record the root deltas that must be cleared before retrying [#98](https://github.com/dusk-network/piecrust-private/issues/98).
+- Persist zero-heavy contract memory pages as sparse files without changing their logical contents or length.
 
 ## [0.32.2] - 2026-08-06
 

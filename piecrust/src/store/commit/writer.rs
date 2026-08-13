@@ -5,7 +5,7 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::io::Write;
+use std::io::{Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 #[cfg(all(test, target_os = "linux"))]
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -28,6 +28,8 @@ use crate::store::{
 
 pub struct CommitWriter;
 
+const SPARSE_BLOCK_SIZE: usize = 4 * 1024;
+const SPARSE_MIN_HOLE_BLOCKS: usize = 2;
 const UNPUBLISHED_PREFIX: &str = ".unpublished-";
 const UNPUBLISHED_MAGIC: &[u8; 8] = b"PCRUSTU1";
 const MEMORY_ENTRY: u8 = 1;
@@ -171,7 +173,7 @@ impl CommitWriter {
                     *page_index,
                     &commit_id,
                 )?;
-                Self::write_page(&page_path, dirty_page)?;
+                Self::write_sparse_page(&page_path, dirty_page)?;
             }
 
             let bytecode_main_path =
@@ -256,7 +258,7 @@ impl CommitWriter {
         Ok(dir.join(format!("{page_index}")))
     }
 
-    fn write_page(path: &Path, page: &[u8]) -> io::Result<()> {
+    fn write_sparse_page(path: &Path, page: &[u8]) -> io::Result<()> {
         if page.len() != PAGE_SIZE {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
@@ -265,26 +267,65 @@ impl CommitWriter {
         }
 
         let temporary = Self::temporary_path(path)?;
-        let result = (|| {
-            let mut file = fs::OpenOptions::new()
-                .write(true)
-                .create_new(true)
-                .open(&temporary)?;
-            file.write_all(page)?;
-            file.flush()?;
-            if file.metadata()?.len() != page.len() as u64 {
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    "Persisted contract memory page has an invalid length",
-                ));
-            }
-            drop(file);
-            fs::rename(&temporary, path)
-        })();
+        let result = Self::write_sparse_page_inner(&temporary, page)
+            .and_then(|()| fs::rename(&temporary, path));
         if result.is_err() {
             let _ = fs::remove_file(&temporary);
         }
         result
+    }
+
+    fn write_sparse_page_inner(path: &Path, page: &[u8]) -> io::Result<()> {
+        let zero_blocks = page
+            .chunks(SPARSE_BLOCK_SIZE)
+            .filter(|block| block.iter().all(|byte| *byte == 0))
+            .count();
+
+        let mut file = fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(path)?;
+        if zero_blocks < SPARSE_MIN_HOLE_BLOCKS {
+            file.write_all(page)?;
+        } else {
+            file.set_len(page.len() as u64)?;
+
+            let mut offset = 0;
+            while offset < page.len() {
+                while offset < page.len()
+                    && page[offset..]
+                        .get(..SPARSE_BLOCK_SIZE)
+                        .unwrap_or(&page[offset..])
+                        .iter()
+                        .all(|byte| *byte == 0)
+                {
+                    offset = (offset + SPARSE_BLOCK_SIZE).min(page.len());
+                }
+                let start = offset;
+                while offset < page.len()
+                    && page[offset..]
+                        .get(..SPARSE_BLOCK_SIZE)
+                        .unwrap_or(&page[offset..])
+                        .iter()
+                        .any(|byte| *byte != 0)
+                {
+                    offset = (offset + SPARSE_BLOCK_SIZE).min(page.len());
+                }
+                if start != offset {
+                    file.seek(SeekFrom::Start(start as u64))?;
+                    file.write_all(&page[start..offset])?;
+                }
+            }
+        }
+
+        if file.metadata()?.len() != page.len() as u64 {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "Persisted contract memory page has an invalid length",
+            ));
+        }
+
+        Ok(())
     }
 
     pub(crate) fn recover_unpublished_roots(root_dir: &Path) -> io::Result<()> {
@@ -702,6 +743,8 @@ impl CommitWriter {
 
 #[cfg(all(test, target_os = "linux"))]
 mod tests {
+    use std::os::unix::fs::MetadataExt;
+
     use super::*;
 
     #[test]
@@ -835,12 +878,36 @@ mod tests {
     }
 
     #[test]
+    fn sparse_page_retains_length_and_contents_without_dense_allocation() {
+        let temp = tempfile::tempdir().expect("temporary directory");
+        let path = temp.path().join("page");
+        let mut page = vec![0; crate::store::PAGE_SIZE];
+        page[2 * SPARSE_BLOCK_SIZE] = 1;
+        page[10 * SPARSE_BLOCK_SIZE] = 2;
+
+        CommitWriter::write_sparse_page(&path, &page)
+            .expect("sparse page should be written");
+
+        assert_eq!(fs::read(&path).expect("page should be readable"), page);
+        let metadata = fs::metadata(path).expect("page metadata should exist");
+        assert_eq!(metadata.len(), crate::store::PAGE_SIZE as u64);
+        assert!(
+            metadata.blocks() * 512 < metadata.len(),
+            "zero page regions should remain filesystem holes"
+        );
+        assert!(
+            !temp.path().join(".page.piecrust-tmp").exists(),
+            "temporary page should be renamed after completion"
+        );
+    }
+
+    #[test]
     fn all_zero_page_is_materialized_at_its_full_logical_length() {
         let temp = tempfile::tempdir().expect("temporary directory");
         let path = temp.path().join("page");
         let page = vec![0; crate::store::PAGE_SIZE];
 
-        CommitWriter::write_page(&path, &page)
+        CommitWriter::write_sparse_page(&path, &page)
             .expect("zero page should be written");
 
         assert_eq!(fs::metadata(&path).unwrap().len(), page.len() as u64);
@@ -854,7 +921,7 @@ mod tests {
         fs::write(&path, b"stale").expect("stale destination");
         let page = vec![3; crate::store::PAGE_SIZE];
 
-        CommitWriter::write_page(&path, &page)
+        CommitWriter::write_sparse_page(&path, &page)
             .expect("completed temporary page should be published");
 
         assert_eq!(fs::read(path).unwrap(), page);
@@ -867,7 +934,7 @@ mod tests {
         fs::create_dir(&path).expect("destination obstruction");
         let page = vec![1; crate::store::PAGE_SIZE];
 
-        CommitWriter::write_page(&path, &page)
+        CommitWriter::write_sparse_page(&path, &page)
             .expect_err("a directory cannot be replaced by a page file");
 
         assert!(path.is_dir(), "the destination should remain untouched");
