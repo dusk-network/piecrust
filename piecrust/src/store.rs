@@ -106,6 +106,7 @@ impl ContractStore {
         let commit_store = self.commit_store.clone();
 
         CommitOperation::recover_all(&self.root_dir)?;
+        CommitWriter::recover_unpublished_roots(&self.root_dir)?;
 
         tracing::trace!("before read_all_commit");
         CommitReader::read_all_commits(

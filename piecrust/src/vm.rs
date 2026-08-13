@@ -136,6 +136,11 @@ impl VM {
     /// The directory will be used to save any future session commits made by
     /// this `VM` instance.
     ///
+    /// Callers must serialize mutations when multiple `VM` instances refer to
+    /// the same directory. Concurrent commits, finalizations, or deletions from
+    /// separate instances are unsupported because each instance owns an
+    /// independent in-memory view of the commit store.
+    ///
     /// # Errors
     /// If the directory contains unparseable or inconsistent data.
     pub fn new<P: AsRef<Path>>(root_dir: P) -> Result<Self, Error> {

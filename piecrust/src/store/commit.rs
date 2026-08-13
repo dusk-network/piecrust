@@ -11,6 +11,7 @@ pub mod remover;
 pub mod writer;
 
 use std::cell::Ref;
+use std::collections::BTreeSet;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::{fs, io};
@@ -98,7 +99,33 @@ impl Commit {
         }))
     }
 
-    pub fn insert(&mut self, contract_id: ContractId, memory: &Memory) {
+    pub fn insert_contract(
+        &mut self,
+        contract_id: ContractId,
+        memory: &Memory,
+        is_new: bool,
+    ) -> BTreeSet<usize> {
+        if is_new {
+            self.remove_and_insert(contract_id, memory)
+        } else {
+            self.insert(contract_id, memory)
+        }
+    }
+
+    fn insert(
+        &mut self,
+        contract_id: ContractId,
+        memory: &Memory,
+    ) -> BTreeSet<usize> {
+        self.insert_inner(contract_id, memory, true)
+    }
+
+    fn insert_inner(
+        &mut self,
+        contract_id: ContractId,
+        memory: &Memory,
+        allow_identical_skip: bool,
+    ) -> BTreeSet<usize> {
         if self.index.get(&contract_id).is_none() {
             if let Some(element) = self
                 .commit_store
@@ -124,28 +151,27 @@ impl Commit {
         element.set_len(memory.current_len());
 
         debug!("Check dirty pages for {contract_id}");
-        for (dirty_page, clean, page_index) in memory.dirty_pages() {
+        let mut identical_pages = BTreeSet::new();
+        for (dirty_page, clean_page, page_index) in memory.dirty_pages() {
+            if allow_identical_skip
+                && element.page_indices().contains(page_index)
+                && dirty_page == clean_page
+            {
+                debug!(
+                    msg = "skip identical page",
+                    page_index,
+                    contract_id = hex::encode(&contract_id.as_bytes()[0..8]),
+                );
+                identical_pages.insert(*page_index);
+                continue;
+            }
+
             let hash = Hash::new(dirty_page);
-            let clean = Hash::new(clean);
-            // TODO: re-enable skipping of unchanged pages behind an env var to
-            //       preserve old behavior
-            //
-            // if hash == clean {
-            //     debug!(
-            //         msg = "SKIPPING page",
-            //         page_index,
-            //         contract_id = hex::encode(&contract_id.as_bytes()[0..8]),
-            //         dirty = hex::encode(hash.as_bytes()),
-            //         clean = hex::encode(clean.as_bytes())
-            //     );
-            //     continue;
-            // }
             debug!(
                 msg = "insert page",
                 page_index,
                 contract_id = hex::encode(&contract_id.as_bytes()[0..8]),
                 dirty = hex::encode(hash.as_bytes()),
-                clean = hex::encode(clean.as_bytes())
             );
 
             element.insert_page_index_hash(
@@ -160,11 +186,21 @@ impl Commit {
         let internal_pos = contracts_merkle.insert(pos, root);
         element.set_hash(Some(root));
         element.set_int_pos(Some(internal_pos));
+
+        identical_pages
     }
 
-    pub fn remove_and_insert(&mut self, contract: ContractId, memory: &Memory) {
+    fn remove_and_insert(
+        &mut self,
+        contract: ContractId,
+        memory: &Memory,
+    ) -> BTreeSet<usize> {
         self.index.remove_contract_index(&contract);
-        self.insert(contract, memory);
+        self.index.insert_contract_index(
+            &contract,
+            ContractIndexElement::new(memory.is_64()),
+        );
+        self.insert_inner(contract, memory, false)
     }
 
     fn redundant_elements(&self) -> Vec<ContractId> {

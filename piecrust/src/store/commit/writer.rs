@@ -5,7 +5,10 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::io::Write;
 use std::path::{Path, PathBuf};
+#[cfg(all(test, target_os = "linux"))]
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::{fs, io};
 
@@ -20,10 +23,18 @@ use crate::store::hasher::Hash;
 use crate::store::session::ContractDataEntry;
 use crate::store::{
     BASE_FILE, BYTECODE_DIR, Bytecode, ELEMENT_FILE, LEAF_DIR, MAIN_DIR,
-    MEMORY_DIR, METADATA_EXTENSION, Module, OBJECTCODE_EXTENSION,
+    MEMORY_DIR, METADATA_EXTENSION, Module, OBJECTCODE_EXTENSION, PAGE_SIZE,
 };
 
 pub struct CommitWriter;
+
+const UNPUBLISHED_PREFIX: &str = ".unpublished-";
+const UNPUBLISHED_MAGIC: &[u8; 8] = b"PCRUSTU1";
+const MEMORY_ENTRY: u8 = 1;
+const LEAF_ENTRY: u8 = 2;
+
+#[cfg(all(test, target_os = "linux"))]
+static FAIL_DURING_BASE_PUBLICATION: AtomicBool = AtomicBool::new(false);
 
 impl CommitWriter {
     ///
@@ -45,13 +56,17 @@ impl CommitWriter {
 
         let mut commit =
             base.unwrap_or(Commit::new(&commit_store, base_info.maybe_base));
+        let mut identical_pages = BTreeMap::new();
 
         for (contract_id, contract_data) in &commit_contracts {
-            if contract_data.is_new {
-                commit.remove_and_insert(*contract_id, &contract_data.memory)
-            } else {
-                commit.insert(*contract_id, &contract_data.memory)
-            };
+            let contract_identical_pages = commit.insert_contract(
+                *contract_id,
+                &contract_data.memory,
+                contract_data.is_new,
+            );
+            if !contract_identical_pages.is_empty() {
+                identical_pages.insert(*contract_id, contract_identical_pages);
+            }
         }
 
         commit.squash();
@@ -67,10 +82,15 @@ impl CommitWriter {
             return Ok(root);
         }
 
+        Self::clear_unpublished_root(root_dir, &root_hex)?;
+        let manifest = Self::unpublished_manifest(&commit, &commit_contracts);
+        Self::write_unpublished_manifest(root_dir, root, &manifest)?;
+
         Self::write_commit_inner(
             root_dir,
             &commit,
             commit_contracts,
+            identical_pages,
             root_hex,
             base_info,
         )
@@ -85,6 +105,7 @@ impl CommitWriter {
         root_dir: P,
         commit: &Commit,
         commit_contracts: BTreeMap<ContractId, ContractDataEntry>,
+        identical_pages: BTreeMap<ContractId, BTreeSet<usize>>,
         commit_id: S,
         mut base_info: BaseInfo,
     ) -> io::Result<()> {
@@ -129,21 +150,28 @@ impl CommitWriter {
             let leaf_main_dir = directories.leaf_main_dir.join(&contract_hex);
             fs::create_dir_all(&leaf_main_dir)?;
 
-            let mut pages = BTreeSet::new();
+            let commit_memory_dir = memory_main_dir.join(commit_id.as_ref());
 
             let mut dirty = false;
-            // Write dirty pages and keep track of the page indices.
+            // Write changed dirty pages. Identical dirty pages still mark the
+            // contract as dirty so finalization and deletion process its leaf.
             for (dirty_page, _, page_index) in
                 contract_data.memory.dirty_pages()
             {
+                dirty = true;
+                if identical_pages
+                    .get(contract)
+                    .is_some_and(|pages| pages.contains(page_index))
+                {
+                    continue;
+                }
+
                 let page_path: PathBuf = Self::page_path_main(
                     &memory_main_dir,
                     *page_index,
                     &commit_id,
                 )?;
-                fs::write(page_path, dirty_page)?;
-                pages.insert(*page_index);
-                dirty = true;
+                Self::write_page(&page_path, dirty_page)?;
             }
 
             let bytecode_main_path =
@@ -166,7 +194,7 @@ impl CommitWriter {
                 dirty = true;
             }
             if dirty {
-                fs::create_dir_all(memory_main_dir.join(commit_id.as_ref()))?;
+                fs::create_dir_all(commit_memory_dir)?;
                 base_info.contract_hints.push(*contract);
             }
         }
@@ -201,7 +229,18 @@ impl CommitWriter {
                     format!("Failed serializing base info file: {err}"),
                 )
             })?;
-        fs::write(base_main_path, base_info_bytes)?;
+        Self::write_bytes_atomically(&base_main_path, &base_info_bytes)?;
+
+        let manifest_path =
+            Self::unpublished_manifest_path(root_dir, commit_id.as_ref());
+        if let Err(error) = fs::remove_file(manifest_path) {
+            if error.kind() != io::ErrorKind::NotFound {
+                tracing::warn!(
+                    ?error,
+                    "Unable to clean unpublished-commit manifest"
+                );
+            }
+        }
 
         Ok(())
     }
@@ -215,6 +254,384 @@ impl CommitWriter {
         let dir = memory_dir.as_ref().join(commit_id);
         fs::create_dir_all(&dir)?;
         Ok(dir.join(format!("{page_index}")))
+    }
+
+    fn write_page(path: &Path, page: &[u8]) -> io::Result<()> {
+        if page.len() != PAGE_SIZE {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "Contract memory page has an invalid length",
+            ));
+        }
+
+        let temporary = Self::temporary_path(path)?;
+        let result = (|| {
+            let mut file = fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&temporary)?;
+            file.write_all(page)?;
+            file.flush()?;
+            if file.metadata()?.len() != page.len() as u64 {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "Persisted contract memory page has an invalid length",
+                ));
+            }
+            drop(file);
+            fs::rename(&temporary, path)
+        })();
+        if result.is_err() {
+            let _ = fs::remove_file(&temporary);
+        }
+        result
+    }
+
+    pub(crate) fn recover_unpublished_roots(root_dir: &Path) -> io::Result<()> {
+        let main_dir = root_dir.join(MAIN_DIR);
+        fs::create_dir_all(&main_dir)?;
+        let mut manifests = Vec::new();
+        let mut temporary_manifests = Vec::new();
+        for entry in fs::read_dir(&main_dir)? {
+            let entry = entry?;
+            if !entry.file_type()?.is_file() {
+                continue;
+            }
+            let name = entry.file_name().to_string_lossy().to_string();
+            if let Some(root) = name.strip_prefix(UNPUBLISHED_PREFIX) {
+                if root.len() == 64 {
+                    manifests.push((root.to_owned(), entry.path()));
+                }
+            } else if name.starts_with(&format!(".{UNPUBLISHED_PREFIX}"))
+                && name.ends_with(".piecrust-tmp")
+            {
+                temporary_manifests.push(entry.path());
+            }
+        }
+
+        for (root, manifest_path) in manifests {
+            match Self::clear_unpublished_root(root_dir, &root) {
+                Ok(()) => {}
+                Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {}
+                Err(error) => return Err(error),
+            }
+            Self::remove_file_if_exists(&manifest_path)?;
+        }
+        for temporary in temporary_manifests {
+            Self::remove_file_if_exists(&temporary)?;
+        }
+        Self::recover_legacy_unpublished_roots(root_dir)
+    }
+
+    // Commits written before root-local manifests were introduced can leave
+    // unpublished deltas behind. Sweep those once on startup so an upgrade
+    // cannot later resolve a reused root through stale legacy files. Normal
+    // commit publication uses the bounded manifest path above.
+    fn recover_legacy_unpublished_roots(root_dir: &Path) -> io::Result<()> {
+        let main_dir = root_dir.join(MAIN_DIR);
+        let mut published = BTreeMap::new();
+
+        for entry in fs::read_dir(&main_dir)? {
+            let entry = entry?;
+            if !entry.file_type()?.is_dir() {
+                continue;
+            }
+            let name = entry.file_name().to_string_lossy().to_string();
+            if !Self::is_root_name(&name) {
+                continue;
+            }
+            let valid = match BaseInfo::from_path(entry.path().join(BASE_FILE))
+            {
+                Ok(_) => true,
+                Err(error) if error.kind() == io::ErrorKind::NotFound => false,
+                Err(error) => return Err(error),
+            };
+            published.insert(name.clone(), valid);
+            if !valid {
+                Self::remove_directory_if_exists(&entry.path())?;
+            }
+        }
+
+        for namespace in [MEMORY_DIR, LEAF_DIR] {
+            let namespace_dir = main_dir.join(namespace);
+            let contracts = match fs::read_dir(namespace_dir) {
+                Ok(contracts) => contracts,
+                Err(error) if error.kind() == io::ErrorKind::NotFound => {
+                    continue;
+                }
+                Err(error) => return Err(error),
+            };
+            for contract in contracts {
+                let contract = contract?;
+                if !contract.file_type()?.is_dir() {
+                    continue;
+                }
+                for root in fs::read_dir(contract.path())? {
+                    let root = root?;
+                    if !root.file_type()?.is_dir() {
+                        continue;
+                    }
+                    let name = root.file_name().to_string_lossy().to_string();
+                    if !Self::is_root_name(&name) {
+                        continue;
+                    }
+                    let is_published = if let Some(published) =
+                        published.get(&name)
+                    {
+                        *published
+                    } else {
+                        let published_root = match BaseInfo::from_path(
+                            main_dir.join(&name).join(BASE_FILE),
+                        ) {
+                            Ok(_) => true,
+                            Err(error)
+                                if error.kind() == io::ErrorKind::NotFound =>
+                            {
+                                false
+                            }
+                            Err(error) => return Err(error),
+                        };
+                        published.insert(name.clone(), published_root);
+                        published_root
+                    };
+                    if !is_published {
+                        Self::remove_directory_if_exists(&root.path())?;
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn is_root_name(name: &str) -> bool {
+        name.len() == 64
+            && hex::decode(name).is_ok_and(|bytes| bytes.len() == 32)
+    }
+
+    fn clear_unpublished_root(root_dir: &Path, root: &str) -> io::Result<()> {
+        let main_dir = root_dir.join(MAIN_DIR);
+        let commit_dir = main_dir.join(root);
+        let base_path = commit_dir.join(BASE_FILE);
+        let base_error = match BaseInfo::from_path(&base_path) {
+            Ok(_) => {
+                return Err(io::Error::new(
+                    io::ErrorKind::AlreadyExists,
+                    "State root is already published on disk",
+                ));
+            }
+            Err(error) => error,
+        };
+        let manifest_path = Self::unpublished_manifest_path(root_dir, root);
+        let manifest = match fs::read(&manifest_path) {
+            Ok(bytes) => Some(Self::parse_unpublished_manifest(root, &bytes)?),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => None,
+            Err(error) => return Err(error),
+        };
+        if base_error.kind() != io::ErrorKind::NotFound && manifest.is_none() {
+            return Err(base_error);
+        }
+
+        if let Some(entries) = manifest {
+            for (contract, namespaces) in entries {
+                let contract_hex = hex::encode(contract);
+                if namespaces & MEMORY_ENTRY != 0 {
+                    Self::remove_directory_if_exists(
+                        &main_dir
+                            .join(MEMORY_DIR)
+                            .join(&contract_hex)
+                            .join(root),
+                    )?;
+                }
+                if namespaces & LEAF_ENTRY != 0 {
+                    Self::remove_directory_if_exists(
+                        &main_dir.join(LEAF_DIR).join(contract_hex).join(root),
+                    )?;
+                }
+            }
+        }
+
+        Self::remove_directory_if_exists(&commit_dir)?;
+        Self::remove_file_if_exists(&Self::temporary_path(&base_path)?)?;
+        Self::remove_file_if_exists(&Self::temporary_path(&manifest_path)?)
+    }
+
+    fn unpublished_manifest(
+        commit: &Commit,
+        contracts: &BTreeMap<ContractId, ContractDataEntry>,
+    ) -> BTreeMap<ContractId, u8> {
+        contracts
+            .iter()
+            .filter_map(|(contract, data)| {
+                let mut namespaces = 0;
+                if data.is_new || data.memory.dirty_pages().next().is_some() {
+                    namespaces |= MEMORY_ENTRY;
+                }
+                if commit.index.contains_key(contract) {
+                    namespaces |= LEAF_ENTRY;
+                }
+                (namespaces != 0).then_some((*contract, namespaces))
+            })
+            .collect()
+    }
+
+    fn write_unpublished_manifest(
+        root_dir: &Path,
+        root: Hash,
+        entries: &BTreeMap<ContractId, u8>,
+    ) -> io::Result<()> {
+        fs::create_dir_all(root_dir.join(MAIN_DIR))?;
+        let mut bytes = Vec::with_capacity(48 + entries.len() * 33);
+        bytes.extend_from_slice(UNPUBLISHED_MAGIC);
+        bytes.extend_from_slice(root.as_bytes());
+        bytes.extend_from_slice(&(entries.len() as u64).to_le_bytes());
+        for (contract, namespaces) in entries {
+            bytes.extend_from_slice(contract.as_bytes());
+            bytes.push(*namespaces);
+        }
+        Self::write_bytes_atomically(
+            &Self::unpublished_manifest_path(root_dir, &hex::encode(root)),
+            &bytes,
+        )
+    }
+
+    fn parse_unpublished_manifest(
+        root: &str,
+        bytes: &[u8],
+    ) -> io::Result<BTreeMap<ContractId, u8>> {
+        const HEADER_LEN: usize = 48;
+        const ENTRY_LEN: usize = 33;
+        if bytes.len() < HEADER_LEN || &bytes[..8] != UNPUBLISHED_MAGIC {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "Invalid unpublished-commit manifest",
+            ));
+        }
+        let expected_root = hex::decode(root).map_err(|error| {
+            io::Error::new(io::ErrorKind::InvalidData, error)
+        })?;
+        if bytes[8..40] != expected_root {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "Unpublished-commit manifest root mismatch",
+            ));
+        }
+        let count =
+            u64::from_le_bytes(bytes[40..48].try_into().map_err(|_| {
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "Invalid unpublished-commit manifest length",
+                )
+            })?);
+        let count = usize::try_from(count).map_err(|_| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                "Unpublished-commit manifest is too large",
+            )
+        })?;
+        let expected_len = count
+            .checked_mul(ENTRY_LEN)
+            .and_then(|length| HEADER_LEN.checked_add(length))
+            .ok_or_else(|| {
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "Unpublished-commit manifest is too large",
+                )
+            })?;
+        if bytes.len() != expected_len {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "Invalid unpublished-commit manifest length",
+            ));
+        }
+
+        let mut entries = BTreeMap::new();
+        for entry in bytes[HEADER_LEN..].chunks_exact(ENTRY_LEN) {
+            let contract = ContractId::from_bytes(
+                entry[..32].try_into().map_err(|_| {
+                    io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        "Invalid unpublished-commit manifest entry",
+                    )
+                })?,
+            );
+            let namespaces = entry[32];
+            if namespaces == 0
+                || namespaces & !(MEMORY_ENTRY | LEAF_ENTRY) != 0
+                || entries.insert(contract, namespaces).is_some()
+            {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "Invalid unpublished-commit manifest entry",
+                ));
+            }
+        }
+        Ok(entries)
+    }
+
+    fn unpublished_manifest_path(root_dir: &Path, root: &str) -> PathBuf {
+        root_dir
+            .join(MAIN_DIR)
+            .join(format!("{UNPUBLISHED_PREFIX}{root}"))
+    }
+
+    fn write_bytes_atomically(path: &Path, bytes: &[u8]) -> io::Result<()> {
+        let temporary = Self::temporary_path(path)?;
+        let result = (|| {
+            let mut file = fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&temporary)?;
+            #[cfg(all(test, target_os = "linux"))]
+            if path.file_name().is_some_and(|name| name == BASE_FILE)
+                && FAIL_DURING_BASE_PUBLICATION.swap(false, Ordering::SeqCst)
+            {
+                file.write_all(&bytes[..bytes.len() / 2])?;
+                return Err(io::Error::other(
+                    "injected failure during base publication",
+                ));
+            }
+            file.write_all(bytes)?;
+            file.flush()?;
+            drop(file);
+            let persisted = fs::read(&temporary)?;
+            if persisted != bytes {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "Atomic publication temp has invalid contents",
+                ));
+            }
+            fs::rename(&temporary, path)
+        })();
+        if result.is_err() {
+            let _ = fs::remove_file(&temporary);
+        }
+        result
+    }
+
+    fn temporary_path(path: &Path) -> io::Result<PathBuf> {
+        let filename = path.file_name().ok_or_else(|| {
+            io::Error::new(io::ErrorKind::InvalidInput, "Invalid file path")
+        })?;
+        Ok(path.with_file_name(format!(
+            ".{}.piecrust-tmp",
+            filename.to_string_lossy()
+        )))
+    }
+
+    fn remove_file_if_exists(path: &Path) -> io::Result<()> {
+        match fs::remove_file(path) {
+            Ok(()) => Ok(()),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
+            Err(error) => Err(error),
+        }
+    }
+
+    fn remove_directory_if_exists(path: &Path) -> io::Result<()> {
+        match fs::remove_dir_all(path) {
+            Ok(()) => Ok(()),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
+            Err(error) => Err(error),
+        }
     }
 
     fn base_path_main<P: AsRef<Path>, S: AsRef<str>>(
@@ -280,5 +697,183 @@ impl CommitWriter {
         module.write_module_data(module_path, bytecode.as_ref())?;
         debug!("Saved module for contract: {}", contract_hex);
         Ok(())
+    }
+}
+
+#[cfg(all(test, target_os = "linux"))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn partial_base_publication_is_retryable_and_restartable() {
+        use crate::{Error, SessionData, VM};
+
+        let directory = tempfile::tempdir().unwrap();
+        let vm = VM::new(directory.path()).unwrap();
+
+        FAIL_DURING_BASE_PUBLICATION.store(true, Ordering::SeqCst);
+        let first = vm.session(SessionData::builder()).unwrap().commit();
+        assert!(
+            matches!(first, Err(Error::PersistenceError(error)) if error.kind() == io::ErrorKind::Other),
+            "the injected publication failure should be returned"
+        );
+
+        let retry = vm.session(SessionData::builder()).unwrap().commit();
+        drop(vm);
+        let restart = VM::new(directory.path());
+        assert!(
+            retry.is_ok() && restart.is_ok(),
+            "retry={retry:?}, restart={restart:?}"
+        );
+    }
+
+    #[test]
+    fn unpublished_cleanup_ignores_unrelated_contract_namespaces() {
+        let directory = tempfile::tempdir().unwrap();
+        let root = format!("{:064x}", 1);
+        let unrelated = directory
+            .path()
+            .join(MAIN_DIR)
+            .join(MEMORY_DIR)
+            .join(format!("{:064x}", 2))
+            .join(&root);
+        fs::create_dir_all(unrelated.parent().unwrap()).unwrap();
+        fs::write(&unrelated, b"unrelated").unwrap();
+
+        CommitWriter::clear_unpublished_root(directory.path(), &root)
+            .expect("cleanup should not inspect unrelated contract parents");
+        assert_eq!(fs::read(unrelated).unwrap(), b"unrelated");
+    }
+
+    #[test]
+    fn startup_removes_legacy_unpublished_residue_but_keeps_published_roots() {
+        let directory = tempfile::tempdir().unwrap();
+        let main = directory.path().join(MAIN_DIR);
+        let contract = format!("{:064x}", 7);
+        let unpublished = format!("{:064x}", 8);
+        let published = format!("{:064x}", 9);
+
+        for root in [&unpublished, &published] {
+            fs::create_dir_all(
+                main.join(MEMORY_DIR).join(&contract).join(root),
+            )
+            .unwrap();
+            fs::create_dir_all(main.join(LEAF_DIR).join(&contract).join(root))
+                .unwrap();
+            fs::create_dir_all(main.join(root)).unwrap();
+        }
+        let base = rkyv::to_bytes::<_, 128>(&BaseInfo::default()).unwrap();
+        fs::write(main.join(&published).join(BASE_FILE), base).unwrap();
+
+        CommitWriter::recover_unpublished_roots(directory.path()).unwrap();
+
+        assert!(!main.join(&unpublished).exists());
+        assert!(
+            !main
+                .join(MEMORY_DIR)
+                .join(&contract)
+                .join(&unpublished)
+                .exists()
+        );
+        assert!(
+            !main
+                .join(LEAF_DIR)
+                .join(&contract)
+                .join(&unpublished)
+                .exists()
+        );
+        assert!(main.join(&published).join(BASE_FILE).is_file());
+        assert!(
+            main.join(MEMORY_DIR)
+                .join(&contract)
+                .join(&published)
+                .is_dir()
+        );
+        assert!(main.join(LEAF_DIR).join(contract).join(published).is_dir());
+    }
+
+    #[test]
+    fn startup_rejects_ambiguous_legacy_base_corruption() {
+        let directory = tempfile::tempdir().unwrap();
+        let root = format!("{:064x}", 10);
+        let commit = directory.path().join(MAIN_DIR).join(&root);
+        fs::create_dir_all(&commit).unwrap();
+        fs::write(commit.join(BASE_FILE), b"partial").unwrap();
+
+        let error = CommitWriter::recover_unpublished_roots(directory.path())
+            .expect_err("unmarked base corruption must fail closed");
+
+        assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+        assert!(commit.join(BASE_FILE).is_file());
+    }
+
+    #[test]
+    fn startup_clears_manifest_left_after_successful_publication() {
+        let directory = tempfile::tempdir().unwrap();
+        let root = [11; 32];
+        let root_hex = hex::encode(root);
+        CommitWriter::write_unpublished_manifest(
+            directory.path(),
+            root.into(),
+            &BTreeMap::new(),
+        )
+        .unwrap();
+        let manifest = CommitWriter::unpublished_manifest_path(
+            directory.path(),
+            &root_hex,
+        );
+        fs::write(&manifest, b"corrupt").unwrap();
+        let commit = directory.path().join(MAIN_DIR).join(&root_hex);
+        fs::create_dir_all(&commit).unwrap();
+        let base = rkyv::to_bytes::<_, 128>(&BaseInfo::default()).unwrap();
+        fs::write(commit.join(BASE_FILE), base).unwrap();
+
+        CommitWriter::recover_unpublished_roots(directory.path()).unwrap();
+
+        assert!(commit.join(BASE_FILE).is_file());
+        assert!(!manifest.exists());
+    }
+
+    #[test]
+    fn all_zero_page_is_materialized_at_its_full_logical_length() {
+        let temp = tempfile::tempdir().expect("temporary directory");
+        let path = temp.path().join("page");
+        let page = vec![0; crate::store::PAGE_SIZE];
+
+        CommitWriter::write_page(&path, &page)
+            .expect("zero page should be written");
+
+        assert_eq!(fs::metadata(&path).unwrap().len(), page.len() as u64);
+        assert_eq!(fs::read(path).unwrap(), page);
+    }
+
+    #[test]
+    fn complete_staged_page_replaces_a_stale_destination() {
+        let temp = tempfile::tempdir().expect("temporary directory");
+        let path = temp.path().join("page");
+        fs::write(&path, b"stale").expect("stale destination");
+        let page = vec![3; crate::store::PAGE_SIZE];
+
+        CommitWriter::write_page(&path, &page)
+            .expect("completed temporary page should be published");
+
+        assert_eq!(fs::read(path).unwrap(), page);
+    }
+
+    #[test]
+    fn failed_page_publication_removes_the_temporary_file() {
+        let temp = tempfile::tempdir().expect("temporary directory");
+        let path = temp.path().join("page");
+        fs::create_dir(&path).expect("destination obstruction");
+        let page = vec![1; crate::store::PAGE_SIZE];
+
+        CommitWriter::write_page(&path, &page)
+            .expect_err("a directory cannot be replaced by a page file");
+
+        assert!(path.is_dir(), "the destination should remain untouched");
+        assert!(
+            !temp.path().join(".page.piecrust-tmp").exists(),
+            "failed publication should remove its temporary file"
+        );
     }
 }

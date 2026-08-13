@@ -82,6 +82,11 @@ path = "tests/initializer.rs"
 required-features = ["debug"]
 
 [[test]]
+name = "identical_pages"
+path = "tests/identical_pages.rs"
+required-features = ["debug"]
+
+[[test]]
 name = "validation"
 path = "tests/validation.rs"
 required-features = ["debug"]

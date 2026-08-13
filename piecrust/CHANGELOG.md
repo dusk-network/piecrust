@@ -13,6 +13,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Make finalization and deletion recoverable across failures and restarts, hide incomplete operations, and reject missing persisted commit state.
 - Finalize and delete new contracts that have no dirty memory pages.
 
+### Changed
+
+- Avoid persisting dirty pages of existing contracts that are byte-identical to an already-materialized predecessor page, publish complete page and commit metadata files through temporary paths, and record the root deltas that must be cleared before retrying [#98](https://github.com/dusk-network/piecrust-private/issues/98).
+
 ## [0.32.2] - 2026-08-06
 
 ### Fixed

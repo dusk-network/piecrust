@@ -102,7 +102,7 @@ impl ContractSession {
             .map(|c| c.fast_clone(&mut self.contracts.keys()))
             .unwrap_or(Commit::new(&self.commit_store, None));
         for (contract, entry) in &self.contracts {
-            commit.insert(*contract, &entry.memory);
+            commit.insert_contract(*contract, &entry.memory, entry.is_new);
         }
         let root = commit.root();
         tracing::trace!("root call finished");
@@ -122,7 +122,7 @@ impl ContractSession {
             .clone()
             .unwrap_or(Commit::new(&self.commit_store, None));
         for (contract, entry) in &self.contracts {
-            commit.insert(*contract, &entry.memory);
+            commit.insert_contract(*contract, &entry.memory, entry.is_new);
         }
 
         let contract_data = self.contracts.get(&contract)?;
