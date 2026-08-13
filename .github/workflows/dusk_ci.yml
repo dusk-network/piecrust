@@ -21,7 +21,6 @@ jobs:
     name: Run tests (Linux)
     uses: dusk-network/.github/.github/workflows/run-make.yml@main
     with:
-      runner: ubuntu-latest
       make_target: test
 
   no-std:
