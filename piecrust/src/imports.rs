@@ -20,6 +20,8 @@ use piecrust_uplink::{
 use crate::Error;
 use crate::config::BYTE_STORE_COST;
 use crate::contract::ContractMetadata;
+#[cfg(feature = "call-hook")]
+use crate::hook::{self, Decision};
 use crate::instance::{Env, WrappedInstance};
 use crate::session::INIT_METHOD;
 
@@ -228,6 +230,19 @@ pub(crate) fn hd(
     Ok(data.len() as u32)
 }
 
+/// The gas limit passed to a callee: the explicit `gas_limit` when it is
+/// positive and below the caller's remaining gas, otherwise the
+/// [`GAS_PASS_PCT`] portion of the caller's remaining gas.
+pub(crate) fn callee_gas_limit(caller_remaining: u64, gas_limit: u64) -> u64 {
+    if gas_limit > 0 && gas_limit < caller_remaining {
+        gas_limit
+    } else {
+        let div = caller_remaining / 100 * GAS_PASS_PCT;
+        let rem = caller_remaining % 100 * GAS_PASS_PCT / 100;
+        div + rem
+    }
+}
+
 pub(crate) fn c(
     mut fenv: Caller<Env>,
     callee_ofs: usize,
@@ -247,7 +262,7 @@ pub(crate) fn c(
         c_err.into()
     };
 
-    let parsed = {
+    let (callee_id, name, arg) = {
         let instance = env.self_instance();
 
         check_ptr(instance, callee_ofs, CONTRACT_ID_BYTES)?;
@@ -255,44 +270,59 @@ pub(crate) fn c(
         check_arg(instance, arg_len)?;
 
         let argbuf_ofs = instance.arg_buffer_offset();
-        let caller_remaining = instance.get_remaining_gas();
-        let callee_limit = if gas_limit > 0 && gas_limit < caller_remaining {
-            gas_limit
-        } else {
-            let div = caller_remaining / 100 * GAS_PASS_PCT;
-            let rem = caller_remaining % 100 * GAS_PASS_PCT / 100;
-            div + rem
-        };
 
-        let (callee_id, name, arg) =
-            instance.with_memory_mut(|memory| -> Result<_, Error> {
-                let mut callee_bytes = [0; CONTRACT_ID_BYTES];
-                callee_bytes.copy_from_slice(
-                    &memory[callee_ofs..callee_ofs + CONTRACT_ID_BYTES],
-                );
-                let callee_id = ContractId::from_bytes(callee_bytes);
+        // A malformed function name aborts the calling contract, exactly like
+        // the bounds checks above: the call never reached a callee, so there
+        // is no callee failure for the caller to recover from.
+        instance.with_memory_mut(|memory| -> Result<_, Error> {
+            let mut callee_bytes = [0; CONTRACT_ID_BYTES];
+            callee_bytes.copy_from_slice(
+                &memory[callee_ofs..callee_ofs + CONTRACT_ID_BYTES],
+            );
+            let callee_id = ContractId::from_bytes(callee_bytes);
 
-                let name =
-                    core::str::from_utf8(&memory[name_ofs..][..name_len])?;
+            let name = core::str::from_utf8(&memory[name_ofs..][..name_len])?;
 
-                let arg = Vec::from(&memory[argbuf_ofs..][..arg_len as usize]);
-                Ok((callee_id, name.to_owned(), arg))
-            })?;
-
-        Ok::<_, Error>((caller_remaining, callee_limit, callee_id, name, arg))
-    };
-
-    let (caller_remaining, callee_limit, callee_id, name, arg) = match parsed {
-        Ok(parsed) => parsed,
-        Err(err) => return Ok(write_contract_error(env, err)),
+            let arg = Vec::from(&memory[argbuf_ofs..][..arg_len as usize]);
+            Ok((callee_id, name.to_owned(), arg))
+        })?
     };
 
     #[cfg(feature = "call-hook")]
-    if let Err(msg) = env.call_hook(&callee_id, &name, &arg) {
-        return Ok(write_contract_error(env, Error::Panic(msg)));
+    match hook::arbitrate(env, callee_id, &name, &arg, gas_limit) {
+        Decision::Proceed => { /* proceed with normal WASM execution */ }
+        Decision::Answered { output, remaining } => {
+            let ret_len = output.len() as i32;
+            let caller = env.self_instance();
+            caller.with_arg_buf_mut(|buf| {
+                buf[..output.len()].copy_from_slice(&output);
+            });
+            caller.set_remaining_gas(remaining);
+            return Ok(ret_len);
+        }
+        Decision::Rejected { error, remaining } => {
+            if let Some(remaining) = remaining {
+                env.self_instance().set_remaining_gas(remaining);
+            }
+            // Surface the error to the caller as a failed WASM callee would:
+            // write its parts to the arg buffer and return the matching code.
+            let code = env
+                .self_instance()
+                .with_arg_buf_mut(|buf| error.to_parts(buf));
+            return Ok(code);
+        }
     }
 
+    // The event checkpoint is taken after the hook ran: a later failure of
+    // the callee must not sweep events of the hook's successful nested
+    // calls, whose state persists.
     let event_checkpoint = env.event_checkpoint();
+
+    // Gas is read after the hook ran, so that nested calls the hook made are
+    // reflected in the remaining gas the callee's limit is derived from.
+    let caller_remaining = env.self_instance().get_remaining_gas();
+    let callee_limit = callee_gas_limit(caller_remaining, gas_limit);
+
     let callee_stack_element = match env.push_callstack(callee_id, callee_limit)
     {
         Ok(stack_element) => stack_element,

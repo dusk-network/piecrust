@@ -16,6 +16,8 @@ use bytecheck::CheckBytes;
 use dusk_wasmtime::{
     Engine, LinearMemory, MemoryCreator, MemoryType, Module as WasmtimeModule,
 };
+#[cfg(feature = "call-hook")]
+use piecrust_uplink::ContractError;
 use piecrust_uplink::{
     ARGBUF_LEN, CONTRACT_ID_BYTES, ContractId, Event, SCRATCH_BUF_BYTES,
 };
@@ -29,6 +31,10 @@ use rkyv::{Archive, Deserialize, Infallible, Serialize, check_archived_root};
 use crate::call_tree::{CallTree, CallTreeElem};
 use crate::contract::{ContractData, ContractMetadata, WrappedContract};
 use crate::error::Error::{self, InitalizationError, PersistenceError};
+#[cfg(feature = "call-hook")]
+use crate::hook::{CallHook, HookContext, Interception};
+#[cfg(feature = "call-hook")]
+use crate::imports::callee_gas_limit;
 use crate::imports::check_arg;
 use crate::instance::WrappedInstance;
 use crate::store::{ContractSession, PAGE_SIZE, PageOpening};
@@ -79,6 +85,15 @@ impl RootCallContext {
 /// [`commit`]: Session::commit
 pub struct Session {
     engine: Engine,
+    /// Raw pointer to a `Box::leak`-ed `SessionInner`.
+    ///
+    /// Multiple `Session` clones share this pointer.  The allocation is
+    /// stable for the lifetime of the session — it is never moved or
+    /// reallocated, an invariant relied upon by `SessionMemoryCreator`,
+    /// which captures the pointer at construction.
+    ///
+    /// Only the `original` session (the one with `original: true`) frees
+    /// this allocation on drop.
     inner: NonNull<SessionInner>,
     original: bool,
 }
@@ -111,22 +126,6 @@ impl Drop for Session {
         }
     }
 }
-
-/// A hook called before each inter-contract call and contextual root call.
-///
-/// Receives the callee contract ID, the function name, the raw argument bytes,
-/// and the current call stack before the callee is pushed. Returns `Ok(())` to
-/// allow the call, or `Err(reason)` to reject it with a descriptive message.
-///
-/// The callee is not included in the stack because the hook runs before the
-/// callee is pushed. The stack is ordered like `abi::callstack()`: index 0 is
-/// the immediate caller, and the last element is the root contract call.
-#[cfg(feature = "call-hook")]
-pub type CallHook = Box<
-    dyn Fn(&ContractId, &str, &[u8], &[&ContractId]) -> Result<(), String>
-        + Send
-        + Sync,
->;
 
 struct SessionInner {
     current: ContractId,
@@ -449,8 +448,13 @@ impl Session {
                 // contract has an init method in the first place, which might
                 // not be the case, such as when ingesting untrusted bytecode.
                 let arg = arg.unwrap_or_default();
-                let (data, gas_spent, call_tree) =
-                    self.call_inner(contract_id, INIT_METHOD, arg, gas_limit)?;
+                let (data, gas_spent, call_tree) = self.call_inner(
+                    None,
+                    contract_id,
+                    INIT_METHOD,
+                    arg,
+                    gas_limit,
+                )?;
                 let events = mem::take(&mut self.inner_mut().events);
                 return Ok(Some(CallReceipt {
                     gas_limit,
@@ -547,7 +551,95 @@ impl Session {
         }
 
         let (data, gas_spent, call_tree) =
-            self.call_inner(contract, fn_name, fn_arg.into(), gas_limit)?;
+            self.call_inner(None, contract, fn_name, fn_arg.into(), gas_limit)?;
+        let events = mem::take(&mut self.inner_mut().events);
+
+        Ok(CallReceipt {
+            gas_limit,
+            gas_spent,
+            events,
+            call_tree,
+            data,
+        })
+    }
+
+    /// Execute a call on the current state of this session with a specified
+    /// caller identity.
+    ///
+    /// Behaves like [`call`], but inside the callee `abi::caller()` will
+    /// return `caller` and `abi::callstack()` will return `[caller]`,
+    /// matching the stack depth of a normal contract-to-contract call.
+    ///
+    /// `caller` is asserted, not verified: it need not be a deployed
+    /// contract, and any [`ContractId`] is accepted. This differs from
+    /// [`call_raw_with_root_context`], whose synthetic caller must exist.
+    ///
+    /// The receipt's call tree is rooted at the callee, exactly as for a
+    /// plain [`call`] — the caller identity frame is internal and not part
+    /// of the iterated tree.
+    ///
+    /// [`call_raw_with_root_context`]: Session::call_raw_with_root_context
+    ///
+    /// [`call`]: Session::call
+    pub fn call_as<A, R>(
+        &mut self,
+        caller: ContractId,
+        contract: ContractId,
+        fn_name: &str,
+        fn_arg: &A,
+        gas_limit: u64,
+    ) -> Result<CallReceipt<R>, Error>
+    where
+        A: for<'b> Serialize<StandardBufSerializer<'b>>,
+        A::Archived: for<'b> CheckBytes<DefaultValidator<'b>>,
+        R: Archive,
+        R::Archived: Deserialize<R, Infallible>
+            + for<'b> CheckBytes<DefaultValidator<'b>>,
+    {
+        let mut sbuf = [0u8; SCRATCH_BUF_BYTES];
+        let scratch = BufferScratch::new(&mut sbuf);
+        let ser = BufferSerializer::new(&mut self.inner_mut().buffer[..]);
+        let mut ser = CompositeSerializer::new(ser, scratch, Infallible);
+
+        ser.serialize_value(fn_arg)?;
+        let pos = ser.pos();
+
+        let receipt = self.call_as_raw(
+            caller,
+            contract,
+            fn_name,
+            self.inner().buffer[..pos].to_vec(),
+            gas_limit,
+        )?;
+
+        receipt.deserialize()
+    }
+
+    /// Execute a raw call with a specified caller identity.
+    ///
+    /// See [`call_as`] and [`call_raw`] for more information.
+    ///
+    /// [`call_as`]: Session::call_as
+    /// [`call_raw`]: Session::call_raw
+    pub fn call_as_raw<V: Into<Vec<u8>>>(
+        &mut self,
+        caller: ContractId,
+        contract: ContractId,
+        fn_name: &str,
+        fn_arg: V,
+        gas_limit: u64,
+    ) -> Result<CallReceipt<Vec<u8>>, Error> {
+        if fn_name == INIT_METHOD {
+            return Err(InitalizationError("init call not allowed".into()));
+        }
+
+        let (data, gas_spent, call_tree) = self.call_inner(
+            Some(caller),
+            contract,
+            fn_name,
+            fn_arg.into(),
+            gas_limit,
+        )?;
         let events = mem::take(&mut self.inner_mut().events);
 
         Ok(CallReceipt {
@@ -595,8 +687,40 @@ impl Session {
         let _context_guard = RootCallContextGuard { inner: self.inner };
 
         #[cfg(feature = "call-hook")]
-        self.call_hook(&contract, fn_name, &fn_arg)
-            .map_err(Error::Panic)?;
+        {
+            // The hook sees the synthetic caller as the calling identity,
+            // matching what the callee's caller/call-stack queries report.
+            let caller = context.synthetic_caller();
+            let (hook_result, hook_events) =
+                self.call_hook(&caller, &contract, fn_name, &fn_arg);
+            match hook_result {
+                Ok(None) => {}
+                Ok(Some(_)) => {
+                    // A root call has no caller frame to charge the
+                    // interception's gas against and no caller arg buffer to
+                    // write its output into, so the hook cannot answer on the
+                    // callee's behalf here. Refusing keeps that explicit
+                    // rather than silently running the callee anyway.
+                    self.revert_events_at(&hook_events);
+                    return Err(Error::SessionError(
+                        "root call context calls cannot be intercepted".into(),
+                    ));
+                }
+                Err(err) => {
+                    self.revert_events_at(&hook_events);
+                    return Err(match err {
+                        ContractError::Panic(msg) => Error::Panic(msg),
+                        ContractError::OutOfGas => Error::OutOfGas,
+                        ContractError::DoesNotExist => {
+                            Error::ContractDoesNotExist(contract)
+                        }
+                        ContractError::Unknown => {
+                            Error::Panic("unknown call-hook error".into())
+                        }
+                    });
+                }
+            }
+        }
 
         self.call_raw(contract, fn_name, fn_arg, gas_limit)
     }
@@ -790,6 +914,17 @@ impl Session {
         }
     }
 
+    /// Mark the events at exactly the given indices as reverted.
+    #[cfg(feature = "call-hook")]
+    pub(crate) fn revert_events_at(&mut self, indices: &[usize]) {
+        let events = &mut self.inner_mut().events;
+        for &index in indices {
+            if let Some(event) = events.get_mut(index) {
+                event.reverted = true;
+            }
+        }
+    }
+
     pub(crate) fn push_feed(&mut self, data: Vec<u8>) -> Result<(), Error> {
         let feed = self.inner().feeder.as_ref().ok_or(Error::MissingFeed)?;
         feed.send(data).map_err(Error::FeedPulled)
@@ -840,6 +975,17 @@ impl Session {
         name: &str,
     ) -> Option<Arc<dyn HostQuery>> {
         self.inner().host_queries.get_arc(name)
+    }
+
+    /// The call depth as [`MAX_CALL_DEPTH`] measures it: the frames on the
+    /// call tree, plus the synthetic ancestor of a contextual root call,
+    /// which occupies a stack slot without being a frame of its own.
+    ///
+    /// Every push path shares this so the two cannot drift apart — an
+    /// instance-backed frame and a lightweight one must be bounded alike.
+    fn effective_depth(&self) -> usize {
+        self.inner().call_tree.depth()
+            + usize::from(self.inner().root_call_context.is_some())
     }
 
     pub(crate) fn nth_from_top(&self, n: usize) -> Option<CallTreeElem> {
@@ -893,9 +1039,7 @@ impl Session {
         contract_id: ContractId,
         limit: u64,
     ) -> Result<CallTreeElem, Error> {
-        let current_depth = self.inner().call_tree.depth()
-            + usize::from(self.inner().root_call_context.is_some());
-        if current_depth >= MAX_CALL_DEPTH {
+        if self.effective_depth() >= MAX_CALL_DEPTH {
             return Err(Error::SessionError(
                 format!("Maximum call depth exceeded ({MAX_CALL_DEPTH})")
                     .into(),
@@ -914,6 +1058,7 @@ impl Session {
             limit,
             spent: 0,
             mem_len,
+            instance_backed: true,
         });
 
         Ok(self
@@ -931,10 +1076,43 @@ impl Session {
         self.inner_mut().call_tree.move_up_prune();
     }
 
+    /// Push a lightweight frame onto the call tree without creating an
+    /// instance.
+    ///
+    /// This is used when the call tree must record a contract that won't
+    /// execute WASM — e.g. a call rerouted by the call-hook or the caller
+    /// identity frame in [`call_as`](Session::call_as).
+    pub(crate) fn push_callstack_frame(
+        &mut self,
+        contract_id: ContractId,
+        limit: u64,
+    ) -> Result<(), Error> {
+        if self.effective_depth() >= MAX_CALL_DEPTH {
+            return Err(Error::SessionError(
+                format!("Maximum call depth exceeded ({MAX_CALL_DEPTH})")
+                    .into(),
+            ));
+        }
+
+        self.inner_mut().call_tree.push(CallTreeElem {
+            contract_id,
+            limit,
+            spent: 0,
+            mem_len: 0,
+            instance_backed: false,
+        });
+
+        Ok(())
+    }
+
     pub(crate) fn revert_callstack(&mut self) -> Result<(), std::io::Error> {
         let call_tree: Vec<_> =
             self.inner().call_tree.iter().copied().collect();
         for elem in call_tree {
+            // Lightweight frames have no instance to revert.
+            if !elem.instance_backed {
+                continue;
+            }
             let instance = self
                 .instance(&elem.contract_id)
                 .expect("instance should exist");
@@ -1036,31 +1214,68 @@ impl Session {
         err
     }
 
+    /// Execute a contract call, optionally with a specified caller identity.
+    ///
+    /// When `caller` is `Some`, a lightweight frame is pushed onto the call
+    /// tree first so that `abi::caller()` inside the callee returns the
+    /// specified identity and the call stack depth matches a normal
+    /// contract-to-contract call.
     fn call_inner(
         &mut self,
+        caller: Option<ContractId>,
         contract: ContractId,
         fname: &str,
         fdata: Vec<u8>,
         limit: u64,
     ) -> Result<(Vec<u8>, u64, CallTree), Error> {
+        // Reject oversized arguments before any frame is pushed — a later
+        // failure of the argument write would return with the frames and
+        // snapshot still in place, corrupting the session for subsequent
+        // calls.
+        if fdata.len() > ARGBUF_LEN {
+            return Err(Error::MemoryAccessOutOfBounds {
+                offset: 0,
+                len: fdata.len(),
+                mem_len: ARGBUF_LEN,
+            });
+        }
+
         let event_checkpoint = self.event_checkpoint();
-        let stack_element = self.push_callstack(contract, limit)?;
+
+        if let Some(caller) = caller {
+            self.push_callstack_frame(caller, limit)?;
+        }
+
+        let stack_element = match self.push_callstack(contract, limit) {
+            Ok(elem) => elem,
+            Err(err) => {
+                // `clear` frees the whole tree regardless of the cursor
+                // position, so the frames pushed above need no pruning.
+                self.clear_call_tree_and_instances();
+                return Err(err);
+            }
+        };
         {
             let instance = self
                 .instance(&stack_element.contract_id)
                 .expect("instance should exist");
-            instance
-                .snap()
-                .map_err(|err| Error::MemorySnapshotFailure {
+            if let Err(err) = instance.snap() {
+                self.clear_call_tree_and_instances();
+                return Err(Error::MemorySnapshotFailure {
                     reason: None,
                     io: Arc::new(err),
-                })?;
+                });
+            }
         }
 
         let ret_len = {
             let instance = self
                 .instance(&stack_element.contract_id)
                 .expect("instance should exist");
+            // Unreachable while the length pre-check above mirrors the arg
+            // buffer's own bound; kept as defence in depth against the two
+            // drifting apart, since a failure here leaves frames and a
+            // snapshot in place that only `revert_failed_call` clears.
             let arg_len = match instance.write_bytes_to_arg_buffer(&fdata) {
                 Ok(arg_len) => arg_len,
                 Err(err) => {
@@ -1091,6 +1306,10 @@ impl Session {
         let call_tree: Vec<_> =
             self.inner().call_tree.iter().copied().collect();
         for elem in call_tree {
+            // Lightweight frames have no instance to apply.
+            if !elem.instance_backed {
+                continue;
+            }
             let instance = self
                 .instance(&elem.contract_id)
                 .expect("instance should exist");
@@ -1111,6 +1330,178 @@ impl Session {
         Ok((ret, spent, call_tree))
     }
 
+    /// Execute a nested contract call with a specified caller identity.
+    ///
+    /// Unlike [`call_inner`], this is designed for calls made from within an
+    /// active execution context (e.g. from a call-hook).  On error it reverts
+    /// **only the callee's state** (via [`revert_callstack`] scoped to the
+    /// callee subtree) without clearing the entire call tree or instance
+    /// map — the outer call chain and any earlier successful nested calls
+    /// are preserved.  Events emitted within the failed subtree are marked
+    /// as reverted, mirroring the inter-contract-call error path.
+    ///
+    /// This matches the ICC error semantics in [`imports::c`]: a failed
+    /// callee is reverted and pruned, and the error is returned to the
+    /// caller.  The full-chain rollback happens higher up — when the hook
+    /// propagates the error and the outer WASM caller fails, its own error
+    /// path reverts the entire subtree (including frames from earlier
+    /// successful `call_nested` calls within the same hook invocation).
+    ///
+    /// # Gas
+    ///
+    /// The nested call is paid for by the contract whose inter-contract call
+    /// the hook intercepted (the top of the call tree when the hook fired):
+    /// `gas_limit` resolves through [`callee_gas_limit`] against that
+    /// contract's remaining gas — the inter-contract-call convention — and
+    /// the gas spent by the nested call — the full resolved limit on
+    /// failure, like a failed inter-contract call — is deducted from its
+    /// fuel meter.  This keeps the call tree's invariant that a parent's
+    /// spent gas covers the sum of its children's.
+    ///
+    /// `apply()` is intentionally not called here: `move_up_call_tree` keeps
+    /// the nested frames in the tree as children of the outer caller, so the
+    /// outer `call_inner`'s apply loop will process them when the top-level
+    /// call completes.
+    ///
+    /// [`call_inner`]: Session::call_inner
+    /// [`revert_callstack`]: Session::revert_callstack
+    /// [`imports::c`]: crate::imports
+    #[cfg(feature = "call-hook")]
+    pub(crate) fn call_nested(
+        &mut self,
+        caller: ContractId,
+        callee: ContractId,
+        fn_name: &str,
+        fn_args: &[u8],
+        gas_limit: u64,
+    ) -> Result<(Vec<u8>, u64), Error> {
+        if fn_name == INIT_METHOD {
+            return Err(InitalizationError("init call not allowed".into()));
+        }
+
+        if fn_args.len() > ARGBUF_LEN {
+            return Err(Error::MemoryAccessOutOfBounds {
+                offset: 0,
+                len: fn_args.len(),
+                mem_len: ARGBUF_LEN,
+            });
+        }
+
+        // The suspended contract whose inter-contract call was intercepted
+        // pays for the nested call. The hook only fires while that contract
+        // executes WASM, so the top of the call tree is instance-backed.
+        let outer_id = self
+            .nth_from_top(0)
+            .ok_or(Error::SessionError(
+                "call_as_raw requires an active contract call".into(),
+            ))?
+            .contract_id;
+        let outer_remaining = self
+            .instance(&outer_id)
+            .ok_or(Error::SessionError(
+                "suspended caller instance should exist".into(),
+            ))?
+            .get_remaining_gas();
+        // Same limit resolution as a WASM inter-contract call: `0` or an
+        // over-budget limit selects the `GAS_PASS_PCT` share of the
+        // intercepted contract's remaining gas, keeping the reserve that
+        // lets a nested failure propagate instead of starving the outer
+        // frames into `OutOfGas`.
+        let nested_limit = callee_gas_limit(outer_remaining, gas_limit);
+
+        let event_checkpoint = self.event_checkpoint();
+
+        self.push_callstack_frame(caller, nested_limit)?;
+
+        let stack_element = match self.push_callstack(callee, nested_limit) {
+            Ok(elem) => elem,
+            Err(err) => {
+                self.move_up_prune_call_tree();
+                return Err(err);
+            }
+        };
+
+        // The snapshot is taken outside the closure so its failure does not
+        // reach the revert below — an unmatched revert would roll memory
+        // back past this call's boundary (to a previous snapshot or the
+        // base state).
+        let snapped = match self.instance(&stack_element.contract_id) {
+            Some(instance) => {
+                instance.snap().map_err(|err| Error::MemorySnapshotFailure {
+                    reason: None,
+                    io: Arc::new(err),
+                })
+            }
+            None => {
+                Err(Error::SessionError("callee instance should exist".into()))
+            }
+        };
+        if let Err(err) = snapped {
+            self.move_up_prune_call_tree();
+            self.move_up_prune_call_tree();
+            // A failed nested call charges its full limit, exactly like
+            // a failed inter-contract call.
+            if let Some(outer_instance) = self.instance(&outer_id) {
+                outer_instance
+                    .set_remaining_gas(outer_remaining - nested_limit);
+            }
+            return Err(err);
+        }
+
+        let result = (|| -> Result<(Vec<u8>, u64), Error> {
+            let instance = self.instance(&stack_element.contract_id).ok_or(
+                Error::SessionError("callee instance should exist".into()),
+            )?;
+
+            let arg_len = instance.write_bytes_to_arg_buffer(fn_args)?;
+            let ret_len = instance
+                .call(fn_name, arg_len, nested_limit)
+                .map_err(Error::normalize)?;
+            check_arg(instance, ret_len as u32)?;
+
+            let ret = instance.read_bytes_from_arg_buffer(ret_len as u32);
+            let spent = nested_limit - instance.get_remaining_gas();
+
+            Ok((ret, spent))
+        })();
+
+        match result {
+            Ok((ret, spent)) => {
+                self.move_up_call_tree(spent);
+                // The lightweight caller frame must report `spent` so
+                // that `CallTree::update_spent` can subtract the
+                // callee child's `spent` and arrive at zero — the
+                // frame itself did no work.
+                self.move_up_call_tree(spent);
+                // Charge the nested gas to the suspended caller's fuel
+                // meter. This also restores that contract's fuel when the
+                // nested callee was the same contract (shared instance).
+                if let Some(outer_instance) = self.instance(&outer_id) {
+                    outer_instance.set_remaining_gas(outer_remaining - spent);
+                }
+                Ok((ret, spent))
+            }
+            Err(mut err) => {
+                if let Err(io_err) = self.revert_callstack() {
+                    err = Error::MemorySnapshotFailure {
+                        reason: Some(Arc::new(err)),
+                        io: Arc::new(io_err),
+                    };
+                }
+                self.revert_events_from(event_checkpoint);
+                self.move_up_prune_call_tree();
+                self.move_up_prune_call_tree();
+                // A failed nested call charges its full limit, exactly like
+                // a failed inter-contract call.
+                if let Some(outer_instance) = self.instance(&outer_id) {
+                    outer_instance
+                        .set_remaining_gas(outer_remaining - nested_limit);
+                }
+                Err(err)
+            }
+        }
+    }
+
     pub fn contract_metadata(
         &mut self,
         contract_id: &ContractId,
@@ -1123,8 +1514,7 @@ impl Session {
     /// Set a hook that is called before each inter-contract call and
     /// contextual root call.
     ///
-    /// The hook receives the callee contract ID, the function name, the raw
-    /// argument bytes, and the current call stack before the callee is pushed.
+    /// See [`CallHook`] for the full signature and return semantics.
     #[cfg(feature = "call-hook")]
     pub fn set_call_hook(&mut self, hook: CallHook) -> Option<CallHook> {
         self.inner_mut().call_hook.replace(hook)
@@ -1138,21 +1528,31 @@ impl Session {
 
     /// Run the call hook, if one is set.
     ///
-    /// Returns `Ok(())` if the call is allowed (or no hook is set), or
-    /// `Err(reason)` if the hook rejects.
+    /// Returns the hook's result — `Ok(None)` if the call should proceed
+    /// normally (or no hook is set), `Ok(Some(interception))` if the hook
+    /// handled the call, or `Err(contract_error)` if the hook rejects —
+    /// together with the indices of events the hook emitted through its
+    /// [`HookContext`], so the caller can mark exactly those events reverted
+    /// when the call does not go through.
+    ///
+    /// The hook is cloned out of `SessionInner` before it is invoked, so no
+    /// borrow of the inner session is held while the `HookContext` mutates
+    /// it re-entrantly.
     #[cfg(feature = "call-hook")]
     pub(crate) fn call_hook(
         &self,
+        caller: &ContractId,
         callee: &ContractId,
         fn_name: &str,
         arg: &[u8],
-    ) -> Result<(), String> {
-        if let Some(hook) = &self.inner().call_hook {
-            let call_stack = self.effective_call_ids();
-            hook(callee, fn_name, arg, &call_stack)
-        } else {
-            Ok(())
-        }
+    ) -> (Result<Option<Interception>, ContractError>, Vec<usize>) {
+        let hook = match &self.inner().call_hook {
+            Some(hook) => hook.clone(),
+            None => return (Ok(None), Vec::new()),
+        };
+        let mut ctx = HookContext::new(self.clone());
+        let result = hook(caller, callee, fn_name, arg, &mut ctx);
+        (result, ctx.into_emitted())
     }
 }
 

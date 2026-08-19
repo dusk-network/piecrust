@@ -129,9 +129,10 @@ fn oversized_argument_failure_cleans_call_context() -> Result<(), Error> {
         0xfc
     );
 
-    // Each oversized argument fails after the call context is pushed but before
-    // the contract runs. Reversion should prune that context every time,
-    // otherwise repeated ARGBUF_LEN + 1 calls eventually exhaust call depth.
+    // Each oversized argument is rejected by `call_inner`'s length pre-check,
+    // before any call context is pushed. Repeated ARGBUF_LEN + 1 calls must
+    // therefore leave the call depth untouched — a pre-check that started
+    // pushing, or stopped rejecting, would exhaust it here.
     for _ in 0..REPEATED_WRITE_FAILURES {
         let err = session
             .call_raw(id, "increment", vec![0u8; ARGBUF_LEN + 1], LIMIT)
