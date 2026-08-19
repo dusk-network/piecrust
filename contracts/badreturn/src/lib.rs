@@ -47,6 +47,14 @@ unsafe fn counter(arg_len: u32) -> u32 {
     unsafe { wrap_call(arg_len, |_: ()| (*(&raw const STATE)).counter()) }
 }
 
+/// Claims a return length far beyond the argument buffer without writing
+/// anything. This bypasses `wrap_call` entirely; the host must reject the
+/// bogus length instead of reading out of bounds.
+#[unsafe(no_mangle)]
+unsafe fn huge_ret_len(_arg_len: u32) -> u32 {
+    u32::MAX
+}
+
 /// Returns garbage bytes that are NOT a valid rkyv archive for types with
 /// validation constraints. This bypasses `wrap_call` entirely and writes
 /// raw invalid bytes into the argument buffer.
