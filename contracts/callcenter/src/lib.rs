@@ -141,10 +141,26 @@ impl Callcenter {
         panic!("panik");
     }
 
+    /// Emit an event, call another contract, then emit a second event.
+    pub fn emit_call_emit(&self, counter_id: ContractId) {
+        uplink::emit("callcenter", 1u32);
+        let _: i64 = uplink::call(counter_id, "read_value", &()).unwrap();
+        uplink::emit("callcenter", 2u32);
+    }
+
+    /// Emit events around two sequential inter-contract calls.
+    pub fn emit_call_call_emit(&self, ids: (ContractId, ContractId)) {
+        uplink::emit("callcenter", 1u32);
+        let _: i64 = uplink::call(ids.0, "read_value", &()).unwrap();
+        uplink::emit("callcenter", 2u32);
+        let _: i64 = uplink::call(ids.1, "read_value", &()).unwrap();
+        uplink::emit("callcenter", 3u32);
+    }
+
     /// Call another contract's function expecting a `bool` return, and
     /// propagate the result (including deserialization errors) instead of
-    /// unwrapping. 
-    /// 
+    /// unwrapping.
+    ///
     /// Uses `bool` because it has validation constraints (only 0 or 1 are
     /// valid), unlike primitive integers which accept any bit pattern.
     pub fn try_query_bool(
@@ -291,6 +307,26 @@ unsafe fn delegate_transaction(arg_len: u32) -> u32 {
 #[unsafe(no_mangle)]
 unsafe fn panik(arg_len: u32) -> u32 {
     unsafe { wrap_call(arg_len, |()| (*(&raw const STATE)).panik()) }
+}
+
+/// Expose `Callcenter::emit_call_emit()` to the host
+#[unsafe(no_mangle)]
+unsafe fn emit_call_emit(arg_len: u32) -> u32 {
+    unsafe {
+        wrap_call(arg_len, |counter_id| {
+            (*(&raw const STATE)).emit_call_emit(counter_id)
+        })
+    }
+}
+
+/// Expose `Callcenter::emit_call_call_emit()` to the host
+#[unsafe(no_mangle)]
+unsafe fn emit_call_call_emit(arg_len: u32) -> u32 {
+    unsafe {
+        wrap_call(arg_len, |ids| {
+            (*(&raw const STATE)).emit_call_call_emit(ids)
+        })
+    }
 }
 
 /// Expose `Callcenter::try_query_bool()` to the host

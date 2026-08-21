@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Add `Session::call_as` and `Session::call_as_raw` to call a contract with a specified caller identity
+- Add an `instance_backed` field to `CallTreeElem`
+- Add `HookContext` and `Interception` types letting call hooks inspect the call stack, make nested calls, emit events, and intercept inter-contract calls
+
+### Changed
+
+- Change `CallHook` to a caller-aware signature returning `Result<Option<Interception>, ContractError>`, with the call stack exposed via `HookContext`
+- Change `CallHook` from a `Box<dyn Fn…>` to an `Arc<dyn Fn…>`: existing `set_call_hook(Box::new(…))` call sites become `set_call_hook(Arc::new(…))`
+- Resolve the `HookContext::call_as_raw` gas limit through the inter-contract-call convention: `0` or an over-budget limit selects the default share of the intercepted contract's remaining gas
+
 ## [0.32.2] - 2026-08-06
 
 ### Fixed
@@ -576,6 +588,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [#234]: https://github.com/dusk-network/piecrust/pull/234
 
 <!-- ISSUES -->
+[#496]: https://github.com/dusk-network/piecrust/issues/496
 [#466]: https://github.com/dusk-network/piecrust/issues/466
 
 [#rusk_3341]: https://github.com/dusk-network/rusk/issues/3341

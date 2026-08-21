@@ -100,6 +100,11 @@ name = "call_hook"
 path = "tests/call_hook.rs"
 required-features = ["call-hook", "debug"]
 
+[[test]]
+name = "call_as"
+path = "tests/call_as.rs"
+required-features = ["debug"]
+
 [[bench]]
 name = "stack"
 harness = false

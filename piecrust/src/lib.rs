@@ -125,6 +125,8 @@ mod call_tree;
 mod config;
 mod contract;
 mod error;
+#[cfg(feature = "call-hook")]
+mod hook;
 mod imports;
 mod instance;
 mod session;
@@ -135,11 +137,11 @@ mod vm;
 pub use call_tree::{CallTree, CallTreeElem};
 pub use contract::{ContractData, ContractDataBuilder};
 pub use error::Error;
+#[cfg(feature = "call-hook")]
+pub use hook::{CallHook, HookContext, Interception};
 // re-export the contents of the `piecrust-uplink` crate wholesale,
 // ensuring this is the only crate we need to define and use a VM.
 pub use piecrust_uplink::*;
-#[cfg(feature = "call-hook")]
-pub use session::CallHook;
 pub use session::{CallReceipt, RootCallContext, Session, SessionData};
 pub use store::PageOpening;
 pub use vm::{HostQuery, VM};
